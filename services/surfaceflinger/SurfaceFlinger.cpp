@@ -6781,15 +6781,23 @@ status_t SurfaceFlinger::doDump(int fd, const DumpArgs& args, bool asProto) {
         return NO_ERROR;
     }
 
-    // Traversal of drawing state must happen on the main thread.
-    // Otherwise, SortedVector may have shared ownership during concurrent
-    // traversals, which can result in use-after-frees.
+    // Collect debug data from main thread
     std::string compositionLayers;
     mScheduler
             ->schedule([&]() FTL_FAKE_GUARD(mStateLock) FTL_FAKE_GUARD(kMainThreadContext) {
                 dumpVisibleFrontEnd(compositionLayers);
             })
             .get();
+    // get window info listener data without the state lock
+    auto windowInfosDebug = mWindowInfosListenerInvoker->getDebugInfo();
+    compositionLayers.append("Window Infos:\n");
+    StringAppendF(&compositionLayers, "  max send vsync id: %" PRId64 "\n",
+                  ftl::to_underlying(windowInfosDebug.maxSendDelayVsyncId));
+    StringAppendF(&compositionLayers, "  max send delay (ns): %" PRId64 " ns\n",
+                  windowInfosDebug.maxSendDelayDuration);
+    StringAppendF(&compositionLayers, "  unsent messages: %zu\n",
+                  windowInfosDebug.pendingMessageCount);
+    compositionLayers.append("\n");
     dumpAll(args, compositionLayers, result);
     write(fd, result.c_str(), result.size());
     return NO_ERROR;
@@ -7377,15 +7385,6 @@ void SurfaceFlinger::dumpAll(const DumpArgs& args, const std::string& compositio
     FlagManager::getInstance().dump(result);
 
     result.append(mTimeStats->miniDump());
-    result.append("\n");
-
-    result.append("Window Infos:\n");
-    auto windowInfosDebug = mWindowInfosListenerInvoker->getDebugInfo();
-    StringAppendF(&result, "  max send vsync id: %" PRId64 "\n",
-                  ftl::to_underlying(windowInfosDebug.maxSendDelayVsyncId));
-    StringAppendF(&result, "  max send delay (ns): %" PRId64 " ns\n",
-                  windowInfosDebug.maxSendDelayDuration);
-    StringAppendF(&result, "  unsent messages: %zu\n", windowInfosDebug.pendingMessageCount);
     result.append("\n");
 }
 
@@ -9834,7 +9833,9 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::moveSnapshotsToComposit
     std::vector<std::pair<Layer*, LayerFE*>> layers;
     if (mLayerLifecycleManagerEnabled) {
         nsecs_t currentTime = systemTime();
-        mLayerSnapshotBuilder.forEachVisibleSnapshot(
+        const bool needsMetadata = mCompositionEngine->getFeatureFlags().test(
+                compositionengine::Feature::kSnapshotLayerMetadata);
+        mLayerSnapshotBuilder.forEachSnapshot(
                 [&](std::unique_ptr<frontend::LayerSnapshot>& snapshot) FTL_FAKE_GUARD(
                         kMainThreadContext) {
                     if (cursorOnly &&
@@ -9860,6 +9861,12 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::moveSnapshotsToComposit
                     layerFE->mSnapshot = std::move(snapshot);
                     refreshArgs.layers.push_back(layerFE);
                     layers.emplace_back(legacyLayer.get(), layerFE.get());
+                },
+                [needsMetadata](const frontend::LayerSnapshot& snapshot) {
+                    return snapshot.isVisible ||
+                            (needsMetadata &&
+                             snapshot.changes.test(
+                                     frontend::RequestedLayerState::Changes::Metadata));
                 });
     }
     if (!mLayerLifecycleManagerEnabled) {
