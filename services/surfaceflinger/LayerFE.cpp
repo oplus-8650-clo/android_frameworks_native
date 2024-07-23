@@ -425,4 +425,11 @@ ftl::Future<FenceResult> LayerFE::createReleaseFenceFuture() {
 LayerFE::ReleaseFencePromiseStatus LayerFE::getReleaseFencePromiseStatus() {
     return mReleaseFencePromiseStatus;
 }
+
+/* QTI_BEGIN */
+int32_t LayerFE::getLayerId() const {
+    return static_cast<int32_t>(mSnapshot->sequence);
+}
+/* QTI_END */
+
 } // namespace android
