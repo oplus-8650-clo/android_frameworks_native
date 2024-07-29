@@ -297,7 +297,7 @@ void QtiSurfaceFlingerExtension::qtiHandlePresentationDisplaysEarlyWakeup(size_t
             mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kEarlyWakeUp);
 
     if (mQtiDisplayExtnIntf && earlyWakeUpEnabled && mQtiInternalPresentationDisplays) {
-        ATRACE_CALL();
+        SFTRACE_CALL();
         if (singleUpdatingDisplay) {
             Mutex::Autolock lock(mQtiFlinger->mStateLock);
             const sp<DisplayDevice> display =
@@ -466,7 +466,7 @@ void QtiSurfaceFlingerExtension::qtiUpdateBufferData(bool qtiLatchMediaContent,
         s.bufferData->acquireFence->get() != -1 &&
         (s.bufferData->acquireFence->getStatus() == Fence::Status::Signaled) &&
         (s.bufferData->acquireFence->getSignalTime() == Fence::SIGNAL_TIME_INVALID)) {
-        ATRACE_NAME("fence signaled with error. drop");
+        SFTRACE_NAME("fence signaled with error. drop");
         s.bufferData->qtiInvalid = true;
     }
 }
@@ -583,7 +583,7 @@ void QtiSurfaceFlingerExtension::qtiNotifyDisplayUpdateImminent() {
     }
 
     if (mQtiDisplayExtnIntf && doEarlyWakeUp) {
-        ATRACE_CALL();
+        SFTRACE_CALL();
 
         if (mQtiInternalPresentationDisplays) {
             // Notify Display Extn for GPU Early Wakeup only
@@ -1401,7 +1401,7 @@ void QtiSurfaceFlingerExtension::qtiSyncToDisplayHardware() {
     // TODO(b/292132254) re-introduce as necessary. mPreviousPresentFences no
     // longer exists.
     /*
-    ATRACE_CALL();
+    SFTRACE_CALL();
 
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
@@ -1424,7 +1424,7 @@ bool QtiSurfaceFlingerExtension::qtiIsSmomoOptimalRefreshActive() {
 }
 
 void QtiSurfaceFlingerExtension::qtiUpdateSmomoState() {
-    ATRACE_NAME("SmoMoUpdateState");
+    SFTRACE_NAME("SmoMoUpdateState");
     Mutex::Autolock lock(mQtiFlinger->mStateLock);
 
     // Check if smomo instances exist.
@@ -2280,7 +2280,7 @@ ndk::ScopedAStatus DisplayConfigAidlCallbackHandler::notifyIdleStatus(bool in_is
 }
 ndk::ScopedAStatus DisplayConfigAidlCallbackHandler::notifyResolutionChange(
         int32_t displayId, const Attributes& attr) {
-    ATRACE_CALL();
+    SFTRACE_CALL();
     ALOGI("%s: Received notification for resolution change", __func__);
 
     if (mQtiSFExtnIntf) {
