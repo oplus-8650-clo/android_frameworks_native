@@ -116,7 +116,10 @@ cc_test {
     test_options: {
         unit_test: true,
     },
-    test_suites: ["device-tests"],
+    test_suites: [
+        "device-tests",
+        "device-platinum-tests",
+    ],
     cflags: [
         "-Wno-error=ambiguous-reversed-operator",
     ],
