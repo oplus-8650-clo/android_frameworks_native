@@ -565,7 +565,7 @@ void Display::qtiBeginDraw() {
         dataspace =
                 renderSurface->qtiGetDisplaySurfaceExtension()->getClientTargetCurrentDataspace();
 
-        if (ATRACE_ENABLED()) {
+        if (SFTRACE_ENABLED()) {
             std::string temp =
                     "Specfence_QtiBeginDraw_currentIndex_" + std::to_string(current.index);
             SFTRACE_NAME(temp.c_str());

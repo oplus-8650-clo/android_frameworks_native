@@ -747,6 +747,7 @@ void SurfaceFlinger::bootFinished() {
     mBootFinished = true;
     FlagManager::getMutableInstance().markBootCompleted();
 
+    ::tracing_perfetto::registerWithPerfetto();
     mInitBootPropsFuture.wait();
     mRenderEnginePrimeCacheFuture.wait();
 
@@ -3481,9 +3482,9 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
     mQtiSFExtnIntf->qtiUpdateLayerState(mNumLayers);
     /* QTI_END */
 
-    // Even though ATRACE_INT64 already checks if tracing is enabled, it doesn't prevent the
+    // Even though SFTRACE_INT64 already checks if tracing is enabled, it doesn't prevent the
     // side-effect of getTotalSize(), so we check that again here
-    if (ATRACE_ENABLED()) {
+    if (SFTRACE_ENABLED()) {
         // getTotalSize returns the total number of buffers that were allocated by SurfaceFlinger
         SFTRACE_INT64("Total Buffer Size", GraphicBufferAllocator::get().getTotalSize());
     }
@@ -4526,6 +4527,11 @@ void SurfaceFlinger::requestHardwareVsync(PhysicalDisplayId displayId, bool enab
     getHwComposer().setVsyncEnabled(displayId, enable ? hal::Vsync::ENABLE : hal::Vsync::DISABLE);
 }
 
+// This callback originates from Scheduler::applyPolicy, whose thread context may be the main thread
+// (via Scheduler::chooseRefreshRateForContent) or a OneShotTimer thread. The latter case imposes a
+// deadlock prevention rule: If the main thread is processing hotplug, then mStateLock is locked as
+// the main thread stops the OneShotTimer and joins with its thread. Hence, the OneShotTimer thread
+// must not lock mStateLock in this callback, which would deadlock with the join.
 void SurfaceFlinger::requestDisplayModes(std::vector<display::DisplayModeRequest> modeRequests) {
     if (mBootStage != BootStage::FINISHED) {
         ALOGV("Currently in the boot stage, skipping display mode changes");
@@ -4550,13 +4556,15 @@ void SurfaceFlinger::requestDisplayModes(std::vector<display::DisplayModeRequest
 
     for (auto& request : modeRequests) {
         const auto& modePtr = request.mode.modePtr;
-
         const auto displayId = modePtr->getPhysicalDisplayId();
-        const auto display = getDisplayDeviceLocked(displayId);
 
+        const auto display = getDisplayDeviceLocked(displayId);
         if (!display) continue;
 
-        if (display->refreshRateSelector().isModeAllowed(request.mode)) {
+        const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId);
+        if (!selectorPtr) continue;
+
+        if (selectorPtr->isModeAllowed(request.mode)) {
             /* QTI_BEGIN */
             uint32_t qtiHwcDisplayId;
             if (mQtiSFExtnIntf->qtiGetHwcDisplayId(display, &qtiHwcDisplayId)) {
@@ -7148,14 +7156,24 @@ void SurfaceFlinger::dumpOffscreenLayersProto(perfetto::protos::LayersProto& lay
     rootProto->set_name("Offscreen Root");
     rootProto->set_parent(-1);
 
-    for (Layer* offscreenLayer : mOffscreenLayers) {
-        // Add layer as child of the fake root
-        rootProto->add_children(offscreenLayer->sequence);
+    perfetto::protos::LayersProto offscreenLayers =
+            LayerProtoFromSnapshotGenerator(mLayerSnapshotBuilder, mFrontEndDisplayInfos,
+                                            mLegacyLayers, traceFlags)
+                    .generate(mLayerHierarchyBuilder.getOffscreenHierarchy());
 
-        // Add layer
-        auto* layerProto = offscreenLayer->writeToProto(layersProto, traceFlags);
-        layerProto->set_parent(offscreenRootLayerId);
+    for (int i = 0; i < offscreenLayers.layers_size(); i++) {
+        perfetto::protos::LayerProto* layerProto = offscreenLayers.mutable_layers()->Mutable(i);
+        if (layerProto->parent() == -1) {
+            layerProto->set_parent(offscreenRootLayerId);
+            // Add layer as child of the fake root
+            rootProto->add_children(layerProto->id());
+        }
     }
+
+    layersProto.mutable_layers()->Reserve(layersProto.layers_size() +
+                                          offscreenLayers.layers_size());
+    std::copy(offscreenLayers.layers().begin(), offscreenLayers.layers().end(),
+              RepeatedFieldBackInserter(layersProto.mutable_layers()));
 }
 
 perfetto::protos::LayersProto SurfaceFlinger::dumpProtoFromMainThread(uint32_t traceFlags) {
@@ -8171,6 +8189,22 @@ void SurfaceFlinger::kernelTimerChanged(bool expired) {
         if (display->onKernelTimerChanged(desiredModeIdOpt, timerExpired)) {
             mScheduler->scheduleFrame();
         }
+    }));
+}
+
+void SurfaceFlinger::vrrDisplayIdle(bool idle) {
+    // Update the overlay on the main thread to avoid race conditions with
+    // RefreshRateSelector::getActiveMode
+    static_cast<void>(mScheduler->schedule([=, this] {
+        const auto display = FTL_FAKE_GUARD(mStateLock, getDefaultDisplayDeviceLocked());
+        if (!display) {
+            ALOGW("%s: default display is null", __func__);
+            return;
+        }
+        if (!display->isRefreshRateOverlayEnabled()) return;
+
+        display->onVrrIdle(idle);
+        mScheduler->scheduleFrame();
     }));
 }
 
