@@ -7155,14 +7155,24 @@ void SurfaceFlinger::dumpOffscreenLayersProto(perfetto::protos::LayersProto& lay
     rootProto->set_name("Offscreen Root");
     rootProto->set_parent(-1);
 
-    for (Layer* offscreenLayer : mOffscreenLayers) {
-        // Add layer as child of the fake root
-        rootProto->add_children(offscreenLayer->sequence);
+    perfetto::protos::LayersProto offscreenLayers =
+            LayerProtoFromSnapshotGenerator(mLayerSnapshotBuilder, mFrontEndDisplayInfos,
+                                            mLegacyLayers, traceFlags)
+                    .generate(mLayerHierarchyBuilder.getOffscreenHierarchy());
 
-        // Add layer
-        auto* layerProto = offscreenLayer->writeToProto(layersProto, traceFlags);
-        layerProto->set_parent(offscreenRootLayerId);
+    for (int i = 0; i < offscreenLayers.layers_size(); i++) {
+        perfetto::protos::LayerProto* layerProto = offscreenLayers.mutable_layers()->Mutable(i);
+        if (layerProto->parent() == -1) {
+            layerProto->set_parent(offscreenRootLayerId);
+            // Add layer as child of the fake root
+            rootProto->add_children(layerProto->id());
+        }
     }
+
+    layersProto.mutable_layers()->Reserve(layersProto.layers_size() +
+                                          offscreenLayers.layers_size());
+    std::copy(offscreenLayers.layers().begin(), offscreenLayers.layers().end(),
+              RepeatedFieldBackInserter(layersProto.mutable_layers()));
 }
 
 perfetto::protos::LayersProto SurfaceFlinger::dumpProtoFromMainThread(uint32_t traceFlags) {
@@ -8178,6 +8188,22 @@ void SurfaceFlinger::kernelTimerChanged(bool expired) {
         if (display->onKernelTimerChanged(desiredModeIdOpt, timerExpired)) {
             mScheduler->scheduleFrame();
         }
+    }));
+}
+
+void SurfaceFlinger::vrrDisplayIdle(bool idle) {
+    // Update the overlay on the main thread to avoid race conditions with
+    // RefreshRateSelector::getActiveMode
+    static_cast<void>(mScheduler->schedule([=, this] {
+        const auto display = FTL_FAKE_GUARD(mStateLock, getDefaultDisplayDeviceLocked());
+        if (!display) {
+            ALOGW("%s: default display is null", __func__);
+            return;
+        }
+        if (!display->isRefreshRateOverlayEnabled()) return;
+
+        display->onVrrIdle(idle);
+        mScheduler->scheduleFrame();
     }));
 }
 
