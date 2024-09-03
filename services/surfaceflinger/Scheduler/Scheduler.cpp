@@ -409,14 +409,20 @@ void Scheduler::enableSyntheticVsync(bool enable) {
     eventThreadFor(Cycle::Render).enableSyntheticVsync(enable);
 }
 
-void Scheduler::onFrameRateOverridesChanged(Cycle cycle, PhysicalDisplayId displayId) {
-    const bool supportsFrameRateOverrideByContent =
-            pacesetterSelectorPtr()->supportsAppFrameRateOverrideByContent();
+void Scheduler::onFrameRateOverridesChanged() {
+    const auto [pacesetterId, supportsFrameRateOverrideByContent] = [this] {
+        std::scoped_lock lock(mDisplayLock);
+        const auto pacesetterOpt = pacesetterDisplayLocked();
+        LOG_ALWAYS_FATAL_IF(!pacesetterOpt);
+        const Display& pacesetter = *pacesetterOpt;
+        return std::make_pair(FTL_FAKE_GUARD(kMainThreadContext, *mPacesetterDisplayId),
+                              pacesetter.selectorPtr->supportsAppFrameRateOverrideByContent());
+    }();
 
     std::vector<FrameRateOverride> overrides =
             mFrameRateOverrideMappings.getAllFrameRateOverrides(supportsFrameRateOverrideByContent);
 
-    eventThreadFor(cycle).onFrameRateOverridesChanged(displayId, std::move(overrides));
+    eventThreadFor(Cycle::Render).onFrameRateOverridesChanged(pacesetterId, std::move(overrides));
 }
 
 void Scheduler::onHdcpLevelsChanged(Cycle cycle, PhysicalDisplayId displayId,
@@ -913,9 +919,13 @@ void Scheduler::dumpVsync(std::string& out) const {
     }
 }
 
-bool Scheduler::updateFrameRateOverrides(GlobalSignals consideredSignals, Fps displayRefreshRate) {
-    std::scoped_lock lock(mPolicyLock);
-    return updateFrameRateOverridesLocked(consideredSignals, displayRefreshRate);
+void Scheduler::updateFrameRateOverrides(GlobalSignals consideredSignals, Fps displayRefreshRate) {
+    const bool changed = (std::scoped_lock(mPolicyLock),
+                          updateFrameRateOverridesLocked(consideredSignals, displayRefreshRate));
+
+    if (changed) {
+        onFrameRateOverridesChanged();
+    }
 }
 
 bool Scheduler::updateFrameRateOverridesLocked(GlobalSignals consideredSignals,
@@ -1171,7 +1181,7 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
                 updateFrameRateOverridesLocked(consideredSignals, mPolicy.modeOpt->fps);
     }
     if (frameRateOverridesChanged) {
-        mSchedulerCallback.triggerOnFrameRateOverridesChanged();
+        onFrameRateOverridesChanged();
     }
     return consideredSignals;
 }
@@ -1271,6 +1281,8 @@ void Scheduler::setGameModeFrameRateForUid(FrameRateOverride frameRateOverride) 
     } else {
         mFrameRateOverrideMappings.setGameModeRefreshRateForUid(frameRateOverride);
     }
+
+    onFrameRateOverridesChanged();
 }
 
 void Scheduler::setGameDefaultFrameRateForUid(FrameRateOverride frameRateOverride) {
@@ -1289,6 +1301,7 @@ void Scheduler::setPreferredRefreshRateForUid(FrameRateOverride frameRateOverrid
     }
 
     mFrameRateOverrideMappings.setPreferredRefreshRateForUid(frameRateOverride);
+    onFrameRateOverridesChanged();
 }
 
 void Scheduler::updateSmallAreaDetection(
