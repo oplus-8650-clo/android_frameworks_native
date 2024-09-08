@@ -2681,7 +2681,7 @@ InputDispatcher::findTouchedWindowTargetsLocked(nsecs_t currentTime, const Motio
 
                 // Check if the wallpaper window should deliver the corresponding event.
                 slipWallpaperTouch(targetFlags, oldTouchedWindowHandle, newTouchedWindowHandle,
-                                   tempTouchState, entry.deviceId, pointer, targets);
+                                   tempTouchState, entry, targets);
                 tempTouchState.removeTouchingPointerFromWindow(entry.deviceId, pointer.id,
                                                                oldTouchedWindowHandle);
             }
@@ -4876,6 +4876,10 @@ InputEventInjectionResult InputDispatcher::injectInputEvent(const InputEvent* ev
                     logDispatchStateLocked();
                     LOG(ERROR) << "Inconsistent event: " << motionEvent
                                << ", reason: " << result.error();
+                    if (policyFlags & POLICY_FLAG_INJECTED_FROM_ACCESSIBILITY) {
+                        mLock.unlock();
+                        return InputEventInjectionResult::FAILED;
+                    }
                 }
             }
 
@@ -7093,9 +7097,11 @@ void InputDispatcher::setMonitorDispatchingTimeoutForTest(std::chrono::nanosecon
 void InputDispatcher::slipWallpaperTouch(ftl::Flags<InputTarget::Flags> targetFlags,
                                          const sp<WindowInfoHandle>& oldWindowHandle,
                                          const sp<WindowInfoHandle>& newWindowHandle,
-                                         TouchState& state, DeviceId deviceId,
-                                         const PointerProperties& pointerProperties,
+                                         TouchState& state, const MotionEntry& entry,
                                          std::vector<InputTarget>& targets) const {
+    LOG_IF(FATAL, entry.getPointerCount() != 1) << "Entry not eligible for slip: " << entry;
+    const DeviceId deviceId = entry.deviceId;
+    const PointerProperties& pointerProperties = entry.pointerProperties[0];
     std::vector<PointerProperties> pointers{pointerProperties};
     const bool oldHasWallpaper = oldWindowHandle->getInfo()->inputConfig.test(
             gui::WindowInfo::InputConfig::DUPLICATE_TOUCH_TO_WALLPAPER);
@@ -7122,7 +7128,7 @@ void InputDispatcher::slipWallpaperTouch(ftl::Flags<InputTarget::Flags> targetFl
         state.addOrUpdateWindow(newWallpaper, InputTarget::DispatchMode::SLIPPERY_ENTER,
                                 InputTarget::Flags::WINDOW_IS_OBSCURED |
                                         InputTarget::Flags::WINDOW_IS_PARTIALLY_OBSCURED,
-                                deviceId, pointers);
+                                deviceId, pointers, entry.eventTime);
     }
 }
 
