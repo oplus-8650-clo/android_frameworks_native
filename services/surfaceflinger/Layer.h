@@ -549,7 +549,6 @@ public:
     };
 
     BufferInfo mBufferInfo;
-    std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint> mBufferReleaseChannel;
 
     // implements compositionengine::LayerFE
     const compositionengine::LayerFECompositionState* getCompositionState() const;
@@ -805,8 +804,6 @@ public:
 
     bool setTrustedPresentationInfo(TrustedPresentationThresholds const& thresholds,
                                     TrustedPresentationListener const& listener);
-    void setBufferReleaseChannel(
-            const std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint>& channel);
 
     // Creates a new handle each time, so we only expect
     // this to be called once.
