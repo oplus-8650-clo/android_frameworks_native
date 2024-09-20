@@ -5438,6 +5438,10 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
         }
     }
 
+    if (what & layer_state_t::eBufferReleaseChannelChanged) {
+        layer->setBufferReleaseChannel(s.bufferReleaseChannel);
+    }
+
     const auto& requestedLayerState = mLayerLifecycleManager.getLayerFromId(layer->getSequence());
     bool willPresentCurrentTransaction = requestedLayerState &&
             (requestedLayerState->hasReadyFrame() ||
@@ -6208,9 +6212,16 @@ perfetto::protos::LayersProto SurfaceFlinger::dumpDrawingStateProto(uint32_t tra
         }
     }
 
-    return LayerProtoFromSnapshotGenerator(mLayerSnapshotBuilder, mFrontEndDisplayInfos,
-                                           mLegacyLayers, traceFlags)
-            .generate(mLayerHierarchyBuilder.getHierarchy());
+    auto traceGenerator =
+            LayerProtoFromSnapshotGenerator(mLayerSnapshotBuilder, mFrontEndDisplayInfos,
+                                            mLegacyLayers, traceFlags)
+                    .with(mLayerHierarchyBuilder.getHierarchy());
+
+    if (traceFlags & LayerTracing::Flag::TRACE_EXTRA) {
+        traceGenerator.withOffscreenLayers(mLayerHierarchyBuilder.getOffscreenHierarchy());
+    }
+
+    return traceGenerator.generate();
 }
 
 google::protobuf::RepeatedPtrField<perfetto::protos::DisplayProto>
@@ -6242,36 +6253,6 @@ SurfaceFlinger::dumpDisplayProto() const {
 
 void SurfaceFlinger::dumpHwc(std::string& result) const {
     getHwComposer().dump(result);
-}
-
-void SurfaceFlinger::dumpOffscreenLayersProto(perfetto::protos::LayersProto& layersProto,
-                                              uint32_t traceFlags) const {
-    // Add a fake invisible root layer to the proto output and parent all the offscreen layers to
-    // it.
-    perfetto::protos::LayerProto* rootProto = layersProto.add_layers();
-    const int32_t offscreenRootLayerId = INT32_MAX - 2;
-    rootProto->set_id(offscreenRootLayerId);
-    rootProto->set_name("Offscreen Root");
-    rootProto->set_parent(-1);
-
-    perfetto::protos::LayersProto offscreenLayers =
-            LayerProtoFromSnapshotGenerator(mLayerSnapshotBuilder, mFrontEndDisplayInfos,
-                                            mLegacyLayers, traceFlags)
-                    .generate(mLayerHierarchyBuilder.getOffscreenHierarchy());
-
-    for (int i = 0; i < offscreenLayers.layers_size(); i++) {
-        perfetto::protos::LayerProto* layerProto = offscreenLayers.mutable_layers()->Mutable(i);
-        if (layerProto->parent() == -1) {
-            layerProto->set_parent(offscreenRootLayerId);
-            // Add layer as child of the fake root
-            rootProto->add_children(layerProto->id());
-        }
-    }
-
-    layersProto.mutable_layers()->Reserve(layersProto.layers_size() +
-                                          offscreenLayers.layers_size());
-    std::copy(offscreenLayers.layers().begin(), offscreenLayers.layers().end(),
-              RepeatedFieldBackInserter(layersProto.mutable_layers()));
 }
 
 perfetto::protos::LayersProto SurfaceFlinger::dumpProtoFromMainThread(uint32_t traceFlags) {
@@ -8888,9 +8869,6 @@ perfetto::protos::LayersSnapshotProto SurfaceFlinger::takeLayersSnapshotProto(
                                             0);
 
     auto layers = dumpDrawingStateProto(traceFlags);
-    if (traceFlags & LayerTracing::Flag::TRACE_EXTRA) {
-        dumpOffscreenLayersProto(layers);
-    }
     *snapshot.mutable_layers() = std::move(layers);
 
     if (traceFlags & LayerTracing::Flag::TRACE_HWC) {

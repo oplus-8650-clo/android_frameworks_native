@@ -2562,15 +2562,24 @@ void Layer::cloneDrawingState(const Layer* from) {
 void Layer::callReleaseBufferCallback(const sp<ITransactionCompletedListener>& listener,
                                       const sp<GraphicBuffer>& buffer, uint64_t framenumber,
                                       const sp<Fence>& releaseFence) {
-    if (!listener) {
+    if (!listener && !mBufferReleaseChannel) {
         return;
     }
+
     SFTRACE_FORMAT_INSTANT("callReleaseBufferCallback %s - %" PRIu64, getDebugName(), framenumber);
+
+    ReleaseCallbackId callbackId{buffer->getId(), framenumber};
+    const sp<Fence>& fence = releaseFence ? releaseFence : Fence::NO_FENCE;
     uint32_t currentMaxAcquiredBufferCount =
             mFlinger->getMaxAcquiredBufferCountForCurrentRefreshRate(mOwnerUid);
-    listener->onReleaseBuffer({buffer->getId(), framenumber},
-                              releaseFence ? releaseFence : Fence::NO_FENCE,
-                              currentMaxAcquiredBufferCount);
+
+    if (listener) {
+        listener->onReleaseBuffer(callbackId, fence, currentMaxAcquiredBufferCount);
+    }
+
+    if (mBufferReleaseChannel) {
+        mBufferReleaseChannel->writeReleaseFence(callbackId, fence, currentMaxAcquiredBufferCount);
+    }
 }
 
 sp<CallbackHandle> Layer::findCallbackHandle() {
@@ -2688,6 +2697,7 @@ void Layer::onLayerDisplayed(ftl::SharedFuture<FenceResult> futureFenceResult,
 
 void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
     for (const auto& handle : mDrawingState.callbackHandles) {
+        handle->bufferReleaseChannel = mBufferReleaseChannel;
         handle->transformHint = mTransformHint;
         handle->dequeueReadyTime = dequeueReadyTime;
         handle->currentMaxAcquiredBufferCount =
@@ -4141,6 +4151,11 @@ bool Layer::setTrustedPresentationInfo(TrustedPresentationThresholds const& thre
     // path to ensure it recomutes the current state and invokes the TrustedPresentationListener if
     // we're already in the requested state.
     return haveTrustedPresentationListener;
+}
+
+void Layer::setBufferReleaseChannel(
+        const std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint>& channel) {
+    mBufferReleaseChannel = channel;
 }
 
 void Layer::updateLastLatchTime(nsecs_t latchTime) {
