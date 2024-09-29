@@ -4512,6 +4512,8 @@ void SurfaceFlinger::scheduleNotifyExpectedPresentHint(PhysicalDisplayId display
             if (data.hintStatus.compare_exchange_strong(scheduleHintOnTx,
                                                         NotifyExpectedPresentHintStatus::Sent)) {
                 sendHint();
+                constexpr bool kAllowToEnable = true;
+                mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable);
             }
         }));
     }
