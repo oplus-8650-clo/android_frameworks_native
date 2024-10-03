@@ -1258,7 +1258,6 @@ private:
     // TODO: Also move visibleRegions over to a boolean system.
     bool mUpdateInputInfo = false;
     bool mSomeChildrenChanged;
-    bool mForceTransactionDisplayChange = false;
     bool mUpdateAttachedChoreographer = false;
 
     struct LayerIntHash {
@@ -1289,7 +1288,6 @@ private:
     };
 
     bool mIsHdcpViaNegVsync = false;
-    bool mIsHotplugErrViaNegVsync = false;
 
     std::mutex mHotplugMutex;
     std::vector<HotplugEvent> mPendingHotplugEvents GUARDED_BY(mHotplugMutex);
