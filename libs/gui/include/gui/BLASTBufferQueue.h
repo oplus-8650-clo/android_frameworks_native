@@ -169,7 +169,7 @@ public:
      * indicates the reason for the hang.
      */
     void setTransactionHangCallback(std::function<void(const std::string&)> callback);
-
+    void setApplyToken(sp<IBinder>);
     virtual ~BLASTBufferQueue();
 
     void onFirstRef() override;
@@ -306,7 +306,7 @@ private:
 
     // Queues up transactions using this token in SurfaceFlinger. This prevents queued up
     // transactions from other parts of the client from blocking this transaction.
-    const sp<IBinder> mApplyToken GUARDED_BY(mMutex) = sp<BBinder>::make();
+    sp<IBinder> mApplyToken GUARDED_BY(mMutex) = sp<BBinder>::make();
 
     // Guards access to mDequeueTimestamps since we cannot hold to mMutex in onFrameDequeued or
     // we will deadlock.
