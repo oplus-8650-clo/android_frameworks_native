@@ -4548,7 +4548,7 @@ void InputDispatcher::notifyKey(const NotifyKeyArgs& args) {
             if (args.id != android::os::IInputConstants::INVALID_INPUT_EVENT_ID &&
                 IdGenerator::getSource(args.id) == IdGenerator::Source::INPUT_READER &&
                 !mInputFilterEnabled) {
-                mLatencyTracker.trackNotifyKey(args);
+                mLatencyTracker.trackListener(args);
             }
         }
 
@@ -4684,7 +4684,7 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
         if (args.id != android::os::IInputConstants::INVALID_INPUT_EVENT_ID &&
             IdGenerator::getSource(args.id) == IdGenerator::Source::INPUT_READER &&
             !mInputFilterEnabled) {
-            mLatencyTracker.trackNotifyMotion(args);
+            mLatencyTracker.trackListener(args);
         }
 
         needWake = enqueueInboundEventLocked(std::move(newEntry));
