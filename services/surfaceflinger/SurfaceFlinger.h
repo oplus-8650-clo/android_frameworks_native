@@ -63,6 +63,7 @@
 #include <utils/threads.h>
 
 #include <compositionengine/OutputColorSetting.h>
+#include <compositionengine/impl/OutputCompositionState.h>
 #include <scheduler/Fps.h>
 #include <scheduler/PresentLatencyTracker.h>
 #include <scheduler/Time.h>
@@ -76,7 +77,6 @@
 #include "Display/PhysicalDisplay.h"
 #include "DisplayDevice.h"
 #include "DisplayHardware/HWC2.h"
-#include "DisplayHardware/PowerAdvisor.h"
 #include "DisplayIdGenerator.h"
 #include "Effects/Daltonizer.h"
 #include "FrontEnd/DisplayInfo.h"
@@ -87,6 +87,7 @@
 #include "FrontEnd/TransactionHandler.h"
 #include "LayerVector.h"
 #include "MutexUtils.h"
+#include "PowerAdvisor/PowerAdvisor.h"
 #include "Scheduler/ISchedulerCallback.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/Scheduler.h"
@@ -1388,7 +1389,7 @@ private:
     sp<os::IInputFlinger> mInputFlinger;
     InputWindowCommands mInputWindowCommands;
 
-    std::unique_ptr<Hwc2::PowerAdvisor> mPowerAdvisor;
+    std::unique_ptr<adpf::PowerAdvisor> mPowerAdvisor;
 
     void enableRefreshRateOverlay(bool enable) REQUIRES(mStateLock, kMainThreadContext);
 

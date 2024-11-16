@@ -139,7 +139,6 @@
 #include "DisplayHardware/FramebufferSurface.h"
 #include "DisplayHardware/HWComposer.h"
 #include "DisplayHardware/Hal.h"
-#include "DisplayHardware/PowerAdvisor.h"
 #include "DisplayHardware/VirtualDisplaySurface.h"
 #include "DisplayRenderArea.h"
 #include "Effects/Daltonizer.h"
@@ -164,6 +163,7 @@
 #include "QtiExtension/QtiSurfaceFlingerExtensionFactory.h"
 #include "QtiExtension/QtiExtensionContext.h"
 /* QTI_END */
+#include "PowerAdvisor/PowerAdvisor.h"
 #include "RegionSamplingThread.h"
 #include "RenderAreaBuilder.h"
 #include "Scheduler/EventThread.h"
@@ -437,7 +437,11 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory, SkipInitializationTag)
         mEmulatedDisplayDensity(getDensityFromProperty("qemu.sf.lcd_density", false)),
         mInternalDisplayDensity(
                 getDensityFromProperty("ro.sf.lcd_density", !mEmulatedDisplayDensity)),
-        mPowerAdvisor(std::make_unique<Hwc2::impl::PowerAdvisor>(*this)),
+        mPowerAdvisor(std::make_unique<
+                      adpf::impl::PowerAdvisor>([this] { disableExpensiveRendering(); },
+                                                std::chrono::milliseconds(
+                                                        sysprop::display_update_imminent_timeout_ms(
+                                                                80)))),
         mWindowInfosListenerInvoker(sp<WindowInfosListenerInvoker>::make()),
         mSkipPowerOnForQuiescent(base::GetBoolProperty("ro.boot.quiescent"s, false)) {
     ALOGI("Using HWComposer service: %s", mHwcServiceName.c_str());
@@ -1047,7 +1051,7 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     mQtiSFExtnIntf =
             mQtiSFExtnIntf->qtiPostInit(static_cast<android::impl::HWComposer&>(
                                                 mCompositionEngine->getHwComposer()),
-                                        static_cast<Hwc2::impl::PowerAdvisor*>(mPowerAdvisor.get()),
+                                        static_cast<adpf::impl::PowerAdvisor*>(mPowerAdvisor.get()),
                                         mScheduler->getVsyncConfiguration_ptr(), getHwComposer().getComposer());
    surfaceflingerextension::QtiExtensionContext::instance().setCompositionEngine(
             &getCompositionEngine());
@@ -1401,7 +1405,8 @@ void SurfaceFlinger::setDesiredMode(display::DisplayModeRequest&& desiredMode) {
             mScheduler->updatePhaseConfiguration(displayId, mode.fps);
 
             if (emitEvent) {
-                mScheduler->onDisplayModeChanged(displayId, mode);
+                mScheduler->onDisplayModeChanged(displayId, mode,
+                                                 /*clearContentRequirements*/ false);
             }
             break;
         case DesiredModeAction::None:
@@ -1501,7 +1506,7 @@ void SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
     mScheduler->updatePhaseConfiguration(displayId, activeMode.fps);
 
     if (pendingModeOpt->emitEvent) {
-        mScheduler->onDisplayModeChanged(displayId, activeMode);
+        mScheduler->onDisplayModeChanged(displayId, activeMode, /*clearContentRequirements*/ true);
     }
 }
 
@@ -4275,7 +4280,8 @@ void SurfaceFlinger::updateInputFlinger(VsyncId vsyncId, TimePoint frameTime) {
                                                       inputWindowCommands =
                                                               std::move(mInputWindowCommands),
                                                       inputFlinger = mInputFlinger, this,
-                                                      visibleWindowsChanged, vsyncId, frameTime]() {
+                                                      visibleWindowsChanged, vsyncId,
+                                                      frameTime]() mutable {
         SFTRACE_NAME("BackgroundExecutor::updateInputFlinger");
         if (updateWindowInfo) {
             mWindowInfosListenerInvoker
@@ -8088,7 +8094,8 @@ status_t SurfaceFlinger::applyRefreshRateSelectorPolicy(
     ALOGV("Setting desired display mode specs: %s", currentPolicy.toString().c_str());
 
     if (const bool isPacesetter =
-                mScheduler->onDisplayModeChanged(displayId, selector.getActiveMode())) {
+                mScheduler->onDisplayModeChanged(displayId, selector.getActiveMode(),
+                                                 /*clearContentRequirements*/ true)) {
         mDisplayModeController.updateKernelIdleTimer(displayId);
     }
 
