@@ -354,6 +354,8 @@ public:
     // recovery should begin.
     void addBufferStuffedUids(BufferStuffingMap bufferStuffedUids);
 
+    void setDebugPresentDelay(TimePoint delay) { mDebugPresentDelay = delay; }
+
 private:
     friend class TestableScheduler;
 
@@ -619,6 +621,8 @@ private:
 
     FrameRateOverrideMappings mFrameRateOverrideMappings;
     SmallAreaDetectionAllowMappings mSmallAreaDetectionAllowMappings;
+
+    std::atomic<std::optional<TimePoint>> mDebugPresentDelay;
 
     /* QTI_BEGIN */
     // Cache thermal Fps, and limit to the given level
