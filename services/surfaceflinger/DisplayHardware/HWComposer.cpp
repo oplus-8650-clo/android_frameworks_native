@@ -1210,6 +1210,7 @@ std::optional<DisplayIdentificationInfo> HWComposer::onHotplugConnect(
             return DisplayIdentificationInfo{.id = PhysicalDisplayId::fromPort(port),
                                              .name = isPrimary ? "Primary display"
                                                                : "Secondary display",
+                                             .port = port,
                                              .deviceProductInfo = std::nullopt};
         }();
 
