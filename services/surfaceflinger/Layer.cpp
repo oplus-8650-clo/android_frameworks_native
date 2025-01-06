@@ -1390,6 +1390,15 @@ sp<LayerFE> Layer::getCompositionEngineLayerFE(
     }
     auto layerFE = mFlinger->getFactory().createLayerFE(mName, this);
     mLayerFEs.emplace_back(path, layerFE);
+
+    /* QTI_BEGIN */
+    if (getBuffer()) {
+        mQtiIsSecureDisplay = mFlinger->mQtiSFExtnIntf->qtiIsSecureDisplay(
+                static_cast<sp<const GraphicBuffer>>(getBuffer()));
+        mQtiIsSecureCamera = mFlinger->mQtiSFExtnIntf->qtiIsSecureCamera(
+                static_cast<sp<const GraphicBuffer>>(getBuffer()));
+    }
+    /* QTI_END */
     return layerFE;
 }
 
