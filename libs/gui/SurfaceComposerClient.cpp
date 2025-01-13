@@ -837,9 +837,7 @@ SurfaceComposerClient::Transaction::Transaction() {
 
 SurfaceComposerClient::Transaction::Transaction(const Transaction& other)
       : mId(other.mId),
-        mAnimation(other.mAnimation),
-        mEarlyWakeupStart(other.mEarlyWakeupStart),
-        mEarlyWakeupEnd(other.mEarlyWakeupEnd),
+        mFlags(other.mFlags),
         mMayContainBuffer(other.mMayContainBuffer),
         mDesiredPresentTime(other.mDesiredPresentTime),
         mIsAutoTimestamp(other.mIsAutoTimestamp),
@@ -876,9 +874,7 @@ SurfaceComposerClient::Transaction::createFromParcel(const Parcel* parcel) {
 
 status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel) {
     const uint64_t transactionId = parcel->readUint64();
-    const bool animation = parcel->readBool();
-    const bool earlyWakeupStart = parcel->readBool();
-    const bool earlyWakeupEnd = parcel->readBool();
+    const uint32_t flags = parcel->readUint32();
     const int64_t desiredPresentTime = parcel->readInt64();
     const bool isAutoTimestamp = parcel->readBool();
     const bool logCallPoints = parcel->readBool();
@@ -973,9 +969,7 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
 
     // Parsing was successful. Update the object.
     mId = transactionId;
-    mAnimation = animation;
-    mEarlyWakeupStart = earlyWakeupStart;
-    mEarlyWakeupEnd = earlyWakeupEnd;
+    mFlags = flags;
     mDesiredPresentTime = desiredPresentTime;
     mIsAutoTimestamp = isAutoTimestamp;
     mFrameTimelineInfo = frameTimelineInfo;
@@ -1004,9 +998,7 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
     const_cast<SurfaceComposerClient::Transaction*>(this)->cacheBuffers();
 
     parcel->writeUint64(mId);
-    parcel->writeBool(mAnimation);
-    parcel->writeBool(mEarlyWakeupStart);
-    parcel->writeBool(mEarlyWakeupEnd);
+    parcel->writeUint32(mFlags);
     parcel->writeInt64(mDesiredPresentTime);
     parcel->writeBool(mIsAutoTimestamp);
     parcel->writeBool(mLogCallPoints);
@@ -1139,8 +1131,7 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
     mInputWindowCommands.merge(other.mInputWindowCommands);
 
     mMayContainBuffer |= other.mMayContainBuffer;
-    mEarlyWakeupStart = mEarlyWakeupStart || other.mEarlyWakeupStart;
-    mEarlyWakeupEnd = mEarlyWakeupEnd || other.mEarlyWakeupEnd;
+    mFlags |= other.mFlags;
     mApplyToken = other.mApplyToken;
 
     mergeFrameTimelineInfo(mFrameTimelineInfo, other.mFrameTimelineInfo);
@@ -1162,15 +1153,13 @@ void SurfaceComposerClient::Transaction::clear() {
     mInputWindowCommands.clear();
     mUncacheBuffers.clear();
     mMayContainBuffer = false;
-    mAnimation = false;
-    mEarlyWakeupStart = false;
-    mEarlyWakeupEnd = false;
     mDesiredPresentTime = 0;
     mIsAutoTimestamp = true;
     mFrameTimelineInfo = {};
     mApplyToken = nullptr;
     mMergedTransactionIds.clear();
     mLogCallPoints = false;
+    mFlags = 0;
 }
 
 uint64_t SurfaceComposerClient::Transaction::getId() {
@@ -1341,9 +1330,6 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
 
     displayStates = std::move(mDisplayStates);
 
-    if (mAnimation) {
-        flags |= ISurfaceComposer::eAnimation;
-    }
     if (oneWay) {
         if (synchronous) {
             ALOGE("Transaction attempted to set synchronous and one way at the same time"
@@ -1353,13 +1339,11 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
         }
     }
 
-    // If both mEarlyWakeupStart and mEarlyWakeupEnd are set
+    // If both ISurfaceComposer::eEarlyWakeupStart and ISurfaceComposer::eEarlyWakeupEnd are set
     // it is equivalent for none
-    if (mEarlyWakeupStart && !mEarlyWakeupEnd) {
-        flags |= ISurfaceComposer::eEarlyWakeupStart;
-    }
-    if (mEarlyWakeupEnd && !mEarlyWakeupStart) {
-        flags |= ISurfaceComposer::eEarlyWakeupEnd;
+    uint32_t wakeupFlags = ISurfaceComposer::eEarlyWakeupStart | ISurfaceComposer::eEarlyWakeupEnd;
+    if ((flags & wakeupFlags) == wakeupFlags) {
+        flags &= ~(wakeupFlags);
     }
 
     /* QTI_BEGIN */
@@ -1368,6 +1352,7 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
         qtiDolphinWrapper->qtiDolphinFilterBuffer(mIsAutoTimestamp, mDesiredPresentTime, flags);
     }
     /* QTI_END */
+
     sp<IBinder> applyToken = mApplyToken ? mApplyToken : getDefaultApplyToken();
 
     sp<ISurfaceComposer> sf(ComposerService::getComposerService());
@@ -1485,15 +1470,15 @@ std::optional<gui::StalledTransactionInfo> SurfaceComposerClient::getStalledTran
 }
 
 void SurfaceComposerClient::Transaction::setAnimationTransaction() {
-    mAnimation = true;
+    mFlags |= ISurfaceComposer::eAnimation;
 }
 
 void SurfaceComposerClient::Transaction::setEarlyWakeupStart() {
-    mEarlyWakeupStart = true;
+    mFlags |= ISurfaceComposer::eEarlyWakeupStart;
 }
 
 void SurfaceComposerClient::Transaction::setEarlyWakeupEnd() {
-    mEarlyWakeupEnd = true;
+    mFlags |= ISurfaceComposer::eEarlyWakeupEnd;
 }
 
 layer_state_t* SurfaceComposerClient::Transaction::getLayerState(const sp<SurfaceControl>& sc) {
@@ -1719,6 +1704,29 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setCorne
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setClientDrawnCornerRadius(
+        const sp<SurfaceControl>& sc, float clientDrawnCornerRadius) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eClientDrawnCornerRadiusChanged;
+    s->clientDrawnCornerRadius = clientDrawnCornerRadius;
+    return *this;
+}
+
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setClientDrawnShadowRadius(
+        const sp<SurfaceControl>& sc, float clientDrawnShadowRadius) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eClientDrawnShadowsChanged;
+    s->clientDrawnShadowRadius = clientDrawnShadowRadius;
+    return *this;
+}
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setBackgroundBlurRadius(
         const sp<SurfaceControl>& sc, int backgroundBlurRadius) {
     layer_state_t* s = getLayerState(sc);
