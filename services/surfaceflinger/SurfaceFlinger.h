@@ -381,9 +381,6 @@ protected:
     // We're reference counted, never destroy SurfaceFlinger directly
     virtual ~SurfaceFlinger();
 
-    virtual void processDisplayAdded(const wp<IBinder>& displayToken, const DisplayDeviceState&)
-            REQUIRES(mStateLock);
-
     virtual std::shared_ptr<renderengine::ExternalTexture> getExternalTextureFromBufferData(
             BufferData& bufferData, const char* layerName, uint64_t transactionId);
 
@@ -1085,6 +1082,8 @@ private:
             REQUIRES(mStateLock);
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     void processDisplayChangesLocked() REQUIRES(mStateLock, kMainThreadContext);
+    void processDisplayAdded(const wp<IBinder>& displayToken, const DisplayDeviceState&)
+            REQUIRES(mStateLock, kMainThreadContext);
     void processDisplayRemoved(const wp<IBinder>& displayToken)
             REQUIRES(mStateLock, kMainThreadContext);
     void processDisplayChanged(const wp<IBinder>& displayToken,

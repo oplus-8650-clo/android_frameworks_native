@@ -4194,12 +4194,10 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         /* QTI_END */
 
         if (mScheduler) {
-                // TODO(b/241285876): Annotate `processDisplayAdded` instead.
-                ftl::FakeGuard guard(kMainThreadContext);
-
-                // For hotplug reconnect, renew the registration since display modes have been
-                // reloaded.
-                mScheduler->registerDisplay(display->getPhysicalId(), display->holdRefreshRateSelector(), mActiveDisplayId);
+            // For hotplug reconnect, renew the registration since display modes have been
+            // reloaded.
+            mScheduler->registerDisplay(display->getPhysicalId(), display->holdRefreshRateSelector(),
+                                        mActiveDisplayId);
         }
     }
 
