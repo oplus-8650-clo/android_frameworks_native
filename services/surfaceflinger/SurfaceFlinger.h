@@ -87,6 +87,7 @@
 #include "Display/VirtualDisplaySnapshot.h"
 #include "DisplayDevice.h"
 #include "DisplayHardware/HWC2.h"
+#include "DisplayHardware/HWComposer.h"
 #include "DisplayIdGenerator.h"
 #include "Effects/Daltonizer.h"
 #include "FrontEnd/DisplayInfo.h"
@@ -138,7 +139,6 @@ class FlagManager;
 class FpsReporter;
 class TunnelModeEnabledReporter;
 class HdrLayerInfoReporter;
-class HWComposer;
 class IGraphicBufferProducer;
 class Layer;
 class MessageBase;
@@ -1322,7 +1322,7 @@ private:
 
     struct HotplugEvent {
         hal::HWDisplayId hwcDisplayId;
-        hal::Connection connection = hal::Connection::INVALID;
+        HWComposer::HotplugEvent event;
     };
 
     bool mIsHdcpViaNegVsync = false;
