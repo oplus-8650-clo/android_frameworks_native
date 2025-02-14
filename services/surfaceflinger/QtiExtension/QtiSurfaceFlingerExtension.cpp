@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // #define LOG_NDEBUG 0
@@ -1178,7 +1178,7 @@ void QtiSurfaceFlingerExtension::qtiCheckVirtualDisplayHint(const Vector<Display
                             ALOGW_IF(status != NO_ERROR, "Unable to query usage (%d)", status);
                             if ((status == NO_ERROR) && qtiCanAllocateHwcDisplayIdForVDS(usage)) {
                                 createVirtualDisplay = true;
-                                return;
+                                break;
                             }
                         }
                     }
@@ -1505,6 +1505,13 @@ void QtiSurfaceFlingerExtension::qtiUpdateSmomoState() {
                                               : static_cast<uint32_t>(fps));
     }
 
+    // Disable DRC if active displays is more than 1.
+    bool allow_refresh_change = (numActiveDisplays == 1) &&
+            !mQtiFlinger->mScheduler->isGameFrameRateOverridePresent();
+    for (auto& instance : mQtiSmomoInstances) {
+        instance.smoMo->SetRefreshRateChangeStatus(allow_refresh_change);
+    }
+
     bool smomo_optimal_refresh = false;
     if (numActiveDisplays == 1) {
         std::map<int, int> refresh_rate_votes;
@@ -1524,11 +1531,6 @@ void QtiSurfaceFlingerExtension::qtiUpdateSmomoState() {
     }
 
     mQtiSmomoOptimalRefreshActive = smomo_optimal_refresh;
-
-    // Disable DRC if active displays is more than 1.
-    for (auto& instance : mQtiSmomoInstances) {
-        instance.smoMo->SetRefreshRateChangeStatus((numActiveDisplays == 1));
-    }
 }
 
 void QtiSurfaceFlingerExtension::qtiSetDisplayAnimating() {
