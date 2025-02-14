@@ -812,8 +812,8 @@ status_t QtiSurfaceFlingerExtension::qtiBinderSetPowerMode(uint64_t displayId, i
 
     if (tile_h_loc < 0) {
         ALOGI("Debug: Set display = %llu, power mode = %d", (unsigned long long)displayId, mode);
-        if (const auto dispId = DisplayId::fromValue<PhysicalDisplayId>(displayId); dispId) {
-            qtiSetPowerMode(mQtiFlinger->getPhysicalDisplayToken(dispId.value()), mode);
+        if (const auto dispId = PhysicalDisplayId::fromValue(displayId); dispId.value) {
+            qtiSetPowerMode(mQtiFlinger->getPhysicalDisplayToken(dispId), mode);
         }
     } else {
         if (mQtiDisplayConfigHidl) {
@@ -872,8 +872,8 @@ status_t QtiSurfaceFlingerExtension::qtiBinderSetPanelBrightnessTiled(uint64_t d
     if (tile_h_loc < 0) {
         ALOGI("Debug: Set display = %llu, brightness level = %d/255 (%0.2ff)",
               (unsigned long long)displayId, level, levelf);
-        if (const auto dispId = DisplayId::fromValue<PhysicalDisplayId>(displayId); dispId) {
-            mQtiFlinger->setDisplayBrightness(mQtiFlinger->getPhysicalDisplayToken(dispId.value()),
+        if (const auto dispId = PhysicalDisplayId::fromValue(displayId); dispId.value) {
+            mQtiFlinger->setDisplayBrightness(mQtiFlinger->getPhysicalDisplayToken(dispId),
                                               brightness);
         }
     } else {
@@ -1822,10 +1822,10 @@ void QtiSurfaceFlingerExtension::qtiSetupDisplayExtnFeatures() {
                 uint32_t hwcDisplayId;
                 if (qtiGetHwcDisplayId(display, &hwcDisplayId)) {
                     const auto displayId =
-                            DisplayId::fromValue<PhysicalDisplayId>(display->getId().value);
-                    if (displayId) {
+                            PhysicalDisplayId::fromValue(display->getId().value);
+                    if (displayId.value) {
                         auto configId =
-                                mQtiFlinger->getHwComposer().getActiveMode(displayId.value());
+                                mQtiFlinger->getHwComposer().getActiveMode(displayId);
                         if (!configId.value_opt()) {
                             ALOGW("HWC returned no active config");
                             return;
