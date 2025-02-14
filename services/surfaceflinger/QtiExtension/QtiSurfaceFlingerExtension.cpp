@@ -1178,7 +1178,7 @@ void QtiSurfaceFlingerExtension::qtiCheckVirtualDisplayHint(const Vector<Display
                             ALOGW_IF(status != NO_ERROR, "Unable to query usage (%d)", status);
                             if ((status == NO_ERROR) && qtiCanAllocateHwcDisplayIdForVDS(usage)) {
                                 createVirtualDisplay = true;
-                                return;
+                                break;
                             }
                         }
                     }
