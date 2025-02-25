@@ -1071,14 +1071,14 @@ ui::Dataspace Output::getBestDataspace(ui::Dataspace* outHdrDataSpace,
                 break;
             case ui::Dataspace::BT2020_PQ:
             case ui::Dataspace::BT2020_ITU_PQ:
-                bestDataSpace = ui::Dataspace::DISPLAY_P3;
+                bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
                 *outHdrDataSpace = ui::Dataspace::BT2020_PQ;
                 *outIsHdrClientComposition =
                         layer->getLayerFE().getCompositionState()->forceClientComposition;
                 break;
             case ui::Dataspace::BT2020_HLG:
             case ui::Dataspace::BT2020_ITU_HLG:
-                bestDataSpace = ui::Dataspace::DISPLAY_P3;
+                bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
                 // When there's mixed PQ content and HLG content, we set the HDR
                 // data space to be BT2020_HLG and convert PQ to HLG.
                 if (*outHdrDataSpace == ui::Dataspace::UNKNOWN) {
@@ -1110,6 +1110,9 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
             break;
         case ui::ColorMode::DISPLAY_P3:
             bestDataSpace = ui::Dataspace::DISPLAY_P3;
+            break;
+        case ui::ColorMode::DISPLAY_BT2020:
+            bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
             break;
         default:
             break;
