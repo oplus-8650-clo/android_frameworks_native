@@ -26,8 +26,6 @@ namespace android::inputdispatcher {
 
 namespace {
 
-const bool USE_TOPOLOGY = com::android::input::flags::connected_displays_cursor();
-
 bool isMouseOrTouchpad(uint32_t sources) {
     // Check if this is a mouse or touchpad, but not a drawing tablet.
     return isFromSource(sources, AINPUT_SOURCE_MOUSE_RELATIVE) ||
@@ -236,7 +234,8 @@ ssize_t InputState::findKeyMemento(const KeyEntry& entry) const {
 ssize_t InputState::findMotionMemento(const MotionEntry& entry, bool hovering) const {
     // If we have connected displays a mouse can move between displays and displayId may change
     // while a gesture is in-progress.
-    const bool skipDisplayCheck = USE_TOPOLOGY && isMouseOrTouchpad(entry.source);
+    const bool skipDisplayCheck = com::android::input::flags::connected_displays_cursor() &&
+            isMouseOrTouchpad(entry.source);
     for (size_t i = 0; i < mMotionMementos.size(); i++) {
         const MotionMemento& memento = mMotionMementos[i];
         if (memento.deviceId == entry.deviceId && memento.source == entry.source &&
@@ -356,7 +355,8 @@ bool InputState::shouldCancelPreviousStream(const MotionEntry& motionEntry) cons
         // it's unlikely that those two streams would be consistent with each other. Therefore,
         // cancel the previous gesture if the display id changes.
         // Except when we have connected-displays where a mouse may move across display boundaries.
-        const bool skipDisplayCheck = (USE_TOPOLOGY && isMouseOrTouchpad(motionEntry.source));
+        const bool skipDisplayCheck = (com::android::input::flags::connected_displays_cursor() &&
+                                       isMouseOrTouchpad(motionEntry.source));
         if (!skipDisplayCheck && motionEntry.displayId != lastMemento.displayId) {
             LOG(INFO) << "Canceling stream: last displayId was " << lastMemento.displayId
                       << " and new event is " << motionEntry;
