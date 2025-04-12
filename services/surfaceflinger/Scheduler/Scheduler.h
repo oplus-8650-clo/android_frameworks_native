@@ -202,8 +202,9 @@ public:
     }
 
     void updatePhaseConfiguration(PhysicalDisplayId, Fps) EXCLUDES(mVsyncConfigLock);
-    void reloadPhaseConfiguration(Fps, Duration minSfDuration, Duration maxSfDuration,
-                                  Duration appDuration) EXCLUDES(mVsyncConfigLock);
+    void reloadPhaseConfiguration(const FrameRateMode&, Duration minSfDuration,
+                                  Duration maxSfDuration, Duration appDuration)
+            EXCLUDES(mVsyncConfigLock);
 
     VsyncConfigSet getCurrentVsyncConfigs() const EXCLUDES(mVsyncConfigLock) {
         std::scoped_lock lock{mVsyncConfigLock};
@@ -215,11 +216,16 @@ public:
         return mVsyncConfiguration->getConfigsForRefreshRate(refreshRate);
     }
 
+    static nsecs_t getPresentationDeadline(Fps refreshRate, Duration sfVsyncOffset) {
+        // We add an additional 1ms to allow for processing time and
+        // differences between the ideal and actual refresh rate.
+        return refreshRate.getPeriodNsecs() - sfVsyncOffset.ns() + 1000000;
+    }
+
     VsyncConfiguration* getVsyncConfiguration_ptr() {
         std::scoped_lock lock{mVsyncConfigLock};
         return mVsyncConfiguration.get();
     }
-
     // Sets the render rate for the scheduler to run at.
     void setRenderRate(PhysicalDisplayId, Fps, bool applyImmediately);
 
