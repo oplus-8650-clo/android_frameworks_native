@@ -94,6 +94,7 @@ filegroup {
         "android/**/TouchOcclusionMode.aidl",
         "android/gui/TrustedOverlay.aidl",
         "android/gui/BorderSettings.aidl",
+        "android/gui/BoxShadowSettings.aidl",
     ],
 }
 
@@ -352,6 +353,10 @@ cc_library_shared {
 
     static_libs: [
         "libsurfaceflingerflags",
+    ],
+
+    shared_libs: [
+       "libaconfig_storage_read_api_cc",
     ],
 
     afdo: true,

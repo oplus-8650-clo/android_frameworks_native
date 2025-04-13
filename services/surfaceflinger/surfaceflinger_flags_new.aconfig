@@ -134,6 +134,16 @@ flag {
 } # detached_mirror
 
 flag {
+  name: "disable_synthetic_vsync_for_performance"
+  namespace: "core_graphics"
+  description: "Turn off synthetic VSYNC when adjusting thread scheduling for performance"
+  bug: "406147398"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # disable_synthetic_vsync_for_performance
+
+flag {
   name: "display_config_error_hal"
   namespace: "core_graphics"
   description: "Report HAL display configuration errors like modeset failure or link training failure"
@@ -306,14 +316,6 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # override_trusted_overlay
-
-flag {
-  name: "view_set_requested_frame_rate_mrr"
-  namespace: "core_graphics"
-  description: "Enable to use frame rate category NoPreference with fixed frame rate vote on MRR devices"
-  bug: "352206100"
-  is_fixed_read_only: true
-} # view_set_requested_frame_rate_mrr
 
 flag {
   name: "vrr_bugfix_24q4"
