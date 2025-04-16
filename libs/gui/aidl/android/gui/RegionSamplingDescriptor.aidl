@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-package android.gui;
+ package android.gui;
 
-import android.gui.DisplayConnectionType;
-import android.gui.DeviceProductInfo;
-import android.gui.Rotation;
+ import android.gui.ARect;
+ import android.gui.IRegionSamplingListener;
 
-/** @hide */
-parcelable StaticDisplayInfo {
-    DisplayConnectionType connectionType = DisplayConnectionType.Internal;
-    int port = -1;
-    float density;
-    boolean secure;
-    @nullable DeviceProductInfo deviceProductInfo;
-    Rotation installOrientation = Rotation.Rotation0;
-    /* this comes from composer HAL's screenPartStatus.aidl file */
-    int screenPartStatus;
+ /** @hide */
+parcelable RegionSamplingDescriptor {
+    // Sampling area region
+    ARect area;
+
+    // All layers under this layer ID will be sampled from
+    int stopLayerId;
+
+    // Listener receiving median luma notifications
+    IRegionSamplingListener listener;
 }

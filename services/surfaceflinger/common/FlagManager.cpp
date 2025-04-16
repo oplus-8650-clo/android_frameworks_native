@@ -163,7 +163,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(graphite_renderengine);
     DUMP_ACONFIG_FLAG(hdcp_level_hal);
     DUMP_ACONFIG_FLAG(hdcp_negotiation);
-    DUMP_ACONFIG_FLAG(idle_screen_refresh_rate_timeout);
     DUMP_ACONFIG_FLAG(latch_unsignaled_with_auto_refresh_changed);
     DUMP_ACONFIG_FLAG(local_tonemap_screenshots);
     DUMP_ACONFIG_FLAG(misc1);
@@ -179,7 +178,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(trace_frame_rate_override);
     DUMP_ACONFIG_FLAG(true_hdr_screenshots);
     DUMP_ACONFIG_FLAG(use_known_refresh_rate_for_fps_consistency);
-    DUMP_ACONFIG_FLAG(vrr_bugfix_24q4);
     DUMP_ACONFIG_FLAG(vrr_bugfix_dropped_frame);
     DUMP_ACONFIG_FLAG(vrr_config);
     DUMP_ACONFIG_FLAG(vulkan_renderengine);
@@ -277,7 +275,6 @@ FLAG_MANAGER_ACONFIG_FLAG(restore_blur_step, "debug.renderengine.restore_blur_st
 FLAG_MANAGER_ACONFIG_FLAG(dont_skip_on_early_ro, "")
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
 FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
-FLAG_MANAGER_ACONFIG_FLAG(vrr_bugfix_24q4, "");
 FLAG_MANAGER_ACONFIG_FLAG(vrr_bugfix_dropped_frame, "")
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(filter_frames_before_trace_starts, "")
@@ -316,9 +313,6 @@ FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel, "", android::os)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
                                    android::companion::virtualdevice::flags)
 
-/// Trunk stable readonly flags from outside SurfaceFlinger ///
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(idle_screen_refresh_rate_timeout, "",
-                                   com::android::server::display::feature::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel_fixed, "", android::os)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(trace_frame_rate_override, "",
                                    com::android::graphics::libgui::flags);
