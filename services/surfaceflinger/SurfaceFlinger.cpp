@@ -1211,6 +1211,7 @@ status_t SurfaceFlinger::getStaticDisplayInfo(int64_t displayId, ui::StaticDispl
     info->connectionType = snapshot.connectionType();
     info->port = snapshot.port();
     info->deviceProductInfo = snapshot.deviceProductInfo();
+    info->screenPartStatus = snapshot.screenPartStatus();
 
     if (mEmulatedDisplayDensity) {
         info->density = mEmulatedDisplayDensity;
@@ -2109,11 +2110,29 @@ status_t SurfaceFlinger::addRegionSamplingListener(const Rect& samplingArea,
     return NO_ERROR;
 }
 
+status_t SurfaceFlinger::addRegionSamplingListenerWithStopLayerId(
+        const Rect& samplingArea, const int32_t stopLayerId,
+        const sp<IRegionSamplingListener>& listener) {
+    if (!listener || samplingArea == Rect::INVALID_RECT || samplingArea.isEmpty()) {
+        return BAD_VALUE;
+    }
+
+    mRegionSamplingThread->addListener(samplingArea,
+                                       stopLayerId ? stopLayerId : UNASSIGNED_LAYER_ID, listener);
+    return NO_ERROR;
+}
+
 status_t SurfaceFlinger::removeRegionSamplingListener(const sp<IRegionSamplingListener>& listener) {
     if (!listener) {
         return BAD_VALUE;
     }
     mRegionSamplingThread->removeListener(listener);
+    return NO_ERROR;
+}
+
+status_t SurfaceFlinger::getRegionSamplingListeners(
+        std::vector<gui::RegionSamplingDescriptor>* listeners) const {
+    *listeners = mRegionSamplingThread->getListeners();
     return NO_ERROR;
 }
 
@@ -2656,12 +2675,8 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         mUpdateAttachedChoreographer = true;
     }
     outTransactionsAreEmpty = mLayerLifecycleManager.getGlobalChanges().get() == 0;
-    if (FlagManager::getInstance().vrr_bugfix_24q4()) {
-        mustComposite |= mLayerLifecycleManager.getGlobalChanges().any(
-                frontend::RequestedLayerState::kMustComposite);
-    } else {
-        mustComposite |= mLayerLifecycleManager.getGlobalChanges().get() != 0;
-    }
+    mustComposite |= mLayerLifecycleManager.getGlobalChanges().any(
+            frontend::RequestedLayerState::kMustComposite);
 
     bool newDataLatched = false;
     SFTRACE_NAME("DisplayCallbackAndStatsUpdates");
@@ -3942,6 +3957,7 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(PhysicalDispl
         const auto& display = displayOpt->get();
         const auto& snapshot = display.snapshot();
         const uint8_t port = snapshot.port();
+        const android::ScreenPartStatus screenPartStatus = snapshot.screenPartStatus();
 
         std::optional<DeviceProductInfo> deviceProductInfo;
         if (getHwComposer().updatesDeviceProductInfoOnHotplugReconnect()) {
@@ -3954,8 +3970,9 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(PhysicalDispl
         // display on reconnect.
         const auto it =
                 mPhysicalDisplays.try_replace(displayId, display.token(), displayId, port,
-                                              snapshot.connectionType(), std::move(displayModes),
-                                              std::move(colorModes), std::move(deviceProductInfo));
+                                              screenPartStatus, snapshot.connectionType(),
+                                              std::move(displayModes), std::move(colorModes),
+                                              std::move(deviceProductInfo));
 
         auto& state = mCurrentState.displays.editValueFor(it->second.token());
         state.sequenceId = DisplayDeviceState{}.sequenceId; // Generate new sequenceId.
@@ -3972,8 +3989,8 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(PhysicalDispl
     const ui::DisplayConnectionType connectionType =
             getHwComposer().getDisplayConnectionType(displayId);
 
-    mPhysicalDisplays.try_emplace(displayId, token, displayId, info.port, connectionType,
-                                  std::move(displayModes), std::move(colorModes),
+    mPhysicalDisplays.try_emplace(displayId, token, displayId, info.port, info.screenPartStatus,
+                                  connectionType, std::move(displayModes), std::move(colorModes),
                                   std::move(info.deviceProductInfo));
 
     DisplayDeviceState state;
@@ -6463,7 +6480,9 @@ void SurfaceFlinger::dumpDisplayIdentificationData(std::string& result) const {
             continue;
         }
 
-        StringAppendF(&result, "port=%u pnpId=%s displayName=\"", port, edid->pnpId.data());
+        StringAppendF(&result, "port=%u pnpId=%s screenPartStatus=%s displayName=\"", port,
+                      edid->pnpId.data(),
+                      android::ScreenPartStatusToString(screenPartStatus).c_str());
         result.append(edid->displayName.data(), edid->displayName.length());
         result.append("\"\n");
     }
@@ -8632,13 +8651,9 @@ status_t SurfaceFlinger::setDesiredDisplayModeSpecs(const sp<IBinder>& displayTo
             return INVALID_OPERATION;
         } else {
             using Policy = scheduler::RefreshRateSelector::DisplayManagerPolicy;
-            const auto idleScreenConfigOpt =
-                    FlagManager::getInstance().idle_screen_refresh_rate_timeout()
-                    ? specs.idleScreenRefreshRateConfig
-                    : std::nullopt;
             const Policy policy{DisplayModeId(specs.defaultMode), translate(specs.primaryRanges),
                                 translate(specs.appRequestRanges), specs.allowGroupSwitching,
-                                idleScreenConfigOpt};
+                                specs.idleScreenRefreshRateConfig};
 
             return setDesiredDisplayModeSpecsInternal(display, policy);
         }
@@ -9407,6 +9422,7 @@ binder::Status SurfaceComposerAIDL::getStaticDisplayInfo(int64_t displayId,
         outInfo->density = info.density;
         outInfo->secure = info.secure;
         outInfo->installOrientation = static_cast<gui::Rotation>(info.installOrientation);
+        outInfo->screenPartStatus = static_cast<uint8_t>(info.screenPartStatus);
 
         if (const std::optional<DeviceProductInfo> dpi = info.deviceProductInfo) {
             gui::DeviceProductInfo dinfo;
@@ -9818,11 +9834,36 @@ binder::Status SurfaceComposerAIDL::addRegionSamplingListener(
     return binderStatusFromStatusT(status);
 }
 
+binder::Status SurfaceComposerAIDL::addRegionSamplingListenerWithStopLayerId(
+        const gui::ARect& samplingArea, const int32_t stopLayerId,
+        const sp<gui::IRegionSamplingListener>& listener) {
+    status_t status = checkAccessPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+    android::Rect rect;
+    rect.left = samplingArea.left;
+    rect.top = samplingArea.top;
+    rect.right = samplingArea.right;
+    rect.bottom = samplingArea.bottom;
+    status = mFlinger->addRegionSamplingListenerWithStopLayerId(rect, stopLayerId, listener);
+    return binderStatusFromStatusT(status);
+}
+
 binder::Status SurfaceComposerAIDL::removeRegionSamplingListener(
         const sp<gui::IRegionSamplingListener>& listener) {
     status_t status = checkReadFrameBufferPermission();
     if (status == OK) {
         status = mFlinger->removeRegionSamplingListener(listener);
+    }
+    return binderStatusFromStatusT(status);
+}
+
+binder::Status SurfaceComposerAIDL::getRegionSamplingListeners(
+        std::vector<gui::RegionSamplingDescriptor>* listeners) {
+    status_t status = checkAccessPermission();
+    if (status == OK) {
+        status = mFlinger->getRegionSamplingListeners(listeners);
     }
     return binderStatusFromStatusT(status);
 }
