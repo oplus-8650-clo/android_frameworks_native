@@ -128,6 +128,7 @@ struct RequestedLayerState : layer_state_t {
     uint32_t parentId = UNASSIGNED_LAYER_ID;
     uint32_t relativeParentId = UNASSIGNED_LAYER_ID;
     uint32_t layerIdToMirror = UNASSIGNED_LAYER_ID;
+    uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     ui::LayerStack layerStackToMirror = ui::UNASSIGNED_LAYER_STACK;
     uint32_t touchCropId = UNASSIGNED_LAYER_ID;
     uint32_t bgColorLayerId = UNASSIGNED_LAYER_ID;

@@ -32,11 +32,10 @@ cc_test {
     ],
     srcs: [
         "main.cpp",
-
         "test_framework/core/EdidBuilder.cpp",
         "test_framework/core/TestService.cpp",
-        "test_framework/fake_hwc3/Hwc3Composer.cpp",
-        "test_framework/fake_hwc3/Hwc3Controller.cpp",
+        "test_framework/hwc3/FakeComposer.cpp",
+        "test_framework/hwc3/Hwc3Controller.cpp",
         "test_framework/surfaceflinger/SFController.cpp",
 
         // Internal tests

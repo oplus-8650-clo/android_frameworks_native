@@ -450,11 +450,17 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
         updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
+        if (FlagManager::getInstance().stop_layer()) {
+            applyStopLayers(args.root, childPath);
+        }
     } else {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
             updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
+            if (FlagManager::getInstance().stop_layer()) {
+                applyStopLayers(*childHierarchy, childPath);
+            }
         }
     }
 
@@ -1393,6 +1399,100 @@ void LayerSnapshotBuilder::updateTouchableRegionCrop(const Args& args) {
                     displayInfo.transform.transform(Rect{clonedRootSnapshot->transformedBounds});
             snapshot->inputInfo.touchableRegion =
                     snapshot->inputInfo.touchableRegion.intersect(rect);
+        }
+    }
+}
+
+// Apply stop layers to the hierarchy.
+//
+// If layer X specifies stop layer Y, then any layer within X's subhierarchy that is z-ordered
+// above Y is hidden. The stop layer itself, layer Y, is also hidden.
+//
+// This works by traversing the hierarchy in z-order. When a layer that specifies a stop layer is
+// encountered, the specified stop layer is pushed to the stopLayer stack, the subhierarchy is
+// traversed, then the stop layer is popped from the stack. If a layer whose id is stored in the
+// stop layer stack is encountered during traversal, it is added to the activeStopLayers set. Any
+// layer visited while the activeStopLayer set is non-empty is hidden. When an element is popped
+// from the stopLayer stack, any active stop layers that are no longer in the stopLayer stack are
+// removed from the activeStopLayers set.
+void LayerSnapshotBuilder::applyStopLayers(const LayerHierarchy& hierarchy,
+                                           const LayerHierarchy::TraversalPath& traversalPath) {
+    ftl::SmallVector<uint32_t, 5> stopLayers;
+    ftl::SmallVector<uint32_t, 5> activeStopLayers;
+    applyStopLayersInternal(hierarchy, traversalPath, stopLayers, activeStopLayers);
+}
+
+void LayerSnapshotBuilder::applyStopLayersInternal(
+        const LayerHierarchy& hierarchy, const LayerHierarchy::TraversalPath& traversalPath,
+        ftl::SmallVector<uint32_t, 5>& stopLayers,
+        ftl::SmallVector<uint32_t, 5>& activeStopLayers) {
+    const RequestedLayerState* layer = hierarchy.getLayer();
+
+    // Push to the stopLayer stack.
+    if (layer->stopLayerId != UNASSIGNED_LAYER_ID) {
+        stopLayers.push_back(layer->stopLayerId);
+    }
+
+    // Hide this layer if the activeStopLayers set is non-empty.
+    if (!activeStopLayers.empty()) {
+        LayerSnapshot* snapshot = getSnapshot(traversalPath);
+        snapshot->isHiddenByPolicyFromParent = true;
+    }
+
+    // Traverse z-ordered below children before potentially activating this layer as a stop layer.
+    auto childIt = hierarchy.mChildren.begin();
+    while (childIt != hierarchy.mChildren.end()) {
+        auto& [childHierarchy, childVariant] = *childIt;
+        if (childHierarchy->getLayer()->z >= 0) {
+            break;
+        }
+        childIt++;
+
+        LayerHierarchy::TraversalPath childTraversalPath =
+                traversalPath.makeChild(childHierarchy->getLayer()->id, childVariant);
+        if (childTraversalPath.detached) {
+            continue;
+        }
+
+        applyStopLayersInternal(*childHierarchy, childTraversalPath, stopLayers, activeStopLayers);
+    }
+
+    // Activate this layer as a stop layer if it's in the stopLayers stack.
+    bool isStopLayer =
+            std::find(stopLayers.begin(), stopLayers.end(), layer->id) != stopLayers.end();
+    if (isStopLayer) {
+        activeStopLayers.push_back(layer->id);
+        LayerSnapshot* snapshot = getSnapshot(traversalPath);
+        snapshot->isHiddenByPolicyFromParent = true;
+    }
+
+    // Traverse z-ordered above children.
+    while (childIt != hierarchy.mChildren.end()) {
+        auto& [childHierarchy, childVariant] = *childIt++;
+
+        LayerHierarchy::TraversalPath childTraversalPath =
+                traversalPath.makeChild(childHierarchy->getLayer()->id, childVariant);
+        if (childTraversalPath.detached) {
+            continue;
+        }
+
+        applyStopLayersInternal(*childHierarchy, childTraversalPath, stopLayers, activeStopLayers);
+    }
+
+    // Pop from the stopLayer stack and remove active stop layers from the activeStopLayers set
+    // if necessary.
+    if (layer->stopLayerId != UNASSIGNED_LAYER_ID) {
+        stopLayers.pop_back();
+
+        auto it = activeStopLayers.begin();
+        while (it != activeStopLayers.end()) {
+            bool stopLayerNoLongerActive =
+                    std::find(stopLayers.begin(), stopLayers.end(), *it) == stopLayers.end();
+            if (stopLayerNoLongerActive) {
+                activeStopLayers.unstable_erase(it);
+            } else {
+                it++;
+            }
         }
     }
 }

@@ -257,6 +257,7 @@ struct layer_state_t {
         eClientDrawnCornerRadiusChanged = 0x200000'00000000,
         eBorderSettingsChanged = 0x400000'00000000,
         eBoxShadowSettingsChanged = 0x800000'00000000,
+        eStopLayerChanged = 0x1000000'00000000,
     };
 
     layer_state_t();

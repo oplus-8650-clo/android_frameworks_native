@@ -25,26 +25,26 @@
 
 #include "test_framework/core/DisplayConfiguration.h"
 
-namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3 {
+namespace android::surfaceflinger::tests::end2end::test_framework::hwc3 {
 
-class Hwc3Composer final {
+class FakeComposer final {
     struct Passkey;  // Uses the passkey idiom to restrict construction.
 
-    class Hwc3ComposerImpl;  // An internal class implements the AIDL interface.
+    struct ComposerImpl;  // An internal class implements the AIDL interface.
 
   public:
-    using Hwc3IComposer = aidl::android::hardware::graphics::composer3::IComposer;
+    using IComposer = aidl::android::hardware::graphics::composer3::IComposer;
 
     // Gets the full qualified service name given a base name for the service.
     [[nodiscard]] static auto getServiceName(std::string_view baseServiceName) -> std::string;
 
-    // Constructs a Hwc3Composer instance.
-    [[nodiscard]] static auto make() -> base::expected<std::shared_ptr<Hwc3Composer>, std::string>;
+    // Constructs a FakeComposer instance.
+    [[nodiscard]] static auto make() -> base::expected<std::shared_ptr<FakeComposer>, std::string>;
 
-    explicit Hwc3Composer(Passkey passkey);
+    explicit FakeComposer(Passkey passkey);
 
     // Obtains the AIDL composer3::IComposer interface for the internal instance.
-    [[nodiscard]] auto getComposer() -> std::shared_ptr<Hwc3IComposer>;
+    [[nodiscard]] auto getComposer() -> std::shared_ptr<IComposer>;
 
     // Adds a display to the composer. This will sent a hotplug connect event.
     void addDisplay(const core::DisplayConfiguration& display);
@@ -55,7 +55,7 @@ class Hwc3Composer final {
   private:
     [[nodiscard]] auto init() -> base::expected<void, std::string>;
 
-    std::shared_ptr<Hwc3ComposerImpl> mImpl;
+    std::shared_ptr<ComposerImpl> mImpl;
 };
 
-}  // namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3
+}  // namespace android::surfaceflinger::tests::end2end::test_framework::hwc3

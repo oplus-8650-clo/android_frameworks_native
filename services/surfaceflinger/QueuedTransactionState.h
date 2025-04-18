@@ -46,6 +46,7 @@ public:
     uint32_t parentId = UNASSIGNED_LAYER_ID;
     uint32_t relativeParentId = UNASSIGNED_LAYER_ID;
     uint32_t touchCropId = UNASSIGNED_LAYER_ID;
+    uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
 };
 
 struct QueuedTransactionState {
