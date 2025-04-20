@@ -65,11 +65,11 @@ public:
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
     bool refresh_rate_overlay_on_external_display() const;
+    bool vsync_predictor_rate_change_with_aligned_sequence() const;
     bool vsync_predictor_recovery() const;
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
-    bool add_sf_skipped_frames_to_trace() const;
     bool adpf_fmq_sf() const;
     bool allow_n_vsyncs_in_targeter() const;
     bool arr_setframerate_gte_enum() const;

@@ -1406,10 +1406,8 @@ nsecs_t FrameTimeline::DisplayFrame::trace(pid_t surfaceFlingerPid, nsecs_t mono
         surfaceFrame->trace(mToken, monoBootOffset, filterFramesBeforeTraceStarts);
     }
 
-    if (FlagManager::getInstance().add_sf_skipped_frames_to_trace()) {
-        addSkippedFrame(surfaceFlingerPid, monoBootOffset, previousPredictionPresentTime,
-                        filterFramesBeforeTraceStarts);
-    }
+    addSkippedFrame(surfaceFlingerPid, monoBootOffset, previousPredictionPresentTime,
+                    filterFramesBeforeTraceStarts);
     return mSurfaceFlingerPredictions.presentTime;
 }
 

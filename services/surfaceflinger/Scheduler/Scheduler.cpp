@@ -651,8 +651,9 @@ void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderFrameRate, bool ap
 
     ALOGV("%s %s (%s)", __func__, to_string(mode.fps).c_str(),
           to_string(mode.modePtr->getVsyncRate()).c_str());
-
-    display.schedulePtr->getTracker().setRenderRate(renderFrameRate, applyImmediately);
+    std::vector<FrameRateOverride> overrides = mFrameRateOverrideMappings.getAllFrameRateOverrides(
+            display.selectorPtr->supportsAppFrameRateOverrideByContent());
+    display.schedulePtr->getTracker().setRenderRate(renderFrameRate, applyImmediately, overrides);
 }
 
 Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,

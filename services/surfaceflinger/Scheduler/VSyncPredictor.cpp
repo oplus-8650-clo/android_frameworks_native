@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <numeric>
 #include <sstream>
 
 #include <android-base/logging.h>
@@ -383,7 +384,8 @@ bool VSyncPredictor::isVSyncInPhase(nsecs_t timePoint, Fps frameRate) {
     return mTimelines.back().isVSyncInPhase(model, vsync, frameRate);
 }
 
-void VSyncPredictor::setRenderRate(Fps renderRate, bool applyImmediately) {
+void VSyncPredictor::setRenderRate(Fps renderRate, bool applyImmediately,
+                                   std::vector<FrameRateOverride> frameRateOverrides) {
     SFTRACE_FORMAT("%s %s", __func__, to_string(renderRate).c_str());
     ALOGV("%s %s: RenderRate %s ", __func__, to_string(mId).c_str(), to_string(renderRate).c_str());
     std::lock_guard lock(mMutex);
@@ -407,14 +409,12 @@ void VSyncPredictor::setRenderRate(Fps renderRate, bool applyImmediately) {
         SFTRACE_FORMAT_INSTANT("newRenderRateIsHigher");
         mTimelines.clear();
         mLastCommittedVsync = TimePoint::fromNs(0);
-
+        mTimelines.emplace_back(mLastCommittedVsync, mIdealPeriod, renderRate);
     } else {
-        // We need to freeze the timeline at the committed vsync, and
-        // then use with threshold adjustments when required to avoid
-        // marginal errors when checking the vsync on the timeline.
-        mTimelines.back().freeze(mLastCommittedVsync);
+        mTimelines.back().freeze(getVSyncPredictionModelLocked(), mLastCommittedVsync,
+                                 frameRateOverrides);
+        mTimelines.emplace_back(*(mTimelines.back().validUntil()), mIdealPeriod, renderRate);
     }
-    mTimelines.emplace_back(mLastCommittedVsync, mIdealPeriod, renderRate);
     purgeTimelines(TimePoint::fromNs(mClock->now()));
 }
 
@@ -659,12 +659,42 @@ VSyncPredictor::VsyncTimeline::VsyncTimeline(TimePoint knownVsync, Period idealP
         mRenderRateOpt(renderRateOpt),
         mLastVsyncSequence(makeVsyncSequence(knownVsync)) {}
 
-void VSyncPredictor::VsyncTimeline::freeze(TimePoint lastVsync) {
+void VSyncPredictor::VsyncTimeline::freeze(Model model, TimePoint lastVsync,
+                                           std::vector<FrameRateOverride> frameRateOverrides) {
     LOG_ALWAYS_FATAL_IF(mValidUntil.has_value());
+    if (FlagManager::getInstance().vsync_predictor_rate_change_with_aligned_sequence() &&
+        !frameRateOverrides.empty() && mLastVsyncSequence) {
+        const int64_t renderRatePhase =
+                getFreezeSequencePhase(model, lastVsync, std::move(frameRateOverrides));
+        lastVsync = TimePoint::fromNs(lastVsync.ns() + model.slope * renderRatePhase);
+    }
+
     SFTRACE_FORMAT_INSTANT("renderRate %s valid for %.2f",
                            mRenderRateOpt ? to_string(*mRenderRateOpt).c_str() : "NA",
                            float(lastVsync.ns() - TimePoint::now().ns()) / 1e6f);
     mValidUntil = lastVsync;
+}
+
+int64_t VSyncPredictor::VsyncTimeline::getFreezeSequencePhase(
+        Model model, TimePoint lastVsync, std::vector<FrameRateOverride> frameRateOverrides) {
+    static constexpr uint32_t kCapacity = 10;
+    ftl::SmallMap<Fps, ftl::Unit, kCapacity, FpsApproxEqual> overridesSet;
+    for (auto [_, frameRateHz] : frameRateOverrides) {
+        overridesSet.emplace_or_replace(Fps::fromValue(frameRateHz));
+    }
+
+    const auto idealPeriodFps = Fps::fromPeriodNsecs(mIdealPeriod.ns());
+
+    int64_t divisor = 1;
+    for (auto [fps, _] : overridesSet) {
+        auto frameRateDivisor = RefreshRateSelector::getFrameRateDivisor(idealPeriodFps, fps);
+        if (frameRateDivisor <= 0) continue;
+        divisor = std::lcm(divisor, frameRateDivisor);
+    }
+
+    const auto lastVsyncSequence = getVsyncSequenceLocked(model, lastVsync.ns());
+    auto seq = static_cast<int64_t>(std::ceil(lastVsyncSequence.seq / divisor)) * divisor;
+    return seq - lastVsyncSequence.seq;
 }
 
 std::optional<TimePoint> VSyncPredictor::VsyncTimeline::nextAnticipatedVSyncTimeFrom(

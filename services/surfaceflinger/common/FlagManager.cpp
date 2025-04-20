@@ -131,11 +131,11 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
     DUMP_ACONFIG_FLAG(monitor_buffer_fences);
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
+    DUMP_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence);
     DUMP_ACONFIG_FLAG(vsync_predictor_recovery);
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
-    DUMP_ACONFIG_FLAG(add_sf_skipped_frames_to_trace);
     DUMP_ACONFIG_FLAG(adpf_fmq_sf);
     DUMP_ACONFIG_FLAG(allow_n_vsyncs_in_targeter);
     DUMP_ACONFIG_FLAG(arr_setframerate_gte_enum);
@@ -260,7 +260,6 @@ FLAG_MANAGER_ACONFIG_FLAG(misc1, "")
 FLAG_MANAGER_ACONFIG_FLAG(vrr_config, "debug.sf.enable_vrr_config")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
-FLAG_MANAGER_ACONFIG_FLAG(add_sf_skipped_frames_to_trace, "")
 FLAG_MANAGER_ACONFIG_FLAG(use_known_refresh_rate_for_fps_consistency, "")
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
@@ -306,6 +305,7 @@ FLAG_MANAGER_ACONFIG_FLAG(adpf_native_session_manager, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
+FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence, "")
 FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_recovery, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///

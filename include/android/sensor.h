@@ -349,7 +349,7 @@ enum {
     AREPORTING_MODE_CONTINUOUS = 0,
     /** reporting on change */
     AREPORTING_MODE_ON_CHANGE = 1,
-    /** on shot reporting */
+    /** one shot reporting */
     AREPORTING_MODE_ONE_SHOT = 2,
     /** special trigger reporting */
     AREPORTING_MODE_SPECIAL_TRIGGER = 3
