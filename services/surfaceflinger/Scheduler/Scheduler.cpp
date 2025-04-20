@@ -1202,10 +1202,6 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
                                                                      .shouldEmitEvent()});
         }
 
-        if (!FlagManager::getInstance().vrr_bugfix_dropped_frame()) {
-            frameRateOverridesChanged =
-                    updateFrameRateOverridesLocked(consideredSignals, modeOpt->fps);
-        }
         if (mPolicy.modeOpt != modeOpt) {
 // QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
             // Need a null pointer check for mPolicy since it's null during boot up
@@ -1227,7 +1223,7 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
         mSchedulerCallback.requestDisplayModes(std::move(modeRequests));
     }
 
-    if (FlagManager::getInstance().vrr_bugfix_dropped_frame()) {
+    {
         std::scoped_lock lock(mPolicyLock);
         frameRateOverridesChanged =
                 updateFrameRateOverridesLocked(consideredSignals, mPolicy.modeOpt->fps);

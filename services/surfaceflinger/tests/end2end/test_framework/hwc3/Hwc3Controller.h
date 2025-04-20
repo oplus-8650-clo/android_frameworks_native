@@ -22,11 +22,13 @@
 
 #include <android-base/expected.h>
 
+#include <aidl/android/hardware/graphics/composer3/PowerMode.h>
+
 #include "test_framework/core/DisplayConfiguration.h"
 
-namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3 {
+namespace android::surfaceflinger::tests::end2end::test_framework::hwc3 {
 
-class Hwc3Composer;
+class FakeComposer;
 
 class Hwc3Controller final {
     struct Passkey;  // Uses the passkey idiom to restrict construction.
@@ -37,7 +39,7 @@ class Hwc3Controller final {
 
     // Makes the HWC3 controller instance.
     [[nodiscard]] static auto make(std::span<const core::DisplayConfiguration> displays)
-            -> base::expected<std::shared_ptr<fake_hwc3::Hwc3Controller>, std::string>;
+            -> base::expected<std::shared_ptr<hwc3::Hwc3Controller>, std::string>;
 
     explicit Hwc3Controller(Passkey passkey);
 
@@ -53,7 +55,7 @@ class Hwc3Controller final {
     [[nodiscard]] auto init(std::span<const core::DisplayConfiguration> displays)
             -> base::expected<void, std::string>;
 
-    std::shared_ptr<Hwc3Composer> mComposer;
+    std::shared_ptr<FakeComposer> mFakeComposer;
 };
 
-}  // namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3
+}  // namespace android::surfaceflinger::tests::end2end::test_framework::hwc3

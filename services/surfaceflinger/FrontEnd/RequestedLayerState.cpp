@@ -57,6 +57,7 @@ RequestedLayerState::RequestedLayerState(const LayerCreationArgs& args)
         ownerPid(args.ownerPid),
         parentId(args.parentId),
         layerIdToMirror(args.layerIdToMirror),
+        stopLayerId(args.stopLayerId),
         pendingBuffers(args.pendingBuffers) {
     layerId = static_cast<int32_t>(args.sequence);
     changes |= RequestedLayerState::Changes::Created;
@@ -357,6 +358,11 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
     if (clientState.what & layer_state_t::eClientDrawnCornerRadiusChanged) {
         clientDrawnCornerRadius = clientState.clientDrawnCornerRadius;
         changes |= RequestedLayerState::Changes::Geometry;
+    }
+
+    if (clientState.what & layer_state_t::eStopLayerChanged) {
+        stopLayerId = resolvedComposerState.stopLayerId;
+        changes |= RequestedLayerState::Changes::Visibility;
     }
 
     // We can't just check requestedTransform here because LayerSnapshotBuilder uses

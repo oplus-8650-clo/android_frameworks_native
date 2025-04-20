@@ -919,6 +919,7 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
     if (other.what & eLutsChanged) diff |= eLutsChanged;
     CHECK_DIFF(diff, ePictureProfileHandleChanged, other, pictureProfileHandle);
     CHECK_DIFF(diff, eAppContentPriorityChanged, other, appContentPriority);
+    if (other.what & eStopLayerChanged) diff |= eStopLayerChanged;
 
     return diff;
 }

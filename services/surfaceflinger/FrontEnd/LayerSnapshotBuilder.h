@@ -139,6 +139,11 @@ private:
                                           const Args& args, bool* outChildHasValidFrameRate);
     void updateTouchableRegionCrop(const Args& args);
 
+    void applyStopLayers(const LayerHierarchy&, const LayerHierarchy::TraversalPath&);
+    void applyStopLayersInternal(const LayerHierarchy&, const LayerHierarchy::TraversalPath&,
+                                 ftl::SmallVector<uint32_t, 5>& stopLayers,
+                                 ftl::SmallVector<uint32_t, 5>& activeStopLayers);
+
     std::unordered_map<LayerHierarchy::TraversalPath, LayerSnapshot*,
                        LayerHierarchy::TraversalPathHash>
             mPathToSnapshot;

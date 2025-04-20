@@ -28,15 +28,15 @@
 #include <ftl/ignore.h>
 
 #include "test_framework/core/DisplayConfiguration.h"
-#include "test_framework/fake_hwc3/Hwc3Composer.h"
-#include "test_framework/fake_hwc3/Hwc3Controller.h"
+#include "test_framework/hwc3/FakeComposer.h"
+#include "test_framework/hwc3/Hwc3Controller.h"
 
-namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3 {
+namespace android::surfaceflinger::tests::end2end::test_framework::hwc3 {
 
 struct Hwc3Controller::Passkey final {};
 
 auto Hwc3Controller::make(std::span<const core::DisplayConfiguration> displays)
-        -> base::expected<std::shared_ptr<fake_hwc3::Hwc3Controller>, std::string> {
+        -> base::expected<std::shared_ptr<hwc3::Hwc3Controller>, std::string> {
     using namespace std::string_literals;
 
     auto controller = std::make_unique<Hwc3Controller>(Passkey{});
@@ -60,19 +60,19 @@ auto Hwc3Controller::init(const std::span<const core::DisplayConfiguration> disp
         -> base::expected<void, std::string> {
     using namespace std::string_literals;
 
-    auto qualifiedServiceName = Hwc3Composer::getServiceName(baseServiceName);
+    auto qualifiedServiceName = FakeComposer::getServiceName(baseServiceName);
 
-    auto composerResult = Hwc3Composer::make();
-    if (!composerResult) {
-        return base::unexpected(std::move(composerResult).error());
+    auto fakeComposerResult = FakeComposer::make();
+    if (!fakeComposerResult) {
+        return base::unexpected(std::move(fakeComposerResult).error());
     }
-    auto composer = *std::move(composerResult);
+    auto fakeComposer = *std::move(fakeComposerResult);
 
     for (const auto& display : displays) {
-        composer->addDisplay(display);
+        fakeComposer->addDisplay(display);
     }
 
-    auto binder = composer->getComposer()->asBinder();
+    auto binder = fakeComposer->getComposer()->asBinder();
 
     // This downgrade allows us to use the fake service name without it being defined in the
     // VINTF manifest.
@@ -85,22 +85,22 @@ auto Hwc3Controller::init(const std::span<const core::DisplayConfiguration> disp
     }
     LOG(INFO) << "Registered service " << qualifiedServiceName << ". Error: " << status;
 
-    mComposer = std::move(composer);
+    mFakeComposer = std::move(fakeComposer);
     return {};
 }
 
 auto Hwc3Controller::getServiceName() -> std::string {
-    return Hwc3Composer::getServiceName(baseServiceName);
+    return FakeComposer::getServiceName(baseServiceName);
 }
 
 void Hwc3Controller::addDisplay(const core::DisplayConfiguration& config) {
-    CHECK(mComposer);
-    mComposer->addDisplay(config);
+    CHECK(mFakeComposer);
+    mFakeComposer->addDisplay(config);
 }
 
 void Hwc3Controller::removeDisplay(core::DisplayConfiguration::Id displayId) {
-    CHECK(mComposer);
-    mComposer->removeDisplay(displayId);
+    CHECK(mFakeComposer);
+    mFakeComposer->removeDisplay(displayId);
 }
 
-}  // namespace android::surfaceflinger::tests::end2end::test_framework::fake_hwc3
+}  // namespace android::surfaceflinger::tests::end2end::test_framework::hwc3
