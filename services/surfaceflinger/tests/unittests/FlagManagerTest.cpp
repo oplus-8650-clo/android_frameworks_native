@@ -99,15 +99,6 @@ TEST_F(FlagManagerTest, returnsOverrideTrue) {
     EXPECT_TRUE(mFlagManager.refresh_rate_overlay_on_external_display());
 }
 
-TEST_F(FlagManagerTest, returnsOverrideReadonly) {
-    SET_FLAG_FOR_TEST(flags::add_sf_skipped_frames_to_trace, false);
-
-    // This is stored in a static variable, so this test depends on the fact
-    // that this flag has not been read in this process.
-    EXPECT_CALL(mFlagManager, getBoolProperty).WillOnce(Return(true));
-    EXPECT_TRUE(mFlagManager.add_sf_skipped_frames_to_trace());
-}
-
 // disabling this test since we need to use a unique flag for this test,
 // but we only one server flag currently. Re-enable once we have a new flag
 // and change this test to use a unique flag.

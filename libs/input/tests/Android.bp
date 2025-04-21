@@ -89,6 +89,10 @@ cc_test {
         ":motion_predictor_model",
         "data/*",
     ],
+    device_first_data: [
+        ":keychars_test_data",
+        ":keylayout_test_data",
+    ],
     test_options: {
         unit_test: true,
     },

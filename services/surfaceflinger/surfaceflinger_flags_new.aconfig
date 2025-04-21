@@ -326,6 +326,16 @@ flag {
 } # override_trusted_overlay
 
 flag {
+  name: "vsync_predictor_rate_change_with_aligned_sequence"
+  namespace: "core_graphics"
+  description: "Render rate changes where all the frame rate overrides align"
+  bug: "377240935"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # vsync_predictor_rate_change_with_aligned_sequence
+
+flag {
   name: "vsync_predictor_recovery"
   namespace: "core_graphics"
   description: "Recover the vsync predictor from bad vsync model"

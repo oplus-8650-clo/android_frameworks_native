@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -112,9 +113,13 @@ std::string getInputDeviceConfigurationFilePathByName(
         pathPrefixes.push_back("/apex/" + apex + "/etc/usr/");
     }
     // ANDROID_ROOT may not be set on host
-    if (auto android_root = getenv("ANDROID_ROOT"); android_root != nullptr) {
-        pathPrefixes.push_back(std::string(android_root) + "/usr/");
+    if (auto androidRoot = getenv("ANDROID_ROOT"); androidRoot != nullptr) {
+        pathPrefixes.push_back(std::string(androidRoot) + "/usr/");
+    } else {
+        // To support host-based tests, use the data contained near the executable test binary.
+        pathPrefixes.push_back(base::GetExecutableDirectory() + "/system/usr/");
     }
+
     for (const auto& prefix : pathPrefixes) {
         path = prefix;
         appendInputDeviceConfigurationFileRelativePath(path, name, type);

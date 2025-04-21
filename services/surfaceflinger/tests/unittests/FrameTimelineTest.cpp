@@ -1273,9 +1273,6 @@ TEST_F(FrameTimelineTest, traceDisplayFrameNoSkipped) {
 }
 
 TEST_F(FrameTimelineTest, traceDisplayFrameSkipped) {
-    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::add_sf_skipped_frames_to_trace,
-                      true);
-
     // setup 2 display frames
     // DF 1: [22,40] -> [5, 40]
     // DF  : [36, 70] (Skipped one, added by the trace)

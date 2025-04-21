@@ -7681,9 +7681,6 @@ TEST_F(InputDispatcherTest, FocusedWindow_PolicyConsumedKeyIgnoresDisableUserAct
 }
 
 TEST_F(InputDispatcherTest, FocusedWindow_DoesNotReceivePolicyFallbackKey) {
-#if !defined(__ANDROID__)
-    GTEST_SKIP() << "b/253299089 Generic files are currently read directly from device.";
-#endif
     InputDeviceInfo testDevice = generateTestDeviceInfo(/*vendorId=*/0,
                                                         /*productId=*/0, /*deviceId=*/1);
     std::unique_ptr<KeyCharacterMap> kcm = loadKeyCharacterMap("Generic");
