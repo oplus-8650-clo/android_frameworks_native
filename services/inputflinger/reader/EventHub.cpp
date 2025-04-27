@@ -49,7 +49,7 @@
 #include <input/PrintTools.h>
 #include <input/VirtualKeyMap.h>
 #include <openssl/sha.h>
-#include <statslog.h>
+#include <statslog_inputflinger.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
 #include <utils/Timers.h>
@@ -2287,9 +2287,10 @@ void EventHub::reportDeviceAddedForStatisticsLocked(const InputDeviceIdentifier&
         obfuscatedId += StringPrintf("%02x", digest[i]);
     }
 
-    android::util::stats_write(android::util::INPUTDEVICE_REGISTERED, identifier.name.c_str(),
-                               identifier.vendor, identifier.product, identifier.version,
-                               identifier.bus, obfuscatedId.c_str(), classes.get());
+    android::inputflinger::stats::stats_write(android::inputflinger::stats::INPUTDEVICE_REGISTERED,
+                                              identifier.name.c_str(), identifier.vendor,
+                                              identifier.product, identifier.version,
+                                              identifier.bus, obfuscatedId.c_str(), classes.get());
 }
 
 void EventHub::openDeviceLocked(const std::string& devicePath) {

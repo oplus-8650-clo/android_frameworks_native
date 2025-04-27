@@ -40,6 +40,7 @@
 #include <gui/TraceUtils.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
+#include <utils/Mutex.h>
 #include <utils/SortedVector.h>
 #include <utils/String8.h>
 #include <utils/threads.h>
@@ -845,7 +846,8 @@ SurfaceComposerClient::Transaction::Transaction(const Transaction& other)
         mDesiredPresentTime(other.mDesiredPresentTime),
         mIsAutoTimestamp(other.mIsAutoTimestamp),
         mFrameTimelineInfo(other.mFrameTimelineInfo),
-        mApplyToken(other.mApplyToken) {
+        mApplyToken(other.mApplyToken),
+        mEarlyWakeupInfo(other.mEarlyWakeupInfo) {
     mDisplayStates = other.mDisplayStates;
     mComposerStates = other.mComposerStates;
     mInputWindowCommands = other.mInputWindowCommands;
@@ -967,6 +969,9 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
         SAFE_PARCEL(parcel->readUint64, &mergedTransactionIds[i]);
     }
 
+    gui::EarlyWakeupInfo earlyWakeupInfo;
+    earlyWakeupInfo.readFromParcel(parcel);
+
     // Parsing was successful. Update the object.
     mId = transactionId;
     mFlags = flags;
@@ -980,6 +985,7 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
     mApplyToken = applyToken;
     mUncacheBuffers = std::move(uncacheBuffers);
     mMergedTransactionIds = std::move(mergedTransactionIds);
+    mEarlyWakeupInfo = earlyWakeupInfo;
     return NO_ERROR;
 }
 
@@ -1039,6 +1045,8 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
     for (auto mergedTransactionId : mMergedTransactionIds) {
         SAFE_PARCEL(parcel->writeUint64, mergedTransactionId);
     }
+
+    mEarlyWakeupInfo.writeToParcel(parcel);
 
     return NO_ERROR;
 }
@@ -1149,6 +1157,8 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
              "Transaction %" PRIu64 " merged with transaction %" PRIu64, other.getId(), mId);
     }
 
+    mEarlyWakeupInfo = other.mEarlyWakeupInfo;
+
     other.clear();
     return *this;
 }
@@ -1167,6 +1177,7 @@ void SurfaceComposerClient::Transaction::clear() {
     mMergedTransactionIds.clear();
     mLogCallPoints = false;
     mFlags = 0;
+    mEarlyWakeupInfo = {};
 }
 
 uint64_t SurfaceComposerClient::Transaction::getId() {
@@ -1185,10 +1196,11 @@ void SurfaceComposerClient::doUncacheBufferTransaction(uint64_t cacheId) {
     uncacheBuffer.id = cacheId;
     Vector<ComposerState> composerStates;
     Vector<DisplayState> displayStates;
-    status_t status = sf->setTransactionState(FrameTimelineInfo{}, composerStates, displayStates,
-                                              ISurfaceComposer::eOneWay,
-                                              Transaction::getDefaultApplyToken(), {}, systemTime(),
-                                              true, {uncacheBuffer}, false, {}, generateId(), {});
+    status_t status =
+            sf->setTransactionState(FrameTimelineInfo{}, composerStates, displayStates,
+                                    ISurfaceComposer::eOneWay, Transaction::getDefaultApplyToken(),
+                                    {}, systemTime(), true, {uncacheBuffer}, false, {},
+                                    generateId(), {}, {});
     if (status != NO_ERROR) {
         ALOGE_AND_TRACE("SurfaceComposerClient::doUncacheBufferTransaction - %s",
                         strerror(-status));
@@ -1363,7 +1375,8 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
             sf->setTransactionState(mFrameTimelineInfo, mComposerStates, mDisplayStates, mFlags,
                                     applyToken, mInputWindowCommands, mDesiredPresentTime,
                                     mIsAutoTimestamp, mUncacheBuffers, hasListenerCallbacks,
-                                    listenerCallbacks, mId, mMergedTransactionIds);
+                                    listenerCallbacks, mId, mMergedTransactionIds,
+                                    mEarlyWakeupInfo);
     mId = generateId();
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinQueueBuffer) {
@@ -1475,11 +1488,15 @@ void SurfaceComposerClient::Transaction::setAnimationTransaction() {
     mFlags |= ISurfaceComposer::eAnimation;
 }
 
-void SurfaceComposerClient::Transaction::setEarlyWakeupStart() {
+void SurfaceComposerClient::Transaction::setEarlyWakeupStart(
+        const gui::EarlyWakeupInfo& earlyWakeupInfo) {
+    mEarlyWakeupInfo = earlyWakeupInfo;
     mFlags |= ISurfaceComposer::eEarlyWakeupStart;
 }
 
-void SurfaceComposerClient::Transaction::setEarlyWakeupEnd() {
+void SurfaceComposerClient::Transaction::setEarlyWakeupEnd(
+        const gui::EarlyWakeupInfo& earlyWakeupInfo) {
+    mEarlyWakeupInfo = earlyWakeupInfo;
     mFlags |= ISurfaceComposer::eEarlyWakeupEnd;
 }
 
@@ -1724,6 +1741,18 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setBackg
     }
     s->what |= layer_state_t::eBackgroundBlurRadiusChanged;
     s->backgroundBlurRadius = backgroundBlurRadius;
+    return *this;
+}
+
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setBackgroundBlurScale(
+        const sp<SurfaceControl>& sc, float backgroundBlurScale) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eBackgroundBlurScaleChanged;
+    s->backgroundBlurScale = backgroundBlurScale;
     return *this;
 }
 
@@ -2649,6 +2678,7 @@ SurfaceComposerClient::SurfaceComposerClient(const sp<ISurfaceComposerClient>& c
 
 void SurfaceComposerClient::onFirstRef() {
     sp<gui::ISurfaceComposer> sf(ComposerServiceAIDL::getComposerService());
+    Mutex::Autolock _lm(mLock);
     if (sf != nullptr && mStatus == NO_INIT) {
         sp<ISurfaceComposerClient> conn;
         binder::Status status = sf->createConnection(&conn);
@@ -2664,10 +2694,12 @@ SurfaceComposerClient::~SurfaceComposerClient() {
 }
 
 status_t SurfaceComposerClient::initCheck() const {
+    Mutex::Autolock _lm(mLock);
     return mStatus;
 }
 
 sp<IBinder> SurfaceComposerClient::connection() const {
+    Mutex::Autolock _lm(mLock);
     return IInterface::asBinder(mClient);
 }
 
@@ -2716,6 +2748,7 @@ status_t SurfaceComposerClient::createSurfaceChecked(const String8& name, uint32
                                                      const sp<IBinder>& parentHandle,
                                                      LayerMetadata metadata,
                                                      uint32_t* outTransformHint) {
+    Mutex::Autolock _lm(mLock);
     status_t err = mStatus;
 
     if (mStatus == NO_ERROR) {
@@ -2742,6 +2775,8 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFr
         return nullptr;
     }
 
+    Mutex::Autolock _lm(mLock);
+
     sp<IBinder> mirrorFromHandle = mirrorFromSurface->getHandle();
     sp<IBinder> stopAtHandle = stopAt ? stopAt->getHandle() : nullptr;
     gui::CreateSurfaceResult result;
@@ -2755,6 +2790,8 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFr
 }
 
 sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
+    Mutex::Autolock _lm(mLock);
+
     gui::CreateSurfaceResult result;
     const binder::Status status = mClient->mirrorDisplay(displayId.value, &result);
     const status_t err = statusTFromBinderStatus(status);
@@ -2766,6 +2803,8 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
 }
 
 status_t SurfaceComposerClient::clearLayerFrameStats(const sp<IBinder>& token) const {
+    Mutex::Autolock _lm(mLock);
+
     if (mStatus != NO_ERROR) {
         return mStatus;
     }
@@ -2774,10 +2813,13 @@ status_t SurfaceComposerClient::clearLayerFrameStats(const sp<IBinder>& token) c
 }
 
 status_t SurfaceComposerClient::getLayerFrameStats(const sp<IBinder>& token,
-        FrameStats* outStats) const {
+    FrameStats* outStats) const {
+    Mutex::Autolock _lm(mLock);
+
     if (mStatus != NO_ERROR) {
         return mStatus;
     }
+
     gui::FrameStats stats;
     const binder::Status status = mClient->getLayerFrameStats(token, &stats);
     if (status.isOk()) {
@@ -3431,10 +3473,10 @@ int SurfaceComposerClient::getGpuContextPriority() {
 
 status_t SurfaceComposerClient::addWindowInfosListener(
         const sp<WindowInfosListener>& windowInfosListener,
-        std::pair<std::vector<gui::WindowInfo>, std::vector<gui::DisplayInfo>>* outInitialInfo) {
+        gui::WindowInfosUpdate* outInitialUpdate) {
     return WindowInfosListenerReporter::getInstance()
             ->addWindowInfosListener(windowInfosListener, ComposerServiceAIDL::getComposerService(),
-                                     outInitialInfo);
+                                     outInitialUpdate);
 }
 
 status_t SurfaceComposerClient::removeWindowInfosListener(

@@ -80,7 +80,6 @@ cc_test {
         "libbinder",
         "libcutils",
         "liblog",
-        "libstatslog",
         "libtinyxml2",
         "libutils",
         "server_configurable_flags",

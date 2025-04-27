@@ -39,6 +39,7 @@
 #include <utils/StrongPointer.h>
 
 #include "test_framework/surfaceflinger/SFController.h"
+#include "test_framework/surfaceflinger/Surface.h"
 
 namespace android::surfaceflinger::tests::end2end::test_framework::surfaceflinger {
 
@@ -176,6 +177,12 @@ void SFController::stop() {
     mSurfaceComposerClient = nullptr;
     mSurfaceComposerClientAidl = nullptr;
     mSurfaceComposerAidl = nullptr;
+}
+
+auto SFController::makeSurface(const Surface::CreationArgs& args)
+        -> base::expected<std::shared_ptr<Surface>, std::string> {
+    CHECK(mSurfaceComposerClient != nullptr);
+    return Surface::make(mSurfaceComposerClient, args);
 }
 
 }  // namespace android::surfaceflinger::tests::end2end::test_framework::surfaceflinger

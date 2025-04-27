@@ -23,6 +23,7 @@
 #include <variant>
 
 #include <android-base/logging.h>
+#include <android/configuration.h>
 #include <android_companion_virtualdevice_flags.h>
 #include <com_android_input_flags.h>
 #include <gmock/gmock.h>
@@ -38,6 +39,7 @@
 #include "InputReaderBase.h"
 #include "InterfaceMocks.h"
 #include "NotifyArgs.h"
+#include "ScopedFlagOverride.h"
 #include "TestEventMatchers.h"
 #include "ui/Rotation.h"
 
@@ -68,7 +70,8 @@ constexpr int32_t TRACKBALL_MOVEMENT_THRESHOLD = 6;
 
 namespace {
 
-DisplayViewport createPrimaryViewport(ui::Rotation orientation) {
+DisplayViewport createPrimaryViewport(ui::Rotation orientation,
+                                      int32_t densityDpi = ACONFIGURATION_DENSITY_XHIGH) {
     const bool isRotated =
             orientation == ui::Rotation::Rotation90 || orientation == ui::Rotation::Rotation270;
     DisplayViewport v;
@@ -82,6 +85,7 @@ DisplayViewport createPrimaryViewport(ui::Rotation orientation) {
     v.deviceHeight = isRotated ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
     v.isActive = true;
     v.uniqueId = "local:1";
+    v.densityDpi = densityDpi;
     return v;
 }
 
@@ -1176,6 +1180,117 @@ TEST_F(CursorInputMapperUnitTest, ConfigureAccelerationOnDisplayChange) {
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                         AllOf(WithMotionAction(HOVER_MOVE), WithDisplayId(DISPLAY_ID),
                               WithRelativeMotion(10, 20)))));
+}
+
+class DensityDependentCursorUnitTest : public CursorInputMapperUnitTest {
+private:
+    bool mFlagValueBeforeTest;
+
+protected:
+    void SetUp() override {
+        mFlagValueBeforeTest = com::android::input::flags::scale_cursor_speed_with_dpi();
+        com::android::input::flags::scale_cursor_speed_with_dpi(true);
+        CursorInputMapperUnitTest::SetUp();
+    }
+
+    void TearDown() override {
+        com::android::input::flags::scale_cursor_speed_with_dpi(mFlagValueBeforeTest);
+    }
+
+    std::list<NotifyArgs> processRelativeMove(int32_t rawRelativeX, int32_t rawRelativeY) {
+        std::list<NotifyArgs> args;
+        args += process(ARBITRARY_TIME, EV_REL, REL_X, rawRelativeX);
+        args += process(ARBITRARY_TIME, EV_REL, REL_Y, rawRelativeY);
+        args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+        return args;
+    }
+
+    std::tuple<float, float> getBaselineCursorMoves(int32_t rawRelativeX, int32_t rawRelativeY) {
+        // Cursor moves are not scaled for display density ACONFIGURATION_DENSITY_XHIGH, which is
+        // considered baseline. Acceleration will still apply.
+        DisplayViewport mediumDensityViewport =
+                createPrimaryViewport(ui::Rotation::Rotation0, ACONFIGURATION_DENSITY_XHIGH);
+        mReaderConfiguration.setDisplayViewports({mediumDensityViewport});
+        EXPECT_CALL((*mDevice), getAssociatedViewport)
+                .WillRepeatedly(Return(mediumDensityViewport));
+        mMapper = createInputMapper<CursorInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+        std::list<NotifyArgs> args = processRelativeMove(rawRelativeX, rawRelativeY);
+        auto coords = get<NotifyMotionArgs>(args.back()).pointerCoords[0];
+        return {coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X),
+                coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y)};
+    }
+};
+
+TEST_F(DensityDependentCursorUnitTest, ScalesCursorMoveWithDisplayDensity) {
+    // Use same move values on different density displays, generated events should be scaled
+    // according to the display density.
+    const int32_t rawRelativeX = 10;
+    const int32_t rawRelativeY = 20;
+    const auto [baselineRelativeX, baselineRelativeY] =
+            getBaselineCursorMoves(rawRelativeX, rawRelativeY);
+
+    DisplayViewport highDensityViewport =
+            createPrimaryViewport(ui::Rotation::Rotation0, ACONFIGURATION_DENSITY_XXHIGH);
+    mReaderConfiguration.setDisplayViewports({highDensityViewport});
+    EXPECT_CALL((*mDevice), getAssociatedViewport).WillRepeatedly(Return(highDensityViewport));
+
+    std::list<NotifyArgs> args =
+            mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                 InputReaderConfiguration::Change::DISPLAY_INFO);
+    args.clear();
+
+    args += processRelativeMove(rawRelativeX, rawRelativeY);
+    float scalingFactor = static_cast<float>(ACONFIGURATION_DENSITY_XXHIGH) /
+            static_cast<float>(ACONFIGURATION_DENSITY_XHIGH);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(HOVER_MOVE),
+                              WithRelativeMotion(baselineRelativeX * scalingFactor,
+                                                 baselineRelativeY * scalingFactor)))));
+}
+
+TEST_F(DensityDependentCursorUnitTest, FallbackToNoScalingWhenDensityUnavailable) {
+    const int32_t rawRelativeX = 10;
+    const int32_t rawRelativeY = 20;
+    const auto [baselineRelativeX, baselineRelativeY] =
+            getBaselineCursorMoves(rawRelativeX, rawRelativeY);
+
+    // Viewport without density information should be equivalent to viewport with baseline density.
+    DisplayViewport noneDensityViewport =
+            createPrimaryViewport(ui::Rotation::Rotation0, ACONFIGURATION_DENSITY_NONE);
+    mReaderConfiguration.setDisplayViewports({noneDensityViewport});
+    EXPECT_CALL((*mDevice), getAssociatedViewport).WillRepeatedly(Return(noneDensityViewport));
+    std::list<NotifyArgs> args =
+            mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                 InputReaderConfiguration::Change::DISPLAY_INFO);
+    args.clear();
+
+    args += processRelativeMove(rawRelativeX, rawRelativeY);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(HOVER_MOVE),
+                              WithRelativeMotion(baselineRelativeX, baselineRelativeY)))));
+}
+
+TEST_F(DensityDependentCursorUnitTest,
+       DoesNotScaleCursorMoveWithDisplayDensityWhenMouseScalingDisabled) {
+    // Create a medium density viewport and disable all scaling.
+    mReaderConfiguration.displaysWithMouseScalingDisabled.emplace(DISPLAY_ID);
+    DisplayViewport mediumDensityViewport =
+            createPrimaryViewport(ui::Rotation::Rotation0, ACONFIGURATION_DENSITY_MEDIUM);
+    mReaderConfiguration.setDisplayViewports({mediumDensityViewport});
+    EXPECT_CALL((*mDevice), getAssociatedViewport).WillRepeatedly(Return(mediumDensityViewport));
+    mMapper = createInputMapper<CursorInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    const int32_t rawRelativeX = 10;
+    const int32_t rawRelativeY = 20;
+    std::list<NotifyArgs> args;
+    args += processRelativeMove(rawRelativeX, rawRelativeY);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(HOVER_MOVE),
+                              WithRelativeMotion(rawRelativeX, rawRelativeY)))));
 }
 
 namespace {

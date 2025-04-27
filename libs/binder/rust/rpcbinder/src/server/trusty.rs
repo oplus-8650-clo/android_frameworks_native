@@ -148,9 +148,8 @@ impl UnbufferedService for RpcServer {
         &self,
         conn: &Self::Connection,
         _handle: &Handle,
-        buffer: &mut [u8],
+        _buffer: &mut [u8],
     ) -> tipc::Result<MessageResult> {
-        assert!(buffer.is_empty());
         let rc = unsafe { binder_rpc_server_bindgen::ARpcServerTrusty_handleMessage(conn.ctx) };
         if rc < 0 {
             Err(TipcError::from_uapi(rc.into()))

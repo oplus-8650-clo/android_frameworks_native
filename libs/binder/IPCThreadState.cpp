@@ -1331,7 +1331,7 @@ status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
     return NO_ERROR;
 }
 
-sp<BBinder> the_context_object;
+[[clang::no_destroy]] sp<BBinder> the_context_object;
 
 void IPCThreadState::setTheContextObject(const sp<BBinder>& obj)
 {

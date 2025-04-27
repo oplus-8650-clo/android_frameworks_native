@@ -3184,6 +3184,51 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
     ASSERT_TRUE(pc->isPointerShown());
 }
 
+TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
+       GetCursorPositionReturnValidPositionForDisplayWithCursor) {
+    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
+    SCOPED_FLAG_OVERRIDE(connected_displays_associated_display_cursor_bugfix, true);
+
+    // Add two displays
+    mChoreographer.setDisplayViewports(
+            {createViewport(FIRST_DISPLAY_ID), createViewport(SECOND_DISPLAY_ID)});
+    setDisplayTopologyWithDisplays(/*primaryDisplayId=*/FIRST_DISPLAY_ID,
+                                   /*adjacentDisplays=*/{SECOND_DISPLAY_ID});
+
+    mChoreographer.notifyInputDevicesChanged(
+            {/*id=*/0, {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE, FIRST_DISPLAY_ID)}});
+
+    auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
+    pc->assertViewportSet(FIRST_DISPLAY_ID);
+
+    auto firstDisplayCursor = mChoreographer.getMouseCursorPosition(FIRST_DISPLAY_ID);
+    // Valid
+    ASSERT_TRUE(firstDisplayCursor.has_value());
+
+    // Invalid, cursor is currently on first display
+    auto secondDisplayCursor = mChoreographer.getMouseCursorPosition(SECOND_DISPLAY_ID);
+    ASSERT_FALSE(secondDisplayCursor.has_value());
+
+    // Move cursor to the secondary display
+    auto pointerBuilder = PointerBuilder(/*id=*/0, ToolType::MOUSE)
+                                  .axis(AMOTION_EVENT_AXIS_RELATIVE_X, /*x=*/100)
+                                  .axis(AMOTION_EVENT_AXIS_RELATIVE_Y, /*y=*/0);
+    mChoreographer.notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_HOVER_MOVE, AINPUT_SOURCE_MOUSE)
+                    .pointer(pointerBuilder)
+                    .deviceId(DEVICE_ID)
+                    .displayId(ui::LogicalDisplayId::INVALID)
+                    .build());
+    pc->assertViewportSet(SECOND_DISPLAY_ID);
+    firstDisplayCursor = mChoreographer.getMouseCursorPosition(FIRST_DISPLAY_ID);
+    // Invalid, cursor is currently on second display
+    ASSERT_FALSE(firstDisplayCursor.has_value());
+
+    // Valid
+    secondDisplayCursor = mChoreographer.getMouseCursorPosition(SECOND_DISPLAY_ID);
+    ASSERT_TRUE(secondDisplayCursor.has_value());
+}
+
 class PointerChoreographerWindowInfoListenerTest : public testing::Test {};
 
 TEST_F(PointerChoreographerWindowInfoListenerTest,
