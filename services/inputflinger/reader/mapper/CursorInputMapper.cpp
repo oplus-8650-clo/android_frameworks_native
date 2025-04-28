@@ -25,6 +25,7 @@
 #include <com_android_input_flags.h>
 #include <ftl/enum.h>
 #include <input/AccelerationCurve.h>
+#include <input/InputFlags.h>
 
 #include "CursorButtonAccumulator.h"
 #include "CursorScrollAccumulator.h"
@@ -34,6 +35,24 @@
 #include "input/PrintTools.h"
 
 namespace android {
+
+namespace {
+
+/** Max density value supported by input. */
+const int32_t ACONFIGURATION_MAX_SUPPORTED_DENSITY = ACONFIGURATION_DENSITY_ANY;
+
+// Density values in range (0, ACONFIGURATION_MAX_SUPPORTED_DENSITY] are supported for cursor
+// moves scaling. Other density values e.g. ACONFIGURATION_DENSITY_DEFAULT,
+// ACONFIGURATION_DENSITY_NONE etc. are ignored.
+inline bool isDensityValueSupportedForScaling(int32_t density) {
+    if (density > 0 && density <= ACONFIGURATION_MAX_SUPPORTED_DENSITY) {
+        return true;
+    }
+    ALOGE("Unexpected display density value %d, cursor move scaling will be disabled.", density);
+    return false;
+}
+
+} // namespace
 
 // The default velocity control parameters that has no effect.
 static const VelocityControlParameters FLAT_VELOCITY_CONTROL_PARAMS{};
@@ -129,6 +148,7 @@ void CursorInputMapper::dump(std::string& dump) {
     dump += StringPrintf(INDENT3 "DisplayId: %s\n",
                          toString(mDisplayId, streamableToString).c_str());
     dump += StringPrintf(INDENT3 "Orientation: %s\n", ftl::enum_string(mOrientation).c_str());
+    dump += StringPrintf(INDENT3 "ViewportDensityDpi: %d\n", mViewportDensityDpi);
     dump += StringPrintf(INDENT3 "ButtonState: 0x%08x\n", mButtonState);
     dump += StringPrintf(INDENT3 "Down: %s\n", toString(isPointerDown(mButtonState)));
     dump += StringPrintf(INDENT3 "DownTime: %" PRId64 "\n", mDownTime);
@@ -496,6 +516,15 @@ void CursorInputMapper::configureOnChangePointerSpeed(const InputReaderConfigura
     bool disableAllScaling = config.displaysWithMouseScalingDisabled.count(
                                      mDisplayId.value_or(ui::LogicalDisplayId::INVALID)) != 0;
 
+    if (InputFlags::scaleCursorSpeedWithDisplayDensity() &&
+        mParameters.mode == Parameters::Mode::POINTER && !disableAllScaling) {
+        // TODO(b/408170793): We use ACONFIGURATION_DENSITY_XHIGH as baseline for scale due to
+        // legacy reasons, this need to be tuned with further UX testing.
+        mXScale = mYScale = isDensityValueSupportedForScaling(mViewportDensityDpi)
+                ? static_cast<float>(mViewportDensityDpi) /
+                        static_cast<float>(ACONFIGURATION_DENSITY_XHIGH)
+                : 1.0;
+    }
     mPointerVelocityControl.setAccelerationEnabled(!disableAllScaling);
 
     mPointerVelocityControl.setCurve(
@@ -537,6 +566,9 @@ void CursorInputMapper::configureOnChangeDisplayInfo(const InputReaderConfigurat
                         static_cast<float>(resolvedViewport->logicalRight - 1),
                         static_cast<float>(resolvedViewport->logicalBottom - 1)}
             : FloatRect{0, 0, 0, 0};
+
+    mViewportDensityDpi =
+            resolvedViewport ? resolvedViewport->densityDpi : ACONFIGURATION_DENSITY_MEDIUM;
 
     bumpGeneration();
 }

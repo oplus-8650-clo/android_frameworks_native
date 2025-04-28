@@ -33,13 +33,12 @@ std::shared_ptr<ScreenCaptureOutput> createScreenCaptureOutput(ScreenCaptureOutp
             /* sourceCrop */ const Rect, ftl::Optional<DisplayIdVariant>,
             const compositionengine::Output::ColorProfile&,
             /* layerAlpha */ float,
-            /* regionSampling */ bool>(args.compositionEngine, args.sourceCrop,
-                                       args.displayIdVariant, args.colorProfile, args.layerAlpha,
-                                       args.regionSampling,
-                                       args.dimInGammaSpaceForEnhancedScreenshots,
-                                       args.enableLocalTonemapping);
+            /* disableBlur */ bool>(args.compositionEngine, args.sourceCrop, args.displayIdVariant,
+                                    args.colorProfile, args.layerAlpha, args.disableBlur,
+                                    args.dimInGammaSpaceForEnhancedScreenshots,
+                                    args.enableLocalTonemapping);
     output->editState().isSecure = args.isSecure;
-    output->editState().isProtected = args.isProtected;
+    output->editState().isProtected = args.buffer->getUsage() & GRALLOC_USAGE_PROTECTED;
     output->setCompositionEnabled(true);
     output->setLayerFilter({args.layerStack});
     output->setRenderSurface(std::make_unique<ScreenCaptureRenderSurface>(std::move(args.buffer)));
@@ -57,27 +56,19 @@ std::shared_ptr<ScreenCaptureOutput> createScreenCaptureOutput(ScreenCaptureOutp
     output->setDisplaySize({sourceCrop.getWidth(), sourceCrop.getHeight()});
     output->setProjection(orientation, sourceCrop,
                           {args.reqBufferSize.width, args.reqBufferSize.height});
-
-    {
-        std::string name = args.regionSampling ? "RegionSampling" : "ScreenCaptureOutput";
-        if (const auto id = args.displayIdVariant.and_then(asDisplayIdOfType<DisplayId>)) {
-            base::StringAppendF(&name, " for %" PRIu64, id->value);
-        }
-        output->setName(name);
-    }
+    output->setName(args.debugName);
     return output;
 }
 
 ScreenCaptureOutput::ScreenCaptureOutput(
         const Rect sourceCrop, ftl::Optional<DisplayIdVariant> displayIdVariant,
         const compositionengine::Output::ColorProfile& colorProfile, float layerAlpha,
-        bool regionSampling, bool dimInGammaSpaceForEnhancedScreenshots,
-        bool enableLocalTonemapping)
+        bool disableBlur, bool dimInGammaSpaceForEnhancedScreenshots, bool enableLocalTonemapping)
       : mSourceCrop(sourceCrop),
         mDisplayIdVariant(displayIdVariant),
         mColorProfile(colorProfile),
         mLayerAlpha(layerAlpha),
-        mRegionSampling(regionSampling),
+        mDisableBlur(disableBlur),
         mDimInGammaSpaceForEnhancedScreenshots(dimInGammaSpaceForEnhancedScreenshots),
         mEnableLocalTonemapping(enableLocalTonemapping) {}
 
@@ -189,7 +180,7 @@ ScreenCaptureOutput::generateClientCompositionRequests(
         }
     }
 
-    if (mRegionSampling) {
+    if (mDisableBlur) {
         for (auto& layer : clientCompositionLayers) {
             layer.backgroundBlurRadius = 0;
             layer.blurRegions.clear();

@@ -24,6 +24,8 @@
 #include <ftl/finalizer.h>
 #include <utils/StrongPointer.h>
 
+#include "test_framework/surfaceflinger/Surface.h"
+
 namespace android::gui {
 
 class ISurfaceComposer;
@@ -53,6 +55,9 @@ class SFController final {
 
     // Starts SurfaceFlinger and establishes the AIDL interface connections.
     [[nodiscard]] auto startAndConnect() -> base::expected<void, std::string>;
+
+    auto makeSurface(const Surface::CreationArgs& args)
+            -> base::expected<std::shared_ptr<Surface>, std::string>;
 
   private:
     [[nodiscard]] auto init() -> base::expected<void, std::string>;

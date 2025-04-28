@@ -5019,8 +5019,10 @@ uint32_t SurfaceFlinger::clearTransactionFlags(uint32_t mask) {
 }
 
 void SurfaceFlinger::setTransactionFlags(uint32_t mask, TransactionSchedule schedule,
-                                         const sp<IBinder>& applyToken, FrameHint frameHint) {
-    mScheduler->modulateVsync({}, &VsyncModulator::setTransactionSchedule, schedule, applyToken);
+                                         FrameHint frameHint,
+                                         const gui::EarlyWakeupInfo& earlyWakeupInfo) {
+    mScheduler->modulateVsync({}, &VsyncModulator::setTransactionSchedule, schedule,
+                              earlyWakeupInfo);
     uint32_t transactionFlags = mTransactionFlags.fetch_or(mask);
     SFTRACE_INT("mTransactionFlags", transactionFlags);
 
@@ -5299,7 +5301,8 @@ status_t SurfaceFlinger::setTransactionState(
         InputWindowCommands inputWindowCommands, int64_t desiredPresentTime, bool isAutoTimestamp,
         const std::vector<client_cache_t>& uncacheBuffers, bool hasListenerCallbacks,
         const std::vector<ListenerCallbacks>& listenerCallbacks, uint64_t transactionId,
-        const std::vector<uint64_t>& mergedTransactionIds) {
+        const std::vector<uint64_t>& mergedTransactionIds,
+        const gui::EarlyWakeupInfo& earlyWakeupInfo) {
     SFTRACE_CALL();
     /* QTI_BEGIN */
     std::unique_lock<std::mutex> lck (mSmomoMutex, std::defer_lock);
@@ -5446,7 +5449,8 @@ status_t SurfaceFlinger::setTransactionState(
                                  originPid,
                                  originUid,
                                  transactionId,
-                                 mergedTransactionIds};
+                                 mergedTransactionIds,
+                                 earlyWakeupInfo};
     state.workloadHint = queuedWorkload;
 
     if (mTransactionTracing) {
@@ -5460,6 +5464,7 @@ status_t SurfaceFlinger::setTransactionState(
     }(state.flags);
 
     const auto frameHint = state.isFrameActive() ? FrameHint::kActive : FrameHint::kNone;
+    // Copy fields of |state| needed after it is moved into queueTransaction
     {
         // Transactions are added via a lockless queue and does not need to be added from the main
         // thread.
@@ -5472,7 +5477,7 @@ status_t SurfaceFlinger::setTransactionState(
             scheduleNotifyExpectedPresentHint(displayId, VsyncId{frameTimelineInfo.vsyncId});
         }
     }
-    setTransactionFlags(eTransactionFlushNeeded, schedule, applyToken, frameHint);
+    setTransactionFlags(eTransactionFlushNeeded, schedule, frameHint, earlyWakeupInfo);
     return NO_ERROR;
 }
 
@@ -7836,14 +7841,31 @@ ui::Dataspace pickBestDataspace(ui::Dataspace requestedDataspace, ui::ColorMode 
     return dataspaceForColorMode;
 }
 
-} // namespace
-
 static void invokeScreenCaptureError(const status_t status,
                                      const sp<IScreenCaptureListener>& captureListener) {
     ScreenCaptureResults captureResults;
     captureResults.fenceResult = base::unexpected(status);
     captureListener->onScreenCaptureCompleted(captureResults);
 }
+
+// Scans through layer handles to provide a list of layer IDs that should be
+// excluded from a screenshot, or std::nullopt if any layer handle does not
+// correspond to a valid layer ID.
+static base::expected<std::unordered_set<uint32_t>, status_t> getExcludeLayerIds(
+        const std::vector<::android::sp<::android::IBinder>>& excludeHandles) {
+    std::unordered_set<uint32_t> excludeLayerIds;
+    for (const auto& handle : excludeHandles) {
+        uint32_t excludeLayer = LayerHandle::getLayerId(handle);
+        if (excludeLayer != UNASSIGNED_LAYER_ID) {
+            excludeLayerIds.emplace(excludeLayer);
+        } else {
+            return base::unexpected(NAME_NOT_FOUND);
+        }
+    }
+    return excludeLayerIds;
+}
+
+} // namespace
 
 void SurfaceFlinger::captureDisplay(const DisplayCaptureArgs& args,
                                     const sp<IScreenCaptureListener>& captureListener) {
@@ -7873,7 +7895,6 @@ void SurfaceFlinger::captureDisplay(const DisplayCaptureArgs& args,
     ftl::Optional<DisplayIdVariant> displayIdVariantOpt;
     ui::LayerStack layerStack;
     ui::Size reqSize(args.width, args.height);
-    std::unordered_set<uint32_t> excludeLayerIds;
     Rect layerStackSpaceRect;
     bool displayIsSecure;
 
@@ -7895,38 +7916,39 @@ void SurfaceFlinger::captureDisplay(const DisplayCaptureArgs& args,
         if (args.width == 0 || args.height == 0) {
             reqSize = layerStackSpaceRect.getSize();
         }
-
-        for (const auto& handle : captureArgs.excludeHandles) {
-            uint32_t excludeLayer = LayerHandle::getLayerId(handle);
-            if (excludeLayer != UNASSIGNED_LAYER_ID) {
-                excludeLayerIds.emplace(excludeLayer);
-            } else {
-                ALOGD("Invalid layer handle passed as excludeLayer to captureDisplay");
-                invokeScreenCaptureError(NAME_NOT_FOUND, captureListener);
-                return;
-            }
-        }
     }
 
-    GetLayerSnapshotsFunction getLayerSnapshotsFn =
-            getLayerSnapshotsForScreenshots(layerStack, captureArgs.uid,
-                                            std::move(excludeLayerIds));
+    auto excludeLayerIds = getExcludeLayerIds(captureArgs.excludeHandles);
+    if (!excludeLayerIds) {
+        ALOGD("Invalid layer handle passed as excludeLayer to captureDisplay");
+        invokeScreenCaptureError(excludeLayerIds.error(), captureListener);
+        return;
+    }
 
-    ScreenshotArgs screenshotArgs;
-    screenshotArgs.captureTypeVariant = displayWeak;
-    screenshotArgs.displayIdVariant = displayIdVariantOpt;
-    screenshotArgs.sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop);
+    ScreenshotArgs screenshotArgs{.captureTypeVariant = displayWeak,
+                                  .displayIdVariant = displayIdVariantOpt,
+                                  .snapshotRequest =
+                                          SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
+                                                                      captureArgs.uid)},
+                                                              .layerStack = layerStack,
+                                                              .excludeLayerIds =
+                                                                      excludeLayerIds.value()},
+                                  .sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop),
+                                  .size = reqSize,
+                                  .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
+                                  .disableBlur = false,
+                                  .isGrayscale = captureArgs.grayscale,
+                                  .isSecure = captureArgs.captureSecureLayers && displayIsSecure,
+                                  .includeProtected = captureArgs.allowProtected,
+                                  .seamlessTransition = captureArgs.hintForSeamlessTransition,
+                                  .debugName = "ScreenCapture"};
+
     if (screenshotArgs.sourceCrop.isEmpty()) {
         screenshotArgs.sourceCrop = layerStackSpaceRect;
     }
-    screenshotArgs.reqSize = reqSize;
-    screenshotArgs.dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace);
-    screenshotArgs.isSecure = captureArgs.captureSecureLayers && displayIsSecure;
-    screenshotArgs.seamlessTransition = captureArgs.hintForSeamlessTransition;
 
-    captureScreenCommon(screenshotArgs, getLayerSnapshotsFn, reqSize,
-                        static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
-                        captureArgs.allowProtected, captureArgs.grayscale, captureListener);
+    captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
+                        captureListener);
 }
 
 void SurfaceFlinger::captureDisplay(DisplayId displayId, const CaptureArgs& args,
@@ -7969,30 +7991,27 @@ void SurfaceFlinger::captureDisplay(DisplayId displayId, const CaptureArgs& args
         return;
     }
 
-    GetLayerSnapshotsFunction getLayerSnapshotsFn =
-            getLayerSnapshotsForScreenshots(layerStack, CaptureArgs::UNSET_UID,
-                                            /*snapshotFilterFn=*/nullptr);
-
     if (captureListener == nullptr) {
         ALOGE("capture screen must provide a capture listener callback");
         invokeScreenCaptureError(BAD_VALUE, captureListener);
         return;
     }
 
-    constexpr bool kAllowProtected = false;
-    constexpr bool kGrayscale = false;
+    ScreenshotArgs screenshotArgs{.captureTypeVariant = displayWeak,
+                                  .displayIdVariant = displayIdVariantOpt,
+                                  .snapshotRequest = SnapshotRequestArgs{.uid = gui::Uid::INVALID,
+                                                                         .layerStack = layerStack},
+                                  .sourceCrop = layerStackSpaceRect,
+                                  .size = size,
+                                  .dataspace = static_cast<ui::Dataspace>(args.dataspace),
+                                  .disableBlur = false,
+                                  .isGrayscale = false,
+                                  .isSecure = args.captureSecureLayers && displayIsSecure,
+                                  .includeProtected = false,
+                                  .seamlessTransition = args.hintForSeamlessTransition,
+                                  .debugName = "ScreenCapture"};
 
-    ScreenshotArgs screenshotArgs;
-    screenshotArgs.captureTypeVariant = displayWeak;
-    screenshotArgs.displayIdVariant = displayIdVariantOpt;
-    screenshotArgs.sourceCrop = layerStackSpaceRect;
-    screenshotArgs.reqSize = size;
-    screenshotArgs.dataspace = static_cast<ui::Dataspace>(args.dataspace);
-    screenshotArgs.isSecure = args.captureSecureLayers && displayIsSecure;
-    screenshotArgs.seamlessTransition = args.hintForSeamlessTransition;
-
-    captureScreenCommon(screenshotArgs, getLayerSnapshotsFn, size,
-                        static_cast<ui::PixelFormat>(args.pixelFormat), kAllowProtected, kGrayscale,
+    captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(args.pixelFormat),
                         captureListener);
 }
 
@@ -8019,7 +8038,6 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
 
     ui::Size reqSize;
     sp<Layer> parent;
-    std::unordered_set<uint32_t> excludeLayerIds;
     ui::Dataspace dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace);
 
     if (captureArgs.captureSecureLayers && !hasCaptureBlackoutContentPermission()) {
@@ -8058,18 +8076,14 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
         }
         reqSize = ui::Size(crop.width() * captureArgs.frameScaleX,
                            crop.height() * captureArgs.frameScaleY);
-
-        for (const auto& handle : captureArgs.excludeHandles) {
-            uint32_t excludeLayer = LayerHandle::getLayerId(handle);
-            if (excludeLayer != UNASSIGNED_LAYER_ID) {
-                excludeLayerIds.emplace(excludeLayer);
-            } else {
-                ALOGD("Invalid layer handle passed as excludeLayer to captureLayers");
-                invokeScreenCaptureError(NAME_NOT_FOUND, captureListener);
-                return;
-            }
-        }
     } // mStateLock
+
+    auto excludeLayerIds = getExcludeLayerIds(captureArgs.excludeHandles);
+    if (!excludeLayerIds) {
+        ALOGD("Invalid layer handle passed as excludeLayer to captureLayers");
+        invokeScreenCaptureError(excludeLayerIds.error(), captureListener);
+        return;
+    }
 
     // really small crop or frameScale
     if (reqSize.width <= 0 || reqSize.height <= 0) {
@@ -8084,29 +8098,33 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
                                     : crop.toFloatRect();
     }
 
-    GetLayerSnapshotsFunction getLayerSnapshotsFn =
-            getLayerSnapshotsForScreenshots(parent->sequence, captureArgs.uid,
-                                            std::move(excludeLayerIds), args.childrenOnly,
-                                            parentCrop);
-
     if (captureListener == nullptr) {
         ALOGD("capture screen must provide a capture listener callback");
         invokeScreenCaptureError(BAD_VALUE, captureListener);
         return;
     }
 
-    ScreenshotArgs screenshotArgs;
-    screenshotArgs.captureTypeVariant = parent->getSequence();
-    screenshotArgs.childrenOnly = args.childrenOnly;
-    screenshotArgs.sourceCrop = crop;
-    screenshotArgs.reqSize = reqSize;
-    screenshotArgs.dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace);
-    screenshotArgs.isSecure = captureArgs.captureSecureLayers;
-    screenshotArgs.seamlessTransition = captureArgs.hintForSeamlessTransition;
+    ScreenshotArgs screenshotArgs{.captureTypeVariant = parent->getSequence(),
+                                  .snapshotRequest =
+                                          SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
+                                                                      captureArgs.uid)},
+                                                              .rootLayerId = parent->getSequence(),
+                                                              .excludeLayerIds =
+                                                                      excludeLayerIds.value(),
+                                                              .childrenOnly = args.childrenOnly,
+                                                              .parentCrop = parentCrop},
+                                  .sourceCrop = crop,
+                                  .size = reqSize,
+                                  .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
+                                  .disableBlur = false,
+                                  .isGrayscale = captureArgs.grayscale,
+                                  .isSecure = captureArgs.captureSecureLayers,
+                                  .includeProtected = captureArgs.allowProtected,
+                                  .seamlessTransition = captureArgs.hintForSeamlessTransition,
+                                  .debugName = "ScreenCapture"};
 
-    captureScreenCommon(screenshotArgs, getLayerSnapshotsFn, reqSize,
-                        static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
-                        captureArgs.allowProtected, captureArgs.grayscale, captureListener);
+    captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
+                        captureListener);
 }
 
 // Creates a Future release fence for a layer and keeps track of it in a list to
@@ -8146,21 +8164,19 @@ bool SurfaceFlinger::layersHasProtectedLayer(
 // main thread. Accessing display requires mStateLock, and contention for
 // this lock is reduced when grabbed from the main thread, thus also reducing
 // risk of deadlocks. Returns false if no display is found.
-bool SurfaceFlinger::getSnapshotsFromMainThread(
-        ScreenshotArgs& args, GetLayerSnapshotsFunction getLayerSnapshotsFn,
-        std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) {
+bool SurfaceFlinger::getSnapshotsFromMainThread(ScreenshotArgs& args) {
     return mScheduler
-            ->schedule([=, this, &args, &layers]() REQUIRES(kMainThreadContext) {
+            ->schedule([=, this, &args]() REQUIRES(kMainThreadContext) {
                 SFTRACE_NAME_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Screenshot");
                 mPowerAdvisor->setScreenshotWorkload();
                 SFTRACE_NAME("getSnapshotsFromMainThread");
-                layers = getLayerSnapshotsFn();
+                args.layers = getLayerSnapshotsForScreenshots(args.snapshotRequest);
                 // Non-threaded RenderEngine eventually returns to the main thread a 2nd time
                 // to complete the screenshot. Release fences should only be added during the 2nd
                 // hop to main thread in order to avoid potential deadlocks from waiting for the
                 // the future fence to fire.
                 if (mRenderEngine->isThreaded()) {
-                    for (auto& [layer, layerFE] : layers) {
+                    for (auto& [layer, layerFE] : args.layers) {
                         attachReleaseFenceFutureToLayer(layer, layerFE.get(),
                                                         ui::UNASSIGNED_LAYER_STACK);
                     }
@@ -8170,49 +8186,46 @@ bool SurfaceFlinger::getSnapshotsFromMainThread(
             .get();
 }
 
-void SurfaceFlinger::captureScreenCommon(ScreenshotArgs& args,
-                                         GetLayerSnapshotsFunction getLayerSnapshotsFn,
-                                         ui::Size bufferSize, ui::PixelFormat reqPixelFormat,
-                                         bool allowProtected, bool grayscale,
+void SurfaceFlinger::captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat reqPixelFormat,
                                          const sp<IScreenCaptureListener>& captureListener) {
     SFTRACE_CALL();
 
-    if (exceedsMaxRenderTargetSize(bufferSize.getWidth(), bufferSize.getHeight())) {
+    if (exceedsMaxRenderTargetSize(args.size.getWidth(), args.size.getHeight())) {
         ALOGE("Attempted to capture screen with size (%" PRId32 ", %" PRId32
               ") that exceeds render target size limit.",
-              bufferSize.getWidth(), bufferSize.getHeight());
+              args.size.getWidth(), args.size.getHeight());
         invokeScreenCaptureError(BAD_VALUE, captureListener);
         return;
     }
 
-    std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
-    bool hasDisplayState = getSnapshotsFromMainThread(args, getLayerSnapshotsFn, layers);
+    bool hasDisplayState = getSnapshotsFromMainThread(args);
     if (!hasDisplayState) {
         ALOGD("Display state not found");
         invokeScreenCaptureError(NO_MEMORY, captureListener);
     }
 
-    const bool hasHdrLayer = std::any_of(layers.cbegin(), layers.cend(), [this](const auto& layer) {
-        return isHdrLayer(*(layer.second->mSnapshot.get()));
-    });
+    const bool hasHdrLayer =
+            std::any_of(args.layers.cbegin(), args.layers.cend(), [this](const auto& layer) {
+                return isHdrLayer(*(layer.second->mSnapshot.get()));
+            });
 
     const bool supportsProtected = getRenderEngine().supportsProtectedContent();
     bool hasProtectedLayer = false;
-    if (allowProtected && supportsProtected) {
-        hasProtectedLayer = layersHasProtectedLayer(layers);
+    if (args.includeProtected && supportsProtected) {
+        hasProtectedLayer = layersHasProtectedLayer(args.layers);
     }
 
     /* QTI_BEGIN */
         mQtiSFExtnIntf->qtiHasProtectedLayer(&hasProtectedLayer);
     /* QTI_END */
 
-    const bool isProtected = hasProtectedLayer && allowProtected && supportsProtected;
+    const bool isProtected = hasProtectedLayer && args.includeProtected && supportsProtected;
     const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_RENDER |
             GRALLOC_USAGE_HW_TEXTURE |
             (isProtected ? GRALLOC_USAGE_PROTECTED
                          : GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN);
     sp<GraphicBuffer> buffer =
-            getFactory().createGraphicBuffer(bufferSize.getWidth(), bufferSize.getHeight(),
+            getFactory().createGraphicBuffer(args.size.getWidth(), args.size.getHeight(),
                                              static_cast<android_pixel_format>(reqPixelFormat),
                                              1 /* layerCount */, usage, "screenshot");
 
@@ -8268,8 +8281,7 @@ void SurfaceFlinger::captureScreenCommon(ScreenshotArgs& args,
     }
 
     auto futureFence =
-            captureScreenshot(args, texture, false /* regionSampling */, grayscale, isProtected,
-                              captureListener, layers, hdrTexture, gainmapTexture);
+            captureScreenshot(args, texture, captureListener, hdrTexture, gainmapTexture);
     futureFence.get();
 }
 
@@ -8287,7 +8299,7 @@ bool SurfaceFlinger::getDisplayStateOnMainThread(ScreenshotArgs& args) {
             if (!snapshot) {
                 ALOGW("Couldn't find layer snapshot for %d", *layerSequence);
             } else {
-                if (!args.childrenOnly) {
+                if (!args.snapshotRequest.childrenOnly) {
                     args.transform = snapshot->localTransform.inverse();
                 }
                 if (args.sourceCrop.isEmpty()) {
@@ -8297,6 +8309,7 @@ bool SurfaceFlinger::getDisplayStateOnMainThread(ScreenshotArgs& args) {
                         [layerStack = snapshot->outputFilter.layerStack](const auto& display) {
                             return display.getLayerStack() == layerStack;
                         });
+                args.debugName.append(", ").append(snapshot->debugName);
             }
 
             // Screenshot initiated through captureDisplay
@@ -8315,6 +8328,8 @@ bool SurfaceFlinger::getDisplayStateOnMainThread(ScreenshotArgs& args) {
             args.sdrWhitePointNits = state.sdrWhitePointNits;
             args.renderIntent = state.renderIntent;
             args.colorMode = state.colorMode;
+            args.debugName.append(", ").append(display->getDisplayName());
+            args.debugName.append(" (").append(to_string(display->getId())).append(")");
             return true;
         }
     }
@@ -8323,9 +8338,7 @@ bool SurfaceFlinger::getDisplayStateOnMainThread(ScreenshotArgs& args) {
 
 ftl::SharedFuture<FenceResult> SurfaceFlinger::captureScreenshot(
         ScreenshotArgs& args, const std::shared_ptr<renderengine::ExternalTexture>& buffer,
-        bool regionSampling, bool grayscale, bool isProtected,
         const sp<IScreenCaptureListener>& captureListener,
-        const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers,
         const std::shared_ptr<renderengine::ExternalTexture>& hdrBuffer,
         const std::shared_ptr<renderengine::ExternalTexture>& gainmapBuffer) {
     SFTRACE_CALL();
@@ -8337,8 +8350,7 @@ ftl::SharedFuture<FenceResult> SurfaceFlinger::captureScreenshot(
 
     if (hdrBuffer && gainmapBuffer) {
         ftl::SharedFuture<FenceResult> hdrRenderFuture =
-                renderScreenImpl(args, hdrBuffer, regionSampling, grayscale, isProtected,
-                                 captureResults, layers);
+                renderScreenImpl(args, hdrBuffer, captureResults);
         captureResults.buffer = buffer->getBuffer();
         captureResults.optionalGainMap = gainmapBuffer->getBuffer();
 
@@ -8369,8 +8381,7 @@ ftl::SharedFuture<FenceResult> SurfaceFlinger::captureScreenshot(
                         })
                         .share();
     } else {
-        renderFuture = renderScreenImpl(args, buffer, regionSampling, grayscale, isProtected,
-                                        captureResults, layers);
+        renderFuture = renderScreenImpl(args, buffer, captureResults);
     }
 
     if (captureListener) {
@@ -8390,11 +8401,10 @@ ftl::SharedFuture<FenceResult> SurfaceFlinger::captureScreenshot(
 
 ftl::SharedFuture<FenceResult> SurfaceFlinger::renderScreenImpl(
         ScreenshotArgs& args, const std::shared_ptr<renderengine::ExternalTexture>& buffer,
-        bool regionSampling, bool grayscale, bool isProtected, ScreenCaptureResults& captureResults,
-        const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) {
+        ScreenCaptureResults& captureResults) {
     SFTRACE_CALL();
 
-    for (auto& [_, layerFE] : layers) {
+    for (auto& [_, layerFE] : args.layers) {
         frontend::LayerSnapshot* snapshot = layerFE->mSnapshot.get();
         captureResults.capturedSecureLayers |= (snapshot->isVisible && snapshot->isSecure);
         captureResults.capturedHdrLayers |= isHdrLayer(*snapshot);
@@ -8439,22 +8449,21 @@ ftl::SharedFuture<FenceResult> SurfaceFlinger::renderScreenImpl(
     captureResults.buffer = capturedBuffer->getBuffer();
 
     ui::LayerStack layerStack{ui::DEFAULT_LAYER_STACK};
-    if (!layers.empty()) {
-        const sp<LayerFE>& layerFE = layers.back().second;
+    if (!args.layers.empty()) {
+        const sp<LayerFE>& layerFE = args.layers.back().second;
         layerStack = layerFE->getCompositionState()->outputFilter.layerStack;
     }
 
     auto present = [this, buffer = capturedBuffer, dataspace = captureResults.capturedDataspace,
-                    grayscale, isProtected, layers, layerStack, regionSampling, args, renderIntent,
-                    enableLocalTonemapping]() -> FenceResult {
+                    layerStack, args, renderIntent, enableLocalTonemapping]() -> FenceResult {
         std::unique_ptr<compositionengine::CompositionEngine> compositionEngine =
                 mFactory.createCompositionEngine();
         compositionEngine->setRenderEngine(mRenderEngine.get());
         compositionEngine->setHwComposer(mHWComposer.get());
 
         std::vector<sp<compositionengine::LayerFE>> layerFEs;
-        layerFEs.reserve(layers.size());
-        for (auto& [layer, layerFE] : layers) {
+        layerFEs.reserve(args.layers.size());
+        for (auto& [layer, layerFE] : args.layers) {
             // Release fences were not yet added for non-threaded render engine. To avoid
             // deadlocks between main thread and binder threads waiting for the future fence
             // result, fences should be added to layers in the same hop onto the main thread.
@@ -8499,20 +8508,20 @@ ftl::SharedFuture<FenceResult> SurfaceFlinger::renderScreenImpl(
                                         .sourceCrop = args.sourceCrop,
                                         .buffer = std::move(buffer),
                                         .displayIdVariant = args.displayIdVariant,
-                                        .reqBufferSize = args.reqSize,
+                                        .reqBufferSize = args.size,
                                         .sdrWhitePointNits = args.sdrWhitePointNits,
                                         .displayBrightnessNits = args.displayBrightnessNits,
                                         .targetBrightness = targetBrightness,
                                         .layerAlpha = layerAlpha,
-                                        .regionSampling = regionSampling,
+                                        .disableBlur = args.disableBlur,
                                         .treat170mAsSrgb = mTreat170mAsSrgb,
                                         .dimInGammaSpaceForEnhancedScreenshots =
                                                 dimInGammaSpaceForEnhancedScreenshots,
                                         .isSecure = args.isSecure,
-                                        .isProtected = isProtected,
-                                        .enableLocalTonemapping = enableLocalTonemapping});
+                                        .enableLocalTonemapping = enableLocalTonemapping,
+                                        .debugName = args.debugName});
 
-        const float colorSaturation = grayscale ? 0 : 1;
+        const float colorSaturation = args.isGrayscale ? 0 : 1;
         compositionengine::CompositionRefreshArgs refreshArgs{
                 .outputs = {output},
                 .layers = std::move(layerFEs),
@@ -9113,12 +9122,9 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::moveSnapshotsToComposit
     return layers;
 }
 
-std::function<std::vector<std::pair<Layer*, sp<LayerFE>>>()>
-SurfaceFlinger::getLayerSnapshotsForScreenshots(
-        std::optional<ui::LayerStack> layerStack, uint32_t uid,
-        std::function<bool(const frontend::LayerSnapshot&, bool& outStopTraversal)>
-                snapshotFilterFn) {
-    return [&, layerStack, uid]() FTL_FAKE_GUARD(kMainThreadContext) {
+std::vector<std::pair<Layer*, sp<LayerFE>>> SurfaceFlinger::getLayerSnapshotsForScreenshots(
+        const SnapshotRequestArgs& args) {
+    auto snapshotLambda = [&](const SnapshotRequestArgs& args) FTL_FAKE_GUARD(kMainThreadContext) {
         std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
         bool stopTraversal = false;
         mLayerSnapshotBuilder.forEachVisibleSnapshot(
@@ -9127,16 +9133,16 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(
                     if (stopTraversal) {
                         return;
                     }
-                    if (layerStack && snapshot->outputFilter.layerStack != *layerStack) {
+                    if (args.layerStack && snapshot->outputFilter.layerStack != *args.layerStack) {
                         return;
                     }
-                    if (uid != CaptureArgs::UNSET_UID && snapshot->uid != gui::Uid(uid)) {
+                    if (args.uid != gui::Uid::INVALID && snapshot->uid != gui::Uid(args.uid)) {
                         return;
                     }
                     if (!snapshot->hasSomethingToDraw()) {
                         return;
                     }
-                    if (snapshotFilterFn && !snapshotFilterFn(*snapshot, stopTraversal)) {
+                    if (args.snapshotFilterFn && !args.snapshotFilterFn(*snapshot, stopTraversal)) {
                         return;
                     }
 
@@ -9152,88 +9158,54 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(
 
         return layers;
     };
-}
 
-std::function<std::vector<std::pair<Layer*, sp<LayerFE>>>()>
-SurfaceFlinger::getLayerSnapshotsForScreenshots(std::optional<ui::LayerStack> layerStack,
-                                                uint32_t uid,
-                                                std::unordered_set<uint32_t> excludeLayerIds) {
-    return [&, layerStack, uid,
-            excludeLayerIds = std::move(excludeLayerIds)]() FTL_FAKE_GUARD(kMainThreadContext) {
-        if (excludeLayerIds.empty()) {
-            auto getLayerSnapshotsFn =
-                    getLayerSnapshotsForScreenshots(layerStack, uid, /*snapshotFilterFn=*/nullptr);
-            std::vector<std::pair<Layer*, sp<LayerFE>>> layers = getLayerSnapshotsFn();
-            return layers;
+    std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
+    if (args.rootLayerId || !args.excludeLayerIds.empty()) {
+        // Create and update LayerSnapshotBuilder args before iterating through snapshots
+        frontend::LayerSnapshotBuilder::Args
+                builderArgs{.root = args.rootLayerId
+                                    ? mLayerHierarchyBuilder
+                                              .getPartialHierarchy(args.rootLayerId.value(),
+                                                                   args.childrenOnly)
+                                    : mLayerHierarchyBuilder.getHierarchy(),
+                            .layerLifecycleManager = mLayerLifecycleManager,
+                            .forceUpdate =
+                                    frontend::LayerSnapshotBuilder::ForceUpdateFlags::HIERARCHY,
+                            .displays = mFrontEndDisplayInfos,
+                            .displayChanges = true,
+                            .globalShadowSettings = mDrawingState.globalShadowSettings,
+                            .supportsBlur = mSupportsBlur,
+                            .forceFullDamage = mForceFullDamage,
+                            .excludeLayerIds = std::move(args.excludeLayerIds),
+                            .supportedLayerGenericMetadata =
+                                    getHwComposer().getSupportedLayerGenericMetadata(),
+                            .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
+                            .skipRoundCornersWhenProtected =
+                                    !getRenderEngine().supportsProtectedContent()};
+        if (args.rootLayerId) {
+            builderArgs.parentCrop = args.parentCrop;
+            // The layer may not exist if it was just created and a screenshot was requested
+            // immediately after. In this case, the hierarchy will be empty so we will not render
+            // any layers.
+            builderArgs.rootSnapshot.isSecure =
+                    mLayerLifecycleManager.getLayerFromId(args.rootLayerId.value()) &&
+                    mLayerLifecycleManager.isLayerSecure(args.rootLayerId.value());
         }
+        mLayerSnapshotBuilder.update(builderArgs);
+        layers = snapshotLambda(args);
 
-        frontend::LayerSnapshotBuilder::Args
-                args{.root = mLayerHierarchyBuilder.getHierarchy(),
-                     .layerLifecycleManager = mLayerLifecycleManager,
-                     .forceUpdate = frontend::LayerSnapshotBuilder::ForceUpdateFlags::HIERARCHY,
-                     .displays = mFrontEndDisplayInfos,
-                     .displayChanges = true,
-                     .globalShadowSettings = mDrawingState.globalShadowSettings,
-                     .supportsBlur = mSupportsBlur,
-                     .forceFullDamage = mForceFullDamage,
-                     .excludeLayerIds = std::move(excludeLayerIds),
-                     .supportedLayerGenericMetadata =
-                             getHwComposer().getSupportedLayerGenericMetadata(),
-                     .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
-                     .skipRoundCornersWhenProtected =
-                             !getRenderEngine().supportsProtectedContent()};
-        mLayerSnapshotBuilder.update(args);
+        // Reset LayerSnapshotBuilder args after snapshots are obtained
+        if (args.rootLayerId) {
+            builderArgs.root = mLayerHierarchyBuilder.getHierarchy();
+            builderArgs.parentCrop.reset();
+        }
+        builderArgs.excludeLayerIds.clear();
+        mLayerSnapshotBuilder.update(builderArgs);
 
-        auto getLayerSnapshotsFn =
-                getLayerSnapshotsForScreenshots(layerStack, uid, /*snapshotFilterFn=*/nullptr);
-        std::vector<std::pair<Layer*, sp<LayerFE>>> layers = getLayerSnapshotsFn();
-
-        args.excludeLayerIds.clear();
-        mLayerSnapshotBuilder.update(args);
-
-        return layers;
-    };
-}
-
-std::function<std::vector<std::pair<Layer*, sp<LayerFE>>>()>
-SurfaceFlinger::getLayerSnapshotsForScreenshots(uint32_t rootLayerId, uint32_t uid,
-                                                std::unordered_set<uint32_t> excludeLayerIds,
-                                                bool childrenOnly,
-                                                const std::optional<FloatRect>& parentCrop) {
-    return [&, rootLayerId, uid, excludeLayerIds = std::move(excludeLayerIds), childrenOnly,
-            parentCrop]() FTL_FAKE_GUARD(kMainThreadContext) {
-        auto root = mLayerHierarchyBuilder.getPartialHierarchy(rootLayerId, childrenOnly);
-        frontend::LayerSnapshotBuilder::Args
-                args{.root = root,
-                     .layerLifecycleManager = mLayerLifecycleManager,
-                     .forceUpdate = frontend::LayerSnapshotBuilder::ForceUpdateFlags::HIERARCHY,
-                     .displays = mFrontEndDisplayInfos,
-                     .displayChanges = true,
-                     .globalShadowSettings = mDrawingState.globalShadowSettings,
-                     .supportsBlur = mSupportsBlur,
-                     .forceFullDamage = mForceFullDamage,
-                     .parentCrop = parentCrop,
-                     .excludeLayerIds = std::move(excludeLayerIds),
-                     .supportedLayerGenericMetadata =
-                             getHwComposer().getSupportedLayerGenericMetadata(),
-                     .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
-                     .skipRoundCornersWhenProtected =
-                             !getRenderEngine().supportsProtectedContent()};
-        // The layer may not exist if it was just created and a screenshot was requested immediately
-        // after. In this case, the hierarchy will be empty so we will not render any layers.
-        args.rootSnapshot.isSecure = mLayerLifecycleManager.getLayerFromId(rootLayerId) &&
-                mLayerLifecycleManager.isLayerSecure(rootLayerId);
-        mLayerSnapshotBuilder.update(args);
-
-        auto getLayerSnapshotsFn =
-                getLayerSnapshotsForScreenshots({}, uid, /*snapshotFilterFn=*/nullptr);
-        std::vector<std::pair<Layer*, sp<LayerFE>>> layers = getLayerSnapshotsFn();
-        args.root = mLayerHierarchyBuilder.getHierarchy();
-        args.parentCrop.reset();
-        args.excludeLayerIds.clear();
-        mLayerSnapshotBuilder.update(args);
-        return layers;
-    };
+    } else {
+        layers = snapshotLambda(args);
+    }
+    return layers;
 }
 
 void SurfaceFlinger::doActiveLayersTracingIfNeeded(bool isCompositionComputed,

@@ -23,6 +23,7 @@
 #include <initializer_list>
 #include <memory>
 #include <optional>
+#include <ratio>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -58,10 +59,13 @@
 #include "test_framework/core/DisplayConfiguration.h"
 #include "test_framework/core/EdidBuilder.h"
 #include "test_framework/core/GuardedSharedState.h"
+#include "test_framework/hwc3/DisplayVSyncEventService.h"
 #include "test_framework/hwc3/FakeComposer.h"
 #include "test_framework/hwc3/FakeDisplayConfiguration.h"
+#include "test_framework/hwc3/SingleDisplayRefreshSchedule.h"
 #include "test_framework/hwc3/delegators/Composer.h"
 #include "test_framework/hwc3/delegators/ComposerClient.h"
+#include "test_framework/hwc3/events/VSync.h"
 
 namespace android::surfaceflinger::tests::end2end::test_framework::hwc3 {
 
@@ -245,6 +249,16 @@ struct ClientImpl final : public DefaultComposerClientImpl {
         mState.withSharedLock([displayId](const auto& state) {
             using aidl::android::hardware::graphics::common::DisplayHotplugEvent::DISCONNECTED;
             state.composerCallbacks->onHotplugEvent(displayId, DISCONNECTED);
+        });
+    }
+
+    void sendVSync(events::VSync event) {
+        mState.withSharedLock([event](const auto& state) {
+            state.composerCallbacks->onVsync(
+                    event.displayId, event.expectedAt.time_since_epoch().count(),
+                    std::chrono::duration_cast<std::chrono::duration<int32_t, std::nano>>(
+                            event.expectedPeriod)
+                            .count());
         });
     }
 
@@ -569,6 +583,19 @@ struct ClientImpl final : public DefaultComposerClientImpl {
 };
 
 struct FakeComposer::ComposerImpl final : public DefaultComposerImpl {
+    auto init() -> base::expected<void, std::string> {
+        auto displayVsyncEventServiceResult = DisplayVSyncEventService::make();
+        if (!displayVsyncEventServiceResult) {
+            return base::unexpected(std::move(displayVsyncEventServiceResult).error());
+        }
+
+        mDisplayVSyncEventService = *std::move(displayVsyncEventServiceResult);
+        mDisplayVSyncEventService->editCallbacks().onVSync.set(
+                [this](auto event) { onVsyncEventGenerated(event); })();
+
+        return {};
+    }
+
     auto getComposer() -> std::shared_ptr<IComposer> { return ref<ComposerImpl>(); }
 
     void addDisplay(const core::DisplayConfiguration& display) {
@@ -603,6 +630,8 @@ struct FakeComposer::ComposerImpl final : public DefaultComposerImpl {
     }
 
     void removeDisplay(core::DisplayConfiguration::Id displayId) {
+        mDisplayVSyncEventService->removeDisplay(displayId);
+
         auto client = mState.withExclusiveLock([displayId](auto& state) {
             if (state.initialDisplayId == displayId) {
                 state.initialDisplayId.reset();
@@ -687,6 +716,51 @@ struct FakeComposer::ComposerImpl final : public DefaultComposerImpl {
         });
     }
 
+    void onVsyncEventGenerated(events::VSync event) {
+        if (auto client = mState.withSharedLock([](const auto& state) { return state.client; })) {
+            client->sendVSync(event);
+        }
+    }
+
+    void onVsyncEnabledChanged(int64_t displayId, bool enable) const {
+        LOG(VERBOSE) << __func__;
+        mState.withSharedLock([this, displayId, enable](const auto& state) {
+            LOG(INFO) << "displayId: " << displayId << " enable: " << enable;
+            if (!enable) {
+                mDisplayVSyncEventService->removeDisplay(displayId);
+                return;
+            }
+
+            auto found = state.configuredDisplays.find(displayId);
+            if (found == state.configuredDisplays.end()) {
+                LOG(WARNING) << "No display " << displayId << " to configure vsync generation.";
+                return;
+            }
+            const auto& display = found->second;
+            auto foundConfig = std::ranges::find_if(
+                    display.displayConfigs, [configId = display.activeConfig](const auto& config) {
+                        return config.configId == configId;
+                    });
+            if (foundConfig == display.displayConfigs.end()) {
+                LOG(WARNING) << "No config " << display.activeConfig << " for display " << displayId
+                             << " to configure vsync generation.";
+                return;
+            }
+            const auto& config = *foundConfig;
+
+            using TimePoint = std::chrono::steady_clock::time_point;
+            using Duration = std::chrono::steady_clock::duration;
+
+            LOG(WARNING) << "Assuming a base of zero for vsync timing!";
+            const TimePoint base{Duration(0)};
+            const auto period = Duration(config.vsyncPeriod);
+            mDisplayVSyncEventService->addDisplay(
+                    displayId, SingleDisplayRefreshSchedule{.base = base, .period = period});
+        });
+    }
+
+    std::shared_ptr<DisplayVSyncEventService> mDisplayVSyncEventService;
+
     struct State {
         std::shared_ptr<ClientImpl> client;
         std::optional<int64_t> initialDisplayId;
@@ -725,7 +799,11 @@ auto FakeComposer::init() -> base::expected<void, std::string> {
 
     auto impl = ndk::SharedRefBase::make<ComposerImpl>();
     if (!impl) {
-        return base::unexpected("Failed to construct the Hwc3ComposerImpl instance."s);
+        return base::unexpected("Failed to construct the ComposerImpl instance."s);
+    }
+
+    if (auto result = impl->init(); !result) {
+        return base::unexpected("Failed to init the ComposerImpl instance: "s + result.error());
     }
 
     mImpl = std::move(impl);

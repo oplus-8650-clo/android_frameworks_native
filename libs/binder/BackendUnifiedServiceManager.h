@@ -29,7 +29,7 @@ class BinderCacheWithInvalidation
     class BinderInvalidation : public IBinder::DeathRecipient {
     public:
         BinderInvalidation(std::weak_ptr<BinderCacheWithInvalidation> cache, const std::string& key)
-              : mCache(cache), mKey(key) {}
+              : mCache(std::move(cache)), mKey(key) {}
 
         void binderDied(const wp<IBinder>& who) override {
             sp<IBinder> binder = who.promote();
@@ -73,7 +73,7 @@ public:
                 if (result != DEAD_OBJECT) {
                     ALOGW("Unlinking to dead binder resulted in: %d", result);
                 }
-                mCache.erase(key);
+                mCache.erase(it);
                 return true;
             }
         }
@@ -105,14 +105,14 @@ public:
         binder::ScopedTrace aidlTrace(ATRACE_TAG_AIDL,
                                       "BinderCacheWithInvalidation::setItem Successfully Cached");
         std::lock_guard<std::mutex> lock(mCacheMutex);
-        mCache[key] = {.service = item, .deathRecipient = deathRecipient};
+        mCache[key] = {.service = item, .deathRecipient = std::move(deathRecipient)};
         return binder::Status::ok();
     }
 
-    bool isClientSideCachingEnabled(const std::string& serviceName);
+    bool isClientSideCachingEnabled(const std::string& serviceName) const;
 
 private:
-    std::map<std::string, Entry> mCache;
+    std::map<std::string, Entry, std::less<>> mCache;
     mutable std::mutex mCacheMutex;
 };
 
@@ -146,6 +146,10 @@ public:
     binder::Status tryUnregisterService(const ::std::string& name,
                                         const sp<IBinder>& service) override;
     binder::Status getServiceDebugInfo(::std::vector<os::ServiceDebugInfo>* _aidl_return) override;
+
+    binder::Status checkServiceAccess(const os::IServiceManager::CallerContext& callerCtx,
+                                      const ::std::string& name, const ::std::string& permission,
+                                      bool* _aidl_return) override;
 
     void enableAddServiceCache(bool value) { mEnableAddServiceCache = value; }
     // for legacy ABI
