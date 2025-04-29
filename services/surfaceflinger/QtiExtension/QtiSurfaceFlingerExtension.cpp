@@ -1296,6 +1296,12 @@ void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState
 
 void QtiSurfaceFlingerExtension::qtiDestroySmomoInstance(const sp<DisplayDevice>& display) {
     uint32_t hwcDisplayId = 0;
+
+    if (mQtiVisibleLayerInfoMap.erase(display->getId())) {
+        ALOGV("Removed display %s from mQtiVisibleLayerInfoMap",
+              to_string(display->getId()).c_str());
+    }
+
     if (!qtiGetHwcDisplayId(display, &hwcDisplayId)) {
         return;
     }
