@@ -68,8 +68,6 @@
 
 namespace android::scheduler {
 
-using base::StringAppendF;
-
 Scheduler::Scheduler(ICompositor& compositor, ISchedulerCallback& callback, FeatureFlags features,
                      surfaceflinger::Factory& factory, Fps activeRefreshRate, TimeStats& timeStats)
       : android::impl::MessageQueue(compositor),

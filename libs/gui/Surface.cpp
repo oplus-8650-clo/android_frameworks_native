@@ -128,6 +128,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
         mFrameTimestampsSupportsPresent(false),
         mEnableFrameTimestamps(false),
         mFrameEventHistory(std::make_unique<ProducerFrameEventHistory>()) {
+    LOG_ALWAYS_FATAL_IF(!mGraphicBufferProducer); // it will crash anyway
+
     // Initialize the ANativeWindow function pointers.
     ANativeWindow::setSwapInterval  = hook_setSwapInterval;
     ANativeWindow::dequeueBuffer    = hook_dequeueBuffer;

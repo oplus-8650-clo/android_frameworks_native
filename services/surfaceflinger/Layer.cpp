@@ -1379,6 +1379,7 @@ void Layer::gatherBufferInfo() {
     }
 
     if (mLastLayerEvent->dataspace != mBufferInfo.mDataspace ||
+        mLastLayerEvent->desiredHdrHeadroom != mBufferInfo.mDesiredHdrSdrRatio ||
         mLastLayerEvent->useLuts != mDrawingState.useLuts ||
         mTimeSinceLayerEventsUpdate == std::chrono::steady_clock::time_point::min()) {
         const auto currentTime = std::chrono::steady_clock::now();
@@ -1391,6 +1392,7 @@ void Layer::gatherBufferInfo() {
         mTimeSinceLayerEventsUpdate = currentTime;
         mLastLayerEvent->dataspace = mBufferInfo.mDataspace;
         mLastLayerEvent->useLuts = mDrawingState.useLuts;
+        mLastLayerEvent->desiredHdrHeadroom = mBufferInfo.mDesiredHdrSdrRatio;
     }
 }
 

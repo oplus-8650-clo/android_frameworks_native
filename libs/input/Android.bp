@@ -220,6 +220,7 @@ cc_library {
         "-Wshadow-uncaptured-local",
         "-Wthread-safety",
     ],
+    afdo: true,
     srcs: [
         "AccelerationCurve.cpp",
         "CoordinateFilter.cpp",

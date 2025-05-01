@@ -587,8 +587,7 @@ private:
             InputWindowCommands inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
             bool hasListenerCallbacks, const std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
-            const gui::EarlyWakeupInfo& earlyWakeupInfo) override;
+            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds) override;
     void bootFinished();
     status_t getSupportedFrameTimestamps(std::vector<FrameEvent>* outSupported) const;
     sp<IDisplayEventConnection> createDisplayEventConnection(
@@ -872,8 +871,8 @@ private:
 
     // Sets the masked bits, and schedules a commit if needed.
     void setTransactionFlags(uint32_t mask, TransactionSchedule = TransactionSchedule::Late,
-                             FrameHint = FrameHint::kActive,
-                             const gui::EarlyWakeupInfo& earlyWakeupInfo = {});
+                             const sp<IBinder>& applyToken = nullptr,
+                             FrameHint = FrameHint::kActive);
 
     // Clears and returns the masked bits.
     uint32_t clearTransactionFlags(uint32_t mask);
@@ -943,9 +942,11 @@ private:
      */
     struct ScreenshotArgs {
         // Contains the sequence ID of the parent layer if the screenshot is
-        // initiated though captureLayers(), or the display that the render
-        // result will be on if initiated through captureDisplay()
-        std::variant<int32_t, wp<const DisplayDevice>> captureTypeVariant;
+        // initiated though captureLayers(), or the displayToken or displayID
+        // that the render result will be on if initiated through captureDisplay().
+        // The monostate type is used to denote that the screenshot is initiated
+        // for region sampling.
+        std::variant<std::monostate, int32_t, sp<IBinder>, DisplayId> captureTypeVariant;
 
         // Display ID of the display the result will be on
         ftl::Optional<DisplayIdVariant> displayIdVariant{std::nullopt};
@@ -1002,12 +1003,12 @@ private:
         std::string debugName;
     };
 
-    bool getSnapshotsFromMainThread(ScreenshotArgs& args);
+    status_t setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args);
 
     void captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat,
                              const sp<IScreenCaptureListener>&);
 
-    bool getDisplayStateOnMainThread(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
+    status_t setScreenshotDisplayState(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
 
     ftl::SharedFuture<FenceResult> captureScreenshot(
             ScreenshotArgs& args, const std::shared_ptr<renderengine::ExternalTexture>& buffer,
@@ -1388,6 +1389,7 @@ private:
         ui::Dataspace dataspace;
         std::chrono::milliseconds timeSinceLastEvent;
         bool useLuts;
+        float desiredHdrHeadroom;
     };
     std::vector<LayerEvent> mLayerEvents;
 

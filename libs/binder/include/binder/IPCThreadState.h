@@ -180,8 +180,6 @@ public:
     [[nodiscard]] status_t addFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
     [[nodiscard]] status_t removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
 
-    LIBBINDER_EXPORTED static void shutdown();
-
     // Call this to disable switching threads to background scheduling when
     // receiving incoming IPC calls.  This is specifically here for the
     // Android system process, since it expects to have background apps calling

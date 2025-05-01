@@ -19,7 +19,6 @@
 #include <android/gui/CachingHint.h>
 #include <android/gui/DisplayBrightness.h>
 #include <android/gui/DisplayCaptureArgs.h>
-#include <android/gui/EarlyWakeupInfo.h>
 #include <android/gui/FrameTimelineInfo.h>
 #include <android/gui/IDisplayEventConnection.h>
 #include <android/gui/IFpsListener.h>
@@ -112,8 +111,7 @@ public:
             InputWindowCommands inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffer,
             bool hasListenerCallbacks, const std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
-            const android::gui::EarlyWakeupInfo& earlyWakeupInfo) = 0;
+            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds) = 0;
 };
 
 // ----------------------------------------------------------------------------

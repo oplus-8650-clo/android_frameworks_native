@@ -334,7 +334,6 @@ static pthread_mutex_t gTLSMutex = PTHREAD_MUTEX_INITIALIZER;
 LIBBINDER_IGNORE_END()
 static std::atomic<bool> gHaveTLS(false);
 static pthread_key_t gTLS = 0;
-static std::atomic<bool> gShutdown = false;
 static std::atomic<bool> gDisableBackgroundScheduling = false;
 
 IPCThreadState* IPCThreadState::self()
@@ -345,12 +344,6 @@ restart:
         IPCThreadState* st = (IPCThreadState*)pthread_getspecific(k);
         if (st) return st;
         return new IPCThreadState;
-    }
-
-    // Racey, heuristic test for simultaneous shutdown.
-    if (gShutdown.load(std::memory_order_relaxed)) {
-        ALOGW("Calling IPCThreadState::self() during shutdown is dangerous, expect a crash.\n");
-        return nullptr;
     }
 
     pthread_mutex_lock(&gTLSMutex);
@@ -378,21 +371,24 @@ IPCThreadState* IPCThreadState::selfOrNull()
     return nullptr;
 }
 
-void IPCThreadState::shutdown()
-{
-    gShutdown.store(true, std::memory_order_relaxed);
-
-    if (gHaveTLS.load(std::memory_order_acquire)) {
-        // XXX Need to wait for all thread pool threads to exit!
-        IPCThreadState* st = (IPCThreadState*)pthread_getspecific(gTLS);
-        if (st) {
-            delete st;
-            pthread_setspecific(gTLS, nullptr);
-        }
-        pthread_key_delete(gTLS);
-        gHaveTLS.store(false, std::memory_order_release);
-    }
-}
+// This code used to be responsible for deleting the TLS, but we keep it
+// forever, since binder threads would often race process destruction.
+// b/77934844. Keeping a few lines here for visibility of the history.
+// IPCThreadState is actually stored in threadDestructor.
+//
+// void IPCThreadState::shutdown()
+// {
+//     if (gHaveTLS.load(std::memory_order_acquire)) {
+//         // XXX Need to wait for all thread pool threads to exit!
+//         IPCThreadState* st = (IPCThreadState*)pthread_getspecific(gTLS);
+//         if (st) {
+//             delete st;
+//             pthread_setspecific(gTLS, nullptr);
+//         }
+//         pthread_key_delete(gTLS);
+//         gHaveTLS.store(false, std::memory_order_release);
+//     }
+// }
 
 void IPCThreadState::disableBackgroundScheduling(bool disable)
 {
