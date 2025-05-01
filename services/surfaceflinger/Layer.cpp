@@ -1209,7 +1209,7 @@ Rect Layer::getBufferSize(const State& /*s*/) const {
     }
 
     if (getTransformToDisplayInverse()) {
-        uint32_t invTransform = SurfaceFlinger::getActiveDisplayRotationFlags();
+        uint32_t invTransform = SurfaceFlinger::getFrontInternalDisplayRotationFlags();
         if (invTransform & ui::Transform::ROT_90) {
             std::swap(bufWidth, bufHeight);
         }

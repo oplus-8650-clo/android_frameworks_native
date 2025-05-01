@@ -192,7 +192,7 @@ QtiSurfaceFlingerExtensionIntf* QtiSurfaceFlingerExtension::qtiPostInit(
 
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
-    const auto displayDevice = mQtiFlinger->getActiveDisplayLocked();
+    const auto displayDevice = mQtiFlinger->getFrontInternalDisplayLocked();
     auto currMode = FTL_FAKE_GUARD(kMainThreadContext, displayDevice->refreshRateSelector().getActiveMode());
 
     const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(displayDevice->getPhysicalId());
@@ -673,7 +673,7 @@ void QtiSurfaceFlingerExtension::qtiUpdateVsyncConfiguration() {
         ConditionalLock lock(mQtiFlinger->mStateLock,
                              std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
         const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(
-                mQtiFlinger->getActiveDisplayLocked()->getPhysicalId());
+                mQtiFlinger->getFrontInternalDisplayLocked()->getPhysicalId());
 
         const auto& display = displayOpt->get();
         const auto& snapshot = display.snapshot();
@@ -731,7 +731,7 @@ void QtiSurfaceFlingerExtension::qtiUpdateFrameScheduler() {
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
     const nsecs_t period = mQtiFlinger->getVsyncPeriodFromHWC();
-    const auto displayId = mQtiFlinger->getActiveDisplayLocked()->getPhysicalId();
+    const auto displayId = mQtiFlinger->getFrontInternalDisplayLocked()->getPhysicalId();
     scheduler->resyncToHardwareVsync(displayId, true, Fps::fromPeriodNsecs(period));
     if (timeStamp > 0) {
         bool periodFlushed = scheduler->addResyncSample(displayId, timeStamp, period);
@@ -1281,7 +1281,7 @@ void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState
     smomoInfo.smoMo->SetChangeRefreshRateCallback(
             [this](int32_t refreshRate) { qtiSetRefreshRateTo(refreshRate); });
 
-    const auto display = mQtiFlinger->getActiveDisplayLocked();
+    const auto display = mQtiFlinger->getFrontInternalDisplayLocked();
     qtiSetRefreshRates(display->getPhysicalId());
 
     if (mQtiSmomoInstances.size() > 1) {
@@ -1412,7 +1412,7 @@ void QtiSurfaceFlingerExtension::qtiSyncToDisplayHardware() {
 
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
-    const uint32_t layerStackId = mQtiFlinger->getActiveDisplayLocked()->getLayerStack().id;
+    const uint32_t layerStackId = mQtiFlinger->getFrontInternalDisplayLocked()->getLayerStack().id;
     if (SmomoIntf* smoMo = qtiGetSmomoInstance(layerStackId)) {
         nsecs_t timestamp = 0;
         // Get the previous frame fence since AOSP deprecated the previousFrameFence() API
@@ -1943,7 +1943,7 @@ void QtiSurfaceFlingerExtension::qtiSetDesiredModeByThermalLevel(float newLevelF
 
 bool QtiSurfaceFlingerExtension::qtiIsFpsDeferNeeded(float newFpsRequest) {
     const auto display =
-            FTL_FAKE_GUARD(mQtiFlinger->mStateLock, mQtiFlinger->getActiveDisplayLocked());
+            FTL_FAKE_GUARD(mQtiFlinger->mStateLock, mQtiFlinger->getFrontInternalDisplayLocked());
     if (!display || mQtiThermalLevelFps == 0) {
         return false;
     }
@@ -1966,7 +1966,7 @@ bool QtiSurfaceFlingerExtension::qtiIsFpsDeferNeeded(float newFpsRequest) {
 DisplayModePtr QtiSurfaceFlingerExtension::qtiGetModeFromFps(float fps) {
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
-    const auto displayDevice = mQtiFlinger->getActiveDisplayLocked();
+    const auto displayDevice = mQtiFlinger->getFrontInternalDisplayLocked();
     auto currMode = FTL_FAKE_GUARD(kMainThreadContext, displayDevice->refreshRateSelector().getActiveMode());
 
     const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(displayDevice->getPhysicalId());
@@ -2156,7 +2156,7 @@ void QtiSurfaceFlingerExtension::qtiFbScalingOnBoot() {
                     mQtiFlinger->mCurrentState.displays.editValueAt(static_cast<size_t>(index));
             DisplayDeviceState& drawState =
                     mQtiFlinger->mDrawingState.displays.editValueAt(static_cast<size_t>(index));
-            qtiSetFrameBufferSizeForScaling(mQtiFlinger->getActiveDisplayLocked(), curState,
+            qtiSetFrameBufferSizeForScaling(mQtiFlinger->getFrontInternalDisplayLocked(), curState,
                                             drawState);
         }
     }

@@ -31,9 +31,12 @@
 #include <gui/BufferItem.h>
 #include <gui/BufferQueue.h>
 #include <gui/ConsumerBase.h>
+#ifndef NO_BINDER
+#include <gui/IConsumerListener.h>
 #include <gui/ISurfaceComposer.h>
-#include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
+#endif
+#include <gui/Surface.h>
 
 #include <private/gui/ComposerService.h>
 

@@ -279,7 +279,7 @@ void RegionSamplingThread::captureSample() {
 
     {
         // TODO(b/159112860): Don't keep sp<DisplayDevice> outside of SF main thread
-        const sp<const DisplayDevice> display = mFlinger.getActiveDisplay();
+        const sp<const DisplayDevice> display = mFlinger.getFrontInternalDisplay();
         displayWeak = display;
         layerStack = display->getLayerStack();
         orientation = ui::Transform::toRotationFlags(display->getOrientation());

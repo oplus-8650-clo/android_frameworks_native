@@ -286,7 +286,7 @@ void LayerFE::prepareBufferStateClientComposition(
          * the code below applies the primary display's inverse transform to
          * the texture transform
          */
-        uint32_t transform = SurfaceFlinger::getActiveDisplayRotationFlags();
+        uint32_t transform = SurfaceFlinger::getFrontInternalDisplayRotationFlags();
         mat4 tr = inverseOrientation(transform);
 
         /**

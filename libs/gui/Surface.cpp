@@ -37,7 +37,15 @@
 
 #include <inttypes.h>
 
+#ifndef NO_BINDER
 #include <android/gui/DisplayStatInfo.h>
+#include <gui/AidlUtil.h>
+#include <gui/ISurfaceComposer.h>
+#include <gui/LayerState.h>
+#include <private/gui/ComposerService.h>
+#include <private/gui/ComposerServiceAIDL.h>
+#endif
+
 #include <android/native_window.h>
 
 #include <gui/FenceMonitor.h>
@@ -52,13 +60,7 @@
 #include <ui/GraphicBuffer.h>
 #include <ui/Region.h>
 
-#include <gui/AidlUtil.h>
 #include <gui/BufferItem.h>
-
-#include <gui/ISurfaceComposer.h>
-#include <gui/LayerState.h>
-#include <private/gui/ComposerService.h>
-#include <private/gui/ComposerServiceAIDL.h>
 
 #include <com_android_graphics_libgui_flags.h>
 
@@ -69,7 +71,6 @@
 namespace android {
 
 using namespace com::android::graphics::libgui;
-using gui::aidl_utils::statusTFromBinderStatus;
 using ui::Dataspace;
 
 namespace {
@@ -212,7 +213,7 @@ Surface::~Surface() {
     if (mConnectedToCpu) {
         Surface::disconnect(NATIVE_WINDOW_API_CPU);
     }
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS) && !defined(NO_BINDER)
     if (mSurfaceDeathListener != nullptr) {
         IInterface::asBinder(mGraphicBufferProducer)->unlinkToDeath(mSurfaceDeathListener);
         mSurfaceDeathListener = nullptr;
@@ -220,6 +221,7 @@ Surface::~Surface() {
 #endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
 }
 
+#ifndef NO_BINDER
 sp<ISurfaceComposer> Surface::composerService() const {
     return ComposerService::getComposerService();
 }
@@ -227,6 +229,7 @@ sp<ISurfaceComposer> Surface::composerService() const {
 sp<gui::ISurfaceComposer> Surface::composerServiceAIDL() const {
     return ComposerServiceAIDL::getComposerService();
 }
+#endif
 
 nsecs_t Surface::now() const {
     return systemTime();
@@ -289,6 +292,12 @@ status_t Surface::getLastQueuedBuffer(sp<GraphicBuffer>* outBuffer,
 status_t Surface::getDisplayRefreshCycleDuration(nsecs_t* outRefreshDuration) {
     ATRACE_CALL();
 
+#ifdef NO_BINDER
+    (void)outRefreshDuration;
+    return INVALID_OPERATION;
+#else
+    using gui::aidl_utils::statusTFromBinderStatus;
+
     gui::DisplayStatInfo stats;
     binder::Status status = composerServiceAIDL()->getDisplayStats(nullptr, &stats);
     if (!status.isOk()) {
@@ -298,6 +307,7 @@ status_t Surface::getDisplayRefreshCycleDuration(nsecs_t* outRefreshDuration) {
     *outRefreshDuration = stats.vsyncPeriod;
 
     return NO_ERROR;
+#endif
 }
 
 void Surface::enableFrameTimestamps(bool enable) {
@@ -1534,6 +1544,9 @@ int Surface::queueBuffers(const std::vector<BatchQueuedBuffer>& buffers) {
 #endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
 
 void Surface::querySupportedTimestampsLocked() const {
+#ifdef NO_BINDER
+    LOG_ALWAYS_FATAL("Surface::querySupportedTimestampsLocked not supported in NO_BINDER mode");
+#else
     // mMutex must be locked when calling this method.
 
     if (mQueriedSupportedTimestamps) {
@@ -1554,6 +1567,7 @@ void Surface::querySupportedTimestampsLocked() const {
             mFrameTimestampsSupportsPresent = true;
         }
     }
+#endif
 }
 
 int Surface::query(int what, int* value) const {
@@ -1573,6 +1587,9 @@ int Surface::query(int what, int* value) const {
                 if (err == NO_ERROR) {
                     return NO_ERROR;
                 }
+#ifdef NO_BINDER
+                return -EPERM;
+#else
                 sp<gui::ISurfaceComposer> surfaceComposer = composerServiceAIDL();
                 if (surfaceComposer == nullptr) {
                     return -EPERM; // likely permissions error
@@ -1580,6 +1597,7 @@ int Surface::query(int what, int* value) const {
                 // ISurfaceComposer no longer supports authenticateSurfaceTexture
                 *value = 0;
                 return NO_ERROR;
+#endif
             }
             case NATIVE_WINDOW_CONCRETE_TYPE:
                 *value = NATIVE_WINDOW_SURFACE;
@@ -2153,6 +2171,10 @@ int Surface::dispatchGetLastQueuedBuffer2(va_list args) {
 }
 
 int Surface::dispatchSetFrameTimelineInfo(va_list args) {
+#ifdef NO_BINDER
+    (void)args;
+    LOG_ALWAYS_FATAL("Surface::dispatchSetFrameTimelineInfo not supported in NO_BINDER mode");
+#else
     ATRACE_CALL();
     ALOGV("Surface::%s", __func__);
 
@@ -2168,6 +2190,7 @@ int Surface::dispatchSetFrameTimelineInfo(va_list args) {
     ftlInfo.skippedFrameStartTimeNanos = nativeWindowFtlInfo.skippedFrameStartTimeNanos;
 
     return setFrameTimelineInfo(nativeWindowFtlInfo.frameNumber, ftlInfo);
+#endif
 }
 
 int Surface::dispatchSetAdditionalOptions(va_list args) {
@@ -2243,7 +2266,7 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
         }
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS) && !defined(NO_BINDER)
         if (listener && listener->needsDeathNotify()) {
             mSurfaceDeathListener = sp<ProducerDeathListenerProxy>::make(listener);
             IInterface::asBinder(mGraphicBufferProducer)->linkToDeath(mSurfaceDeathListener);
@@ -2297,7 +2320,7 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
 
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS) && !defined(NO_BINDER)
     if (mSurfaceDeathListener != nullptr) {
         IInterface::asBinder(mGraphicBufferProducer)->unlinkToDeath(mSurfaceDeathListener);
         mSurfaceDeathListener = nullptr;

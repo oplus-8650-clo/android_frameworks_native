@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <android-base/logging.h>
 #include <android/gui/ISurfaceComposer.h>
 #include <android/gui/IWindowInfosListener.h>
 #include <gui/AidlUtil.h>
@@ -35,27 +36,19 @@ sp<WindowInfosListenerReporter> WindowInfosListenerReporter::getInstance() {
 android::base::Result<gui::WindowInfosUpdate> WindowInfosListenerReporter::addWindowInfosListener(
         sp<WindowInfosListener> windowInfosListener,
         const sp<gui::ISurfaceComposer>& surfaceComposer) {
-    status_t status = OK;
-    {
-        std::scoped_lock lock(mListenersMutex);
-        if (mWindowInfosListeners.empty()) {
-            gui::WindowInfosListenerInfo listenerInfo;
-            binder::Status s = surfaceComposer->addWindowInfosListener(this, &listenerInfo);
-            status = statusTFromBinderStatus(s);
-            if (status == OK) {
-                mWindowInfosPublisher = std::move(listenerInfo.windowInfosPublisher);
-                mListenerId = listenerInfo.listenerId;
-            }
-        }
+    std::scoped_lock lock(mListenersMutex);
+    if (mWindowInfosListeners.empty()) {
+        gui::WindowInfosListenerInfo listenerInfo;
+        binder::Status status = surfaceComposer->addWindowInfosListener(this, &listenerInfo);
+        LOG_IF(FATAL, !status.isOk()) << "Can't register window infos listener for pid " << getpid()
+                                      << ". Device won't be usable";
 
-        if (status == OK) {
-            mWindowInfosListeners.emplace(std::move(windowInfosListener));
-        }
-
-        return mLastUpdate;
+        mWindowInfosPublisher = std::move(listenerInfo.windowInfosPublisher);
+        mListenerId = listenerInfo.listenerId;
     }
+    mWindowInfosListeners.emplace(std::move(windowInfosListener));
 
-    return android::base::Error(status);
+    return mLastUpdate;
 }
 
 status_t WindowInfosListenerReporter::removeWindowInfosListener(

@@ -368,8 +368,8 @@ public:
     // TODO (b/281857977): This should be annotated with REQUIRES(kMainThreadContext), but this
     // would require thread safety annotations throughout the frontend (in particular Layer and
     // LayerFE).
-    static ui::Transform::RotationFlags getActiveDisplayRotationFlags() {
-        return sActiveDisplayRotationFlags;
+    static ui::Transform::RotationFlags getFrontInternalDisplayRotationFlags() {
+        return sFrontInternalDisplayRotationFlags;
     }
 
 // QTI_BEGIN: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
@@ -1073,7 +1073,7 @@ private:
 
     sp<DisplayDevice> getPacesetterDisplayLocked() REQUIRES(mStateLock) {
         if (!FlagManager::getInstance().pacesetter_selection()) {
-            return getActiveDisplayLocked();
+            return getFrontInternalDisplayLocked();
         }
         return getDisplayDeviceLocked(mScheduler->getPacesetterDisplayId());
     }
@@ -1083,17 +1083,17 @@ private:
         return getPacesetterDisplayLocked();
     }
 
-    sp<const DisplayDevice> getActiveDisplayLocked() const REQUIRES(mStateLock) {
-        return const_cast<SurfaceFlinger*>(this)->getActiveDisplayLocked();
+    sp<const DisplayDevice> getFrontInternalDisplayLocked() const REQUIRES(mStateLock) {
+        return const_cast<SurfaceFlinger*>(this)->getFrontInternalDisplayLocked();
     }
 
-    sp<DisplayDevice> getActiveDisplayLocked() REQUIRES(mStateLock) {
-        return getDisplayDeviceLocked(mActiveDisplayId);
+    sp<DisplayDevice> getFrontInternalDisplayLocked() REQUIRES(mStateLock) {
+        return getDisplayDeviceLocked(mFrontInternalDisplayId);
     }
 
-    sp<const DisplayDevice> getActiveDisplay() const EXCLUDES(mStateLock) {
+    sp<const DisplayDevice> getFrontInternalDisplay() const EXCLUDES(mStateLock) {
         Mutex::Autolock lock(mStateLock);
-        return getActiveDisplayLocked();
+        return getFrontInternalDisplayLocked();
     }
 
     using DisplayDeviceAndSnapshot = std::pair<sp<DisplayDevice>, display::DisplaySnapshotRef>;
@@ -1243,14 +1243,13 @@ private:
     void releaseVirtualDisplay(VirtualDisplayIdVariant displayId);
     void releaseVirtualDisplaySnapshot(VirtualDisplayId displayId);
 
-    // Returns a display other than `mActiveDisplayId` that can be activated, if any.
-    sp<DisplayDevice> getActivatableDisplay() const REQUIRES(mStateLock, kMainThreadContext);
+    sp<DisplayDevice> findFrontInternalDisplay() const REQUIRES(mStateLock, kMainThreadContext);
 
-    void onActiveDisplayChangedLocked(const DisplayDevice* inactiveDisplayPtr,
-                                      const DisplayDevice& activeDisplay)
+    void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
+                                   const DisplayDevice& newFrontInternalDisplay)
             REQUIRES(mStateLock, kMainThreadContext);
 
-    void onActiveDisplaySizeChanged(const DisplayDevice&);
+    void onFrontInternalDisplaySizeChanged(const DisplayDevice&);
 
     /*
      * Debugging & dumpsys
@@ -1446,7 +1445,7 @@ private:
             GUARDED_BY(mVirtualDisplaysMutex);
 
     // The inner or outer display for foldables, while unfolded or folded, respectively.
-    std::atomic<PhysicalDisplayId> mActiveDisplayId;
+    std::atomic<PhysicalDisplayId> mFrontInternalDisplayId;
 
     display::DisplayModeController mDisplayModeController;
 
@@ -1556,11 +1555,11 @@ private:
     ActivePictureTracker::Listeners mActivePictureListenersToAdd GUARDED_BY(mStateLock);
     ActivePictureTracker::Listeners mActivePictureListenersToRemove GUARDED_BY(mStateLock);
 
-    std::atomic<ui::Transform::RotationFlags> mActiveDisplayTransformHint;
+    std::atomic<ui::Transform::RotationFlags> mFrontInternalDisplayTransformHint;
 
     // Must only be accessed on the main thread.
     // TODO (b/259407931): Remove.
-    static ui::Transform::RotationFlags sActiveDisplayRotationFlags;
+    static ui::Transform::RotationFlags sFrontInternalDisplayRotationFlags;
 
     bool isRefreshRateOverlayEnabled() const REQUIRES(mStateLock) {
         return hasDisplay(
