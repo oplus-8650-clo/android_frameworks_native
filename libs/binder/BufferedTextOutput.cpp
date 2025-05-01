@@ -258,7 +258,10 @@ void BufferedTextOutput::popBundle()
 BufferedTextOutput::BufferState* BufferedTextOutput::getBuffer() const
 {
     if ((mFlags&MULTITHREADED) != 0) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
         thread_local ThreadState ts;
+#pragma clang diagnostic pop
         while (ts.states.size() <= (size_t)mIndex) ts.states.add(nullptr);
         BufferState* bs = ts.states[mIndex].get();
         if (bs != nullptr && bs->seq == mSeq) return bs;

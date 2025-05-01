@@ -238,6 +238,7 @@ static inline SkM44 getSkM44(const android::mat4& matrix) {
                  matrix[0][3], matrix[1][3], matrix[2][3], matrix[3][3]);
 }
 
+[[maybe_unused]]
 static inline SkPoint3 getSkPoint3(const android::vec3& vector) {
     return SkPoint3::Make(vector.x, vector.y, vector.z);
 }
@@ -1373,10 +1374,16 @@ void SkiaRenderEngine::drawShadow(SkCanvas* canvas,
     const auto flags =
             settings.casterIsTranslucent ? kTransparentOccluder_ShadowFlag : kNone_ShadowFlag;
 
+    // DrawShadow expects the light pos in device space.
+    // Shadow settings is in layer space (which is our current canvas transform).
+    SkMatrix deviceFromLayer = canvas->getTotalMatrix();
+    SkPoint lightPos = {settings.lightPos.x, settings.lightPos.y}; // lightPos is in layer space
+    deviceFromLayer.mapPoints(&lightPos, 1);                       // lightPos is in device space
+
     SkShadowUtils::DrawShadow(canvas, SkPath::RRect(casterRRect), SkPoint3::Make(0, 0, casterZ),
-                              getSkPoint3(settings.lightPos), settings.lightRadius,
-                              getSkColor(settings.ambientColor), getSkColor(settings.spotColor),
-                              flags);
+                              SkPoint3{lightPos.fX, lightPos.fY, settings.lightPos.z},
+                              settings.lightRadius, getSkColor(settings.ambientColor),
+                              getSkColor(settings.spotColor), flags);
 }
 
 void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {

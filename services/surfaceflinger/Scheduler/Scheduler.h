@@ -407,7 +407,7 @@ private:
     }
 
     // Update feature state machine to given state when corresponding timer resets or expires.
-    void kernelIdleTimerCallback(TimerState) EXCLUDES(mDisplayLock);
+    void kernelIdleTimerCallback(PhysicalDisplayId, TimerState) EXCLUDES(mDisplayLock);
     void idleTimerCallback(TimerState);
     void touchTimerCallback(TimerState);
     void displayPowerTimerCallback(TimerState);

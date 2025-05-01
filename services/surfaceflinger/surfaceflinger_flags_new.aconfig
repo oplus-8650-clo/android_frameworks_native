@@ -241,15 +241,11 @@ flag {
 } # no_vsyncs_on_screen_off
 
 flag {
-  name: "reject_dupe_layerstacks"
-  namespace: "window_surfaces"
-  description: "Reject duplicate layerstacks for displays"
-  bug: "370358572"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # reject_dupe_layerstacks
+  name: "pacesetter_selection"
+  namespace: "desktop_display"
+  description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
+  bug: "374072507"
+} # pacesetter_selection
 
 flag {
   name: "skip_invisible_windows_in_input"

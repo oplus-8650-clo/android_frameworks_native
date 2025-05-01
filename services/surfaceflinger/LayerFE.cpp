@@ -343,11 +343,19 @@ void LayerFE::prepareShadowClientComposition(LayerFE::LayerSettings& caster,
         return;
     }
 
-    // Shift the spot light x-position to the middle of the display and then
-    // offset it by casting layer's screen pos.
-    state.lightPos.x =
-            (static_cast<float>(layerStackRect.width()) / 2.f) - mSnapshot->transformedBounds.left;
-    state.lightPos.y -= mSnapshot->transformedBounds.top;
+    // The light source should be at (screenWidth/2, globalShadowSettings.lightPos.y) in
+    // screenspace.
+    vec2 lightPosScreenSpace = {
+            (static_cast<float>(layerStackRect.width()) / 2.f),
+            state.lightPos.y,
+    };
+
+    // Skia expects light pos in layer space.
+    vec2 lightPosLayerSpace = mSnapshot->geomInverseLayerTransform.transform(lightPosScreenSpace);
+
+    state.lightPos.x = lightPosLayerSpace.x;
+    state.lightPos.y = lightPosLayerSpace.y;
+
     caster.shadow = state;
 }
 

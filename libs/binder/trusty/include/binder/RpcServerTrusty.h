@@ -100,7 +100,7 @@ private:
         // The default behavior in trusty is to allow handles to be passed with tipc IPC.
         // We add mode NONE so that servers do not reject connections from clients who do
         // not change their default transport mode.
-        static const std::vector<RpcSession::FileDescriptorTransportMode>
+        [[clang::no_destroy]] static const std::vector<RpcSession::FileDescriptorTransportMode>
                 TRUSTY_SERVER_SUPPORTED_FD_MODES = {RpcSession::FileDescriptorTransportMode::TRUSTY,
                                                     RpcSession::FileDescriptorTransportMode::NONE};
 

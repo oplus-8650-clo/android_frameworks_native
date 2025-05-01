@@ -364,7 +364,7 @@ status_t BBinder::stopRecordingTransactions() {
 
 const String16& BBinder::getInterfaceDescriptor() const
 {
-    static StaticString16 sBBinder(u"BBinder");
+    [[clang::no_destroy]] static StaticString16 sBBinder(u"BBinder");
     ALOGW("Reached BBinder::getInterfaceDescriptor (this=%p). Override?", this);
     return sBBinder;
 }

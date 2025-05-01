@@ -69,7 +69,7 @@ private:
     // TODO: Reimplemement based on standard C++ container?
 };
 
-static sp<HeapCache> gHeapCache = sp<HeapCache>::make();
+[[clang::no_destroy]] static sp<HeapCache> gHeapCache = sp<HeapCache>::make();
 
 /******************************************************************************/
 

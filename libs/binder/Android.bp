@@ -270,6 +270,7 @@ cc_defaults {
         "-Wreorder-init-list",
         "-Wunused-const-variable",
         "-Wunused-result",
+        "-Wexit-time-destructors",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         // Hide symbols by default and set the BUILDING_LIBBINDER macro so that
@@ -468,7 +469,6 @@ release_libbinder_binder_observer_config {
         },
     },
 }
-
 
 soong_config_module_type {
     name: "libbinder_remove_cache_static_list_config",

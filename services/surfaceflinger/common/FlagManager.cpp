@@ -167,8 +167,8 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(misc1);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
     DUMP_ACONFIG_FLAG(override_trusted_overlay);
+    DUMP_ACONFIG_FLAG(pacesetter_selection);
     DUMP_ACONFIG_FLAG(protected_if_client);
-    DUMP_ACONFIG_FLAG(reject_dupe_layerstacks);
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
     DUMP_ACONFIG_FLAG(restore_blur_step);
     DUMP_ACONFIG_FLAG(skip_invisible_windows_in_input);
@@ -271,6 +271,7 @@ FLAG_MANAGER_ACONFIG_FLAG(renderable_buffer_usage, "")
 FLAG_MANAGER_ACONFIG_FLAG(restore_blur_step, "debug.renderengine.restore_blur_step")
 FLAG_MANAGER_ACONFIG_FLAG(dont_skip_on_early_ro, "")
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
+FLAG_MANAGER_ACONFIG_FLAG(pacesetter_selection, "debug.sf.pacesetter_selection")
 FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(filter_frames_before_trace_starts, "")
@@ -293,7 +294,6 @@ FLAG_MANAGER_ACONFIG_FLAG(skip_invisible_windows_in_input, "");
 FLAG_MANAGER_ACONFIG_FLAG(stop_layer, "");
 FLAG_MANAGER_ACONFIG_FLAG(begone_bright_hlg, "debug.sf.begone_bright_hlg");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
-FLAG_MANAGER_ACONFIG_FLAG(reject_dupe_layerstacks, "");
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
 
 /// Trunk stable server (R/W) flags ///

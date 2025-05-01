@@ -40,16 +40,16 @@ using android::binder::unique_fd;
 
 // ---------------------------------------------------------------------------
 
-RpcMutex BpBinder::sTrackingLock;
-std::unordered_map<int32_t, uint32_t> BpBinder::sTrackingMap;
-std::unordered_map<int32_t, uint32_t> BpBinder::sLastLimitCallbackMap;
+[[clang::no_destroy]] RpcMutex BpBinder::sTrackingLock;
+[[clang::no_destroy]] std::unordered_map<int32_t, uint32_t> BpBinder::sTrackingMap;
+[[clang::no_destroy]] std::unordered_map<int32_t, uint32_t> BpBinder::sLastLimitCallbackMap;
 int BpBinder::sNumTrackedUids = 0;
 std::atomic_bool BpBinder::sCountByUidEnabled(false);
-binder_proxy_limit_callback BpBinder::sLimitCallback;
-binder_proxy_warning_callback BpBinder::sWarningCallback;
+[[clang::no_destroy]] binder_proxy_limit_callback BpBinder::sLimitCallback;
+[[clang::no_destroy]] binder_proxy_warning_callback BpBinder::sWarningCallback;
 bool BpBinder::sBinderProxyThrottleCreate = false;
 
-static StaticString16 kDescriptorUninit(u"");
+[[clang::no_destroy]] static StaticString16 kDescriptorUninit(u"");
 
 // Arbitrarily high value that probably distinguishes a bad behaving app
 uint32_t BpBinder::sBinderProxyCountHighWatermark = 2500;

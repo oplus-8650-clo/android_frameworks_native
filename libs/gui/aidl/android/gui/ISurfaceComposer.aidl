@@ -503,7 +503,7 @@ interface ISurfaceComposer {
      * lightRadius
      *      Radius of the light casting the shadow.
      */
-    oneway void setGlobalShadowSettings(in Color ambientColor, in Color spotColor, float lightPosY, float lightPosZ, float lightRadius);
+    void setGlobalShadowSettings(in Color ambientColor, in Color spotColor, float lightPosY, float lightPosZ, float lightRadius);
 
     /**
      * Gets whether a display supports DISPLAY_DECORATION layers.

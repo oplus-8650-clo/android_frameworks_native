@@ -3037,16 +3037,11 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     // Tracks layer stacks of displays that are added to CompositionEngine output.
     ui::DisplayMap<ui::LayerStack, ftl::Unit> outputLayerStacks;
     auto isUniqueOutputLayerStack = [&outputLayerStacks](DisplayId id, ui::LayerStack layerStack) {
-        if (FlagManager::getInstance().reject_dupe_layerstacks()) {
-            if (layerStack != ui::UNASSIGNED_LAYER_STACK &&
-                outputLayerStacks.contains(layerStack)) {
-                // TODO: remove log and DisplayId from params once reject_dupe_layerstacks flag is
-                // removed
-                ALOGD("Existing layer stack ID %d output to another display %" PRIu64
-                      ", dropping display from outputs",
-                      layerStack.id, id.value);
-                return false;
-            }
+        if (layerStack != ui::UNASSIGNED_LAYER_STACK && outputLayerStacks.contains(layerStack)) {
+            ALOGD("Existing layer stack ID %d output to another display %" PRIu64
+                  ", dropping display from outputs",
+                  layerStack.id, id.value);
+            return false;
         }
 
         outputLayerStacks.try_emplace(layerStack);
@@ -7702,19 +7697,16 @@ void SurfaceFlinger::kernelTimerChanged(bool expired) {
     }));
 }
 
-void SurfaceFlinger::vrrDisplayIdle(bool idle) {
+void SurfaceFlinger::vrrDisplayIdle(PhysicalDisplayId displayId, bool idle) {
     // Update the overlay on the main thread to avoid race conditions with
     // RefreshRateSelector::getActiveMode
     static_cast<void>(mScheduler->schedule([=, this] {
-        const auto display = FTL_FAKE_GUARD(mStateLock, getDefaultDisplayDeviceLocked());
-        if (!display) {
-            ALOGW("%s: default display is null", __func__);
-            return;
+        if (const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayId))) {
+            if (display->isRefreshRateOverlayEnabled()) {
+                display->onVrrIdle(idle);
+                mScheduler->scheduleFrame();
+            }
         }
-        if (!display->isRefreshRateOverlayEnabled()) return;
-
-        display->onVrrIdle(idle);
-        mScheduler->scheduleFrame();
     }));
 }
 
@@ -8765,6 +8757,9 @@ status_t SurfaceFlinger::setGlobalShadowSettings(const half4& ambientColor, cons
     // these values are overridden when calculating the shadow settings for a layer.
     mCurrentState.globalShadowSettings.lightPos.x = 0.f;
     mCurrentState.globalShadowSettings.length = 0.f;
+
+    setTransactionFlags(eTransactionNeeded);
+
     return NO_ERROR;
 }
 
