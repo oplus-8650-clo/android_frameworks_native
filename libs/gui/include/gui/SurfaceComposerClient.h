@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <android-base/result.h>
 #include <binder/IBinder.h>
 
 #include <utils/Errors.h>
@@ -911,8 +912,8 @@ public:
     static status_t removeTunnelModeEnabledListener(
             const sp<gui::ITunnelModeEnabledListener>& listener);
 
-    status_t addWindowInfosListener(const sp<gui::WindowInfosListener>& windowInfosListener,
-                                    gui::WindowInfosUpdate* outInitialUpdate);
+    android::base::Result<gui::WindowInfosUpdate> addWindowInfosListener(
+            sp<gui::WindowInfosListener> windowInfosListener);
     status_t removeWindowInfosListener(const sp<gui::WindowInfosListener>& windowInfosListener);
 
     static void notifyShutdown();

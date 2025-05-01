@@ -32,10 +32,9 @@ sp<WindowInfosListenerReporter> WindowInfosListenerReporter::getInstance() {
     return sInstance;
 }
 
-status_t WindowInfosListenerReporter::addWindowInfosListener(
-        const sp<WindowInfosListener>& windowInfosListener,
-        const sp<gui::ISurfaceComposer>& surfaceComposer,
-        gui::WindowInfosUpdate* outInitialUpdate) {
+android::base::Result<gui::WindowInfosUpdate> WindowInfosListenerReporter::addWindowInfosListener(
+        sp<WindowInfosListener> windowInfosListener,
+        const sp<gui::ISurfaceComposer>& surfaceComposer) {
     status_t status = OK;
     {
         std::scoped_lock lock(mListenersMutex);
@@ -50,15 +49,13 @@ status_t WindowInfosListenerReporter::addWindowInfosListener(
         }
 
         if (status == OK) {
-            mWindowInfosListeners.insert(windowInfosListener);
+            mWindowInfosListeners.emplace(std::move(windowInfosListener));
         }
 
-        if (outInitialUpdate != nullptr) {
-            *outInitialUpdate = mLastUpdate;
-        }
+        return mLastUpdate;
     }
 
-    return status;
+    return android::base::Error(status);
 }
 
 status_t WindowInfosListenerReporter::removeWindowInfosListener(

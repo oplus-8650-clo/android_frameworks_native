@@ -141,6 +141,12 @@ void Scheduler::setPacesetterDisplay(PhysicalDisplayId pacesetterId) {
     updatePhaseConfiguration(pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
 }
 
+PhysicalDisplayId Scheduler::getPacesetterDisplayId() const {
+    std::scoped_lock lock(mDisplayLock);
+    LOG_ALWAYS_FATAL_IF(!mPacesetterDisplayId, "Missing a pacesetter!");
+    return *mPacesetterDisplayId;
+}
+
 void Scheduler::registerDisplay(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
                                 PhysicalDisplayId activeDisplayId) {
     auto schedulePtr =

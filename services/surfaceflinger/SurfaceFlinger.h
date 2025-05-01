@@ -1067,18 +1067,33 @@ private:
         return nullptr;
     }
 
-    // Returns the primary display or (for foldables) the active display.
-    sp<const DisplayDevice> getDefaultDisplayDeviceLocked() const REQUIRES(mStateLock) {
-        return const_cast<SurfaceFlinger*>(this)->getDefaultDisplayDeviceLocked();
+    sp<const DisplayDevice> getPacesetterDisplayLocked() const REQUIRES(mStateLock) {
+        return const_cast<SurfaceFlinger*>(this)->getPacesetterDisplayLocked();
     }
 
-    sp<DisplayDevice> getDefaultDisplayDeviceLocked() REQUIRES(mStateLock) {
+    sp<DisplayDevice> getPacesetterDisplayLocked() REQUIRES(mStateLock) {
+        if (!FlagManager::getInstance().pacesetter_selection()) {
+            return getActiveDisplayLocked();
+        }
+        return getDisplayDeviceLocked(mScheduler->getPacesetterDisplayId());
+    }
+
+    sp<const DisplayDevice> getPacesetterDisplay() const EXCLUDES(mStateLock) {
+        Mutex::Autolock lock(mStateLock);
+        return getPacesetterDisplayLocked();
+    }
+
+    sp<const DisplayDevice> getActiveDisplayLocked() const REQUIRES(mStateLock) {
+        return const_cast<SurfaceFlinger*>(this)->getActiveDisplayLocked();
+    }
+
+    sp<DisplayDevice> getActiveDisplayLocked() REQUIRES(mStateLock) {
         return getDisplayDeviceLocked(mActiveDisplayId);
     }
 
-    sp<const DisplayDevice> getDefaultDisplayDevice() const EXCLUDES(mStateLock) {
+    sp<const DisplayDevice> getActiveDisplay() const EXCLUDES(mStateLock) {
         Mutex::Autolock lock(mStateLock);
-        return getDefaultDisplayDeviceLocked();
+        return getActiveDisplayLocked();
     }
 
     using DisplayDeviceAndSnapshot = std::pair<sp<DisplayDevice>, display::DisplaySnapshotRef>;
@@ -1373,6 +1388,7 @@ private:
         int32_t layerId;
         ui::Dataspace dataspace;
         std::chrono::milliseconds timeSinceLastEvent;
+        bool useLuts;
     };
     std::vector<LayerEvent> mLayerEvents;
 

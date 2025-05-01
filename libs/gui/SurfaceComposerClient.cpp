@@ -3471,12 +3471,11 @@ int SurfaceComposerClient::getGpuContextPriority() {
     return priority;
 }
 
-status_t SurfaceComposerClient::addWindowInfosListener(
-        const sp<WindowInfosListener>& windowInfosListener,
-        gui::WindowInfosUpdate* outInitialUpdate) {
+android::base::Result<gui::WindowInfosUpdate> SurfaceComposerClient::addWindowInfosListener(
+        sp<WindowInfosListener> windowInfosListener) {
     return WindowInfosListenerReporter::getInstance()
-            ->addWindowInfosListener(windowInfosListener, ComposerServiceAIDL::getComposerService(),
-                                     outInitialUpdate);
+            ->addWindowInfosListener(std::move(windowInfosListener),
+                                     ComposerServiceAIDL::getComposerService());
 }
 
 status_t SurfaceComposerClient::removeWindowInfosListener(

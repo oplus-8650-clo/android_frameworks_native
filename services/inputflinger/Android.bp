@@ -30,7 +30,6 @@ inputflinger_tidy_checks = [
 cc_defaults {
     name: "inputflinger_defaults",
     host_supported: true,
-    cpp_std: "c++20",
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         "-Wall",

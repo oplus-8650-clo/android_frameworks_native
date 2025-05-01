@@ -19,12 +19,19 @@
 #include <android/os/IAccessor.h>
 #include <android/os/IServiceManager.h>
 #include <binder/RpcSession.h>
+#include <cutils/sockets.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #if defined(__BIONIC__) && !defined(__ANDROID_VNDK__)
 #include <android-base/properties.h>
 #endif
 
 namespace android {
+
+// This is similar to the kernel binder servicemanager's context 0. It's the
+// known socket that we expect the Unix Domain Socket servicemanager to be listening on.
+const char kUdsServiceManagerName[] = ANDROID_SOCKET_DIR "/rpc_servicemanager";
 
 #ifdef LIBBINDER_CLIENT_CACHE
 constexpr bool kUseCache = true;
@@ -488,15 +495,29 @@ Status BackendUnifiedServiceManager::checkServiceAccess(
 [[clang::no_destroy]] static sp<BackendUnifiedServiceManager> gUnifiedServiceManager;
 
 static bool hasOutOfProcessServiceManager() {
-#ifndef BINDER_WITH_KERNEL_IPC
+// We don't currently support kernel binder service management or UDS
+// service management on host or when libbinder is compiled without any
+// kernel binder suport. Please use setDefaultServiceManager for host
+// processes that want to use service manager APIs.
+#if !defined(BINDER_WITH_KERNEL_IPC) || !defined(__BIONIC__)
     return false;
 #else
-#if defined(__BIONIC__) && !defined(__ANDROID_VNDK__)
-    return android::base::GetBoolProperty("servicemanager.installed", true);
-#else
+#ifdef __ANDROID_VNDK__
     return true;
+#else
+    return android::base::GetBoolProperty("servicemanager.installed", true);
 #endif
-#endif // BINDER_WITH_KERNEL_IPC
+#endif
+}
+
+static sp<AidlServiceManager> getUdsServiceManager() {
+    auto session = RpcSession::make();
+    session->setFileDescriptorTransportMode(RpcSession::FileDescriptorTransportMode::UNIX);
+    auto status = session->setupUnixDomainClient(kUdsServiceManagerName);
+    if (status == OK) {
+        return interface_cast<AidlServiceManager>(session->getRootObject());
+    }
+    return nullptr;
 }
 
 sp<BackendUnifiedServiceManager> getBackendUnifiedServiceManager() {
@@ -514,11 +535,22 @@ sp<BackendUnifiedServiceManager> getBackendUnifiedServiceManager() {
 
         sp<AidlServiceManager> sm = nullptr;
         while (hasOutOfProcessServiceManager() && sm == nullptr) {
-            sm = interface_cast<AidlServiceManager>(
-                    ProcessState::self()->getContextObject(nullptr));
+            // There is either a kernel binder service manager, or an RPC binder
+            // service manager
+            sp<ProcessState> ps = ProcessState::selfIfKernelBinderEnabled();
+            if (ps) {
+                // Service management over kernel binder
+                sm = interface_cast<AidlServiceManager>(ps->getContextObject(nullptr));
+            } else {
+                // Check for service management over Unix Domain Sockets
+                sm = getUdsServiceManager();
+            }
+
             if (sm == nullptr) {
-                ALOGE("Waiting 1s on context object on %s.",
-                      ProcessState::self()->getDriverName().c_str());
+                std::string contextObjectName = ps
+                        ? ps->getDriverName() + ", " + kUdsServiceManagerName
+                        : kUdsServiceManagerName;
+                ALOGE("Waiting 1s on context object(s) on %s.", contextObjectName.c_str());
                 sleep(1);
             }
         }

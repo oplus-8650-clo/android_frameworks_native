@@ -107,12 +107,15 @@ PointerChoreographer::PointerChoreographer(InputListenerInterface& inputListener
       : PointerChoreographer(
                 inputListener, policy,
                 [](const sp<android::gui::WindowInfosListener>& listener) {
-                    gui::WindowInfosUpdate initialInfo;
 #if defined(__ANDROID__)
-                    SurfaceComposerClient::getDefault()->addWindowInfosListener(listener,
-                                                                                &initialInfo);
+                    android::base::Result<android::gui::WindowInfosUpdate> result =
+                            SurfaceComposerClient::getDefault()->addWindowInfosListener(listener);
+                    LOG_IF(FATAL, !result.ok()) << "Can't add window listener, pointers won't work";
+                    return result->windowInfos;
+#else
+                    gui::WindowInfosUpdate emptyUpdate;
+                    return emptyUpdate.windowInfos;
 #endif
-                    return initialInfo.windowInfos;
                 },
                 [](const sp<android::gui::WindowInfosListener>& listener) {
 #if defined(__ANDROID__)
