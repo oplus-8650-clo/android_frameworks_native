@@ -54,49 +54,47 @@ android::base::Result<gui::WindowInfosUpdate> WindowInfosListenerReporter::addWi
 status_t WindowInfosListenerReporter::removeWindowInfosListener(
         const sp<WindowInfosListener>& windowInfosListener,
         const sp<gui::ISurfaceComposer>& surfaceComposer) {
-    status_t status = OK;
-    {
-        std::scoped_lock lock(mListenersMutex);
-        if (mWindowInfosListeners.find(windowInfosListener) == mWindowInfosListeners.end()) {
-            return status;
-        }
-
-        if (mWindowInfosListeners.size() == 1) {
-            binder::Status s = surfaceComposer->removeWindowInfosListener(this);
-            status = statusTFromBinderStatus(s);
-            // Clear the last stored state since we're disabling updates and don't want to hold
-            // stale values
-            mLastUpdate = gui::WindowInfosUpdate();
-        }
-
-        if (status == OK) {
-            mWindowInfosListeners.erase(windowInfosListener);
-        }
+    std::scoped_lock lock(mListenersMutex);
+    mWindowInfosListeners.erase(windowInfosListener);
+    if (!mWindowInfosListeners.empty()) {
+        return OK;
     }
 
-    return status;
+    if (binder::Status status = surfaceComposer->removeWindowInfosListener(this); !status.isOk()) {
+        ALOGW("Failed to remove window infos listener from SurfaceFlinger");
+        return statusTFromBinderStatus(status);
+    }
+
+    // Clear the last stored state since we're disabling updates and don't want to hold
+    // stale values
+    mLastUpdate = gui::WindowInfosUpdate();
+    mWindowInfosPublisher.clear();
+    mListenerId = UNASSIGNED_LISTENER_ID;
+
+    return OK;
 }
 
 binder::Status WindowInfosListenerReporter::onWindowInfosChanged(
         const gui::WindowInfosUpdate& update) {
-    std::unordered_set<sp<WindowInfosListener>, gui::SpHash<WindowInfosListener>>
-            windowInfosListeners;
-
+    ListenerSet listeners;
+    int64_t id;
+    sp<gui::IWindowInfosPublisher> publisher;
     {
         std::scoped_lock lock(mListenersMutex);
-        for (auto listener : mWindowInfosListeners) {
-            windowInfosListeners.insert(listener);
-        }
-
+        listeners = mWindowInfosListeners;
+        publisher = mWindowInfosPublisher;
+        id = mListenerId;
         mLastUpdate = update;
     }
-
-    for (auto listener : windowInfosListeners) {
+    // Publisher may be null if we've removed the last window infos listener before handling all
+    // in-flight onWindowInfosChanged calls.
+    if (!publisher) {
+        return binder::Status::ok();
+    }
+    for (auto listener : listeners) {
         listener->onWindowInfosChanged(update);
     }
-
-    mWindowInfosPublisher->ackWindowInfosReceived(update.vsyncId, mListenerId);
-
+    publisher->ackWindowInfosReceived(update.vsyncId, id);
     return binder::Status::ok();
 }
 

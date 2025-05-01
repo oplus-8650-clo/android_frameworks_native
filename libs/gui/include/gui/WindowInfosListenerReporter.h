@@ -42,13 +42,15 @@ private:
     WindowInfosListenerReporter() = default;
     friend class sp<WindowInfosListenerReporter>;
 
+    using ListenerSet =
+            std::unordered_set<sp<gui::WindowInfosListener>, gui::SpHash<gui::WindowInfosListener>>;
+
+    static constexpr int64_t UNASSIGNED_LISTENER_ID = -1;
+
     std::mutex mListenersMutex;
-    std::unordered_set<sp<gui::WindowInfosListener>, gui::SpHash<gui::WindowInfosListener>>
-            mWindowInfosListeners GUARDED_BY(mListenersMutex);
-
+    ListenerSet mWindowInfosListeners GUARDED_BY(mListenersMutex);
     gui::WindowInfosUpdate mLastUpdate GUARDED_BY(mListenersMutex);
-
-    sp<gui::IWindowInfosPublisher> mWindowInfosPublisher;
-    int64_t mListenerId;
+    sp<gui::IWindowInfosPublisher> mWindowInfosPublisher GUARDED_BY(mListenersMutex);
+    int64_t mListenerId GUARDED_BY(mListenersMutex);
 };
 } // namespace android
