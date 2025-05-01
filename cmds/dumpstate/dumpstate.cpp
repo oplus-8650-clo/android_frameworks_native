@@ -1763,6 +1763,7 @@ Dumpstate::RunStatus Dumpstate::dumpstate() {
     DumpFile("ZONEINFO", "/proc/zoneinfo");
     DumpFile("PAGETYPEINFO", "/proc/pagetypeinfo");
     DumpFile("BUDDYINFO", "/proc/buddyinfo");
+    DumpFile("MGLRU", "/sys/kernel/mm/lru_gen/enabled");
     DumpExternalFragmentationInfo();
 // QTI_BEGIN: 2023-09-13: Frameworks: Disabled critical CPU related information from bugreport.
     if (!CRITICAL_CPU_INFO_DISABLE) {

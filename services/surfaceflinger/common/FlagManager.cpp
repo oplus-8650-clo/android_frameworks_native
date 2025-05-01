@@ -149,7 +149,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(detached_mirror);
     DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_config_error_hal);
-    DUMP_ACONFIG_FLAG(display_protected);
     DUMP_ACONFIG_FLAG(dont_skip_on_early_ro);
     DUMP_ACONFIG_FLAG(enable_fro_dependent_features);
     DUMP_ACONFIG_FLAG(enable_layer_command_batching);
@@ -264,7 +263,6 @@ FLAG_MANAGER_ACONFIG_FLAG(use_known_refresh_rate_for_fps_consistency, "")
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
 FLAG_MANAGER_ACONFIG_FLAG(enable_fro_dependent_features, "")
-FLAG_MANAGER_ACONFIG_FLAG(display_protected, "")
 FLAG_MANAGER_ACONFIG_FLAG(fp16_client_target, "debug.sf.fp16_client_target")
 FLAG_MANAGER_ACONFIG_FLAG(game_default_frame_rate, "")
 FLAG_MANAGER_ACONFIG_FLAG(enable_layer_command_batching, "debug.sf.enable_layer_command_batching")

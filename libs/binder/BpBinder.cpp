@@ -164,28 +164,28 @@ sp<BpBinder> BpBinder::create(int32_t handle, std::function<void()>* postTask) {
     if (sCountByUidEnabled) {
         trackedUid = IPCThreadState::self()->getCallingUid();
         RpcMutexUniqueLock _l(sTrackingLock);
-        uint32_t trackedValue = sTrackingMap[trackedUid];
+        const uint32_t trackedValue = sTrackingMap[trackedUid];
+        const uint32_t currentValue = trackedValue & COUNTING_VALUE_MASK;
+
         if (trackedValue & LIMIT_REACHED_MASK) [[unlikely]] {
             if (sBinderProxyThrottleCreate) {
                 return nullptr;
             }
-            trackedValue = trackedValue & COUNTING_VALUE_MASK;
             uint32_t lastLimitCallbackAt = sLastLimitCallbackMap[trackedUid];
 
-            if (trackedValue > lastLimitCallbackAt &&
-                (trackedValue - lastLimitCallbackAt > sBinderProxyCountHighWatermark)) {
+            if (currentValue > lastLimitCallbackAt &&
+                (currentValue - lastLimitCallbackAt > sBinderProxyCountHighWatermark)) {
                 ALOGE("Still too many binder proxy objects sent to uid %d from uid %d (%d proxies "
                       "held)",
-                      getuid(), trackedUid, trackedValue);
+                      getuid(), trackedUid, currentValue);
 
                 if (sLimitCallback) {
                     *postTask = [=]() { sLimitCallback(trackedUid); };
                 }
 
-                sLastLimitCallbackMap[trackedUid] = trackedValue;
+                sLastLimitCallbackMap[trackedUid] = currentValue;
             }
         } else {
-            uint32_t currentValue = trackedValue & COUNTING_VALUE_MASK;
             if (currentValue >= sBinderProxyCountWarningWatermark
                     && currentValue < sBinderProxyCountHighWatermark
                     && ((trackedValue & WARNING_REACHED_MASK) == 0)) [[unlikely]] {
@@ -195,14 +195,14 @@ sp<BpBinder> BpBinder::create(int32_t handle, std::function<void()>* postTask) {
                 }
             } else if (currentValue >= sBinderProxyCountHighWatermark) {
                 ALOGE("Too many binder proxy objects sent to uid %d from uid %d (%d proxies held)",
-                      getuid(), trackedUid, trackedValue);
+                      getuid(), trackedUid, currentValue);
                 sTrackingMap[trackedUid] |= LIMIT_REACHED_MASK;
 
                 if (sLimitCallback) {
                     *postTask = [=]() { sLimitCallback(trackedUid); };
                 }
 
-                sLastLimitCallbackMap[trackedUid] = trackedValue & COUNTING_VALUE_MASK;
+                sLastLimitCallbackMap[trackedUid] = currentValue;
                 if (sBinderProxyThrottleCreate) {
                     ALOGI("Throttling binder proxy creates from uid %d in uid %d until binder proxy"
                           " count drops below %d",

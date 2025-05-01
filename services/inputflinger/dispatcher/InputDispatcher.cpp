@@ -6131,6 +6131,13 @@ void InputDispatcher::dumpDispatchStateLocked(std::string& dump) const {
     const nsecs_t currentTime = now();
 
     dump += addLinePrefix(mConnectionManager.dump(currentTime), INDENT);
+    if (!mInputFilterVerifiersByDisplay.empty()) {
+        for (const auto& [displayId, verifier] : mInputFilterVerifiersByDisplay) {
+            dump += addLinePrefix(std::string("Verifier on ") + displayId.toString() + " : " +
+                                          verifier.dump(),
+                                  INDENT);
+        }
+    }
 
     // Dump recently dispatched or dropped events from oldest to newest.
     if (!mRecentQueue.empty()) {

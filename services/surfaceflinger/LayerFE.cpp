@@ -233,15 +233,8 @@ void LayerFE::prepareBufferStateClientComposition(
         // activeBuffer, then we need to return LayerSettings.
         return;
     }
-    bool blackOutLayer;
-    if (FlagManager::getInstance().display_protected()) {
-        blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
+    bool blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
                 (mSnapshot->isSecure && !targetSettings.isSecure);
-    } else {
-        blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
-                ((mSnapshot->isSecure || mSnapshot->hasProtectedContent) &&
-                 !targetSettings.isSecure);
-    }
     const bool bufferCanBeUsedAsHwTexture =
             mSnapshot->externalTexture->getUsage() & GraphicBuffer::USAGE_HW_TEXTURE;
     if (blackOutLayer || !bufferCanBeUsedAsHwTexture) {

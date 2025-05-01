@@ -83,7 +83,6 @@ public:
     bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
     bool display_config_error_hal() const;
-    bool display_protected() const;
     bool dont_skip_on_early_ro() const;
     bool enable_fro_dependent_features() const;
     bool enable_layer_command_batching() const;
