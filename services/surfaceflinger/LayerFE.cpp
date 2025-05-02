@@ -233,15 +233,8 @@ void LayerFE::prepareBufferStateClientComposition(
         // activeBuffer, then we need to return LayerSettings.
         return;
     }
-    bool blackOutLayer;
-    if (FlagManager::getInstance().display_protected()) {
-        blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
+    bool blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
                 (mSnapshot->isSecure && !targetSettings.isSecure);
-    } else {
-        blackOutLayer = (mSnapshot->hasProtectedContent && !targetSettings.isProtected) ||
-                ((mSnapshot->isSecure || mSnapshot->hasProtectedContent) &&
-                 !targetSettings.isSecure);
-    }
     const bool bufferCanBeUsedAsHwTexture =
             mSnapshot->externalTexture->getUsage() & GraphicBuffer::USAGE_HW_TEXTURE;
     if (blackOutLayer || !bufferCanBeUsedAsHwTexture) {
@@ -293,7 +286,7 @@ void LayerFE::prepareBufferStateClientComposition(
          * the code below applies the primary display's inverse transform to
          * the texture transform
          */
-        uint32_t transform = SurfaceFlinger::getActiveDisplayRotationFlags();
+        uint32_t transform = SurfaceFlinger::getFrontInternalDisplayRotationFlags();
         mat4 tr = inverseOrientation(transform);
 
         /**
@@ -350,11 +343,19 @@ void LayerFE::prepareShadowClientComposition(LayerFE::LayerSettings& caster,
         return;
     }
 
-    // Shift the spot light x-position to the middle of the display and then
-    // offset it by casting layer's screen pos.
-    state.lightPos.x =
-            (static_cast<float>(layerStackRect.width()) / 2.f) - mSnapshot->transformedBounds.left;
-    state.lightPos.y -= mSnapshot->transformedBounds.top;
+    // The light source should be at (screenWidth/2, globalShadowSettings.lightPos.y) in
+    // screenspace.
+    vec2 lightPosScreenSpace = {
+            (static_cast<float>(layerStackRect.width()) / 2.f),
+            state.lightPos.y,
+    };
+
+    // Skia expects light pos in layer space.
+    vec2 lightPosLayerSpace = mSnapshot->geomInverseLayerTransform.transform(lightPosScreenSpace);
+
+    state.lightPos.x = lightPosLayerSpace.x;
+    state.lightPos.y = lightPosLayerSpace.y;
+
     caster.shadow = state;
 }
 

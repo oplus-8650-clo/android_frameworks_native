@@ -236,7 +236,8 @@ public:
             REQUIRES(kMainThreadContext);
     void updateRefreshRateOverlayRate(Fps refreshRate, Fps renderFps, bool setByHwc = false);
     bool isRefreshRateOverlayEnabled() const { return mRefreshRateOverlay != nullptr; }
-    void animateOverlay();
+    void animateRefreshRateOverlay();
+    void animateHdrSdrRatioOverlay();
     bool onKernelTimerChanged(std::optional<DisplayModeId>, bool timerExpired);
     void onVrrIdle(bool idle);
 

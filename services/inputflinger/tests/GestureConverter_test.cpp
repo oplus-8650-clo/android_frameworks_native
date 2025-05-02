@@ -285,8 +285,6 @@ TEST_F(GestureConverterTest, DragWithButton) {
 }
 
 TEST_F(GestureConverterTest, Scroll) {
-    input_flags::enable_touchpad_no_focus_change(true);
-
     const nsecs_t downTime = 12345;
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
@@ -957,8 +955,6 @@ TEST_F(GestureConverterTest, DisablingSystemGestures_EndsOngoingMultiFingerSwipe
 }
 
 TEST_F(GestureConverterTest, Pinch_Inwards) {
-    input_flags::enable_touchpad_no_focus_change(true);
-
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
@@ -1026,8 +1022,6 @@ TEST_F(GestureConverterTest, Pinch_Inwards) {
 }
 
 TEST_F(GestureConverterTest, Pinch_Outwards) {
-    input_flags::enable_touchpad_no_focus_change(true);
-
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
@@ -1179,8 +1173,6 @@ TEST_F(GestureConverterTest, ResetWithButtonPressed) {
 }
 
 TEST_F(GestureConverterTest, ResetDuringScroll) {
-    input_flags::enable_touchpad_no_focus_change(true);
-
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);

@@ -1323,18 +1323,11 @@ void Output::updateProtectedContentState() {
     bool supportsProtectedContent = renderEngine.supportsProtectedContent();
 
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-    bool isProtected;
-    if (FlagManager::getInstance().display_protected()) {
-        isProtected = outputState.isProtected;
-    } else {
-        isProtected = outputState.isSecure;
-    }
-
     // We need to set the render surface as protected (DRM) if all the following conditions are met:
     // 1. The display is protected (in legacy, check if the display is secure)
     // 2. Protected content is supported
     // 3. At least one layer has protected content.
-    if (isProtected && supportsProtectedContent) {
+    if (outputState.isProtected && supportsProtectedContent) {
         auto layers = getOutputLayersOrderedByZ();
         bool needsProtected = std::any_of(layers.begin(), layers.end(), [](auto* layer) {
             return layer->getLayerFE().getCompositionState()->hasProtectedContent &&
@@ -1599,16 +1592,13 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                                              BlurRegionsOnly
                                    : LayerFE::ClientCompositionTargetSettings::BlurSetting::
                                              Enabled);
-                bool isProtected = supportsProtectedContent;
-                if (FlagManager::getInstance().display_protected()) {
-                    isProtected = outputState.isProtected && supportsProtectedContent;
-                }
                 compositionengine::LayerFE::ClientCompositionTargetSettings
                         targetSettings{.clip = clip,
                                        .needsFiltering = layer->needsFiltering() ||
                                                outputState.needsFiltering,
                                        .isSecure = outputState.isSecure,
-                                       .isProtected = isProtected,
+                                       .isProtected = outputState.isProtected &&
+                                               supportsProtectedContent,
                                        .viewport = outputState.layerStackSpace.getContent(),
                                        .dataspace = outputDataspace,
                                        .realContentIsVisible = realContentIsVisible,

@@ -23,7 +23,9 @@
 
 #include <binder/Functional.h>
 
+#ifndef BINDER_RPC_SINGLE_THREADED
 #include "FdUtils.h"
+#endif // BINDER_RPC_SINGLE_THREADED
 #include "RpcState.h"
 #include "Utils.h"
 

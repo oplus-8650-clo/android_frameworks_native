@@ -368,8 +368,8 @@ public:
     // TODO (b/281857977): This should be annotated with REQUIRES(kMainThreadContext), but this
     // would require thread safety annotations throughout the frontend (in particular Layer and
     // LayerFE).
-    static ui::Transform::RotationFlags getActiveDisplayRotationFlags() {
-        return sActiveDisplayRotationFlags;
+    static ui::Transform::RotationFlags getFrontInternalDisplayRotationFlags() {
+        return sFrontInternalDisplayRotationFlags;
     }
 
 // QTI_BEGIN: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
@@ -587,8 +587,7 @@ private:
             InputWindowCommands inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
             bool hasListenerCallbacks, const std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
-            const gui::EarlyWakeupInfo& earlyWakeupInfo) override;
+            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds) override;
     void bootFinished();
     status_t getSupportedFrameTimestamps(std::vector<FrameEvent>* outSupported) const;
     sp<IDisplayEventConnection> createDisplayEventConnection(
@@ -738,7 +737,7 @@ private:
                                      Fps renderRate) override;
     void onCommitNotComposited() override
             REQUIRES(kMainThreadContext);
-    void vrrDisplayIdle(bool idle) override;
+    void vrrDisplayIdle(PhysicalDisplayId displayId, bool idle) override;
 
     // ICEPowerCallback overrides:
     void notifyCpuLoadUp() override;
@@ -872,8 +871,8 @@ private:
 
     // Sets the masked bits, and schedules a commit if needed.
     void setTransactionFlags(uint32_t mask, TransactionSchedule = TransactionSchedule::Late,
-                             FrameHint = FrameHint::kActive,
-                             const gui::EarlyWakeupInfo& earlyWakeupInfo = {});
+                             const sp<IBinder>& applyToken = nullptr,
+                             FrameHint = FrameHint::kActive);
 
     // Clears and returns the masked bits.
     uint32_t clearTransactionFlags(uint32_t mask);
@@ -943,9 +942,11 @@ private:
      */
     struct ScreenshotArgs {
         // Contains the sequence ID of the parent layer if the screenshot is
-        // initiated though captureLayers(), or the display that the render
-        // result will be on if initiated through captureDisplay()
-        std::variant<int32_t, wp<const DisplayDevice>> captureTypeVariant;
+        // initiated though captureLayers(), or the displayToken or displayID
+        // that the render result will be on if initiated through captureDisplay().
+        // The monostate type is used to denote that the screenshot is initiated
+        // for region sampling.
+        std::variant<std::monostate, int32_t, sp<IBinder>, DisplayId> captureTypeVariant;
 
         // Display ID of the display the result will be on
         ftl::Optional<DisplayIdVariant> displayIdVariant{std::nullopt};
@@ -1002,12 +1003,12 @@ private:
         std::string debugName;
     };
 
-    bool getSnapshotsFromMainThread(ScreenshotArgs& args);
+    status_t setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args);
 
     void captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat,
                              const sp<IScreenCaptureListener>&);
 
-    bool getDisplayStateOnMainThread(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
+    status_t setScreenshotDisplayState(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
 
     ftl::SharedFuture<FenceResult> captureScreenshot(
             ScreenshotArgs& args, const std::shared_ptr<renderengine::ExternalTexture>& buffer,
@@ -1067,18 +1068,33 @@ private:
         return nullptr;
     }
 
-    // Returns the primary display or (for foldables) the active display.
-    sp<const DisplayDevice> getDefaultDisplayDeviceLocked() const REQUIRES(mStateLock) {
-        return const_cast<SurfaceFlinger*>(this)->getDefaultDisplayDeviceLocked();
+    sp<const DisplayDevice> getPacesetterDisplayLocked() const REQUIRES(mStateLock) {
+        return const_cast<SurfaceFlinger*>(this)->getPacesetterDisplayLocked();
     }
 
-    sp<DisplayDevice> getDefaultDisplayDeviceLocked() REQUIRES(mStateLock) {
-        return getDisplayDeviceLocked(mActiveDisplayId);
+    sp<DisplayDevice> getPacesetterDisplayLocked() REQUIRES(mStateLock) {
+        if (!FlagManager::getInstance().pacesetter_selection()) {
+            return getFrontInternalDisplayLocked();
+        }
+        return getDisplayDeviceLocked(mScheduler->getPacesetterDisplayId());
     }
 
-    sp<const DisplayDevice> getDefaultDisplayDevice() const EXCLUDES(mStateLock) {
+    sp<const DisplayDevice> getPacesetterDisplay() const EXCLUDES(mStateLock) {
         Mutex::Autolock lock(mStateLock);
-        return getDefaultDisplayDeviceLocked();
+        return getPacesetterDisplayLocked();
+    }
+
+    sp<const DisplayDevice> getFrontInternalDisplayLocked() const REQUIRES(mStateLock) {
+        return const_cast<SurfaceFlinger*>(this)->getFrontInternalDisplayLocked();
+    }
+
+    sp<DisplayDevice> getFrontInternalDisplayLocked() REQUIRES(mStateLock) {
+        return getDisplayDeviceLocked(mFrontInternalDisplayId);
+    }
+
+    sp<const DisplayDevice> getFrontInternalDisplay() const EXCLUDES(mStateLock) {
+        Mutex::Autolock lock(mStateLock);
+        return getFrontInternalDisplayLocked();
     }
 
     using DisplayDeviceAndSnapshot = std::pair<sp<DisplayDevice>, display::DisplaySnapshotRef>;
@@ -1228,14 +1244,13 @@ private:
     void releaseVirtualDisplay(VirtualDisplayIdVariant displayId);
     void releaseVirtualDisplaySnapshot(VirtualDisplayId displayId);
 
-    // Returns a display other than `mActiveDisplayId` that can be activated, if any.
-    sp<DisplayDevice> getActivatableDisplay() const REQUIRES(mStateLock, kMainThreadContext);
+    sp<DisplayDevice> findFrontInternalDisplay() const REQUIRES(mStateLock, kMainThreadContext);
 
-    void onActiveDisplayChangedLocked(const DisplayDevice* inactiveDisplayPtr,
-                                      const DisplayDevice& activeDisplay)
+    void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
+                                   const DisplayDevice& newFrontInternalDisplay)
             REQUIRES(mStateLock, kMainThreadContext);
 
-    void onActiveDisplaySizeChanged(const DisplayDevice&);
+    void onFrontInternalDisplaySizeChanged(const DisplayDevice&);
 
     /*
      * Debugging & dumpsys
@@ -1373,6 +1388,8 @@ private:
         int32_t layerId;
         ui::Dataspace dataspace;
         std::chrono::milliseconds timeSinceLastEvent;
+        bool useLuts;
+        float desiredHdrHeadroom;
     };
     std::vector<LayerEvent> mLayerEvents;
 
@@ -1430,7 +1447,7 @@ private:
             GUARDED_BY(mVirtualDisplaysMutex);
 
     // The inner or outer display for foldables, while unfolded or folded, respectively.
-    std::atomic<PhysicalDisplayId> mActiveDisplayId;
+    std::atomic<PhysicalDisplayId> mFrontInternalDisplayId;
 
     display::DisplayModeController mDisplayModeController;
 
@@ -1540,11 +1557,11 @@ private:
     ActivePictureTracker::Listeners mActivePictureListenersToAdd GUARDED_BY(mStateLock);
     ActivePictureTracker::Listeners mActivePictureListenersToRemove GUARDED_BY(mStateLock);
 
-    std::atomic<ui::Transform::RotationFlags> mActiveDisplayTransformHint;
+    std::atomic<ui::Transform::RotationFlags> mFrontInternalDisplayTransformHint;
 
     // Must only be accessed on the main thread.
     // TODO (b/259407931): Remove.
-    static ui::Transform::RotationFlags sActiveDisplayRotationFlags;
+    static ui::Transform::RotationFlags sFrontInternalDisplayRotationFlags;
 
     bool isRefreshRateOverlayEnabled() const REQUIRES(mStateLock) {
         return hasDisplay(

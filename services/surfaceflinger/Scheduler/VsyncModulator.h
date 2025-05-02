@@ -21,10 +21,7 @@
 #include <optional>
 #include <unordered_set>
 
-#include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/thread_annotations.h>
-#include <android/gui/EarlyWakeupInfo.h>
 #include <binder/IBinder.h>
 #include <utils/Timers.h>
 
@@ -66,8 +63,7 @@ public:
 
     // Changes offsets in response to transaction flags or commit.
     [[nodiscard]] VsyncConfigOpt setTransactionSchedule(TransactionSchedule,
-                                                        const android::gui::EarlyWakeupInfo& = {})
-            EXCLUDES(mMutex);
+                                                        const sp<IBinder>& = {}) EXCLUDES(mMutex);
     [[nodiscard]] VsyncConfigOpt onTransactionCommit();
 
     // Called when we send a refresh rate change to hardware composer, so that
@@ -79,8 +75,6 @@ public:
     [[nodiscard]] VsyncConfigOpt onRefreshRateChangeCompleted();
 
     [[nodiscard]] VsyncConfigOpt onDisplayRefresh(bool usedGpuComposition);
-
-    void dump(std::string& result) const EXCLUDES(mMutex);
 
 protected:
     // Called from unit tests as well
@@ -102,8 +96,7 @@ private:
     using Schedule = TransactionSchedule;
     std::atomic<Schedule> mTransactionSchedule = Schedule::Late;
 
-    std::unordered_map<wp<IBinder>, gui::EarlyWakeupInfo, WpHash> mEarlyWakeupRequests
-            GUARDED_BY(mMutex);
+    std::unordered_set<wp<IBinder>, WpHash> mEarlyWakeupRequests GUARDED_BY(mMutex);
     std::atomic<bool> mRefreshRateChangePending = false;
 
     std::atomic<int> mEarlyTransactionFrames = 0;

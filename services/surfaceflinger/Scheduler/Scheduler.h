@@ -106,6 +106,8 @@ public:
     void setPacesetterDisplay(PhysicalDisplayId) REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock, mVsyncConfigLock);
 
+    PhysicalDisplayId getPacesetterDisplayId() const EXCLUDES(mDisplayLock);
+
     using RefreshRateSelectorPtr = std::shared_ptr<RefreshRateSelector>;
 
     using ConstVsyncSchedulePtr = std::shared_ptr<const VsyncSchedule>;
@@ -407,7 +409,7 @@ private:
     }
 
     // Update feature state machine to given state when corresponding timer resets or expires.
-    void kernelIdleTimerCallback(TimerState) EXCLUDES(mDisplayLock);
+    void kernelIdleTimerCallback(PhysicalDisplayId, TimerState) EXCLUDES(mDisplayLock);
     void idleTimerCallback(TimerState);
     void touchTimerCallback(TimerState);
     void displayPowerTimerCallback(TimerState);
@@ -575,8 +577,8 @@ private:
     ui::PhysicalDisplayMap<PhysicalDisplayId, Display> mDisplays GUARDED_BY(mDisplayLock)
             GUARDED_BY(kMainThreadContext);
 
-    ftl::Optional<PhysicalDisplayId> mPacesetterDisplayId GUARDED_BY(mDisplayLock)
-            GUARDED_BY(kMainThreadContext);
+    // May be read from any thread, but must only be written from the main thread.
+    ftl::Optional<PhysicalDisplayId> mPacesetterDisplayId GUARDED_BY(mDisplayLock);
 
     ftl::Optional<DisplayRef> pacesetterDisplayLocked() REQUIRES(mDisplayLock) {
         return static_cast<const Scheduler*>(this)->pacesetterDisplayLocked().transform(

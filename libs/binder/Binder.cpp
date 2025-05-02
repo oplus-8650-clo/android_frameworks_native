@@ -28,7 +28,6 @@
 #include <binder/RecordedTransaction.h>
 #include <binder/RpcServer.h>
 #include <binder/unique_fd.h>
-#include <pthread.h>
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -365,7 +364,7 @@ status_t BBinder::stopRecordingTransactions() {
 
 const String16& BBinder::getInterfaceDescriptor() const
 {
-    static StaticString16 sBBinder(u"BBinder");
+    [[clang::no_destroy]] static StaticString16 sBBinder(u"BBinder");
     ALOGW("Reached BBinder::getInterfaceDescriptor (this=%p). Override?", this);
     return sBBinder;
 }
@@ -417,7 +416,7 @@ status_t BBinder::transact(
         }
     }
 
-    if (kEnableKernelIpc && mRecordingOn && code != START_RECORDING_TRANSACTION) [[unlikely]] {
+    if (kEnableKernelIpc && kEnableRecording && mRecordingOn && code != START_RECORDING_TRANSACTION) [[unlikely]] {
         Extras* e = mExtras.load(std::memory_order_acquire);
         RpcMutexUniqueLock lock(e->mLock);
         if (mRecordingOn) {
@@ -428,7 +427,7 @@ status_t BBinder::transact(
                     fromDetails(getInterfaceDescriptor(), code, flags, ts, data,
                                 reply ? *reply : emptyReply, err);
             if (transaction) {
-                if (status_t err = transaction->dumpToFile(e->mRecordingFd); err != NO_ERROR) {
+                if (err = transaction->dumpToFile(e->mRecordingFd); err != NO_ERROR) {
                     ALOGI("Failed to dump RecordedTransaction to file with error %d", err);
                 }
             } else {

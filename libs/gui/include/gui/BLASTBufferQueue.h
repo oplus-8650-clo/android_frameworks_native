@@ -59,6 +59,7 @@ class QtiBLASTBufferQueueExtension;
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 class BLASTBufferQueue;
 class BufferItemConsumer;
+class BufferReleaseReader;
 
 class BLASTBufferItemConsumer : public BufferItemConsumer {
 public:
@@ -389,45 +390,12 @@ private:
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BUFFER_RELEASE_CHANNEL)
     // BufferReleaseChannel is used to communicate buffer releases from SurfaceFlinger to the
     // client.
-    std::unique_ptr<gui::BufferReleaseChannel::ConsumerEndpoint> mBufferReleaseConsumer;
     std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint> mBufferReleaseProducer;
 
     void updateBufferReleaseProducer() REQUIRES(mMutex);
     void drainBufferReleaseConsumer();
 
-    // BufferReleaseReader is used to do blocking but interruptible reads from the buffer
-    // release channel. To implement this, BufferReleaseReader owns an epoll file descriptor that
-    // is configured to wake up when either the BufferReleaseReader::ConsumerEndpoint or an eventfd
-    // becomes readable. Interrupts are necessary because a free buffer may become available for
-    // reasons other than a buffer release from the producer.
-    class BufferReleaseReader {
-    public:
-        explicit BufferReleaseReader(BLASTBufferQueue&);
-
-        BufferReleaseReader(const BufferReleaseReader&) = delete;
-        BufferReleaseReader& operator=(const BufferReleaseReader&) = delete;
-
-        // Block until we can read a buffer release message.
-        //
-        // Returns:
-        // * OK if a ReleaseCallbackId and Fence were successfully read.
-        // * WOULD_BLOCK if the blocking read was interrupted by interruptBlockingRead.
-        // * TIMED_OUT if the blocking read timed out.
-        // * UNKNOWN_ERROR if something went wrong.
-        status_t readBlocking(ReleaseCallbackId& outId, sp<Fence>& outReleaseFence,
-                              uint32_t& outMaxAcquiredBufferCount, nsecs_t timeout);
-
-        void interruptBlockingRead();
-        void clearInterrupts();
-
-    private:
-        BLASTBufferQueue& mBbq;
-
-        android::base::unique_fd mEpollFd;
-        android::base::unique_fd mEventFd;
-    };
-
-    std::optional<BufferReleaseReader> mBufferReleaseReader;
+    std::shared_ptr<BufferReleaseReader> mBufferReleaseReader;
 #endif
 };
 

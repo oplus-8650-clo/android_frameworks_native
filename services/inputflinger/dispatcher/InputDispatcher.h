@@ -342,6 +342,10 @@ private:
         sp<android::gui::WindowInfoHandle> findWallpaperWindowBelow(
                 const sp<android::gui::WindowInfoHandle>& windowHandle) const;
 
+        // Returns true if the given window can accept pointer events at the given display location.
+        bool windowAcceptsTouchAt(const gui::WindowInfo& windowInfo, ui::LogicalDisplayId displayId,
+                                  float x, float y, bool isStylus) const;
+
         bool isTouchTrusted(const TouchOcclusionInfo& occlusionInfo) const;
 
         // Returns topology's primary display if the display belongs to it, otherwise the

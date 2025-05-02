@@ -75,8 +75,6 @@ public:
     bool mMayContainBuffer = false;
     // Prints debug logs when enabled.
     bool mLogCallPoints = false;
-    // Tracks the client setting the early wakeup request
-    gui::EarlyWakeupInfo mEarlyWakeupInfo;
 
     std::vector<DisplayState> mDisplayStates;
     std::vector<ComposerState> mComposerStates;

@@ -195,6 +195,8 @@ public:
         mBlastBufferQueueAdapter->setApplyToken(std::move(applyToken));
     }
 
+    void dropBbq() { mBlastBufferQueueAdapter.clear(); }
+
 private:
     sp<TestBLASTBufferQueue> mBlastBufferQueueAdapter;
 };
@@ -1438,6 +1440,50 @@ TEST_F(BLASTBufferQueueTest, TransformHint) {
     ASSERT_EQ(ui::Transform::ROT_0, static_cast<ui::Transform::RotationFlags>(transformHint));
 
     adapter.waitForCallbacks();
+}
+
+// Verifies that we don't deadlock if BufferQueueProducer::cancelBuffer is called on a thread
+// right before the owner of BBQ drops its strong pointer (b/410458641). This test is
+// non-deterministic and sensitive to timings. The owning BBQ pointer may be dropped before,
+// during, or after notifyBufferReleased is called. This test could be improved by mocking
+// the BufferReleaseReader, forcing it to wait until after we drop the BBQ pointer. Doing so
+// would require injecting a mock BufferReleaseReader into BBQ which is difficult to do with the
+// current code structure.
+TEST_F(BLASTBufferQueueTest, CancelBuffer_NoDeadlock) {
+    for (int i = 0; i < 100; i++) {
+        BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+        sp<IGraphicBufferProducer> producer;
+        setUpProducer(adapter, producer);
+
+        int slot;
+        sp<Fence> fence;
+        sp<GraphicBuffer> buf;
+        status_t status = producer->dequeueBuffer(&slot, &fence, mDisplayWidth, mDisplayHeight,
+                                                  PIXEL_FORMAT_RGBA_8888,
+                                                  GRALLOC_USAGE_SW_WRITE_OFTEN, nullptr, nullptr);
+        ASSERT_EQ(IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION, status);
+        ASSERT_EQ(OK, producer->requestBuffer(slot, &buf));
+
+        bool threadComplete = false;
+        std::mutex threadCompleteMutex;
+        std::condition_variable threadCompleteCondition;
+
+        std::thread thread([&]() {
+            producer->cancelBuffer(slot, fence);
+            std::lock_guard lock{threadCompleteMutex};
+            threadComplete = true;
+            threadCompleteCondition.notify_one();
+        });
+
+        // Give the background thread some time to start up before dropping the BBQ pointer.
+        std::this_thread::sleep_for(1ms);
+
+        adapter.dropBbq();
+        std::unique_lock lock{threadCompleteMutex};
+        ASSERT_TRUE(threadCompleteCondition.wait_for(lock, 5s, [&]() { return threadComplete; }))
+                << "Failed to join background thread, likely indicates deadlock";
+        thread.join();
+    }
 }
 
 class BLASTBufferQueueTransformTest : public BLASTBufferQueueTest {

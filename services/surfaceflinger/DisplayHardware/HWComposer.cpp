@@ -229,9 +229,10 @@ bool HWComposer::allocateVirtualDisplay(HalVirtualDisplayId displayId, ui::Size 
 
 void HWComposer::allocatePhysicalDisplay(hal::HWDisplayId hwcDisplayId, PhysicalDisplayId displayId,
                                          uint8_t port, std::optional<ui::Size> physicalSize) {
-    LOG_ALWAYS_FATAL_IF(!mActivePorts.try_emplace(port).second,
-                        "Cannot attach display %" PRIu64 " to an already active port %" PRIu8 ".",
-                        hwcDisplayId, port);
+    // TODO: b/413414541 - turn this back to LOG_ALWAYS_FATAL_IF once the issue is resolved.
+    ALOGE_IF(!mActivePorts.try_emplace(port).second,
+             "Attaching display %" PRIu64 " to an already active port %" PRIu8 ".", hwcDisplayId,
+             port);
 
     mPhysicalDisplayIdMap[hwcDisplayId] = displayId;
 

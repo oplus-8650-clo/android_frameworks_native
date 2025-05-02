@@ -578,34 +578,6 @@ bool isUserActivityEvent(const EventEntry& eventEntry) {
     }
 }
 
-// Returns true if the given window can accept pointer events at the given display location.
-bool windowAcceptsTouchAt(const WindowInfo& windowInfo, ui::LogicalDisplayId displayId, float x,
-                          float y, bool isStylus, const ui::Transform& displayTransform) {
-    const auto inputConfig = windowInfo.inputConfig;
-    if (windowInfo.displayId != displayId ||
-        inputConfig.test(WindowInfo::InputConfig::NOT_VISIBLE)) {
-        return false;
-    }
-    const bool windowCanInterceptTouch = isStylus && windowInfo.interceptsStylus();
-    if (inputConfig.test(WindowInfo::InputConfig::NOT_TOUCHABLE) && !windowCanInterceptTouch) {
-        return false;
-    }
-
-    // Window Manager works in the logical display coordinate space. When it specifies bounds for a
-    // window as (l, t, r, b), the range of x in [l, r) and y in [t, b) are considered to be inside
-    // the window. Points on the right and bottom edges should not be inside the window, so we need
-    // to be careful about performing a hit test when the display is rotated, since the "right" and
-    // "bottom" of the window will be different in the display (un-rotated) space compared to in the
-    // logical display in which WM determined the bounds. Perform the hit test in the logical
-    // display space to ensure these edges are considered correctly in all orientations.
-    const auto touchableRegion = displayTransform.transform(windowInfo.touchableRegion);
-    const auto p = displayTransform.transform(x, y);
-    if (!touchableRegion.contains(std::floor(p.x), std::floor(p.y))) {
-        return false;
-    }
-    return true;
-}
-
 // Returns true if the given window's frame can occlude pointer events at the given display
 // location.
 bool windowOccludesTouchAt(const WindowInfo& windowInfo, ui::LogicalDisplayId displayId, float x,
@@ -957,9 +929,10 @@ InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy,
 
     mWindowInfoListener = sp<DispatcherWindowListener>::make(*this);
 #if defined(__ANDROID__)
-    gui::WindowInfosUpdate update;
-    SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowInfoListener, &update);
-    onWindowInfosChanged(update);
+    android::base::Result<gui::WindowInfosUpdate> result =
+            SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowInfoListener);
+    LOG_IF(FATAL, !result.ok()) << "Can't listen for window info. Input will not work";
+    onWindowInfosChanged(*result);
 #endif
     mKeyRepeatState.lastKeyEntry = nullptr;
 
@@ -1459,8 +1432,7 @@ sp<WindowInfoHandle> InputDispatcher::DispatcherWindowInfo::findTouchedWindowAt(
         }
 
         const WindowInfo& info = *windowHandle->getInfo();
-        if (!info.isSpy() &&
-            windowAcceptsTouchAt(info, displayId, x, y, isStylus, getDisplayTransform(displayId))) {
+        if (!info.isSpy() && windowAcceptsTouchAt(info, displayId, x, y, isStylus)) {
             return windowHandle;
         }
     }
@@ -1501,11 +1473,10 @@ std::vector<sp<WindowInfoHandle>> InputDispatcher::findTouchedSpyWindowsAt(
         const DispatcherWindowInfo& windowInfos) {
     // Traverse windows from front to back and gather the touched spy windows.
     std::vector<sp<WindowInfoHandle>> spyWindows;
-    const ui::Transform displayTransform = windowInfos.getDisplayTransform(displayId);
     const auto& windowHandles = windowInfos.getWindowHandlesForDisplay(displayId);
     for (const sp<WindowInfoHandle>& windowHandle : windowHandles) {
         const WindowInfo& info = *windowHandle->getInfo();
-        if (!windowAcceptsTouchAt(info, displayId, x, y, isStylus, displayTransform)) {
+        if (!windowInfos.windowAcceptsTouchAt(info, displayId, x, y, isStylus)) {
             // Skip if the pointer is outside of the window.
             continue;
         }
@@ -5266,6 +5237,36 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
     return getDisplayTransform(windowInfo.displayId);
 }
 
+bool InputDispatcher::DispatcherWindowInfo::windowAcceptsTouchAt(const gui::WindowInfo& windowInfo,
+                                                                 ui::LogicalDisplayId displayId,
+                                                                 float x, float y,
+                                                                 bool isStylus) const {
+    const auto inputConfig = windowInfo.inputConfig;
+    if (windowInfo.displayId != displayId ||
+        inputConfig.test(WindowInfo::InputConfig::NOT_VISIBLE)) {
+        return false;
+    }
+    const bool windowCanInterceptTouch = isStylus && windowInfo.interceptsStylus();
+    if (inputConfig.test(WindowInfo::InputConfig::NOT_TOUCHABLE) && !windowCanInterceptTouch) {
+        return false;
+    }
+
+    // Window Manager works in the logical display coordinate space. When it specifies bounds for a
+    // window as (l, t, r, b), the range of x in [l, r) and y in [t, b) are considered to be inside
+    // the window. Points on the right and bottom edges should not be inside the window, so we need
+    // to be careful about performing a hit test when the display is rotated, since the "right" and
+    // "bottom" of the window will be different in the display (un-rotated) space compared to in the
+    // logical display in which WM determined the bounds. Perform the hit test in the logical
+    // display space to ensure these edges are considered correctly in all orientations.
+    const ui::Transform& displayTransform = getDisplayTransform(windowInfo.displayId);
+    const auto touchableRegion = displayTransform.transform(windowInfo.touchableRegion);
+    const auto p = displayTransform.transform(x, y);
+    if (!touchableRegion.contains(std::floor(p.x), std::floor(p.y))) {
+        return false;
+    }
+    return true;
+}
+
 ui::LogicalDisplayId InputDispatcher::DispatcherWindowInfo::getPrimaryDisplayId(
         ui::LogicalDisplayId displayId) const {
     if (mTopology.graph.contains(displayId)) {
@@ -5613,14 +5614,16 @@ InputDispatcher::DispatcherTouchState::updateHoveringStateFromWindowInfo(
     std::list<CancellationArgs> cancellations;
     // Check if the hovering should stop because the window is no longer eligible to receive it
     // (for example, if the touchable region changed)
-    ui::Transform displayTransform = mWindowInfos.getDisplayTransform(displayId);
     for (TouchedWindow& touchedWindow : state.windows) {
+        const gui::WindowInfo& windowInfo = *touchedWindow.windowHandle->getInfo();
         std::vector<DeviceId> erasedDevices = touchedWindow.eraseHoveringPointersIf(
                 [&](const PointerProperties& properties, float x, float y) {
                     const bool isStylus = properties.toolType == ToolType::STYLUS;
+                    // The touchstate's displayId may be different from window's display on the
+                    // connected-displays, for this reason we use use window's displayId here.
                     const bool stillAcceptsTouch =
-                            windowAcceptsTouchAt(*touchedWindow.windowHandle->getInfo(), displayId,
-                                                 x, y, isStylus, displayTransform);
+                            mWindowInfos.windowAcceptsTouchAt(windowInfo, windowInfo.displayId, x,
+                                                              y, isStylus);
                     return !stillAcceptsTouch;
                 });
 
@@ -6131,6 +6134,13 @@ void InputDispatcher::dumpDispatchStateLocked(std::string& dump) const {
     const nsecs_t currentTime = now();
 
     dump += addLinePrefix(mConnectionManager.dump(currentTime), INDENT);
+    if (!mInputFilterVerifiersByDisplay.empty()) {
+        for (const auto& [displayId, verifier] : mInputFilterVerifiersByDisplay) {
+            dump += addLinePrefix(std::string("Verifier on ") + displayId.toString() + " : " +
+                                          verifier.dump(),
+                                  INDENT);
+        }
+    }
 
     // Dump recently dispatched or dropped events from oldest to newest.
     if (!mRecentQueue.empty()) {

@@ -20,7 +20,6 @@
 #include <memory>
 #include <variant>
 
-#include <android/gui/EarlyWakeupInfo.h>
 #include <ftl/fake_guard.h>
 #include <ftl/match.h>
 #include <gui/LayerMetadata.h>
@@ -321,7 +320,7 @@ public:
     void setLayerCompositionType(const sp<Layer>& layer,
                                  aidl::android::hardware::graphics::composer3::Composition type) {
         auto outputLayer = findOutputLayerForDisplay(static_cast<uint32_t>(layer->sequence),
-                                                     mFlinger->getDefaultDisplayDevice());
+                                                     mFlinger->getFrontInternalDisplay());
         LOG_ALWAYS_FATAL_IF(!outputLayer);
         auto& state = outputLayer->editState();
         LOG_ALWAYS_FATAL_IF(!outputLayer->getState().hwc);
@@ -478,8 +477,7 @@ public:
         ScreenCaptureResults captureResults;
         const auto& state = display->getCompositionDisplay()->getState();
 
-        SurfaceFlinger::ScreenshotArgs screenshotArgs{.captureTypeVariant = display,
-                                                      .displayIdVariant = std::nullopt,
+        SurfaceFlinger::ScreenshotArgs screenshotArgs{.displayIdVariant = std::nullopt,
                                                       .layers = layers,
                                                       .sourceCrop = sourceCrop,
                                                       .size = sourceCrop.getSize(),
@@ -530,13 +528,12 @@ public:
             const InputWindowCommands& inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
             bool hasListenerCallbacks, std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
-            const gui::EarlyWakeupInfo& earlyWakeupInfo) {
+            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds) {
         return mFlinger->setTransactionState(frameTimelineInfo, states, displays, flags, applyToken,
                                              inputWindowCommands, desiredPresentTime,
                                              isAutoTimestamp, uncacheBuffers, hasListenerCallbacks,
-                                             listenerCallbacks, transactionId, mergedTransactionIds,
-                                             earlyWakeupInfo);
+                                             listenerCallbacks, transactionId,
+                                             mergedTransactionIds);
     }
 
     auto setTransactionStateInternal(QueuedTransactionState& transaction) {
@@ -565,11 +562,11 @@ public:
         return mFlinger->setDesiredDisplayModeSpecs(displayToken, specs);
     }
 
-    void onActiveDisplayChanged(const DisplayDevice* inactiveDisplayPtr,
-                                const DisplayDevice& activeDisplay) {
+    void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
+                                   const DisplayDevice& newFrontInternalDisplay) {
         Mutex::Autolock lock(mFlinger->mStateLock);
         ftl::FakeGuard guard(kMainThreadContext);
-        mFlinger->onActiveDisplayChangedLocked(inactiveDisplayPtr, activeDisplay);
+        mFlinger->onNewFrontInternalDisplay(oldFrontInternalDisplayPtr, newFrontInternalDisplay);
     }
 
     auto createLayer(LayerCreationArgs& args, const sp<IBinder>& parentHandle,
@@ -718,11 +715,13 @@ public:
     auto& mutableHwcDisplayData() { return getHwComposer().mDisplayData; }
     auto& mutableHwcPhysicalDisplayIdMap() { return getHwComposer().mPhysicalDisplayIdMap; }
     auto& mutablePrimaryHwcDisplayId() { return getHwComposer().mPrimaryHwcDisplayId; }
-    auto& mutableActiveDisplayId() NO_THREAD_SAFETY_ANALYSIS { return mFlinger->mActiveDisplayId; }
+    auto& mutableFrontInternalDisplayId() NO_THREAD_SAFETY_ANALYSIS {
+        return mFlinger->mFrontInternalDisplayId;
+    }
     auto& mutablePreviouslyComposedLayers() { return mFlinger->mPreviouslyComposedLayers; }
 
-    auto& mutableActiveDisplayRotationFlags() {
-        return SurfaceFlinger::sActiveDisplayRotationFlags;
+    auto& mutableFrontInternalDisplayRotationFlags() {
+        return SurfaceFlinger::sFrontInternalDisplayRotationFlags;
     }
 
     auto& mutableMinAcquiredBuffers() { return SurfaceFlinger::minAcquiredBuffers; }
@@ -1100,7 +1099,7 @@ public:
                 LOG_ALWAYS_FATAL_IF(!mHwcDisplayId);
 
                 if (mCreationArgs.isPrimary) {
-                    mFlinger.mutableActiveDisplayId() = *physicalId;
+                    mFlinger.mutableFrontInternalDisplayId() = *physicalId;
                 }
 
                 if (!mCreationArgs.refreshRateSelector) {
@@ -1155,7 +1154,7 @@ public:
                     mFlinger.scheduler()->registerDisplay(*physicalId,
                                                           mCreationArgs.refreshRateSelector,
                                                           std::move(controller), std::move(tracker),
-                                                          mFlinger.mutableActiveDisplayId());
+                                                          mFlinger.mutableFrontInternalDisplayId());
                 }
             }
 

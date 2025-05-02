@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <android-base/result.h>
 #include <binder/IBinder.h>
 
 #include <utils/Errors.h>
@@ -510,9 +511,6 @@ public:
         // per process will be used.
         sp<IBinder> mApplyToken = nullptr;
 
-        // Tracks the client setting the early wakeup request
-        gui::EarlyWakeupInfo mEarlyWakeupInfo;
-
         InputWindowCommands mInputWindowCommands;
         int mStatus = NO_ERROR;
 
@@ -849,10 +847,9 @@ public:
         void setDisplayProjection(const sp<IBinder>& token, ui::Rotation orientation,
                                   const Rect& layerStackRect, const Rect& displayRect);
         void setDisplaySize(const sp<IBinder>& token, uint32_t width, uint32_t height);
-
         void setAnimationTransaction();
-        void setEarlyWakeupStart(const gui::EarlyWakeupInfo& token);
-        void setEarlyWakeupEnd(const gui::EarlyWakeupInfo& token);
+        void setEarlyWakeupStart();
+        void setEarlyWakeupEnd();
 
         /**
          * Strip the transaction of all permissioned requests, required when
@@ -911,8 +908,8 @@ public:
     static status_t removeTunnelModeEnabledListener(
             const sp<gui::ITunnelModeEnabledListener>& listener);
 
-    status_t addWindowInfosListener(const sp<gui::WindowInfosListener>& windowInfosListener,
-                                    gui::WindowInfosUpdate* outInitialUpdate);
+    android::base::Result<gui::WindowInfosUpdate> addWindowInfosListener(
+            sp<gui::WindowInfosListener> windowInfosListener);
     status_t removeWindowInfosListener(const sp<gui::WindowInfosListener>& windowInfosListener);
 
     static void notifyShutdown();

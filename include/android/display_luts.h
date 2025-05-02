@@ -60,7 +60,7 @@ typedef struct ADisplayLuts ADisplayLuts;
 /**
  * Creates a \a ADisplayLutsEntry entry.
  *
- * You are responsible for mamanging the memory of the returned object.
+ * You are responsible for managing the memory of the returned object.
  * Always call \a ADisplayLutsEntry_destroy to release it after use.
  *
  * Functions like \a ADisplayLuts_set create their own copies of entries,
@@ -86,7 +86,7 @@ ADisplayLutsEntry* _Nonnull ADisplayLutsEntry_createEntry(float* _Nonnull buffer
     __INTRODUCED_IN(36);
 
 /**
- * Destroy the \a ADisplayLutsEntry instance.
+ * Destroys the \a ADisplayLutsEntry instance.
  *
  * @param entry The entry to be destroyed
  */
