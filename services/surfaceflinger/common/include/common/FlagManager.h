@@ -83,7 +83,6 @@ public:
     bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
     bool display_config_error_hal() const;
-    bool display_protected() const;
     bool dont_skip_on_early_ro() const;
     bool enable_fro_dependent_features() const;
     bool enable_layer_command_batching() const;
@@ -97,14 +96,15 @@ public:
     bool graphite_renderengine() const;
     bool hdcp_level_hal() const;
     bool hdcp_negotiation() const;
+    bool idle_screen_refresh_rate_timeout() const;
     bool latch_unsignaled_with_auto_refresh_changed() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
     bool misc1() const;
     bool no_vsyncs_on_screen_off() const;
     bool override_trusted_overlay() const;
+    bool pacesetter_selection() const;
     bool protected_if_client() const;
-    bool reject_dupe_layerstacks() const;
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
     bool skip_invisible_windows_in_input() const;

@@ -479,7 +479,7 @@ bool checkCallingPermission(const String16& permission)
     return checkCallingPermission(permission, nullptr, nullptr);
 }
 
-static StaticString16 _permission(u"permission");
+[[clang::no_destroy]] static StaticString16 _permission(u"permission");
 
 bool checkCallingPermission(const String16& permission, int32_t* outPid, int32_t* outUid)
 {
@@ -492,8 +492,8 @@ bool checkCallingPermission(const String16& permission, int32_t* outPid, int32_t
 }
 
 bool checkPermission(const String16& permission, pid_t pid, uid_t uid, bool logPermissionFailure) {
-    static std::mutex gPermissionControllerLock;
-    static sp<IPermissionController> gPermissionController;
+    [[clang::no_destroy]] static std::mutex gPermissionControllerLock;
+    [[clang::no_destroy]] static sp<IPermissionController> gPermissionController;
 
     sp<IPermissionController> pc;
     gPermissionControllerLock.lock();

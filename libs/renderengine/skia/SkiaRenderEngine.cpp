@@ -238,6 +238,7 @@ static inline SkM44 getSkM44(const android::mat4& matrix) {
                  matrix[0][3], matrix[1][3], matrix[2][3], matrix[3][3]);
 }
 
+[[maybe_unused]]
 static inline SkPoint3 getSkPoint3(const android::vec3& vector) {
     return SkPoint3::Make(vector.x, vector.y, vector.z);
 }
@@ -547,18 +548,9 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
     }
 
     if (graphicBuffer && parameters.layer.luts) {
-        const bool dimInLinearSpace = parameters.display.dimmingStage !=
-                aidl::android::hardware::graphics::composer3::DimmingStage::GAMMA_OETF;
-        const ui::Dataspace runtimeEffectDataspace = !dimInLinearSpace
-                ? static_cast<ui::Dataspace>(
-                          (parameters.outputDataSpace & ui::Dataspace::STANDARD_MASK) |
-                          ui::Dataspace::TRANSFER_GAMMA2_2 |
-                          (parameters.outputDataSpace & ui::Dataspace::RANGE_MASK))
-                : parameters.outputDataSpace;
-
         shader = mLutShader.lutShader(shader, parameters.layer.luts,
                                       parameters.layer.sourceDataspace,
-                                      toSkColorSpace(runtimeEffectDataspace));
+                                      toSkColorSpace(parameters.outputDataSpace));
     }
 
     if (parameters.requiresLinearEffect) {
@@ -1059,7 +1051,8 @@ void SkiaRenderEngine::drawLayersInternal(
                 (display.outputDataspace & ui::Dataspace::TRANSFER_MASK) ==
                         static_cast<int32_t>(ui::Dataspace::TRANSFER_SRGB);
 
-        const bool useFakeOutputDataspaceForRuntimeEffect = !dimInLinearSpace && isExtendedHdr;
+        const bool useFakeOutputDataspaceForRuntimeEffect =
+                !dimInLinearSpace && (isExtendedHdr || layer.luts);
 
         const ui::Dataspace fakeDataspace = useFakeOutputDataspaceForRuntimeEffect
                 ? static_cast<ui::Dataspace>(
@@ -1079,7 +1072,7 @@ void SkiaRenderEngine::drawLayersInternal(
         const bool requiresLinearEffect = layer.colorTransform != mat4() ||
                 (needsToneMapping(layer.sourceDataspace, display.outputDataspace)) ||
                 (dimInLinearSpace && !equalsWithinMargin(1.f, layerDimmingRatio)) ||
-                (!dimInLinearSpace && isExtendedHdr);
+                useFakeOutputDataspaceForRuntimeEffect;
 
         // quick abort from drawing the remaining portion of the layer
         if (layer.skipContentDraw ||
@@ -1381,10 +1374,16 @@ void SkiaRenderEngine::drawShadow(SkCanvas* canvas,
     const auto flags =
             settings.casterIsTranslucent ? kTransparentOccluder_ShadowFlag : kNone_ShadowFlag;
 
+    // DrawShadow expects the light pos in device space.
+    // Shadow settings is in layer space (which is our current canvas transform).
+    SkMatrix deviceFromLayer = canvas->getTotalMatrix();
+    SkPoint lightPos = {settings.lightPos.x, settings.lightPos.y}; // lightPos is in layer space
+    deviceFromLayer.mapPoints(&lightPos, 1);                       // lightPos is in device space
+
     SkShadowUtils::DrawShadow(canvas, SkPath::RRect(casterRRect), SkPoint3::Make(0, 0, casterZ),
-                              getSkPoint3(settings.lightPos), settings.lightRadius,
-                              getSkColor(settings.ambientColor), getSkColor(settings.spotColor),
-                              flags);
+                              SkPoint3{lightPos.fX, lightPos.fY, settings.lightPos.z},
+                              settings.lightRadius, getSkColor(settings.ambientColor),
+                              getSkColor(settings.spotColor), flags);
 }
 
 void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {

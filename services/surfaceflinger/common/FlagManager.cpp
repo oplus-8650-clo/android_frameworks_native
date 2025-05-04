@@ -149,7 +149,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(detached_mirror);
     DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_config_error_hal);
-    DUMP_ACONFIG_FLAG(display_protected);
     DUMP_ACONFIG_FLAG(dont_skip_on_early_ro);
     DUMP_ACONFIG_FLAG(enable_fro_dependent_features);
     DUMP_ACONFIG_FLAG(enable_layer_command_batching);
@@ -168,8 +167,8 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(misc1);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
     DUMP_ACONFIG_FLAG(override_trusted_overlay);
+    DUMP_ACONFIG_FLAG(pacesetter_selection);
     DUMP_ACONFIG_FLAG(protected_if_client);
-    DUMP_ACONFIG_FLAG(reject_dupe_layerstacks);
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
     DUMP_ACONFIG_FLAG(restore_blur_step);
     DUMP_ACONFIG_FLAG(skip_invisible_windows_in_input);
@@ -264,7 +263,6 @@ FLAG_MANAGER_ACONFIG_FLAG(use_known_refresh_rate_for_fps_consistency, "")
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
 FLAG_MANAGER_ACONFIG_FLAG(enable_fro_dependent_features, "")
-FLAG_MANAGER_ACONFIG_FLAG(display_protected, "")
 FLAG_MANAGER_ACONFIG_FLAG(fp16_client_target, "debug.sf.fp16_client_target")
 FLAG_MANAGER_ACONFIG_FLAG(game_default_frame_rate, "")
 FLAG_MANAGER_ACONFIG_FLAG(enable_layer_command_batching, "debug.sf.enable_layer_command_batching")
@@ -273,6 +271,7 @@ FLAG_MANAGER_ACONFIG_FLAG(renderable_buffer_usage, "")
 FLAG_MANAGER_ACONFIG_FLAG(restore_blur_step, "debug.renderengine.restore_blur_step")
 FLAG_MANAGER_ACONFIG_FLAG(dont_skip_on_early_ro, "")
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
+FLAG_MANAGER_ACONFIG_FLAG(pacesetter_selection, "debug.sf.pacesetter_selection")
 FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(filter_frames_before_trace_starts, "")
@@ -295,7 +294,6 @@ FLAG_MANAGER_ACONFIG_FLAG(skip_invisible_windows_in_input, "");
 FLAG_MANAGER_ACONFIG_FLAG(stop_layer, "");
 FLAG_MANAGER_ACONFIG_FLAG(begone_bright_hlg, "debug.sf.begone_bright_hlg");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
-FLAG_MANAGER_ACONFIG_FLAG(reject_dupe_layerstacks, "");
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
 
 /// Trunk stable server (R/W) flags ///

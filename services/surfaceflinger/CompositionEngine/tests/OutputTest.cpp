@@ -4330,11 +4330,7 @@ struct OutputComposeSurfacesTest_HandlesProtectedContent : public OutputComposeS
 
 TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifNoProtectedContentLayers) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer2.mLayerFEState.hasProtectedContent = false;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));
     EXPECT_CALL(*mRenderSurface, isProtected).WillOnce(Return(true));
@@ -4349,11 +4345,7 @@ TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifNoProtectedContentLa
 
 TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifNotEnabled) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer2.mLayerFEState.hasProtectedContent = true;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));
 
@@ -4376,11 +4368,7 @@ TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifNotEnabled) {
 
 TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifAlreadyEnabledEverywhere) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer2.mLayerFEState.hasProtectedContent = true;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));
     EXPECT_CALL(*mRenderSurface, isProtected).WillOnce(Return(true));
@@ -4394,11 +4382,7 @@ TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifAlreadyEnabledEveryw
 
 TEST_F(OutputComposeSurfacesTest_HandlesProtectedContent, ifAlreadyEnabledInRenderSurface) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer2.mLayerFEState.hasProtectedContent = true;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));
     EXPECT_CALL(*mRenderSurface, isProtected).WillOnce(Return(true));
@@ -5518,11 +5502,7 @@ struct OutputUpdateProtectedContentStateTest : public testing::Test {
 
 TEST_F(OutputUpdateProtectedContentStateTest, ifProtectedContentLayerComposeByHWC) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer1.mLayerFEState.hasProtectedContent = false;
     mLayer2.mLayerFEState.hasProtectedContent = true;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));
@@ -5534,11 +5514,7 @@ TEST_F(OutputUpdateProtectedContentStateTest, ifProtectedContentLayerComposeByHW
 
 TEST_F(OutputUpdateProtectedContentStateTest, ifProtectedContentLayerComposeByClient) {
     SET_FLAG_FOR_TEST(flags::protected_if_client, true);
-    if (FlagManager::getInstance().display_protected()) {
-        mOutput.mState.isProtected = true;
-    } else {
-        mOutput.mState.isSecure = true;
-    }
+    mOutput.mState.isProtected = true;
     mLayer1.mLayerFEState.hasProtectedContent = false;
     mLayer2.mLayerFEState.hasProtectedContent = true;
     EXPECT_CALL(mRenderEngine, supportsProtectedContent()).WillRepeatedly(Return(true));

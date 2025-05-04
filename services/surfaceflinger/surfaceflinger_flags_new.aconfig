@@ -60,17 +60,6 @@ flag {
 } # begone_bright_hlg
 
 flag {
-  name: "ce_fence_promise"
-  namespace: "window_surfaces"
-  description: "Moves logic for buffer release fences into LayerFE"
-  bug: "294936197"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # ce_fence_promise
-
-flag {
   name: "commit_not_composited"
   namespace: "core_graphics"
   description: "mark frames as non janky if the transaction resulted in no composition"
@@ -252,26 +241,11 @@ flag {
 } # no_vsyncs_on_screen_off
 
 flag {
-  name: "reject_dupe_layerstacks"
-  namespace: "window_surfaces"
-  description: "Reject duplicate layerstacks for displays"
-  bug: "370358572"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # reject_dupe_layerstacks
-
-flag {
-  name: "single_hop_screenshot"
-  namespace: "window_surfaces"
-  description: "Only access SF main thread once during a screenshot"
-  bug: "285553970"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # single_hop_screenshot
+  name: "pacesetter_selection"
+  namespace: "desktop_display"
+  description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
+  bug: "374072507"
+} # pacesetter_selection
 
 flag {
   name: "skip_invisible_windows_in_input"

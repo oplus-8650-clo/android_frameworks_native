@@ -25,8 +25,6 @@
 #include <utils/RefBase.h>
 
 #include <bitset>
-#include <mutex>
-#include <thread>
 
 namespace android {
 

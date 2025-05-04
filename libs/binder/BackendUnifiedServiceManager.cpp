@@ -495,15 +495,19 @@ Status BackendUnifiedServiceManager::checkServiceAccess(
 [[clang::no_destroy]] static sp<BackendUnifiedServiceManager> gUnifiedServiceManager;
 
 static bool hasOutOfProcessServiceManager() {
-#ifndef BINDER_WITH_KERNEL_IPC
+// We don't currently support kernel binder service management or UDS
+// service management on host or when libbinder is compiled without any
+// kernel binder suport. Please use setDefaultServiceManager for host
+// processes that want to use service manager APIs.
+#if !defined(BINDER_WITH_KERNEL_IPC) || !defined(__BIONIC__)
     return false;
 #else
-#if defined(__BIONIC__) && !defined(__ANDROID_VNDK__)
-    return android::base::GetBoolProperty("servicemanager.installed", true);
-#else
+#ifdef __ANDROID_VNDK__
     return true;
+#else
+    return android::base::GetBoolProperty("servicemanager.installed", true);
 #endif
-#endif // BINDER_WITH_KERNEL_IPC
+#endif
 }
 
 static sp<AidlServiceManager> getUdsServiceManager() {

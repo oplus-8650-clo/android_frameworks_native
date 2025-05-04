@@ -91,7 +91,6 @@ void Compare(const TransactionState& s1, const TransactionState& s2) {
     EXPECT_EQ(s1.mHasListenerCallbacks, s2.mHasListenerCallbacks);
     EXPECT_EQ(s1.mListenerCallbacks.size(), s2.mListenerCallbacks.size());
     EXPECT_EQ(s1.mListenerCallbacks, s2.mListenerCallbacks);
-    EXPECT_EQ(s1.mEarlyWakeupInfo, s2.mEarlyWakeupInfo);
 }
 
 std::unique_ptr<std::unordered_map<int, sp<BBinder>>> createTokenMap(size_t maxSize) {
@@ -127,7 +126,6 @@ DisplayState createDisplayStateForTest(size_t i) {
 
 TransactionState createTransactionStateForTest() {
     static sp<BBinder> sApplyToken = sp<BBinder>::make();
-    static gui::EarlyWakeupInfo sEarlyWakeupInfo;
 
     TransactionState state;
     state.mId = 123;
@@ -167,7 +165,6 @@ TransactionState createTransactionStateForTest() {
     }();
     state.mHasListenerCallbacks = true;
     state.mListenerCallbacks = *sListenerCallbacks;
-    state.mEarlyWakeupInfo = sEarlyWakeupInfo;
     return state;
 }
 

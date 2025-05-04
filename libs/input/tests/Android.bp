@@ -10,7 +10,6 @@ package {
 
 cc_test {
     name: "libinput_tests",
-    cpp_std: "c++20",
     host_supported: true,
     srcs: [
         "BlockingQueue_test.cpp",

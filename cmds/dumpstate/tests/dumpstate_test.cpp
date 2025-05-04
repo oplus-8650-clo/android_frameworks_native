@@ -1082,6 +1082,38 @@ TEST_F(ZippedBugReportStreamTest, DISABLED_StreamLimitedOnlyReport) {
     VerifyEntry(handle_, bugreport_txt_name, &entry);
 }
 
+TEST_F(ZippedBugReportStreamTest, ScreenShotFileCreated) {
+    std::string out_path = kTestDataPath + "ScreenShotCapturedOut.zip";
+    android::base::unique_fd out_fd;
+    CreateFd(out_path, &out_fd);
+    ds_.options_->limited_only = true;
+    ds_.options_->stream_to_socket = true;
+    ds_.options_->do_screenshot = false;
+    ds_.options_->is_consent_deferred = true;
+    RedirectOutputToFd(out_fd);
+
+    GenerateBugreport();
+
+    std::string screenshot = ds_.GetPath(ds_.CalledByApi() ? "-png.tmp" : ".png");
+    EXPECT_TRUE(std::filesystem::exists(screenshot)) << screenshot << " was not created.";
+}
+
+TEST_F(ZippedBugReportStreamTest, ScreenShotFileIsNotCreated) {
+    std::string out_path = kTestDataPath + "ScreenShotCapturedOut.zip";
+    android::base::unique_fd out_fd;
+    CreateFd(out_path, &out_fd);
+    ds_.options_->limited_only = true;
+    ds_.options_->stream_to_socket = true;
+    ds_.options_->do_screenshot = false;
+    ds_.options_->is_consent_deferred = false;
+    RedirectOutputToFd(out_fd);
+
+    GenerateBugreport();
+
+    std::string screenshot = ds_.GetPath(ds_.CalledByApi() ? "-png.tmp" : ".png");
+    EXPECT_FALSE(std::filesystem::exists(screenshot)) << screenshot << " was created.";
+}
+
 class ProgressTest : public DumpstateBaseTest {
   public:
     Progress GetInstance(int32_t max, double growth_factor, const std::string& path = "") {

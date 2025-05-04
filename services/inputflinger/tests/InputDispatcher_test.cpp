@@ -15488,6 +15488,7 @@ TEST_P(TransferOrDontTransferFixture, MouseAndTouchTransferSimultaneousMultiDevi
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutTransfer, TransferOrDontTransferFixture, testing::Bool());
 
 class InputDispatcherConnectedDisplayTest : public InputDispatcherDragTests {
+protected:
     constexpr static int DENSITY_MEDIUM = 160;
 
     const DisplayTopologyGraph mTopology =
@@ -15503,7 +15504,6 @@ class InputDispatcherConnectedDisplayTest : public InputDispatcherDragTests {
                                           {SECOND_DISPLAY_ID, DENSITY_MEDIUM}})
                     .value();
 
-protected:
     void SetUp() override {
         addDisplay(DISPLAY_ID, ui::Transform());
         addDisplay(SECOND_DISPLAY_ID,
@@ -15672,6 +15672,50 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonP
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
     mWindowOnSecondDisplay->assertNoEvents();
+}
+
+/**
+ * Test that touch state is maintained across windowInfo updates on the non-primary display.
+ *
+ * Create two windows, one on the primary display and another on the secondary display.
+ * Start hovering on the window on the secondary display.
+ *
+ * Update the window info, and verify that the hover state is maintained, and no events are
+ * generated.
+ *
+ * Remove the window on the secondary display, and verify that the window receives a HOVER_EXIT
+ * event.
+ */
+TEST_F(InputDispatcherConnectedDisplayTest,
+       NonPrimaryDisplayTouchStateIsMaintainedOnWindowInfoUpdate) {
+    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
+    sp<FakeWindowHandle> window0 =
+            sp<FakeWindowHandle>::make(std::make_shared<FakeApplicationHandle>(), mDispatcher,
+                                       "TestWindowOnPrimaryDisplay", mTopology.primaryDisplayId);
+    window0->setFrame(Rect(0, 0, 500, 500));
+    sp<FakeWindowHandle> window1 =
+            sp<FakeWindowHandle>::make(std::make_shared<FakeApplicationHandle>(), mDispatcher,
+                                       "TestWindowOnNonPrimaryDisplay", SECOND_DISPLAY_ID);
+    window1->setFrame(Rect(0, 0, 500, 500));
+    mDispatcher->onWindowInfosChanged({{*window0->getInfo(), *window1->getInfo()}, {}, 0, 0});
+
+    // Add hover state to window on display 1.
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_HOVER_ENTER, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(100).y(100))
+                    .build());
+    window1->consumeMotionEvent(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER));
+
+    // Sending same window info should not generate any events.
+    mDispatcher->onWindowInfosChanged({{*window0->getInfo(), *window1->getInfo()}, {}, 0, 0});
+    window1->assertNoEvents();
+
+    // Remove the window now, it should receive hover_exit as usual.
+    mDispatcher->onWindowInfosChanged({{}, {}, 0, 0});
+    window1->consumeMotionEvent(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT));
+
+    window0->assertNoEvents();
 }
 
 using InputDispatcherConnectedDisplayPointerInWindowTest = InputDispatcherConnectedDisplayTest;

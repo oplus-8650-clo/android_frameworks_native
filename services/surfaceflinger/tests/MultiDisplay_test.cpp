@@ -18,7 +18,6 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wconversion"
 
-#include <common/FlagManager.h>
 #include <gui/IConsumerListener.h>
 #include <ui/DisplayState.h>
 
@@ -158,8 +157,6 @@ TEST_F(MultiDisplayTest, RenderLayerInMirroredVirtualDisplay) {
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
 TEST_F(MultiDisplayTest, rejectDuplicateLayerStacks) {
-    if (!FlagManager::getInstance().reject_dupe_layerstacks()) return;
-
     // Setup
     sp<CpuConsumer> cpuConsumer1 = sp<CpuConsumer>::make(static_cast<size_t>(1));
     cpuConsumer1->setName(String8("consumer 1"));

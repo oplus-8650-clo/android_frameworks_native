@@ -68,8 +68,6 @@
 
 namespace android::scheduler {
 
-using base::StringAppendF;
-
 Scheduler::Scheduler(ICompositor& compositor, ISchedulerCallback& callback, FeatureFlags features,
                      surfaceflinger::Factory& factory, Fps activeRefreshRate, TimeStats& timeStats)
       : android::impl::MessageQueue(compositor),
@@ -139,6 +137,12 @@ void Scheduler::setPacesetterDisplay(PhysicalDisplayId pacesetterId) {
         mVsyncConfiguration->reset();
     }
     updatePhaseConfiguration(pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
+}
+
+PhysicalDisplayId Scheduler::getPacesetterDisplayId() const {
+    std::scoped_lock lock(mDisplayLock);
+    LOG_ALWAYS_FATAL_IF(!mPacesetterDisplayId, "Missing a pacesetter!");
+    return *mPacesetterDisplayId;
 }
 
 void Scheduler::registerDisplay(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
@@ -851,12 +855,23 @@ auto Scheduler::getVsyncScheduleLocked(std::optional<PhysicalDisplayId> idOpt) c
     return displayOpt->get().schedulePtr;
 }
 
-void Scheduler::kernelIdleTimerCallback(TimerState state) {
+void Scheduler::kernelIdleTimerCallback(PhysicalDisplayId displayId, TimerState state) {
     SFTRACE_INT("ExpiredKernelIdleTimer", static_cast<int>(state));
 
-    // TODO(145561154): cleanup the kernel idle timer implementation and the refresh rate
-    // magic number
-    const Fps refreshRate = pacesetterSelectorPtr()->getActiveMode().modePtr->getPeakFps();
+    Fps refreshRate;
+    {
+        std::scoped_lock lock(mDisplayLock);
+        ftl::FakeGuard guard(kMainThreadContext);
+        const auto displayOpt = mDisplays.get(displayId);
+        if (!displayOpt) {
+            ALOGW("%s: Invalid display %s!", __func__, to_string(displayId).c_str());
+            return;
+        }
+
+        // TODO: b/145561154 - Clean up the kernel idle timer implementation and the refresh rate
+        // magic number
+        refreshRate = displayOpt->get().selectorPtr->getActiveMode().modePtr->getPeakFps();
+    }
 
     constexpr Fps FPS_THRESHOLD_FOR_KERNEL_TIMER = 65_Hz;
     using namespace fps_approx_ops;
@@ -1021,11 +1036,24 @@ std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
             pacesetter.selectorPtr->setIdleTimerCallbacks(
                     {.platform = {.onReset = [this] { idleTimerCallback(TimerState::Reset); },
                                   .onExpired = [this] { idleTimerCallback(TimerState::Expired); }},
-                     .kernel = {.onReset = [this] { kernelIdleTimerCallback(TimerState::Reset); },
+                     .kernel = {.onReset =
+                                        [this, pacesetterId] {
+                                            kernelIdleTimerCallback(pacesetterId,
+                                                                    TimerState::Reset);
+                                        },
                                 .onExpired =
-                                        [this] { kernelIdleTimerCallback(TimerState::Expired); }},
-                     .vrr = {.onReset = [this] { mSchedulerCallback.vrrDisplayIdle(false); },
-                             .onExpired = [this] { mSchedulerCallback.vrrDisplayIdle(true); }}});
+                                        [this, pacesetterId] {
+                                            kernelIdleTimerCallback(pacesetterId,
+                                                                    TimerState::Expired);
+                                        }},
+                     .vrr = {.onReset =
+                                     [this, pacesetterId] {
+                                         mSchedulerCallback.vrrDisplayIdle(pacesetterId, false);
+                                     },
+                             .onExpired =
+                                     [this, pacesetterId] {
+                                         mSchedulerCallback.vrrDisplayIdle(pacesetterId, true);
+                                     }}});
 
             pacesetter.selectorPtr->startIdleTimer();
         }
