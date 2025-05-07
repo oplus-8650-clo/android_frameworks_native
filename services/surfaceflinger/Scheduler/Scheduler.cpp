@@ -43,7 +43,6 @@
 #include <ui/DisplayMap.h>
 #include <utils/Timers.h>
 
-#include <FrameTimeline/FrameTimeline.h>
 #include <scheduler/interface/ICompositor.h>
 
 #include <cinttypes>
@@ -55,6 +54,7 @@
 #include <common/FlagManager.h>
 #include "EventThread.h"
 #include "FrameRateOverrideMappings.h"
+#include "FrameTimeline.h"
 #include "FrontEnd/LayerHandle.h"
 #include "Layer.h"
 #include "OneShotTimer.h"
@@ -91,8 +91,7 @@ Scheduler::~Scheduler() {
     demotePacesetterDisplay({.toggleIdleTimer = true});
 }
 
-void Scheduler::initVsync(frametimeline::TokenManager& tokenManager,
-                          std::chrono::nanoseconds workDuration) {
+void Scheduler::initVsync(TokenManager& tokenManager, std::chrono::nanoseconds workDuration) {
     Impl::initVsyncInternal(getVsyncSchedule()->getDispatch(), tokenManager, workDuration);
 }
 
@@ -370,7 +369,7 @@ void Scheduler::onExpectedPresentTimePosted(TimePoint expectedPresentTime) {
     }
 }
 
-void Scheduler::createEventThread(Cycle cycle, frametimeline::TokenManager* tokenManager,
+void Scheduler::createEventThread(Cycle cycle, TokenManager* tokenManager,
                                   std::chrono::nanoseconds workDuration,
                                   std::chrono::nanoseconds readyDuration) {
     auto eventThread =
@@ -1063,6 +1062,10 @@ std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
         constexpr bool kForce = true;
         newVsyncSchedulePtr->onDisplayModeChanged(pacesetter.selectorPtr->getActiveMode().modePtr,
                                                   kForce);
+
+        if (FlagManager::getInstance().pacesetter_selection()) {
+            mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, true);
+        }
     }
     return newVsyncSchedulePtr;
 }
@@ -1084,6 +1087,11 @@ void Scheduler::demotePacesetterDisplay(PromotionParams params) {
             pacesetterPtr->stopIdleTimer();
             pacesetterPtr->clearIdleTimerCallbacks();
         }
+    }
+
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        const PhysicalDisplayId pacesetterId = FTL_FAKE_GUARD(mDisplayLock, *mPacesetterDisplayId);
+        mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, false);
     }
 
     // Clear state that depends on the pacesetter's RefreshRateSelector.

@@ -661,7 +661,7 @@ std::ostream& operator<<(std::ostream& out, const InputState& state) {
         for (const InputState::MotionMemento& memento : state.mMotionMementos) {
             out << "{deviceId=" << memento.deviceId
                 << ", hovering=" << std::to_string(memento.hovering)
-                << ", downTime=" << memento.downTime << "}, ";
+                << ", downTime=" << memento.downTime << "ns}, ";
         }
     }
     return out;

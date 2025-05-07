@@ -452,8 +452,8 @@ std::ostream& operator<<(std::ostream& out, const KeyEvent& event) {
         out << ", metaState=" << event.getMetaState();
     }
 
-    out << ", eventTime=" << event.getEventTime();
-    out << ", downTime=" << event.getDownTime();
+    out << ", eventTime=" << event.getEventTime() << "ns";
+    out << ", downTime=" << event.getDownTime() << "ns";
     out << ", flags=" << std::hex << event.getFlags() << std::dec;
     out << ", repeatCount=" << event.getRepeatCount();
     out << ", deviceId=" << event.getDeviceId();
@@ -1199,7 +1199,7 @@ std::string MotionEvent::safeDump() const {
     if (mEdgeFlags != 0) {
         out << ", mEdgeFlags=" << mEdgeFlags;
     }
-    out << ", mDownTime=" << mDownTime;
+    out << ", mDownTime=" << mDownTime << "ns";
     out << ", mDeviceId=" << mDeviceId;
     out << ", mSource=" << inputEventSourceToString(mSource);
     out << ", mDisplayId=" << mDisplayId;
@@ -1265,8 +1265,8 @@ std::ostream& operator<<(std::ostream& out, const MotionEvent& event) {
     if (event.getHistorySize() != 0) {
         out << ", historySize=" << event.getHistorySize();
     }
-    out << ", eventTime=" << event.getEventTime();
-    out << ", downTime=" << event.getDownTime();
+    out << ", eventTime=" << event.getEventTime() << "ns";
+    out << ", downTime=" << event.getDownTime() << "ns";
     out << ", deviceId=" << event.getDeviceId();
     out << ", source=" << inputEventSourceToString(event.getSource());
     out << ", displayId=" << event.getDisplayId();

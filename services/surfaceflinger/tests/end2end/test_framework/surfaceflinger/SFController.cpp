@@ -38,6 +38,8 @@
 #include <utils/String8.h>
 #include <utils/StrongPointer.h>
 
+#include "test_framework/surfaceflinger/DisplayEventReceiver.h"
+#include "test_framework/surfaceflinger/PollFdThread.h"
 #include "test_framework/surfaceflinger/SFController.h"
 #include "test_framework/surfaceflinger/Surface.h"
 
@@ -96,10 +98,18 @@ SFController::SFController(Passkey passkey) {
 }
 
 auto SFController::init() -> base::expected<void, std::string> {
+    using namespace std::string_literals;
+
     LOG(INFO) << "Stopping everything to prepare for tests";
     // NOLINTBEGIN(cert-env33-c)
     system("stop");
     // NOLINTEND(cert-env33-c)
+
+    auto pollFdThreadResult = PollFdThread::make();
+    if (!pollFdThreadResult) {
+        return base::unexpected(std::move(pollFdThreadResult).error());
+    }
+    mPollFdThread = *std::move(pollFdThreadResult);
 
     mCleanup = ftl::Finalizer([this]() { stop(); });
 
@@ -177,6 +187,15 @@ void SFController::stop() {
     mSurfaceComposerClient = nullptr;
     mSurfaceComposerClientAidl = nullptr;
     mSurfaceComposerAidl = nullptr;
+}
+
+auto SFController::makeDisplayEventReceiver()
+        -> base::expected<std::shared_ptr<DisplayEventReceiver>, std::string> {
+    CHECK(mSurfaceComposerAidl != nullptr);
+    return DisplayEventReceiver::make(mSurfaceComposerAidl, *mPollFdThread,
+                                      gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp, nullptr,
+                                      {gui::ISurfaceComposer::EventRegistration::frameRateOverride,
+                                       gui::ISurfaceComposer::EventRegistration::modeChanged});
 }
 
 auto SFController::makeSurface(const Surface::CreationArgs& args)

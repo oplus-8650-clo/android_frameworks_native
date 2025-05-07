@@ -33,6 +33,7 @@ struct ISchedulerCallback {
                                              Fps renderRate) = 0;
     virtual void onCommitNotComposited() = 0;
     virtual void vrrDisplayIdle(PhysicalDisplayId, bool idle) = 0;
+    virtual void enableLayerCachingTexturePool(PhysicalDisplayId, bool enable) = 0;
 
 protected:
     ~ISchedulerCallback() = default;

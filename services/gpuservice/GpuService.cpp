@@ -146,6 +146,11 @@ void GpuService::toggleAngleAsSystemDriver(bool enabled) {
     }
 }
 
+std::string GpuService::getPersistGraphicsEgl() {
+    std::lock_guard<std::mutex> lock(mLock);
+    return android::base::GetProperty("persist.graphics.egl", "");
+}
+
 FeatureOverrides GpuService::getFeatureOverrides() {
     if (!graphicsenv_flags::angle_feature_overrides()) {
         FeatureOverrides featureOverrides;

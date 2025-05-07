@@ -18,113 +18,13 @@
 """
 import dataclasses
 import os
-import re
 from typing import get_origin
 
 import generator_common as gencom
+import vkjson_gen_util as util
 import vk as VK
 
 dataclass_field = dataclasses.field
-
-
-COPYRIGHT_WARNINGS = """///////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (c) 2015-2016 The Khronos Group Inc.
-// Copyright (c) 2015-2016 Valve Corporation
-// Copyright (c) 2015-2016 LunarG, Inc.
-// Copyright (c) 2015-2016 Google, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-///////////////////////////////////////////////////////////////////////////////
-"""
-
-
-def get_copyright_warnings():
-  return COPYRIGHT_WARNINGS
-
-
-def get_vkjson_struct_name(extension_name):
-  """Gets the corresponding structure name from a Vulkan extension name.
-  Example: "VK_KHR_shader_float16_int8" → "VkJsonKHRShaderFloat16Int8"
-  """
-  prefix_map = {
-    "VK_KHR": "VkJsonKHR",
-    "VK_EXT": "VkJsonExt",
-    "VK_IMG": "VkJsonIMG"
-  }
-
-  for prefix, replacement in prefix_map.items():
-    if extension_name.startswith(prefix):
-      struct_name = replacement + extension_name[len(prefix):]
-      break
-  else:
-    struct_name = f"VkJsonExt{extension_name}"
-
-  # Convert underscores to camel case
-  # Example: "VK_KHR_shader_float16_int8" → "VkJsonKHRShaderFloat16Int8"
-  struct_name = re.sub(r"_(.)", lambda m: m.group(1).upper(), struct_name)
-
-  return struct_name
-
-
-def get_vkjson_struct_variable_name(extension_name):
-  """Gets corresponding instance name from a Vulkan extension name.
-  Example: "VK_KHR_shader_float16_int8" → "khr_shader_float16_int8"
-  """
-  prefix_map = {
-    "VK_KHR_": "khr_",
-    "VK_EXT_": "ext_",
-    "VK_IMG_": "img_"
-  }
-
-  for prefix, replacement in prefix_map.items():
-    if extension_name.startswith(prefix):
-      return replacement + extension_name[len(prefix):]
-
-  return extension_name.lower()  # Default case if no known prefix matches
-
-
-def get_struct_name(struct_name):
-  """Gets corresponding instance name
-  Example: "VkPhysicalDeviceShaderFloat16Int8FeaturesKHR" → "shader_float16_int8_features_khr"
-  """
-  # Remove "VkPhysicalDevice" prefix and any of the known suffixes
-  base_name = struct_name.removeprefix("VkPhysicalDevice").removesuffix("KHR").removesuffix("EXT").removesuffix("IMG")
-
-  # Convert CamelCase to snake_case
-  # Example: "ShaderFloat16Int8Features" → "shader_float16_int8_features"
-  variable_name = re.sub(r"(?<!^)(?=[A-Z])", "_", base_name).lower()
-
-  # Fix special cases
-  variable_name = variable_name.replace("2_d_", "_2d_").replace("3_d_", "_3d_")
-
-  # Add back the correct suffix if it was removed
-  suffix_map = {"KHR": "_khr", "EXT": "_ext", "IMG": "_img"}
-  for suffix, replacement in suffix_map.items():
-    if struct_name.endswith(suffix):
-      variable_name += replacement
-      break
-
-  # Handle specific exceptions
-  special_cases = {
-    "8_bit_storage_features_khr": "bit8_storage_features_khr",
-    "memory_properties": "memory",
-    "16_bit_storage_features": "bit16_storage_features",
-    "i_d_properties": "id_properties"
-  }
-
-  return special_cases.get(variable_name, variable_name)
-
 
 def generate_extension_struct_definition(f):
   """Generates struct definition code for extension based structs
@@ -142,8 +42,8 @@ def generate_extension_struct_definition(f):
   vkJson_entries = []
 
   for extension_name, struct_list in VK.VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING["extensions"].items():
-    vkjson_struct_name = get_vkjson_struct_name(extension_name)
-    vkjson_struct_variable_name = get_vkjson_struct_variable_name(extension_name)
+    vkjson_struct_name = util.get_vkjson_struct_name(extension_name)
+    vkjson_struct_variable_name = util.get_vkjson_struct_variable_name(extension_name)
     vkJson_entries.append(f"{vkjson_struct_name} {vkjson_struct_variable_name}")
 
     struct_entries = []
@@ -154,7 +54,7 @@ def generate_extension_struct_definition(f):
 
     for struct_map in struct_list:
       for struct_name, _ in struct_map.items():
-        variable_name = get_struct_name(struct_name)
+        variable_name = util.get_struct_name(struct_name)
         f.write(f"    memset(&{variable_name}, 0, sizeof({struct_name}));\n")
         struct_entries.append(f"{struct_name} {variable_name}")
 
@@ -218,7 +118,7 @@ def generate_memset_statements(f):
   # Process independent structs
   for dataclass_type in VK.EXTENSION_INDEPENDENT_STRUCTS:
     class_name = dataclass_type.__name__
-    variable_name = get_struct_name(class_name)
+    variable_name = util.get_struct_name(class_name)
     f.write(f"memset(&{variable_name}, 0, sizeof({class_name}));\n")
     entries.append(f"{class_name} {variable_name}")
 
@@ -232,7 +132,7 @@ def gen_h():
                          "..", "vkjson", "vkjson.h")
 
   with open(genfile, "w") as f:
-    f.write(f'{get_copyright_warnings()}\n')
+    f.write(f'{util.get_copyright_warnings()}\n')
 
     f.write("""\
 #ifndef VKJSON_H_
@@ -357,7 +257,7 @@ def generate_extension_struct_template():
   template_code = []
 
   for extension, struct_mappings in VK.VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING["extensions"].items():
-    struct_type = get_vkjson_struct_name(extension)
+    struct_type = util.get_vkjson_struct_name(extension)
 
     template_code.append(f"template <typename Visitor>")
     template_code.append(f"inline bool Iterate(Visitor* visitor, {struct_type}* structs) {{")
@@ -374,7 +274,7 @@ def generate_extension_struct_template():
           json_field_name = "bit8StorageFeaturesKHR"
 
         visitor_calls.append(
-            f'visitor->Visit("{json_field_name}", &structs->{get_struct_name(struct_name)})'
+            f'visitor->Visit("{json_field_name}", &structs->{util.get_struct_name(struct_name)})'
         )
 
     template_code.append(" &&\n         ".join(visitor_calls) + ";")
@@ -462,18 +362,6 @@ def generate_struct_template(data_classes):
   return "\n".join(template_code)
 
 
-def emit_struct_visits_by_vk_version(f, version):
-  """Emits visitor calls for Vulkan version structs
-  """
-  for struct_map in VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING[version]:
-    for struct_name, _ in struct_map.items():
-      struct_var = get_struct_name(struct_name)
-      # Converts struct_var from snake_case (e.g., point_clipping_properties)
-      # to camelCase (e.g., pointClippingProperties) for struct_display_name.
-      struct_display_name = re.sub(r"_([a-z])", lambda match: match.group(1).upper(), struct_var)
-      f.write(f'visitor->Visit("{struct_display_name}", &device->{struct_var}) &&\n')
-
-
 def gen_cc():
   """Generates vkjson.cc file.
   """
@@ -482,7 +370,7 @@ def gen_cc():
 
   with open(genfile, "w") as f:
 
-    f.write(get_copyright_warnings())
+    f.write(util.get_copyright_warnings())
     f.write("\n")
 
     f.write("""\
@@ -1038,7 +926,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
     case VK_API_VERSION_1_1:
       ret &=\n""")
 
-    emit_struct_visits_by_vk_version(f, "VK_VERSION_1_1")
+    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_1")
 
     f.write("""\
           visitor->Visit("externalFenceProperties",
@@ -1049,7 +937,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
     case VK_API_VERSION_1_0:
       ret &=\n""")
 
-    emit_struct_visits_by_vk_version(f, "VK_VERSION_1_0")
+    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_0")
 
     f.write("""\
              visitor->Visit("queues", &device->queues) &&
@@ -1058,7 +946,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
              visitor->Visit("formats", &device->formats);\n\n""")
 
     for extension_name, _ in VK.VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING["extensions"].items():
-      struct_var = get_vkjson_struct_variable_name(extension_name)
+      struct_var = util.get_vkjson_struct_variable_name(extension_name)
       f.write(f"  if (device->{struct_var}.reported) {{\n")
       f.write(f"    ret &= visitor->Visit(\"{extension_name}\", &device->{struct_var});\n")
       f.write("  }\n")
@@ -1455,85 +1343,6 @@ bool VkJsonImageFormatPropertiesFromJson(const std::string& json,
   gencom.run_clang_format(genfile)
 
 
-def generate_vk_core_structs_init_code(version):
-  """Generates code to initialize properties and features
-  for structs based on its vulkan API version dependency.
-  """
-  properties_code, features_code = [], []
-
-  for item in VK.VULKAN_CORES_AND_STRUCTS_MAPPING["versions"].get(version, []):
-    for struct_name, struct_type in item.items():
-      version_lower = version.lower()
-
-      if "Properties" in struct_name:
-        properties_code.extend([
-            f"device.{version_lower}.properties.sType = {struct_type};",
-            f"device.{version_lower}.properties.pNext = properties.pNext;",
-            f"properties.pNext = &device.{version_lower}.properties;\n\n"
-        ])
-
-      elif "Features" in struct_name:
-        features_code.extend([
-            f"device.{version_lower}.features.sType = {struct_type};",
-            f"device.{version_lower}.features.pNext = features.pNext;",
-            f"features.pNext = &device.{version_lower}.features;\n\n"
-        ])
-
-  return "\n".join(properties_code), "\n".join(features_code)
-
-
-def generate_vk_extension_structs_init_code(mapping, struct_category, next_pointer):
-  """Generates Vulkan struct initialization code for given struct category (Properties/Features)
-  based on its extension dependency.
-  """
-  generated_code = []
-
-  for extension, struct_mappings in mapping.items():
-    struct_var_name = get_vkjson_struct_variable_name(extension)
-    extension_code = [
-        f"  if (HasExtension(\"{extension}\", device.extensions)) {{",
-        f"    device.{struct_var_name}.reported = true;"
-    ]
-
-    struct_count = 0
-    for struct_mapping in struct_mappings:
-      for struct_name, struct_type in struct_mapping.items():
-        if struct_category in struct_name:
-          struct_count += 1
-          struct_instance = get_struct_name(struct_name)
-          extension_code.extend([
-              f"    device.{struct_var_name}.{struct_instance}.sType = {struct_type};",
-              f"    device.{struct_var_name}.{struct_instance}.pNext = {next_pointer}.pNext;",
-              f"    {next_pointer}.pNext = &device.{struct_var_name}.{struct_instance};"
-          ])
-
-    extension_code.append("  }\n")
-
-    if struct_count > 0:
-      generated_code.extend(extension_code)
-
-  return "\n".join(generated_code)
-
-
-def generate_vk_version_structs_initialization(version_data, struct_type_keyword, next_pointer):
-  """Generates Vulkan struct initialization code for given struct category (Properties/Features)
-  of vulkan api version s.
-  """
-  struct_initialization_code = []
-
-  for struct_mapping in version_data:
-    for struct_name, struct_type in struct_mapping.items():
-      if struct_type_keyword in struct_name:
-        struct_variable = get_struct_name(struct_name)
-        struct_initialization_code.extend([
-            f"device.{struct_variable}.sType = {struct_type};",
-            f"device.{struct_variable}.pNext = {next_pointer}.pNext;",
-            f"{next_pointer}.pNext = &device.{struct_variable};\n"
-        ])
-
-  return "\n".join(struct_initialization_code)
-
-
 def gen_instance_cc():
   """Generates vkjson_instance.cc file.
   """
@@ -1541,7 +1350,7 @@ def gen_instance_cc():
                          "..", "vkjson", "vkjson_instance.cc")
 
   with open(genfile, "w") as f:
-    f.write(get_copyright_warnings())
+    f.write(util.get_copyright_warnings())
     f.write("\n")
 
     f.write("""\
@@ -1610,7 +1419,7 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
       {},
   };\n\n""")
 
-    cc_code_properties = generate_vk_extension_structs_init_code(
+    cc_code_properties = util.generate_vk_extension_structs_init_code(
     VK.VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING["extensions"], "Properties", "properties"
     )
     f.write(f'{cc_code_properties}\n')
@@ -1626,7 +1435,7 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
       {},
   };\n\n""")
 
-    cc_code_features = generate_vk_extension_structs_init_code(
+    cc_code_features = util.generate_vk_extension_structs_init_code(
       VK.VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING["extensions"], "Features", "features"
     )
     f.write(f'{cc_code_features}\n')
@@ -1679,12 +1488,12 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
 
     # Vulkan version data for VK_VERSION_1_1
     vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["VK_VERSION_1_1"]
-    f.write(generate_vk_version_structs_initialization(vk_version_data, "Properties", "properties") + "\n")
+    f.write(util.generate_vk_version_structs_initialization(vk_version_data, "Properties", "properties") + "\n")
 
     f.write("""\
     vkGetPhysicalDeviceProperties2(physical_device, &properties);\n\n""")
 
-    features_initialization_code = generate_vk_version_structs_initialization(vk_version_data, "Features", "features")
+    features_initialization_code = util.generate_vk_version_structs_initialization(vk_version_data, "Features", "features")
     f.write(features_initialization_code)
 
     f.write("""\
@@ -1737,10 +1546,10 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
 
   if (device.properties.apiVersion >= VK_API_VERSION_1_2) {\n""")
 
-    cc_code_properties_11, cc_code_features_11 = generate_vk_core_structs_init_code("Core11")
-    cc_code_properties_12, cc_code_features_12 = generate_vk_core_structs_init_code("Core12")
-    cc_code_properties_13, cc_code_features_13 = generate_vk_core_structs_init_code("Core13")
-    cc_code_properties_14, cc_code_features_14 = generate_vk_core_structs_init_code("Core14")
+    cc_code_properties_11, cc_code_features_11 = util.generate_vk_core_structs_init_code("Core11")
+    cc_code_properties_12, cc_code_features_12 = util.generate_vk_core_structs_init_code("Core12")
+    cc_code_properties_13, cc_code_features_13 = util.generate_vk_core_structs_init_code("Core13")
+    cc_code_properties_14, cc_code_features_14 = util.generate_vk_core_structs_init_code("Core14")
 
     f.write(cc_code_properties_11)
     f.write(cc_code_properties_12)

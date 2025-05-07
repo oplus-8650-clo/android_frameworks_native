@@ -774,6 +774,22 @@ TEST_F(SchedulerTest, resyncAllSkipsOffDisplays) FTL_FAKE_GUARD(kMainThreadConte
     mScheduler->resyncAllToHardwareVsync(kAllowToEnable);
 }
 
+TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()));
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+
+    EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId1, true));
+    EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId2, false));
+    mScheduler->setPacesetterDisplay(kDisplayId1);
+}
+
 class AttachedChoreographerTest : public SchedulerTest {
 protected:
     void frameRateTestScenario(Fps layerFps, int8_t frameRateCompatibility, Fps displayFps,

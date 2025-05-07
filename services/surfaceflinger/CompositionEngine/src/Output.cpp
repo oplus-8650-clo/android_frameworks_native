@@ -406,6 +406,10 @@ void Output::setRenderSurfaceForTest(std::unique_ptr<compositionengine::RenderSu
     mRenderSurface = std::move(surface);
 }
 
+bool Output::plannerTexturePoolEnabled() const {
+    return mPlanner && mPlanner->isTexturePoolEnabled();
+}
+
 Region Output::getDirtyRegion() const {
     const auto& outputState = getState();
     return outputState.dirtyRegion.intersect(outputState.layerStackSpace.getContent());

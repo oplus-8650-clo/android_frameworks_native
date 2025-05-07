@@ -350,7 +350,7 @@ std::string LatencyAggregatorWithHistograms::dump(const char* prefix) const {
     }
 
     return StringPrintf("%sLatencyAggregatorWithHistograms:\n", prefix) + statisticsStr +
-            StringPrintf("%s  mLastSlowEventTime=%" PRId64 "\n", prefix, mLastSlowEventTime) +
+            StringPrintf("%s  mLastSlowEventTime=%" PRId64 "ns\n", prefix, mLastSlowEventTime) +
             StringPrintf("%s  mNumEventsSinceLastSlowEventReport = %zu\n", prefix,
                          mNumEventsSinceLastSlowEventReport) +
             StringPrintf("%s  mNumSkippedSlowEvents = %zu\n", prefix, mNumSkippedSlowEvents);

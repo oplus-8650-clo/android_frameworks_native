@@ -60,17 +60,6 @@ flag {
 } # begone_bright_hlg
 
 flag {
-  name: "commit_not_composited"
-  namespace: "core_graphics"
-  description: "mark frames as non janky if the transaction resulted in no composition"
-  bug: "340633280"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # commit_not_composited
-
-flag {
   name: "connected_display_hdr"
   namespace: "core_graphics"
   description: "enable connected display hdr capability"
@@ -140,17 +129,6 @@ flag {
   bug: "374184110"
   is_fixed_read_only: true
 } # display_config_error_hal
-
-flag {
-  name: "filter_frames_before_trace_starts"
-  namespace: "core_graphics"
-  description: "Do not trace FrameTimeline events for frames started before the trace started"
-  bug: "364194637"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # filter_frames_before_trace_starts
 
 flag {
   name: "flush_buffer_slots_to_uncache"

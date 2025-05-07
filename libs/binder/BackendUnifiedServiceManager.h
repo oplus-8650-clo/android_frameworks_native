@@ -154,10 +154,16 @@ public:
     void enableAddServiceCache(bool value) { mEnableAddServiceCache = value; }
     // for legacy ABI
     const String16& getInterfaceDescriptor() const override {
+        if (mTheRealServiceManager == nullptr) return mNullInterfaceDescriptor;
         return mTheRealServiceManager->getInterfaceDescriptor();
     }
 
 private:
+    // Empty descriptor in case there is no mTheRealServiceManager. We need an
+    // object to return a String& reference and there is only expected to be a
+    // single BackendUnifiedServiceManager per-process, so this is a member
+    // variable.
+    const String16 mNullInterfaceDescriptor;
     bool mEnableAddServiceCache = true;
     std::shared_ptr<BinderCacheWithInvalidation> mCacheForGetService;
     sp<os::IServiceManager> mTheRealServiceManager;

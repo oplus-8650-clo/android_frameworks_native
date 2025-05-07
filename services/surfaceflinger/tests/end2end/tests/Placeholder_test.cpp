@@ -30,11 +30,14 @@
 #include "test_framework/hwc3/events/DisplayPresented.h"
 #include "test_framework/hwc3/events/PendingBufferSwap.h"
 #include "test_framework/hwc3/events/VSyncEnabled.h"
+#include "test_framework/surfaceflinger/DisplayEventReceiver.h"
 #include "test_framework/surfaceflinger/SFController.h"
 #include "test_framework/surfaceflinger/Surface.h"
 #include "test_framework/surfaceflinger/events/BufferReleased.h"
+#include "test_framework/surfaceflinger/events/Hotplug.h"
 #include "test_framework/surfaceflinger/events/TransactionCompleted.h"
 #include "test_framework/surfaceflinger/events/TransactionInitiated.h"
+#include "test_framework/surfaceflinger/events/VSyncTiming.h"
 
 #define TRY_OR_ASSERT(expr)                       \
     ({                                            \
@@ -77,6 +80,20 @@ TEST_F(Placeholder, Bringup) {
                 LOG(INFO) << fmt::format("onPendingBufferSwap {}", event);
             })();
 
+    auto displayEvents = TRY_OR_ASSERT(service->flinger().makeDisplayEventReceiver());
+    displayEvents->setVsyncRate(1);
+
+    displayEvents->editCallbacks().onHotplug.set(
+            [](test_framework::surfaceflinger::events::Hotplug event) {
+                LOG(INFO) << fmt::format("onHotplug {}", event);
+            })();
+    size_t vsyncCount = 0;
+    displayEvents->editCallbacks().onVSyncTiming.set(
+            [&](test_framework::surfaceflinger::events::VSyncTiming event) {
+                ++vsyncCount;
+                LOG(INFO) << fmt::format("onVSyncTiming {}", event);
+            })();
+
     auto surface =
             TRY_OR_ASSERT(service->flinger().makeSurface({.name = "test", .size = {100, 100}}));
 
@@ -114,6 +131,7 @@ TEST_F(Placeholder, Bringup) {
     std::this_thread::sleep_for(kSleepTime);
     LOG(INFO) << "Done waiting for " << kSleepTime << "....";
 
+    EXPECT_GT(vsyncCount, 0) << "Expected at least one vsync timing callback. Zero observed.";
     EXPECT_GT(bufferReleaseCount, 0)
             << "Expected at least one buffer release callback. Zero observed.";
     EXPECT_GT(transactionInitiatedCount, 0)

@@ -269,7 +269,7 @@ void VelocityTracker::addMovement(nsecs_t eventTime, int32_t pointerId, int32_t 
 
     if (DEBUG_VELOCITY) {
         LOG(INFO) << "VelocityTracker: addMovement axis=" << MotionEvent::getLabel(axis)
-                  << ", eventTime=" << eventTime << ", pointerId=" << pointerId
+                  << ", eventTime=" << eventTime << "ns, pointerId=" << pointerId
                   << ", activePointerId=" << toString(mActivePointerId) << ", position=" << position
                   << ", velocity=" << toString(getVelocity(axis, pointerId));
     }

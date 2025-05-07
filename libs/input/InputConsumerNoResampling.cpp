@@ -348,10 +348,7 @@ void InputConsumerNoResampling::handleMessages(std::vector<InputMessage>&& messa
             const int32_t action = msg.body.motion.action;
             const DeviceId deviceId = msg.body.motion.deviceId;
             const int32_t source = msg.body.motion.source;
-            const bool batchableEvent = (action == AMOTION_EVENT_ACTION_MOVE ||
-                                         action == AMOTION_EVENT_ACTION_HOVER_MOVE) &&
-                    (isFromSource(source, AINPUT_SOURCE_CLASS_POINTER) ||
-                     isFromSource(source, AINPUT_SOURCE_CLASS_JOYSTICK));
+            const bool batchableEvent = isBatchableEvent(msg);
 
             const bool canResample = (mResamplerCreator != nullptr) &&
                     (isFromSource(source, AINPUT_SOURCE_CLASS_POINTER));
@@ -622,6 +619,27 @@ std::string InputConsumerNoResampling::dump() const {
     }
 
     return out;
+}
+
+bool InputConsumerNoResampling::isBatchableEvent(const InputMessage& message) const {
+    const int32_t action = message.body.motion.action;
+    const int32_t source = message.body.motion.source;
+    const bool batchableEventTypeAndSource =
+            (action == AMOTION_EVENT_ACTION_MOVE || action == AMOTION_EVENT_ACTION_HOVER_MOVE) &&
+            (isFromSource(source, AINPUT_SOURCE_CLASS_POINTER) ||
+             isFromSource(source, AINPUT_SOURCE_CLASS_JOYSTICK));
+    if (!batchableEventTypeAndSource) {
+        return false;
+    }
+
+    const DeviceId deviceId = message.body.motion.deviceId;
+    const auto& it = mBatches.find(deviceId);
+    // If there is no pending event from the device, it's okay to add the event to the batch.
+    if (it == mBatches.end() || it->second.size() == 0) {
+        return true;
+    }
+    // It's okay to add the event to the existing batch if it's on the same display.
+    return it->second.front().body.motion.displayId == message.body.motion.displayId;
 }
 
 } // namespace android

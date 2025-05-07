@@ -47,9 +47,9 @@ class EventThread;
 class EventThreadTest;
 class SurfaceFlinger;
 
-namespace frametimeline {
+namespace scheduler {
 class TokenManager;
-} // namespace frametimeline
+} // namespace scheduler
 
 using gui::ParcelableVsyncEventData;
 using gui::VsyncEventData;
@@ -158,7 +158,7 @@ namespace impl {
 class EventThread : public android::EventThread {
 public:
     EventThread(const char* name, std::shared_ptr<scheduler::VsyncSchedule>,
-                frametimeline::TokenManager*, IEventThreadCallback& callback,
+                scheduler::TokenManager*, IEventThreadCallback& callback,
                 std::chrono::nanoseconds workDuration, std::chrono::nanoseconds readyDuration);
     ~EventThread();
 
@@ -235,7 +235,7 @@ private:
     TimePoint mLastVsyncCallbackTime GUARDED_BY(mMutex) = TimePoint::now();
     TimePoint mLastCommittedVsyncTime GUARDED_BY(mMutex) = TimePoint::now();
     scheduler::VSyncCallbackRegistration mVsyncRegistration GUARDED_BY(mMutex);
-    frametimeline::TokenManager* const mTokenManager;
+    scheduler::TokenManager* const mTokenManager;
 
     IEventThreadCallback& mCallback;
 

@@ -1087,21 +1087,35 @@ TEST(NdkBinder, GetClassInterfaceDescriptor) {
 
 TEST(NdkBinder, CheckServiceAccessOk) {
     // This test case runs as su which has access to all services
-    EXPECT_TRUE(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, "adb", "find"));
+    EXPECT_TRUE(AServiceManager_checkServiceAccess(
+            "u:r:su:s0", 0, 0, "adb",
+            AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND));
+    EXPECT_TRUE(AServiceManager_checkServiceAccess(
+            "u:r:su:s0", 0, 0, "adb",
+            AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_LIST));
+    EXPECT_TRUE(AServiceManager_checkServiceAccess(
+            "u:r:su:s0", 0, 0, "adb", AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_ADD));
 }
 
 TEST(NdkBinder, CheckServiceAccessNotOk) {
-    EXPECT_FALSE(
-            AServiceManager_checkServiceAccess("u:r:some_unknown_sid:s0", 0, 0, "adb", "find"));
+    EXPECT_FALSE(AServiceManager_checkServiceAccess(
+            "u:r:some_unknown_sid:s0", 0, 0, "adb",
+            AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND));
 }
 
 TEST(NdkBinder, InvalidCheckServiceAccessArgs) {
-    EXPECT_DEATH(AServiceManager_checkServiceAccess(nullptr, 0, 0, nullptr, nullptr), "nullptr");
-    EXPECT_DEATH(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, nullptr, nullptr),
+    constexpr AServiceManager_PermissionType kUnknownPermission =
+            static_cast<AServiceManager_PermissionType>(8000);
+    EXPECT_DEATH(AServiceManager_checkServiceAccess(nullptr, 0, 0, nullptr, kUnknownPermission),
                  "nullptr");
-    EXPECT_DEATH(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, "adb", nullptr), "nullptr");
-    EXPECT_DEATH(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, nullptr, "find"), "nullptr");
-    EXPECT_FALSE(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, "adb", "unknown"));
+    EXPECT_DEATH(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, nullptr, kUnknownPermission),
+                 "nullptr");
+    EXPECT_DEATH(AServiceManager_checkServiceAccess("u:r:su:s0", 0, 0, "adb", kUnknownPermission),
+                 "Unknown value for permission argument! permission: 8000");
+    EXPECT_DEATH(AServiceManager_checkServiceAccess(
+                         "u:r:su:s0", 0, 0, nullptr,
+                         AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND),
+                 "nullptr");
 }
 
 static void addOne(int* to) {

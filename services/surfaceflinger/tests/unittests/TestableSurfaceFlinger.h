@@ -132,7 +132,7 @@ public:
         return std::make_unique<mock::FrameTracer>();
     }
 
-    std::unique_ptr<frametimeline::FrameTimeline> createFrameTimeline(
+    std::unique_ptr<scheduler::FrameTimeline> createFrameTimeline(
             std::shared_ptr<TimeStats> timeStats, pid_t surfaceFlingerPid = 0) override {
         return std::make_unique<mock::FrameTimeline>(timeStats, surfaceFlingerPid);
     }
@@ -233,7 +233,7 @@ public:
                 },
                 [](RefreshRateSelectorPtr selectorPtr) { return selectorPtr; });
 
-        mTokenManager = std::make_unique<frametimeline::impl::TokenManager>();
+        mTokenManager = std::make_unique<scheduler::impl::TokenManager>();
 
         using ISchedulerCallback = scheduler::ISchedulerCallback;
         ISchedulerCallback& schedulerCallback = callbackImpl == SchedulerCallbackImpl::kNoOp
@@ -1196,7 +1196,7 @@ private:
     sp<SurfaceFlinger> mFlinger;
     scheduler::mock::SchedulerCallback mSchedulerCallback;
     scheduler::mock::NoOpSchedulerCallback mNoOpSchedulerCallback;
-    std::unique_ptr<frametimeline::impl::TokenManager> mTokenManager;
+    std::unique_ptr<scheduler::impl::TokenManager> mTokenManager;
     scheduler::TestableScheduler* mScheduler = nullptr;
     adpf::mock::PowerAdvisor mPowerAdvisor;
 };

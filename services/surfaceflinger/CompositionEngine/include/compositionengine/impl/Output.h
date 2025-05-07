@@ -128,7 +128,9 @@ public:
     const ReleasedLayers& getReleasedLayersForTest() const;
     void setDisplayColorProfileForTest(std::unique_ptr<compositionengine::DisplayColorProfile>);
     void setRenderSurfaceForTest(std::unique_ptr<compositionengine::RenderSurface>);
+
     bool plannerEnabled() const { return mPlanner != nullptr; }
+    bool plannerTexturePoolEnabled() const override;
     virtual bool anyLayersRequireClientComposition() const;
     virtual void updateProtectedContentState();
     virtual bool dequeueRenderBuffer(base::unique_fd*,

@@ -110,6 +110,7 @@ public:
                           bool deviceHandlesColorTransform);
 
     void setTexturePoolEnabled(bool enabled) { mTexturePool.setEnabled(enabled); }
+    bool isTexturePoolEnabled() const { return mTexturePool.isEnabled(); }
 
     void dump(std::string& result) const;
     void dumpLayers(std::string& result) const;

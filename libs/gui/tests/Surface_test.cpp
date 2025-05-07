@@ -129,36 +129,8 @@ private:
 
 class SurfaceTest : public ::testing::Test {
 protected:
-    SurfaceTest() {
-        ProcessState::self()->startThreadPool();
-    }
-
-    virtual void SetUp() {
-        mComposerClient = sp<SurfaceComposerClient>::make();
-        ASSERT_EQ(NO_ERROR, mComposerClient->initCheck());
-
-        // TODO(brianderson): The following sometimes fails and is a source of
-        //   test flakiness.
-        mSurfaceControl = mComposerClient->createSurface(
-                String8("Test Surface"), 32, 32, PIXEL_FORMAT_RGBA_8888, 0);
-        SurfaceComposerClient::Transaction().apply(true);
-
-        ASSERT_TRUE(mSurfaceControl != nullptr);
-        ASSERT_TRUE(mSurfaceControl->isValid());
-
-        Transaction t;
-        ASSERT_EQ(NO_ERROR, t.setLayer(mSurfaceControl, 0x7fffffff).show(mSurfaceControl).apply());
-
-        mSurface = mSurfaceControl->getSurface();
-        ASSERT_TRUE(mSurface != nullptr);
-    }
-
-    virtual void TearDown() {
-        mComposerClient->dispose();
-    }
-
     void testSurfaceListener(bool hasSurfaceListener, bool enableReleasedCb,
-            int32_t extraDiscardedBuffers) {
+                             int32_t extraDiscardedBuffers) {
         sp<IGraphicBufferProducer> producer;
         sp<IGraphicBufferConsumer> consumer;
         BufferQueue::createBufferQueue(&producer, &consumer);
@@ -192,7 +164,7 @@ protected:
 
         ANativeWindowBuffer* buffer;
         // Fill BUFFER_COUNT-1 buffers
-        for (int i = 0; i < BUFFER_COUNT-1; i++) {
+        for (int i = 0; i < BUFFER_COUNT - 1; i++) {
             ASSERT_EQ(NO_ERROR, native_window_dequeue_buffer_and_wait(window.get(), &buffer));
             ASSERT_EQ(NO_ERROR, window->queueBuffer(window.get(), buffer, -1));
         }
@@ -202,7 +174,7 @@ protected:
 
         // Acquire and free 1+extraDiscardedBuffers buffer, check onBufferReleased is called.
         std::vector<BufferItem> releasedItems;
-        releasedItems.resize(1+extraDiscardedBuffers);
+        releasedItems.resize(1 + extraDiscardedBuffers);
         for (size_t i = 0; i < releasedItems.size(); i++) {
             ASSERT_EQ(NO_ERROR, consumer->acquireBuffer(&releasedItems[i], 0));
             ASSERT_EQ(NO_ERROR,
@@ -237,13 +209,46 @@ protected:
         // Disconnect the surface
         ASSERT_EQ(NO_ERROR, surface->disconnect(NATIVE_WINDOW_API_CPU));
     }
+};
+
+class SurfaceComposerSurfaceTest : public SurfaceTest {
+protected:
+    SurfaceComposerSurfaceTest() { ProcessState::self()->startThreadPool(); }
+
+    virtual void SetUp() override {
+        SurfaceTest::SetUp();
+
+        mComposerClient = sp<SurfaceComposerClient>::make();
+        ASSERT_EQ(NO_ERROR, mComposerClient->initCheck());
+
+        // TODO(brianderson): The following sometimes fails and is a source of
+        //   test flakiness.
+        mSurfaceControl = mComposerClient->createSurface(String8("Test Surface"), 32, 32,
+                                                         PIXEL_FORMAT_RGBA_8888, 0);
+        SurfaceComposerClient::Transaction().apply(true);
+
+        ASSERT_TRUE(mSurfaceControl != nullptr);
+        ASSERT_TRUE(mSurfaceControl->isValid());
+
+        Transaction t;
+        ASSERT_EQ(NO_ERROR, t.setLayer(mSurfaceControl, 0x7fffffff).show(mSurfaceControl).apply());
+
+        mSurface = mSurfaceControl->getSurface();
+        ASSERT_TRUE(mSurface != nullptr);
+    }
+
+    virtual void TearDown() {
+        SurfaceTest::TearDown();
+
+        mComposerClient->dispose();
+    }
 
     sp<Surface> mSurface;
     sp<SurfaceComposerClient> mComposerClient;
     sp<SurfaceControl> mSurfaceControl;
 };
 
-TEST_F(SurfaceTest, CreateSurfaceReturnsErrorBadClient) {
+TEST_F(SurfaceComposerSurfaceTest, CreateSurfaceReturnsErrorBadClient) {
     mComposerClient->dispose();
     ASSERT_EQ(NO_INIT, mComposerClient->initCheck());
 
@@ -253,7 +258,7 @@ TEST_F(SurfaceTest, CreateSurfaceReturnsErrorBadClient) {
     ASSERT_EQ(NO_INIT, err);
 }
 
-TEST_F(SurfaceTest, QueuesToWindowComposerIsTrueWhenVisible) {
+TEST_F(SurfaceComposerSurfaceTest, QueuesToWindowComposerIsTrueWhenVisible) {
     sp<ANativeWindow> anw(mSurface);
     int result = -123;
     int err = anw->query(anw.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,
@@ -262,7 +267,7 @@ TEST_F(SurfaceTest, QueuesToWindowComposerIsTrueWhenVisible) {
     EXPECT_EQ(1, result);
 }
 
-TEST_F(SurfaceTest, QueuesToWindowComposerIsTrueWhenPurgatorized) {
+TEST_F(SurfaceComposerSurfaceTest, QueuesToWindowComposerIsTrueWhenPurgatorized) {
     mSurfaceControl.clear();
     // Wait for the async clean-up to complete.
     std::this_thread::sleep_for(50ms);
@@ -275,7 +280,7 @@ TEST_F(SurfaceTest, QueuesToWindowComposerIsTrueWhenPurgatorized) {
     EXPECT_EQ(1, result);
 }
 
-TEST_F(SurfaceTest, ConcreteTypeIsSurface) {
+TEST_F(SurfaceComposerSurfaceTest, ConcreteTypeIsSurface) {
     sp<ANativeWindow> anw(mSurface);
     int result = -123;
     int err = anw->query(anw.get(), NATIVE_WINDOW_CONCRETE_TYPE, &result);
@@ -283,7 +288,7 @@ TEST_F(SurfaceTest, ConcreteTypeIsSurface) {
     EXPECT_EQ(NATIVE_WINDOW_SURFACE, result);
 }
 
-TEST_F(SurfaceTest, LayerCountIsOne) {
+TEST_F(SurfaceComposerSurfaceTest, LayerCountIsOne) {
     sp<ANativeWindow> anw(mSurface);
     int result = -123;
     int err = anw->query(anw.get(), NATIVE_WINDOW_LAYER_COUNT, &result);
@@ -291,7 +296,7 @@ TEST_F(SurfaceTest, LayerCountIsOne) {
     EXPECT_EQ(1, result);
 }
 
-TEST_F(SurfaceTest, QueryConsumerUsage) {
+TEST_F(SurfaceComposerSurfaceTest, QueryConsumerUsage) {
     const int TEST_USAGE_FLAGS =
             GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_HW_RENDER;
     auto [c, s] = BufferItemConsumer::create(TEST_USAGE_FLAGS);
@@ -304,7 +309,7 @@ TEST_F(SurfaceTest, QueryConsumerUsage) {
     ASSERT_EQ(TEST_USAGE_FLAGS, flags);
 }
 
-TEST_F(SurfaceTest, QueryDefaultBuffersDataSpace) {
+TEST_F(SurfaceComposerSurfaceTest, QueryDefaultBuffersDataSpace) {
     const android_dataspace TEST_DATASPACE = HAL_DATASPACE_V0_SRGB;
 
     auto [cpuConsumer, s] = CpuConsumer::create(1);
@@ -582,7 +587,7 @@ TEST_F(SurfaceTest, SurfaceListenerTest) {
     testSurfaceListener(/*hasListener*/true, /*enableReleasedCb*/true, /*extraDiscardedBuffers*/2);
 }
 
-TEST_F(SurfaceTest, TestGetLastDequeueStartTime) {
+TEST_F(SurfaceComposerSurfaceTest, TestGetLastDequeueStartTime) {
     sp<ANativeWindow> anw(mSurface);
     ASSERT_EQ(NO_ERROR, native_window_api_connect(anw.get(), NATIVE_WINDOW_API_CPU));
 
@@ -598,7 +603,7 @@ TEST_F(SurfaceTest, TestGetLastDequeueStartTime) {
     ASSERT_GE(after, lastDequeueTime);
 }
 
-TEST_F(SurfaceTest, SurfaceIsForCursor) {
+TEST_F(SurfaceComposerSurfaceTest, SurfaceIsForCursor) {
     sp<SurfaceControl> control;
     ASSERT_EQ(NO_ERROR,
               mComposerClient->createSurfaceChecked(String8("Test Surface"), 32, 32,
@@ -2278,8 +2283,6 @@ TEST_F(SurfaceTest, BatchIllegalOperations) {
     ASSERT_EQ(NO_ERROR, surface->disconnect(NATIVE_WINDOW_API_CPU));
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
-
 TEST_F(SurfaceTest, PlatformBufferMethods) {
     sp<CpuConsumer> cpuConsumer = sp<CpuConsumer>::make(1);
     sp<Surface> surface = cpuConsumer->getSurface();
@@ -2559,7 +2562,6 @@ TEST_F(SurfaceTest, QueueBufferOutput_TracksReplacements_Plural) {
     EXPECT_TRUE(outputs[0].bufferReplaced);
     EXPECT_TRUE(outputs[1].bufferReplaced);
 }
-#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 TEST_F(SurfaceTest, UnlimitedSlots_FailsOnIncompatibleConsumer) {

@@ -682,6 +682,11 @@ void InputConsumer::resampleTouchState(nsecs_t sampleTime, MotionEvent* event,
         }
     }
 
+    if (current->displayId != other->displayId) {
+        ALOGD_IF(debugResampling(), "Not resampled, the other is on a different display");
+        return;
+    }
+
     // Resample touch coordinates.
     History oldLastResample;
     oldLastResample.initializeFrom(touchState.lastResample);
@@ -864,9 +869,11 @@ bool InputConsumer::canAddSample(const Batch& batch, const InputMessage* msg) {
     const InputMessage& head = batch.samples[0];
     uint32_t pointerCount = msg->body.motion.pointerCount;
     if (head.body.motion.pointerCount != pointerCount ||
-        head.body.motion.action != msg->body.motion.action) {
+        head.body.motion.action != msg->body.motion.action ||
+        head.body.motion.displayId != msg->body.motion.displayId) {
         return false;
     }
+
     for (size_t i = 0; i < pointerCount; i++) {
         if (head.body.motion.pointers[i].properties != msg->body.motion.pointers[i].properties) {
             return false;

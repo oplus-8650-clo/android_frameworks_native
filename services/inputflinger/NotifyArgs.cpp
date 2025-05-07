@@ -133,8 +133,9 @@ std::string NotifyMotionArgs::dump() const {
         }
         coords += "}";
     }
-    return StringPrintf("NotifyMotionArgs(id=%" PRId32 ", eventTime=%" PRId64 ", deviceId=%" PRId32
-                        ", source=%s, action=%s, pointerCount=%zu pointers=%s, flags=0x%08x)",
+    return StringPrintf("NotifyMotionArgs(id=%" PRId32 ", eventTime=%" PRId64 "ns, "
+                        "deviceId=%" PRId32 ", source=%s, action=%s, pointerCount=%zu, "
+                        "pointers=%s, flags=0x%08x)",
                         id, eventTime, deviceId, inputEventSourceToString(source).c_str(),
                         MotionEvent::actionToString(action).c_str(), getPointerCount(),
                         coords.c_str(), flags);
