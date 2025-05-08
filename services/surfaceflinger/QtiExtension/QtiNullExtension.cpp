@@ -43,7 +43,7 @@ void QtiNullExtension::qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId,
                                                         PhysicalDisplayId id) {}
 void QtiNullExtension::qtiUpdateOnComposerHalHotplug(
         hal::HWDisplayId hwcDisplayId, HWComposer::HotplugEvent hotplugEvent,
-        std::optional<DisplayIdentificationInfo> info) {}
+        std::optional<display::DisplayIdentificationInfo> info) {}
 void QtiNullExtension::qtiUpdateInternalDisplaysPresentationMode() {}
 
 QtiHWComposerExtensionIntf* QtiNullExtension::qtiGetHWComposerExtensionIntf() {

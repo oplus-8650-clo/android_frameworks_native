@@ -24,7 +24,6 @@
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 #pragma once
 
-#include <optional>
 #include <string>
 
 #include <compositionengine/DisplaySurface.h>
@@ -32,8 +31,6 @@
 #include <gui/ConsumerBase.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <ui/DisplayId.h>
-
-#include <ui/DisplayIdentification.h>
 
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 #include "../QtiExtension/QtiDisplaySurfaceExtensionIntf.h"

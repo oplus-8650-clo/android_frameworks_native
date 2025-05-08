@@ -61,6 +61,7 @@
 
 #include "Constants.h"
 #include "MockConsumer.h"
+#include "hardware/gralloc.h"
 #include "testserver/TestServerClient.h"
 
 namespace android {
@@ -2425,6 +2426,28 @@ TEST_F(SurfaceTest, QueueAcquireReleaseDequeue_CalledInStack_DoesNotDeadlock) {
     EXPECT_NE(nullptr, surfaceListener->mBuffer);
 
     EXPECT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
+// See: b/414442592
+TEST_F(SurfaceTest, DequeueBuffer_WithDeadConsumer_DoesNotCrash) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+    sp<SurfaceListener> surfaceListener = sp<StubSurfaceListener>::make();
+    EXPECT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, surfaceListener, false));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    EXPECT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    EXPECT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    consumer->abandon();
+
+    auto beforeBuffer = buffer;
+    auto beforeFence = fence;
+
+    EXPECT_NE(OK, surface->dequeueBuffer(&buffer, &fence));
+    EXPECT_EQ(buffer, beforeBuffer);
+    EXPECT_EQ(fence, beforeFence);
 }
 
 TEST_F(SurfaceTest, ViewSurface_toString) {

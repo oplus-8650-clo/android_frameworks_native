@@ -135,7 +135,7 @@ public:
     void qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId, const HWComposer::HotplugEvent event,
                                           PhysicalDisplayId id) override;
     void qtiUpdateOnComposerHalHotplug(hal::HWDisplayId hwcDisplayId, const HWComposer::HotplugEvent event,
-                                       std::optional<DisplayIdentificationInfo> info) override;
+                                       std::optional<display::DisplayIdentificationInfo> info) override;
     void qtiUpdateInternalDisplaysPresentationMode() override;
     QtiHWComposerExtensionIntf* qtiGetHWComposerExtensionIntf() override;
     composer::DisplayExtnIntf* qtiGetDisplayExtn() { return mQtiDisplayExtnIntf; }

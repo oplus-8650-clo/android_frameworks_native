@@ -203,6 +203,7 @@ filegroup {
         "BackgroundExecutor.cpp",
         "Client.cpp",
         "ClientCache.cpp",
+        "Display/DisplayIdentification.cpp",
         "Display/DisplayModeController.cpp",
         "Display/DisplaySnapshot.cpp",
         "DisplayDevice.cpp",
@@ -360,7 +361,6 @@ cc_library {
     generated_headers: ["statslog_surfaceflinger_bootstrap.h"],
     export_generated_headers: ["statslog_surfaceflinger_bootstrap.h"],
     shared_libs: [
-        "android.os.statsbootstrap_aidl-cpp",
         "libbinder",
         "libstatsbootstrap",
         "libutils",

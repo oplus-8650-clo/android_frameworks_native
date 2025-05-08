@@ -414,7 +414,7 @@ void QtiSurfaceFlingerExtension::qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDi
 
 void QtiSurfaceFlingerExtension::qtiUpdateOnComposerHalHotplug(
         hal::HWDisplayId hwcDisplayId, const HWComposer::HotplugEvent hotplugEvent,
-        std::optional<DisplayIdentificationInfo> info) {
+        std::optional<display::DisplayIdentificationInfo> info) {
     // QTI: Update QTI Extension's displays list when a display is disconnected
     if (hotplugEvent != HWComposer::HotplugEvent::Connected) {
         if (info) {
