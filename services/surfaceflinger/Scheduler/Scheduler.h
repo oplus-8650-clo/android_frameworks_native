@@ -71,10 +71,6 @@ namespace android {
 class FenceTime;
 class TimeStats;
 
-namespace frametimeline {
-class TokenManager;
-} // namespace frametimeline
-
 namespace surfaceflinger {
 class Factory;
 } // namespace surfaceflinger
@@ -84,6 +80,7 @@ namespace scheduler {
 using GlobalSignals = RefreshRateSelector::GlobalSignals;
 
 class RefreshRateStats;
+class TokenManager;
 class VsyncConfiguration;
 class VsyncSchedule;
 
@@ -126,7 +123,7 @@ public:
 
     void run();
 
-    void initVsync(frametimeline::TokenManager&, std::chrono::nanoseconds workDuration);
+    void initVsync(TokenManager&, std::chrono::nanoseconds workDuration);
 
     using Impl::setDuration;
 
@@ -153,8 +150,7 @@ public:
         return std::move(future);
     }
 
-    void createEventThread(Cycle, frametimeline::TokenManager*,
-                           std::chrono::nanoseconds workDuration,
+    void createEventThread(Cycle, TokenManager*, std::chrono::nanoseconds workDuration,
                            std::chrono::nanoseconds readyDuration);
 
     sp<IDisplayEventConnection> createDisplayEventConnection(

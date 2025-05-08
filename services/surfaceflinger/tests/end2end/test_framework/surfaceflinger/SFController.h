@@ -24,6 +24,7 @@
 #include <ftl/finalizer.h>
 #include <utils/StrongPointer.h>
 
+#include "test_framework/surfaceflinger/PollFdThread.h"
 #include "test_framework/surfaceflinger/Surface.h"
 
 namespace android::gui {
@@ -41,6 +42,9 @@ class SurfaceComposerClient;
 
 namespace android::surfaceflinger::tests::end2end::test_framework::surfaceflinger {
 
+class DisplayEventReceiver;
+class PollFdThread;
+
 class SFController final {
     struct Passkey;  // Uses the passkey idiom to restrict construction.
 
@@ -56,6 +60,9 @@ class SFController final {
     // Starts SurfaceFlinger and establishes the AIDL interface connections.
     [[nodiscard]] auto startAndConnect() -> base::expected<void, std::string>;
 
+    auto makeDisplayEventReceiver()
+            -> base::expected<std::shared_ptr<DisplayEventReceiver>, std::string>;
+
     auto makeSurface(const Surface::CreationArgs& args)
             -> base::expected<std::shared_ptr<Surface>, std::string>;
 
@@ -64,6 +71,7 @@ class SFController final {
     static void start();
     void stop();
 
+    std::shared_ptr<PollFdThread> mPollFdThread;
     sp<gui::ISurfaceComposer> mSurfaceComposerAidl;
     sp<gui::ISurfaceComposerClient> mSurfaceComposerClientAidl;
     sp<SurfaceComposerClient> mSurfaceComposerClient;

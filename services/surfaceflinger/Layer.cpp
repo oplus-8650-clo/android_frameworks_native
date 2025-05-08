@@ -76,7 +76,6 @@
 
 #include "DisplayDevice.h"
 #include "DisplayHardware/HWComposer.h"
-#include "FrameTimeline/FrameTimeline.h"
 #include "FrameTracer/FrameTracer.h"
 #include "FrontEnd/LayerCreationArgs.h"
 #include "FrontEnd/LayerHandle.h"
@@ -85,6 +84,7 @@
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 #include "QtiExtension/QtiSurfaceFlingerExtensionIntf.h"
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
+#include "Scheduler/FrameTimeline.h"
 #include "SurfaceFlinger.h"
 #include "TimeStats/TimeStats.h"
 #include "TransactionCallbackInvoker.h"
@@ -149,7 +149,7 @@ using gui::LayerMetadata;
 using gui::WindowInfo;
 using ui::Size;
 
-using PresentState = frametimeline::SurfaceFrame::PresentState;
+using PresentState = scheduler::SurfaceFrame::PresentState;
 
 Layer::Layer(const surfaceflinger::LayerCreationArgs& args)
       : sequence(args.sequence),
@@ -472,15 +472,15 @@ void Layer::setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInf
     setFrameTimelineVsyncForSkippedFrames(info, postTime, mTransactionName, gameMode);
 }
 
-void Layer::addSurfaceFrameDroppedForBuffer(
-        std::shared_ptr<frametimeline::SurfaceFrame>& surfaceFrame, nsecs_t dropTime) {
+void Layer::addSurfaceFrameDroppedForBuffer(std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame,
+                                            nsecs_t dropTime) {
     surfaceFrame->setDropTime(dropTime);
     surfaceFrame->setPresentState(PresentState::Dropped);
     mFlinger->mFrameTimeline->addSurfaceFrame(surfaceFrame);
 }
 
 void Layer::addSurfaceFramePresentedForBuffer(
-        std::shared_ptr<frametimeline::SurfaceFrame>& surfaceFrame, nsecs_t acquireFenceTime,
+        std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame, nsecs_t acquireFenceTime,
         nsecs_t currentLatchTime) REQUIRES(mFlinger->mStateLock) {
     surfaceFrame->setAcquireFenceTime(acquireFenceTime);
     surfaceFrame->setPresentState(PresentState::Presented, mLastLatchTime);
@@ -488,7 +488,7 @@ void Layer::addSurfaceFramePresentedForBuffer(
     updateLastLatchTime(currentLatchTime);
 }
 
-std::shared_ptr<frametimeline::SurfaceFrame> Layer::createSurfaceFrameForTransaction(
+std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForTransaction(
         const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode)
         REQUIRES(mFlinger->mStateLock) {
     auto surfaceFrame =
@@ -510,7 +510,7 @@ std::shared_ptr<frametimeline::SurfaceFrame> Layer::createSurfaceFrameForTransac
     return surfaceFrame;
 }
 
-std::shared_ptr<frametimeline::SurfaceFrame> Layer::createSurfaceFrameForBuffer(
+std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForBuffer(
         const FrameTimelineInfo& info, nsecs_t queueTime, std::string debugName,
         gui::GameMode gameMode) REQUIRES(mFlinger->mStateLock) {
     auto surfaceFrame =

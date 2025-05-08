@@ -70,6 +70,8 @@ public:
 
     void setTexturePoolEnabled(bool enabled) { mFlattener.setTexturePoolEnabled(enabled); }
 
+    bool isTexturePoolEnabled() const { return mFlattener.isTexturePoolEnabled(); }
+
     void dump(const Vector<String16>& args, std::string&);
 
 private:

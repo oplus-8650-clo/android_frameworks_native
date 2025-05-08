@@ -199,5 +199,32 @@ TEST_F(FoldableTest, disableVsyncOnPowerOffPacesetter) {
     ASSERT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), kOuterDisplayId);
 }
 
+TEST_F(FoldableTest, layerCachingTexturePoolOnFrontInternal) {
+    ASSERT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), kInnerDisplayId);
+
+    // In order for TexturePool to be enabled, layer caching needs to be enabled.
+    mInnerDisplay->getCompositionDisplay()->setLayerCachingEnabled(true);
+    mOuterDisplay->getCompositionDisplay()->setLayerCachingEnabled(true);
+
+    mFlinger.setPhysicalDisplayPowerMode(mOuterDisplay, PowerMode::OFF);
+    mFlinger.setPhysicalDisplayPowerMode(mInnerDisplay, PowerMode::ON);
+
+    // Switching to outer display as the front-internal display should disable the inner display's
+    // pool and enable the outer display's pool.
+    mFlinger.setPhysicalDisplayPowerMode(mOuterDisplay, PowerMode::ON);
+    mFlinger.setPhysicalDisplayPowerMode(mInnerDisplay, PowerMode::OFF);
+
+    ASSERT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), kOuterDisplayId);
+
+    EXPECT_FALSE(mInnerDisplay->getCompositionDisplay()->plannerTexturePoolEnabled());
+    EXPECT_TRUE(mOuterDisplay->getCompositionDisplay()->plannerTexturePoolEnabled());
+
+    mFlinger.setPhysicalDisplayPowerMode(mOuterDisplay, PowerMode::OFF);
+    mFlinger.setPhysicalDisplayPowerMode(mInnerDisplay, PowerMode::ON);
+
+    EXPECT_TRUE(mInnerDisplay->getCompositionDisplay()->plannerTexturePoolEnabled());
+    EXPECT_FALSE(mOuterDisplay->getCompositionDisplay()->plannerTexturePoolEnabled());
+}
+
 } // namespace
 } // namespace android

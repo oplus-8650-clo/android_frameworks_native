@@ -177,7 +177,7 @@ bool DisplayEventDispatcher::processPendingEvents(nsecs_t* outTimestamp,
                     *outVsyncEventData = ev.vsync.vsyncData;
 
                     // Trace the RenderRate for this app
-                    if (ATRACE_ENABLED() && flags::trace_frame_rate_override()) {
+                    if (ATRACE_ENABLED()) {
                         const auto frameInterval = ev.vsync.vsyncData.frameInterval;
                         int fps = frameInterval > 0 ? 1e9f / frameInterval : 0;
                         ATRACE_INT("RenderRate", fps);

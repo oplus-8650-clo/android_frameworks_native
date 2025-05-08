@@ -81,9 +81,9 @@ class OutputLayer;
 struct LayerFECompositionState;
 }
 
-namespace frametimeline {
+namespace scheduler {
 class SurfaceFrame;
-} // namespace frametimeline
+} // namespace scheduler
 
 class Layer : public virtual RefBase {
 public:
@@ -151,11 +151,11 @@ public:
         // such SurfaceFrame exists because only one buffer can be presented on the layer per vsync.
         // If multiple buffers are queued, the prior ones will be dropped, along with the
         // SurfaceFrame that's tracking them.
-        std::shared_ptr<frametimeline::SurfaceFrame> bufferSurfaceFrameTX;
+        std::shared_ptr<scheduler::SurfaceFrame> bufferSurfaceFrameTX;
         // A map of token(frametimelineVsyncId) to the SurfaceFrame that's tracking a transaction
         // that contains the token. Only one SurfaceFrame exisits for transactions that share the
         // same token, unless they are presented in different vsyncs.
-        std::unordered_map<int64_t, std::shared_ptr<frametimeline::SurfaceFrame>>
+        std::unordered_map<int64_t, std::shared_ptr<scheduler::SurfaceFrame>>
                 bufferlessSurfaceFramesTX;
         // An arbitrary threshold for the number of BufferlessSurfaceFrames in the state. Used to
         // trigger a warning if the number of SurfaceFrames crosses the threshold.
@@ -344,15 +344,14 @@ public:
     void setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInfo& info,
                                                        nsecs_t postTime, gui::GameMode gameMode);
 
-    void addSurfaceFrameDroppedForBuffer(std::shared_ptr<frametimeline::SurfaceFrame>& surfaceFrame,
+    void addSurfaceFrameDroppedForBuffer(std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame,
                                          nsecs_t dropTime);
-    void addSurfaceFramePresentedForBuffer(
-            std::shared_ptr<frametimeline::SurfaceFrame>& surfaceFrame, nsecs_t acquireFenceTime,
-            nsecs_t currentLatchTime);
+    void addSurfaceFramePresentedForBuffer(std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame,
+                                           nsecs_t acquireFenceTime, nsecs_t currentLatchTime);
 
-    std::shared_ptr<frametimeline::SurfaceFrame> createSurfaceFrameForTransaction(
+    std::shared_ptr<scheduler::SurfaceFrame> createSurfaceFrameForTransaction(
             const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode);
-    std::shared_ptr<frametimeline::SurfaceFrame> createSurfaceFrameForBuffer(
+    std::shared_ptr<scheduler::SurfaceFrame> createSurfaceFrameForBuffer(
             const FrameTimelineInfo& info, nsecs_t queueTime, std::string debugName,
             gui::GameMode gameMode);
     void setFrameTimelineVsyncForSkippedFrames(const FrameTimelineInfo& info, nsecs_t postTime,
@@ -593,7 +592,7 @@ private:
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     std::vector<std::pair<frontend::LayerHierarchy::TraversalPath, sp<LayerFE>>> mLayerFEs;
     bool mHandleAlive = false;
-    std::optional<std::reference_wrapper<frametimeline::FrameTimeline>> getTimeline() const {
+    std::optional<std::reference_wrapper<scheduler::FrameTimeline>> getTimeline() const {
         return *mFlinger->mFrameTimeline;
     }
 };

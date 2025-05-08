@@ -43,6 +43,8 @@ cc_test {
         "test_framework/hwc3/SingleDisplayRefreshEventGenerator.cpp",
         "test_framework/hwc3/SingleDisplayRefreshSchedule.cpp",
         "test_framework/hwc3/TimeKeeperThread.cpp",
+        "test_framework/surfaceflinger/DisplayEventReceiver.cpp",
+        "test_framework/surfaceflinger/PollFdThread.cpp",
         "test_framework/surfaceflinger/SFController.cpp",
         "test_framework/surfaceflinger/SimpleBufferPool.cpp",
         "test_framework/surfaceflinger/Surface.cpp",

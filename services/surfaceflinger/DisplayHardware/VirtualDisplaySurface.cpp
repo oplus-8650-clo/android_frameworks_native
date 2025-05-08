@@ -68,11 +68,7 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
                                              const std::string& name,
                                              bool qtiSecure)
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
       : ConsumerBase(bqProducer, bqConsumer),
-#else
-      : ConsumerBase(bqConsumer),
-#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
         mHwc(hwc),
         mVirtualIdVariant(virtualIdVariant),
         mDisplayName(name),

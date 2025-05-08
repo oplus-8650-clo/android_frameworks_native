@@ -39,7 +39,7 @@
 
 #include "../TimeStats/TimeStats.h"
 
-namespace android::frametimeline {
+namespace android::scheduler {
 
 class FrameTimelineTest;
 
@@ -150,7 +150,7 @@ public:
 
 private:
     // Friend class for testing
-    friend class android::frametimeline::FrameTimelineTest;
+    friend class android::scheduler::FrameTimelineTest;
 
     std::atomic<int64_t> mTraceCookie = 0;
 };
@@ -361,7 +361,7 @@ public:
 
 namespace impl {
 
-class TokenManager : public android::frametimeline::TokenManager {
+class TokenManager : public android::scheduler::TokenManager {
 public:
     TokenManager() : mCurrentToken(FrameTimelineInfo::INVALID_VSYNC_ID + 1) {}
     ~TokenManager() = default;
@@ -371,7 +371,7 @@ public:
 
 private:
     // Friend class for testing
-    friend class android::frametimeline::FrameTimelineTest;
+    friend class android::scheduler::FrameTimelineTest;
 
     void flushTokens(nsecs_t flushTime) REQUIRES(mMutex);
 
@@ -381,7 +381,7 @@ private:
     static constexpr size_t kMaxTokens = 500;
 };
 
-class FrameTimeline : public android::frametimeline::FrameTimeline {
+class FrameTimeline : public android::scheduler::FrameTimeline {
 public:
     class FrameTimelineDataSource : public perfetto::DataSource<FrameTimelineDataSource> {
     public:
@@ -505,12 +505,12 @@ public:
                   bool filterFramesBeforeTraceStarts = true);
     ~FrameTimeline() = default;
 
-    frametimeline::TokenManager* getTokenManager() override { return &mTokenManager; }
+    scheduler::TokenManager* getTokenManager() override { return &mTokenManager; }
     std::shared_ptr<SurfaceFrame> createSurfaceFrameForToken(
             const FrameTimelineInfo& frameTimelineInfo, pid_t ownerPid, uid_t ownerUid,
             int32_t layerId, std::string layerName, std::string debugName, bool isBuffer,
             GameMode) override;
-    void addSurfaceFrame(std::shared_ptr<frametimeline::SurfaceFrame> surfaceFrame) override;
+    void addSurfaceFrame(std::shared_ptr<scheduler::SurfaceFrame> surfaceFrame) override;
     void setSfWakeUp(int64_t token, nsecs_t wakeupTime, Fps refreshRate, Fps renderRate) override;
     void setSfPresent(nsecs_t sfPresentTime, const std::shared_ptr<FenceTime>& presentFence,
                       const std::shared_ptr<FenceTime>& gpuFence = FenceTime::NO_FENCE) override;
@@ -531,7 +531,7 @@ public:
 
 private:
     // Friend class for testing
-    friend class android::frametimeline::FrameTimelineTest;
+    friend class android::scheduler::FrameTimelineTest;
 
     void flushPendingPresentFences() REQUIRES(mMutex);
     std::optional<size_t> getFirstSignalFenceIndex() const REQUIRES(mMutex);
@@ -567,4 +567,4 @@ private:
 };
 
 } // namespace impl
-} // namespace android::frametimeline
+} // namespace android::scheduler

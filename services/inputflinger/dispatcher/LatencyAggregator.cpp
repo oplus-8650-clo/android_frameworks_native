@@ -288,7 +288,7 @@ std::string LatencyAggregator::dump(const char* prefix) const {
 
     return StringPrintf("%sLatencyAggregator:\n", prefix) + sketchDump +
             StringPrintf("%s  mNumSketchEventsProcessed=%zu\n", prefix, mNumSketchEventsProcessed) +
-            StringPrintf("%s  mLastSlowEventTime=%" PRId64 "\n", prefix, mLastSlowEventTime) +
+            StringPrintf("%s  mLastSlowEventTime=%" PRId64 "ns\n", prefix, mLastSlowEventTime) +
             StringPrintf("%s  mNumEventsSinceLastSlowEventReport = %zu\n", prefix,
                          mNumEventsSinceLastSlowEventReport) +
             StringPrintf("%s  mNumSkippedSlowEvents = %zu\n", prefix, mNumSkippedSlowEvents);

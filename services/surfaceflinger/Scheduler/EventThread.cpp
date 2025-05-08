@@ -42,11 +42,11 @@
 
 #include <utils/Errors.h>
 
-#include <Scheduler/Scheduler.h>
 #include <common/FlagManager.h>
 #include <scheduler/FrameRateMode.h>
 #include <scheduler/VsyncConfig.h>
-#include "FrameTimeline/FrameTimeline.h"
+#include "FrameTimeline.h"
+#include "Scheduler.h"
 #include "VSyncDispatch.h"
 
 #include "EventThread.h"
@@ -306,7 +306,7 @@ EventThread::~EventThread() = default;
 namespace impl {
 
 EventThread::EventThread(const char* name, std::shared_ptr<scheduler::VsyncSchedule> vsyncSchedule,
-                         android::frametimeline::TokenManager* tokenManager,
+                         android::scheduler::TokenManager* tokenManager,
                          IEventThreadCallback& callback, std::chrono::nanoseconds workDuration,
                          std::chrono::nanoseconds readyDuration)
       : mThreadName(name),

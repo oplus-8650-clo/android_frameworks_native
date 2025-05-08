@@ -51,6 +51,28 @@ enum AServiceManager_AddServiceFlag : uint32_t {
 };
 
 /**
+ * These are the different SELinux permissions that processes need to have for
+ * different operations with servicemanager.
+ */
+enum AServiceManager_PermissionType : uint32_t {
+    /**
+     * Permission for a process to "find" this service through ServiceManager
+     * APIs like AServiceManager_getService or AServiceManager_waitForService
+     */
+    CHECK_ACCESS_PERMISSION_FIND,
+    /**
+     * Permission for a process to "list" services with
+     * libbinder's IServiceManager::listServices
+     */
+    CHECK_ACCESS_PERMISSION_LIST,
+    /**
+     * Permission for a process to "add", or register, a service with
+     * servicemanager through AServiceManager_addService
+     */
+    CHECK_ACCESS_PERMISSION_ADD,
+};
+
+/**
  * This registers the service with the default service manager under this instance name. This does
  * not take ownership of binder.
  *
@@ -329,6 +351,8 @@ void AServiceManager_reRegister() __INTRODUCED_IN(31);
  *
  * This is useful when a process will be making calls to servicemanager on behalf of another
  * process (callerCtx).
+ * The direct caller of this function also needs to have the permissions it is
+ * checking on behalf of the other process.
  *
  * \param caller_sid - UTF-8 encoded string. SELinux context of the process that is being checked.
  * \param caller_debug_pid - PID of the process that is being checked. This can
@@ -338,8 +362,8 @@ void AServiceManager_reRegister() __INTRODUCED_IN(31);
  *                     only uses this for logging denials for better debugging.
  * \param instance - UTF-8 encoded string. Instance name of the service that the caller
  *                   wants to interact with.
- * \param permission - UTF-8 encoded string. The servicemanager SELinux permission that the process
- *                     is interested in for the service. This is either "find", "list", or "add".
+ * \param permission - The servicemanager SELinux permission that the process
+ *                     is interested in for the service.
  *
  * \return True if the process with `caller_sid` has the SELinux `permission`
  *         for the given service `instance`. False if it does not have
@@ -347,6 +371,7 @@ void AServiceManager_reRegister() __INTRODUCED_IN(31);
  */
 bool AServiceManager_checkServiceAccess(const char* caller_sid, pid_t caller_debug_pid,
                                         uid_t caller_uid, const char* instance,
-                                        const char* permission) __INTRODUCED_IN(37);
+                                        AServiceManager_PermissionType permission)
+        __INTRODUCED_IN(37);
 
 __END_DECLS

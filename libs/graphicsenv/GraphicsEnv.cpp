@@ -746,6 +746,18 @@ void GraphicsEnv::nativeToggleAngleAsSystemDriver(bool enabled) {
     gpuService->toggleAngleAsSystemDriver(enabled);
 }
 
+std::string GraphicsEnv::nativeGetPersistGraphicsEgl() {
+    if (!graphicsenv_flags::query_persist_graphics_egl()) {
+        return "";
+    }
+    const sp<IGpuService> gpuService = getGpuService();
+    if (!gpuService) {
+        ALOGE("No GPU service");
+        return "";
+    }
+    return gpuService->getPersistGraphicsEgl();
+}
+
 bool GraphicsEnv::shouldUseSystemAngle() {
     return mShouldUseSystemAngle;
 }

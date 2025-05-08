@@ -26,6 +26,21 @@ use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::sync::Mutex;
 
+/// Value to use with check_service_access for permission to "find" a service
+#[cfg(not(any(trusty, android_ndk, android_vendor, android_vndk)))]
+pub const CHECK_ACCESS_PERMISSION_FIND: u32 =
+    sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND as u32;
+
+/// Value to use with check_service_access for permission to "list" services
+#[cfg(not(any(trusty, android_ndk, android_vendor, android_vndk)))]
+pub const CHECK_ACCESS_PERMISSION_LIST: u32 =
+    sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_LIST as u32;
+
+/// Value to use with check_service_access for permission to "add" a service
+#[cfg(not(any(trusty, android_ndk, android_vendor, android_vndk)))]
+pub const CHECK_ACCESS_PERMISSION_ADD: u32 =
+    sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_ADD as u32;
+
 /// Register a new service with the default service manager.
 ///
 /// Registers the given binder object with the given identifier. If successful,
@@ -260,7 +275,10 @@ pub fn get_declared_instances(interface: &str) -> Result<Vec<String>> {
 /// callerUid - UID process that is being checked. Used for logging denials
 /// name - name of the service that the caller wants to interact with
 /// permission - the servicemanager SELinux permission that the process is
-///              interested in for the service. This is either "find", "list", or "add".
+///              interested in for the service. This is one of:
+///                 CHECK_ACCESS_PERMISSION_FIND,
+///                 CHECK_ACCESS_PERMISSION_LIST,
+///                 CHECK_ACCESS_PERMISSION_ADD
 // TODO(b/402766978) Add this back into vendor variants when the LLNDK symbols are supported
 // with something like __builtin_available
 #[cfg(not(any(trusty, android_ndk, android_vendor, android_vndk)))]
@@ -269,11 +287,23 @@ pub fn check_service_access(
     caller_debug_pid: pid_t,
     caller_uid: uid_t,
     name: &str,
-    permission: &str,
+    permission: u32,
 ) -> Result<bool> {
     let caller_sid = CString::new(caller_sid).or(Err(StatusCode::UNEXPECTED_NULL))?;
     let name = CString::new(name).or(Err(StatusCode::UNEXPECTED_NULL))?;
-    let permission = CString::new(permission).or(Err(StatusCode::UNEXPECTED_NULL))?;
+    let permission = match permission {
+        CHECK_ACCESS_PERMISSION_FIND => {
+            sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND
+        }
+        CHECK_ACCESS_PERMISSION_LIST => {
+            sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_LIST
+        }
+        CHECK_ACCESS_PERMISSION_ADD => {
+            sys::AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_ADD
+        }
+        _ => return Err(StatusCode::BAD_TYPE),
+    };
+
     // Safety: The CStrings are valid at this point and are only used during the duration
     // of the call.
     unsafe {
@@ -282,7 +312,7 @@ pub fn check_service_access(
             caller_debug_pid,
             caller_uid,
             name.as_ptr(),
-            permission.as_ptr(),
+            permission,
         ))
     }
 }

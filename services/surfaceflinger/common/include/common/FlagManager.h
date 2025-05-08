@@ -71,11 +71,9 @@ public:
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     bool adpf_fmq_sf() const;
-    bool allow_n_vsyncs_in_targeter() const;
     bool arr_setframerate_gte_enum() const;
     bool begone_bright_hlg() const;
     bool cache_when_source_crop_layer_only_moved() const;
-    bool commit_not_composited() const;
     bool connected_display_hdr() const;
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
@@ -83,11 +81,9 @@ public:
     bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
     bool display_config_error_hal() const;
-    bool dont_skip_on_early_ro() const;
     bool enable_fro_dependent_features() const;
     bool enable_layer_command_batching() const;
     bool enable_small_area_detection() const;
-    bool filter_frames_before_trace_starts() const;
     bool flush_buffer_slots_to_uncache() const;
     bool force_compile_graphite_renderengine() const;
     bool fp16_client_target() const;
@@ -111,7 +107,6 @@ public:
     bool stable_edid_ids() const;
     bool stop_layer() const;
     bool synced_resolution_switch() const;
-    bool trace_frame_rate_override() const;
     bool true_hdr_screenshots() const;
     bool use_known_refresh_rate_for_fps_consistency() const;
     bool vrr_config() const;

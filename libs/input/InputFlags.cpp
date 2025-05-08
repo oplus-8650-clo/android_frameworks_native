@@ -30,7 +30,7 @@ namespace {
 // Returns the cached dev option value if available.
 // This check is only required for connected-displays related features.
 std::optional<bool> getConnectedDisplaysDevOptionValue() {
-    if (!com::android::window::flags::enable_desktop_mode_through_dev_option()) {
+    if (!com::android::window::flags::show_desktop_experience_dev_option()) {
         return std::nullopt;
     }
     static std::optional<bool> cachedDevOption;
