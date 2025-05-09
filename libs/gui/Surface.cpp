@@ -813,9 +813,14 @@ status_t Surface::dequeueBuffer(sp<GraphicBuffer>* buffer, sp<Fence>* outFence) 
         return BAD_VALUE;
     }
 
-    android_native_buffer_t* anb;
+    android_native_buffer_t* anb = nullptr;
     int fd = -1;
     status_t res = dequeueBuffer(&anb, &fd);
+    if (res != NO_ERROR) {
+        ALOGV("dequeueBuffer() returned %d", res);
+        return res;
+    }
+
     *buffer = GraphicBuffer::from(anb);
     *outFence = sp<Fence>::make(fd);
     return res;

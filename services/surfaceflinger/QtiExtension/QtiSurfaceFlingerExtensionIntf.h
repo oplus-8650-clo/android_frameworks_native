@@ -67,7 +67,7 @@ public:
                                                   PhysicalDisplayId id) = 0;
     virtual void qtiUpdateOnComposerHalHotplug(hal::HWDisplayId hwcDisplayId,
                                                const HWComposer::HotplugEvent hotplugEvent,
-                                               std::optional<DisplayIdentificationInfo> info) = 0;
+                                               std::optional<display::DisplayIdentificationInfo> info) = 0;
     virtual void qtiUpdateInternalDisplaysPresentationMode() = 0;
     virtual QtiHWComposerExtensionIntf* qtiGetHWComposerExtensionIntf() = 0;
     virtual composer::DisplayExtnIntf* qtiGetDisplayExtn() = 0;
