@@ -1231,36 +1231,18 @@ status_t RpcState::validateParcel(const sp<RpcSession>& session, const Parcel& p
     }
 
     if (rpcFields->mFds && !rpcFields->mFds->empty()) {
-        switch (session->getFileDescriptorTransportMode()) {
-            case RpcSession::FileDescriptorTransportMode::NONE:
-                *errorMsg =
-                        "Parcel has file descriptors, but no file descriptor transport is enabled";
-                return FDS_NOT_ALLOWED;
-            case RpcSession::FileDescriptorTransportMode::UNIX: {
-                constexpr size_t kMaxFdsPerMsg = 253;
-                if (rpcFields->mFds->size() > kMaxFdsPerMsg) {
-                    std::stringstream ss;
-                    ss << "Too many file descriptors in Parcel for unix domain socket: "
-                       << rpcFields->mFds->size() << " (max is " << kMaxFdsPerMsg << ")";
-                    *errorMsg = ss.str();
-                    return BAD_VALUE;
-                }
-                break;
-            }
-            case RpcSession::FileDescriptorTransportMode::TRUSTY: {
-                // Keep this in sync with trusty_ipc.h!!!
-                // We could import that file here on Trusty, but it's not
-                // available on Android
-                constexpr size_t kMaxFdsPerMsg = 8;
-                if (rpcFields->mFds->size() > kMaxFdsPerMsg) {
-                    std::stringstream ss;
-                    ss << "Too many file descriptors in Parcel for Trusty IPC connection: "
-                       << rpcFields->mFds->size() << " (max is " << kMaxFdsPerMsg << ")";
-                    *errorMsg = ss.str();
-                    return BAD_VALUE;
-                }
-                break;
-            }
+        auto fileDescriptorTransportMode = session->getFileDescriptorTransportMode();
+        size_t maxFdsPerMsg = getRpcTransportModeMaxFds(fileDescriptorTransportMode);
+        if (RpcSession::FileDescriptorTransportMode::NONE == fileDescriptorTransportMode) {
+            *errorMsg = "Parcel has file descriptors, but no file descriptor transport is enabled";
+            return FDS_NOT_ALLOWED;
+        }
+        if (rpcFields->mFds->size() > maxFdsPerMsg) {
+            std::stringstream ss;
+            ss << "Too many file descriptors in Parcel: " << rpcFields->mFds->size() << " (max is "
+               << maxFdsPerMsg << ")";
+            *errorMsg = ss.str();
+            return BAD_VALUE;
         }
     }
 
