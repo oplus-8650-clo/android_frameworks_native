@@ -153,7 +153,9 @@ protected:
             mChoreographer.setDisplayTopology(
                     DisplayTopologyGraph::create(/*primaryDisplayId=*/displayId,
                                                  /*adjacencyGraph=*/{},
-                                                 /*displaysDensity=*/{{displayId, DENSITY_MEDIUM}})
+                                                 /*displaysDensity=*/{{displayId, DENSITY_MEDIUM}},
+                                                 /*absoluteDisplayBoundsDp=*/
+                                                 {{displayId, FloatRect(0, 0, 500, 500)}})
                             .value());
         } else {
             mChoreographer.setDefaultMouseDisplayId(displayId);
@@ -2820,7 +2822,8 @@ protected:
                             {DISPLAY_BOTTOM_ID, DENSITY_MEDIUM},
                             {DISPLAY_LEFT_ID, DENSITY_MEDIUM},
                             {DISPLAY_TOP_RIGHT_CORNER_ID, DENSITY_MEDIUM},
-                            {DISPLAY_HIGH_DENSITY_ID, DENSITY_HIGH}})
+                            {DISPLAY_HIGH_DENSITY_ID, DENSITY_HIGH}},
+                           /*absoluteDisplayBoundsDp=*/{})
                             .value();
 };
 
@@ -2960,10 +2963,12 @@ protected:
     static constexpr ui::LogicalDisplayId FIRST_DISPLAY_ID = ui::LogicalDisplayId{10};
     static constexpr ui::LogicalDisplayId SECOND_DISPLAY_ID = ui::LogicalDisplayId{20};
     static constexpr ui::LogicalDisplayId THIRD_DISPLAY_ID = ui::LogicalDisplayId{30};
+    static constexpr int32_t DISPLAY_WIDTH = 100;
+    static constexpr int32_t DISPLAY_HEIGHT = 100;
 
     DisplayViewport createViewport(ui::LogicalDisplayId displayId) {
-        return PointerChoreographerDisplayTopologyTests::createViewport(displayId, /*width=*/100,
-                                                                        /*height=*/100,
+        return PointerChoreographerDisplayTopologyTests::createViewport(displayId, DISPLAY_WIDTH,
+                                                                        DISPLAY_HEIGHT,
                                                                         ui::ROTATION_0);
     }
 
@@ -2979,6 +2984,11 @@ protected:
         std::unordered_map<ui::LogicalDisplayId, int> displaysDensity;
         displaysDensity[primaryDisplayId] = DENSITY_MEDIUM;
 
+        std::unordered_map<ui::LogicalDisplayId, FloatRect> absoluteDisplayBoundsDp;
+        absoluteDisplayBoundsDp.emplace(std::piecewise_construct,
+                                        std::forward_as_tuple(primaryDisplayId),
+                                        std::forward_as_tuple(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT));
+
         for (ui::LogicalDisplayId adjacentDisplayId : adjacentDisplays) {
             topologyGraph[previousDisplay].push_back({.displayId = adjacentDisplayId,
                                                       .position = DisplayTopologyPosition::RIGHT,
@@ -2988,13 +2998,23 @@ protected:
                                                         .offsetDp = 0.0f});
 
             displaysDensity[adjacentDisplayId] = DENSITY_MEDIUM;
+
+            const auto& previousDisplayBounds = absoluteDisplayBoundsDp[previousDisplay];
+            absoluteDisplayBoundsDp.emplace(std::piecewise_construct,
+                                            std::forward_as_tuple(adjacentDisplayId),
+                                            std::forward_as_tuple(previousDisplayBounds.right, 0,
+                                                                  previousDisplayBounds.right +
+                                                                          DISPLAY_WIDTH,
+                                                                  DISPLAY_HEIGHT));
+
             previousDisplay = adjacentDisplayId;
         }
 
-        mChoreographer.setDisplayTopology(DisplayTopologyGraph::create(primaryDisplayId,
-                                                                       std::move(topologyGraph),
-                                                                       std::move(displaysDensity))
-                                                  .value());
+        mChoreographer.setDisplayTopology(
+                DisplayTopologyGraph::create(primaryDisplayId, std::move(topologyGraph),
+                                             std::move(displaysDensity),
+                                             std::move(absoluteDisplayBoundsDp))
+                        .value());
     }
 };
 

@@ -50,7 +50,8 @@ TEST_P(DisplayTopologyGraphTestFixture, DisplayTopologyGraphTest) {
     SCOPED_FLAG_OVERRIDE(enable_display_topology_validation, true);
     auto [_, primaryDisplayId, graph, displaysDensity, isValid] = GetParam();
     auto result = DisplayTopologyGraph::create(primaryDisplayId, std::move(graph),
-                                               std::move(displaysDensity));
+                                               std::move(displaysDensity),
+                                               /*boundsInGlobalDpMap=*/{});
     EXPECT_EQ(isValid, result.ok());
 }
 

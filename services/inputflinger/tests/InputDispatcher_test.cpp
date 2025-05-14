@@ -15501,7 +15501,10 @@ protected:
                                            {{DISPLAY_ID, DisplayTopologyPosition::BOTTOM, 0.0f}}}},
                                          /*displaysDensity=*/
                                          {{DISPLAY_ID, DENSITY_MEDIUM},
-                                          {SECOND_DISPLAY_ID, DENSITY_MEDIUM}})
+                                          {SECOND_DISPLAY_ID, DENSITY_MEDIUM}},
+                                         /*absoluteDisplayBoundsDp=*/
+                                         {{DISPLAY_ID, FloatRect(0, -500, 500, 0)},
+                                          {SECOND_DISPLAY_ID, FloatRect(0, 0, 500, 5000)}})
                     .value();
 
     void SetUp() override {
