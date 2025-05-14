@@ -49,6 +49,7 @@ public:
     bool disable_sched_fifo_re() const;
     bool disable_sched_fifo_composer() const;
     bool disable_sched_fifo_composer_callback() const;
+    bool productionize_readback_screenshot() const;
 
     /// Legacy server flags ///
     bool test_flag() const;
@@ -65,6 +66,7 @@ public:
     bool graphite_renderengine_preview_rollout() const;
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
+    bool readback_screenshot() const;
     bool refresh_rate_overlay_on_external_display() const;
     bool vsync_predictor_rate_change_with_aligned_sequence() const;
     bool vsync_predictor_recovery() const;

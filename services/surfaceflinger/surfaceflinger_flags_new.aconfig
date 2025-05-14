@@ -236,6 +236,13 @@ flag {
 } # pacesetter_selection
 
 flag {
+  name: "readback_screenshot"
+  namespace: "core_graphics"
+  description: "Allows devices to use DPU readback for fullscreen screenshots"
+  bug: "384816457"
+} # readback_screenshot
+
+flag {
   name: "skip_invisible_windows_in_input"
   namespace: "window_surfaces"
   description: "Only send visible windows to input list"

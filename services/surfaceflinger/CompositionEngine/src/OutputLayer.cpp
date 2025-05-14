@@ -988,6 +988,11 @@ void OutputLayer::applyDeviceCompositionTypeChange(Composition compositionType) 
     LOG_FATAL_IF(!state.hwc);
     auto& hwcState = *state.hwc;
 
+    if (hwcState.hwcCompositionType == compositionType) {
+        // no changes
+        return;
+    }
+
     // Only detected disallowed changes if this was not a skip layer, because the
     // validated composition type may be arbitrary (usually DEVICE, to reflect that there were
     // fewer GPU layers)

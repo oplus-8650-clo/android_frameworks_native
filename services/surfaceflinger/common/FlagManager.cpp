@@ -117,6 +117,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_SYSPROP_FLAG(disable_sched_fifo_re);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer_callback);
+    DUMP_SYSPROP_FLAG(productionize_readback_screenshot);
 
     /// Legacy server flags ///
     DUMP_LEGACY_SERVER_FLAG(use_adpf_cpu_hint);
@@ -131,6 +132,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
     DUMP_ACONFIG_FLAG(monitor_buffer_fences);
+    DUMP_ACONFIG_FLAG(readback_screenshot);
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence);
     DUMP_ACONFIG_FLAG(vsync_predictor_recovery);
@@ -237,6 +239,7 @@ FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_sf_sched, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_re, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer_callback, /* default */ false)
+FLAG_MANAGER_SYSPROP_FLAG(productionize_readback_screenshot, /* default */ false)
 
 /// Legacy server flags ///
 FLAG_MANAGER_LEGACY_SERVER_FLAG(test_flag, "", "")
@@ -296,6 +299,7 @@ FLAG_MANAGER_ACONFIG_FLAG(adpf_native_session_manager, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
+FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence, "")
 FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_recovery, "");
 

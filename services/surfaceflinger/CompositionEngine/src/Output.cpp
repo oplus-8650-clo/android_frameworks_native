@@ -1185,6 +1185,15 @@ void Output::prepareFrame() {
 
     std::optional<android::HWComposer::DeviceRequestedChanges> changes;
     bool success = chooseCompositionStrategy(&changes);
+
+    if (success && changes.has_value()) {
+        for (const compositionengine::OutputLayer* layer : getOutputLayersOrderedByZ()) {
+            HWC2::Layer* hwcLayer = layer->getHwcLayer();
+            if (!hwcLayer || changes->changedTypes.contains(hwcLayer)) continue;
+            changes->changedTypes[hwcLayer] = layer->getState().hwc->hwcCompositionType;
+        }
+    }
+
     resetCompositionStrategy();
     outputState.strategyPrediction = CompositionStrategyPredictionState::DISABLED;
     outputState.previousDeviceRequestedChanges = changes;
@@ -1216,6 +1225,14 @@ GpuCompositionResult Output::prepareFrameAsync() {
     const auto& previousChanges = state.previousDeviceRequestedChanges;
     std::optional<android::HWComposer::DeviceRequestedChanges> changes;
     resetCompositionStrategy();
+    // Store all layer composition types before appplying composition strategy
+    android::HWComposer::DeviceRequestedChanges::ChangedTypes backups;
+    for (const compositionengine::OutputLayer* layer : getOutputLayersOrderedByZ()) {
+        HWC2::Layer* hwcLayer = layer->getHwcLayer();
+        if (!hwcLayer) continue;
+        backups[hwcLayer] = layer->getState().hwc->hwcCompositionType;
+    }
+
     auto hwcResult = chooseCompositionStrategyAsync(&changes);
     if (state.previousDeviceRequestedSuccess) {
         applyCompositionStrategy(previousChanges);
@@ -1236,6 +1253,14 @@ GpuCompositionResult Output::prepareFrameAsync() {
     }
 
     auto chooseCompositionSuccess = hwcResult.get();
+    if (chooseCompositionSuccess && changes.has_value()) {
+        // Keep track of all layer composition types, not just changes
+        for (const compositionengine::OutputLayer* layer : getOutputLayersOrderedByZ()) {
+            HWC2::Layer* hwcLayer = layer->getHwcLayer();
+            if (!hwcLayer || changes->changedTypes.contains(hwcLayer)) continue;
+            changes->changedTypes[hwcLayer] = backups[hwcLayer];
+        }
+    }
     const bool predictionSucceeded = dequeueSucceeded && changes == previousChanges;
     state.strategyPrediction = predictionSucceeded ? CompositionStrategyPredictionState::SUCCESS
                                                    : CompositionStrategyPredictionState::FAIL;
