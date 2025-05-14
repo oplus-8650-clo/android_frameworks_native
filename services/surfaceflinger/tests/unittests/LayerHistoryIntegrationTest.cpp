@@ -1023,8 +1023,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitVoteWithCategory) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitVoteWithCategoryNotVisibleDoesNotVote) {
-    SET_FLAG_FOR_TEST(flags::misc1, true);
-
     auto layer = createLegacyAndFrontedEndLayer(1);
     hideLayer(1);
     setFrameRate(1, (12.34_Hz).getValue(), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT,
@@ -1047,36 +1045,7 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitVoteWithCategoryNotVisibleDo
     EXPECT_EQ(0, frequentLayerCount(time));
 }
 
-TEST_F(LayerHistoryIntegrationTest, invisibleExplicitLayer) {
-    SET_FLAG_FOR_TEST(flags::misc1, false);
-
-    auto explicitVisiblelayer = createLegacyAndFrontedEndLayer(1);
-    showLayer(1);
-    setFrameRate(1, (60_Hz).getValue(), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, 0);
-
-    auto explicitInvisiblelayer = createLegacyAndFrontedEndLayer(2);
-    hideLayer(2);
-    setFrameRate(2, (90_Hz).getValue(), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, 0);
-
-    nsecs_t time = systemTime();
-
-    // Post a buffer to the layers to make them active
-    setBuffer(1);
-    setBuffer(2);
-    updateLayerSnapshotsAndLayerHistory(time);
-
-    EXPECT_EQ(2u, layerCount());
-    ASSERT_EQ(1u, summarizeLayerHistory(time).size());
-    EXPECT_EQ(LayerHistory::LayerVoteType::ExplicitExactOrMultiple,
-              summarizeLayerHistory(time)[0].vote);
-    EXPECT_EQ(60_Hz, summarizeLayerHistory(time)[0].desiredRefreshRate);
-    EXPECT_EQ(2u, activeLayerCount());
-    EXPECT_EQ(2, frequentLayerCount(time));
-}
-
 TEST_F(LayerHistoryIntegrationTest, invisibleExplicitLayerDoesNotVote) {
-    SET_FLAG_FOR_TEST(flags::misc1, true);
-
     auto explicitVisiblelayer = createLegacyAndFrontedEndLayer(1);
     showLayer(1);
     setFrameRate(1, (60_Hz).getValue(), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, 0);
@@ -1401,36 +1370,7 @@ TEST_F(LayerHistoryIntegrationTest, inactiveLayers) {
     EXPECT_EQ(1, frequentLayerCount(time));
 }
 
-TEST_F(LayerHistoryIntegrationTest, invisibleExplicitLayerIsActive) {
-    // TODO(b/304338314): uncomment the below line once the bug is fixed
-    SET_FLAG_FOR_TEST(flags::misc1, false);
-
-    auto explicitVisiblelayer = createLegacyAndFrontedEndLayer(1);
-    auto explicitInvisiblelayer = createLegacyAndFrontedEndLayer(2);
-    hideLayer(2);
-    setFrameRate(1, 60.0f, ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                 ANATIVEWINDOW_CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
-    setFrameRate(2, 90.0f, ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                 ANATIVEWINDOW_CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
-    nsecs_t time = systemTime();
-
-    // Post a buffer to the layers to make them active
-    setBufferWithPresentTime(explicitVisiblelayer, time);
-    setBufferWithPresentTime(explicitInvisiblelayer, time);
-
-    EXPECT_EQ(2u, layerCount());
-    ASSERT_EQ(1u, summarizeLayerHistory(time).size());
-    EXPECT_EQ(LayerHistory::LayerVoteType::ExplicitExactOrMultiple,
-              summarizeLayerHistory(time)[0].vote);
-    EXPECT_EQ(60_Hz, summarizeLayerHistory(time)[0].desiredRefreshRate);
-    EXPECT_EQ(2u, activeLayerCount());
-    EXPECT_EQ(2, frequentLayerCount(time));
-}
-
 TEST_F(LayerHistoryIntegrationTest, invisibleExplicitLayerIsNotActive) {
-    // TODO(b/304338314): uncomment the below line once the bug is fixed
-    SET_FLAG_FOR_TEST(flags::misc1, true);
-
     auto explicitVisiblelayer = createLegacyAndFrontedEndLayer(1);
     auto explicitInvisiblelayer = createLegacyAndFrontedEndLayer(2);
     hideLayer(2);

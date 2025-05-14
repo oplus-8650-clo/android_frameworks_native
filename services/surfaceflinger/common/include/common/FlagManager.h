@@ -69,6 +69,7 @@ public:
     bool readback_screenshot() const;
     bool refresh_rate_overlay_on_external_display() const;
     bool vsync_predictor_rate_change_with_aligned_sequence() const;
+    bool unify_refresh_rate_callbacks() const;
     bool vsync_predictor_recovery() const;
 
     /// Trunk stable readonly flags ///
@@ -84,7 +85,6 @@ public:
     bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
     bool display_config_error_hal() const;
-    bool enable_fro_dependent_features() const;
     bool enable_layer_command_batching() const;
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
@@ -96,10 +96,8 @@ public:
     bool hdcp_level_hal() const;
     bool hdcp_negotiation() const;
     bool idle_screen_refresh_rate_timeout() const;
-    bool latch_unsignaled_with_auto_refresh_changed() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
-    bool misc1() const;
     bool no_vsyncs_on_screen_off() const;
     bool override_trusted_overlay() const;
     bool pacesetter_selection() const;

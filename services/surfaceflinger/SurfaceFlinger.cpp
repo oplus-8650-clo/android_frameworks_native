@@ -4914,9 +4914,7 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
 
     FeatureFlags features;
 
-    const auto defaultContentDetectionValue =
-            FlagManager::getInstance().enable_fro_dependent_features() &&
-            sysprop::enable_frame_rate_override(true);
+    const auto defaultContentDetectionValue = sysprop::enable_frame_rate_override(true);
     if (sysprop::use_content_detection_for_refresh_rate(defaultContentDetectionValue)) {
         features |= Feature::kContentDetection;
         if (FlagManager::getInstance().enable_small_area_detection()) {
@@ -9316,17 +9314,15 @@ binder::Status SurfaceComposerAIDL::createDisplayEventConnection(
 
 binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerClient>* outClient) {
     const sp<Client> client = sp<Client>::make(mFlinger);
-    if (client->initCheck() == NO_ERROR) {
-        *outClient = client;
-        if (FlagManager::getInstance().misc1()) {
-            const int policy = SCHED_FIFO;
-            client->setMinSchedulerPolicy(policy, sched_get_priority_min(policy));
-        }
-        return binder::Status::ok();
-    } else {
+    if (client->initCheck() != NO_ERROR) {
         *outClient = nullptr;
         return binderStatusFromStatusT(BAD_VALUE);
     }
+
+    *outClient = client;
+    const int policy = SCHED_FIFO;
+    client->setMinSchedulerPolicy(policy, sched_get_priority_min(policy));
+    return binder::Status::ok();
 }
 
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(

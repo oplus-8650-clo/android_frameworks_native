@@ -49,7 +49,7 @@ namespace android::scheduler {
 namespace {
 
 bool isLayerActive(const LayerInfo& info, nsecs_t threshold, bool isVrrDevice) {
-    if (FlagManager::getInstance().misc1() && !info.isVisible()) {
+    if (!info.isVisible()) {
         return false;
     }
 
