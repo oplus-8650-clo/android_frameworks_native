@@ -669,7 +669,6 @@ private:
         };
         std::map<int /*axis*/, AxisState> absState;
 
-        std::string configurationFile;
         std::shared_ptr<PropertyMap> configuration;
         std::unique_ptr<VirtualKeyMap> virtualKeyMap;
         KeyMap keyMap;

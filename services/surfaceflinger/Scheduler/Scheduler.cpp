@@ -99,11 +99,7 @@ void Scheduler::startTimers() {
     using namespace sysprop;
     using namespace std::string_literals;
 
-    const int32_t defaultTouchTimerValue =
-            FlagManager::getInstance().enable_fro_dependent_features() &&
-                    sysprop::enable_frame_rate_override(true)
-            ? 200
-            : 0;
+    const int32_t defaultTouchTimerValue = sysprop::enable_frame_rate_override(true) ? 200 : 0;
     if (const int32_t millis = set_touch_timer_ms(defaultTouchTimerValue); millis > 0) {
         // Touch events are coming to SF every 100ms, so the timer needs to be higher than that
         mTouchTimer.emplace(
@@ -135,6 +131,7 @@ void Scheduler::setPacesetterDisplay(PhysicalDisplayId pacesetterId) {
         std::scoped_lock lock{mVsyncConfigLock};
         mVsyncConfiguration->reset();
     }
+
     updatePhaseConfiguration(pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
 }
 
@@ -750,8 +747,24 @@ void Scheduler::recordLayerHistory(int32_t id, const LayerProps& layerProps, nse
     }
 }
 
-void Scheduler::setModeChangePending(bool pending) {
-    mLayerHistory.setModeChangePending(pending);
+void Scheduler::setModeChangePending(PhysicalDisplayId displayId, bool pending) {
+    if (!FlagManager::getInstance().pacesetter_selection()) {
+        mLayerHistory.setModeChangePending(pending);
+        return;
+    }
+
+    std::scoped_lock lock(mDisplayLock);
+    ftl::FakeGuard guard(kMainThreadContext);
+    const auto displayOpt = mDisplays.get(displayId);
+    if (!displayOpt) {
+        ALOGW("%s: Invalid display %s!", __func__, to_string(displayId).c_str());
+        return;
+    }
+    displayOpt->get().isModeChangePending = pending;
+
+    mLayerHistory.setModeChangePending(
+            std::any_of(mDisplays.cbegin(), mDisplays.cend(),
+                        [](const auto& display) { return display.second.isModeChangePending; }));
 }
 
 void Scheduler::setDefaultFrameRateCompatibility(
@@ -965,6 +978,7 @@ void Scheduler::dump(utils::Dumper& dumper) const {
 
         display.selectorPtr->dump(dumper);
         display.targeterPtr->dump(dumper);
+        dumper.dump("isModeChangePending"sv, display.isModeChangePending);
         dumper.eol();
     }
 }
@@ -1060,11 +1074,12 @@ std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
         newVsyncSchedulePtr = pacesetter.schedulePtr;
 
         constexpr bool kForce = true;
-        newVsyncSchedulePtr->onDisplayModeChanged(pacesetter.selectorPtr->getActiveMode().modePtr,
-                                                  kForce);
+        const auto pacesetterActiveModePtr = pacesetter.selectorPtr->getActiveMode().modePtr;
+        newVsyncSchedulePtr->onDisplayModeChanged(pacesetterActiveModePtr, kForce);
 
         if (FlagManager::getInstance().pacesetter_selection()) {
             mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, true);
+            onPacesetterDisplaySizeChanged(pacesetterActiveModePtr->getResolution());
         }
     }
     return newVsyncSchedulePtr;
@@ -1353,8 +1368,8 @@ bool Scheduler::onCompositionPresented(nsecs_t presentTime) {
     return false;
 }
 
-void Scheduler::onActiveDisplayAreaChanged(uint32_t displayArea) {
-    mLayerHistory.setDisplayArea(displayArea);
+void Scheduler::onPacesetterDisplaySizeChanged(ui::Size displaySize) {
+    mLayerHistory.setDisplaySize(displaySize);
 }
 
 void Scheduler::setGameModeFrameRateForUid(FrameRateOverride frameRateOverride) {

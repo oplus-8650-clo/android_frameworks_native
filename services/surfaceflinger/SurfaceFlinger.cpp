@@ -1025,6 +1025,15 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     // initialize our drawing state
     mDrawingState = mCurrentState;
 
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        // No need to trigger update for pacesetter via Scheduler::setPacesetterDisplay() as it is
+        // done as part of adding the `display` in initScheduler().
+
+        getRenderEngine().onActiveDisplaySizeChanged(findLargestFramebufferSizeLocked());
+        const auto pacesetter = getPacesetterDisplayLocked();
+        applyRefreshRateSelectorPolicy(pacesetter->getPhysicalId(),
+                                       pacesetter->refreshRateSelector());
+    }
     onNewFrontInternalDisplay(nullptr, *display);
 
     static_cast<void>(mScheduler->schedule(
@@ -1445,7 +1454,7 @@ void SurfaceFlinger::setDesiredMode(display::DisplayModeRequest&& desiredMode) {
             mScheduler->modulateVsync(displayId, &VsyncModulator::onRefreshRateChangeInitiated);
 
             mScheduler->updatePhaseConfiguration(displayId, mode.fps);
-            mScheduler->setModeChangePending(true);
+            mScheduler->setModeChangePending(displayId, true);
 
             // The mode set to switch resolution is not initiated until the display transaction that
             // resizes the display. DM sends this transaction in response to a mode change event, so
@@ -1574,9 +1583,8 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
 
 void SurfaceFlinger::dropModeRequest(PhysicalDisplayId displayId) {
     mDisplayModeController.clearDesiredMode(displayId);
-    if (displayId == mFrontInternalDisplayId) {
-        // TODO(b/255635711): Check for pending mode changes on other displays.
-        mScheduler->setModeChangePending(false);
+    if (displayId == mFrontInternalDisplayId || FlagManager::getInstance().pacesetter_selection()) {
+        mScheduler->setModeChangePending(displayId, false);
     }
 }
 
@@ -4386,6 +4394,15 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
             }
 
             if (display->getPhysicalId() == mFrontInternalDisplayId) {
+                if (FlagManager::getInstance().pacesetter_selection()) {
+                    mScheduler->setPacesetterDisplay(mFrontInternalDisplayId);
+
+                    getRenderEngine().onActiveDisplaySizeChanged(
+                            findLargestFramebufferSizeLocked());
+                    const auto pacesetter = getPacesetterDisplayLocked();
+                    applyRefreshRateSelectorPolicy(pacesetter->getPhysicalId(),
+                                                   pacesetter->refreshRateSelector());
+                }
                 onNewFrontInternalDisplay(nullptr, *display);
             }
         }
@@ -4410,7 +4427,7 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
             display->setFlags(currentState.flags);
         }
 
-        const auto updateDisplaySize = [&]() {
+        const auto updateDisplaySize = [&]() REQUIRES(mStateLock) {
             if (currentState.width != drawingState.width ||
                 currentState.height != drawingState.height) {
                 /* QTI_BEGIN */
@@ -4430,12 +4447,19 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
                         display->setDisplaySize(resolution);
                     }
 
-                    if (display->getId() == mFrontInternalDisplayId) {
-                        onFrontInternalDisplaySizeChanged(*display);
+                    if (FlagManager::getInstance().pacesetter_selection()) {
+                        if (display->getId() == mScheduler->getPacesetterDisplayId()) {
+                            mScheduler->onPacesetterDisplaySizeChanged(display->getSize());
+                            getRenderEngine().onActiveDisplaySizeChanged(
+                                    findLargestFramebufferSizeLocked());
+                        }
+                    } else {
+                        if (display->getId() == mFrontInternalDisplayId) {
+                            mScheduler->onPacesetterDisplaySizeChanged(display->getSize());
+                            getRenderEngine().onActiveDisplaySizeChanged(display->getSize());
+                        }
                     }
-                /* QTI_BEGIN */
                 }
-                /* QTI_END */
             }
         };
 
@@ -4900,9 +4924,7 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
 
     FeatureFlags features;
 
-    const auto defaultContentDetectionValue =
-            FlagManager::getInstance().enable_fro_dependent_features() &&
-            sysprop::enable_frame_rate_override(true);
+    const auto defaultContentDetectionValue = sysprop::enable_frame_rate_override(true);
     if (sysprop::use_content_detection_for_refresh_rate(defaultContentDetectionValue)) {
         features |= Feature::kContentDetection;
         if (FlagManager::getInstance().enable_small_area_detection()) {
@@ -4976,6 +4998,25 @@ void SurfaceFlinger::invalidateLayerStack(const ui::LayerFilter& layerFilter, co
             display->editState().dirtyRegion.orSelf(dirty);
         }
     }
+}
+
+ui::Size SurfaceFlinger::findLargestFramebufferSizeLocked() const {
+    ui::Size maxSize(0, 0);
+    int64_t maxArea = 0;
+    for (const auto& [_, display] : mDisplays) {
+        if (!display->isPoweredOn()) {
+            continue;
+        }
+
+        const ui::Size size = display->getSize();
+        const int64_t area = size.getWidth() * size.getHeight();
+        if (area > maxArea) {
+            maxSize = size;
+            maxArea = area;
+        }
+    }
+
+    return maxSize;
 }
 
 status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinder>& handle,
@@ -6076,6 +6117,10 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     } else if (mode == hal::PowerMode::OFF) {
         const bool currentModeNotDozeSuspend = (currentMode != hal::PowerMode::DOZE_SUSPEND);
         // Turn off the display
+        if (FlagManager::getInstance().pacesetter_selection()) {
+            mScheduler->setModeChangePending(displayId, false);
+        }
+
         if (displayId == mFrontInternalDisplayId) {
             if (const auto display = findFrontInternalDisplay()) {
                 const auto frontInternalDisplay = getFrontInternalDisplayLocked();
@@ -6151,6 +6196,19 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     /* QTI_END */
 
     mScheduler->setDisplayPowerMode(displayId, mode);
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        // TODO: b/389983418 - Update pacesetter designation inside
+        // Scheduler::setDisplayPowerMode().
+        mScheduler->setPacesetterDisplay(mFrontInternalDisplayId);
+
+        // Whether or not the policy of the new pacesetter display changed while it was powered off
+        // (in which case its preferred mode has already been propagated to HWC via setDesiredMode),
+        // the Scheduler's emittedModeOpt must be initialized to the newly active mode, and the
+        // kernel idle timer of the pacesetter display must be toggled.
+        const auto pacesetter = getPacesetterDisplayLocked();
+        applyRefreshRateSelectorPolicy(pacesetter->getPhysicalId(),
+                                       pacesetter->refreshRateSelector());
+    }
 
     ALOGD("Finished setting power mode %d on physical display %s", mode,
           to_string(displayId).c_str());
@@ -6763,7 +6821,6 @@ void SurfaceFlinger::dumpAll(const DumpArgs& args, const std::string& compositio
      * Dump the visible layer list
      */
     colorizer.bold(result);
-    StringAppendF(&result, "SurfaceFlinger New Frontend Enabled:%s\n", "true");
     StringAppendF(&result, "Active Layers - layers with client handles (count = %zu)\n",
                   mNumLayers.load());
     colorizer.reset(result);
@@ -8862,11 +8919,6 @@ void SurfaceFlinger::sample() {
     mRegionSamplingThread->onCompositionComplete(scheduleFrameTimeOpt);
 }
 
-void SurfaceFlinger::onFrontInternalDisplaySizeChanged(const DisplayDevice& activeDisplay) {
-    mScheduler->onActiveDisplayAreaChanged(activeDisplay.getWidth() * activeDisplay.getHeight());
-    getRenderEngine().onActiveDisplaySizeChanged(activeDisplay.getSize());
-}
-
 sp<DisplayDevice> SurfaceFlinger::findFrontInternalDisplay() const {
     if (mPhysicalDisplays.size() == 1) return nullptr;
 
@@ -8884,7 +8936,6 @@ void SurfaceFlinger::onNewFrontInternalDisplay(const DisplayDevice* oldFrontInte
     SFTRACE_CALL();
 
     mFrontInternalDisplayId = newFrontInternalDisplay.getPhysicalId();
-    onFrontInternalDisplaySizeChanged(newFrontInternalDisplay);
 
     mFrontInternalDisplayTransformHint = newFrontInternalDisplay.getTransformHint();
     sFrontInternalDisplayRotationFlags =
@@ -8894,22 +8945,23 @@ void SurfaceFlinger::onNewFrontInternalDisplay(const DisplayDevice* oldFrontInte
         if (oldFrontInternalDisplayPtr) {
             oldFrontInternalDisplayPtr->getCompositionDisplay()->setLayerCachingTexturePoolEnabled(
                     false);
+            mScheduler->setModeChangePending(oldFrontInternalDisplayPtr->getPhysicalId(), false);
         }
 
+        mScheduler->onPacesetterDisplaySizeChanged(newFrontInternalDisplay.getSize());
+        getRenderEngine().onActiveDisplaySizeChanged(newFrontInternalDisplay.getSize());
+
         newFrontInternalDisplay.getCompositionDisplay()->setLayerCachingTexturePoolEnabled(true);
+
+        mScheduler->setPacesetterDisplay(mFrontInternalDisplayId);
+
+        // Whether or not the policy of the new front internal display changed while it was powered
+        // off (in which case its preferred mode has already been propagated to HWC via
+        // setDesiredMode), the Scheduler's emittedModeOpt must be initialized to the newly
+        // active mode, and the kernel idle timer of the front internal display must be toggled.
+        applyRefreshRateSelectorPolicy(mFrontInternalDisplayId,
+                                       newFrontInternalDisplay.refreshRateSelector());
     }
-
-    // TODO(b/255635711): Check for pending mode changes on other displays.
-    mScheduler->setModeChangePending(false);
-
-    mScheduler->setPacesetterDisplay(mFrontInternalDisplayId);
-
-    // Whether or not the policy of the new front internal display changed while it was powered off
-    // (in which case its preferred mode has already been propagated to HWC via setDesiredMode), the
-    // Scheduler's cachedModeChangedParams must be initialized to the newly active mode, and
-    // the kernel idle timer of the front internal display must be toggled.
-    applyRefreshRateSelectorPolicy(mFrontInternalDisplayId,
-                                   newFrontInternalDisplay.refreshRateSelector());
 }
 
 status_t SurfaceFlinger::addWindowInfosListener(const sp<IWindowInfosListener>& windowInfosListener,
@@ -9288,17 +9340,15 @@ binder::Status SurfaceComposerAIDL::createDisplayEventConnection(
 
 binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerClient>* outClient) {
     const sp<Client> client = sp<Client>::make(mFlinger);
-    if (client->initCheck() == NO_ERROR) {
-        *outClient = client;
-        if (FlagManager::getInstance().misc1()) {
-            const int policy = SCHED_FIFO;
-            client->setMinSchedulerPolicy(policy, sched_get_priority_min(policy));
-        }
-        return binder::Status::ok();
-    } else {
+    if (client->initCheck() != NO_ERROR) {
         *outClient = nullptr;
         return binderStatusFromStatusT(BAD_VALUE);
     }
+
+    *outClient = client;
+    const int policy = SCHED_FIFO;
+    client->setMinSchedulerPolicy(policy, sched_get_priority_min(policy));
+    return binder::Status::ok();
 }
 
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(

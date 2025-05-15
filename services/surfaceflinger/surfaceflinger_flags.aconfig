@@ -4,14 +4,6 @@ package: "com.android.graphics.surfaceflinger.flags"
 container: "system"
 
 flag {
-  name: "misc1"
-  namespace: "core_graphics"
-  description: "This flag controls minor miscellaneous SurfaceFlinger changes"
-  bug: "297389311"
-  is_fixed_read_only: true
-}
-
-flag {
   name: "connected_display"
   namespace: "core_graphics"
   description: "Controls SurfaceFlinger support for Connected Displays in 24Q1"
@@ -105,14 +97,6 @@ flag {
   namespace: "core_graphics"
   description: "do not flatten layers if source crop is only moved"
   bug: "305718400"
-  is_fixed_read_only: true
-}
-
-flag {
-  name: "enable_fro_dependent_features"
-  namespace: "core_graphics"
-  description: "enable frame rate override dependent features by default"
-  bug: "314217419"
   is_fixed_read_only: true
 }
 

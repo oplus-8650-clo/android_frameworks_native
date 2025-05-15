@@ -535,11 +535,7 @@ void RpcServer::establishConnection(
                 }
             }
 
-            if (!session->setForServer(server,
-                                       sp<RpcServer::EventListener>::fromExisting(
-                                               static_cast<RpcServer::EventListener*>(
-                                                       server.get())),
-                                       sessionId, sessionSpecificRoot)) {
+            if (!session->setForServer(server, server, sessionId, sessionSpecificRoot)) {
                 ALOGE("Failed to attach server to session");
                 return;
             }

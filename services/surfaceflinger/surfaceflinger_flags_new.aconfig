@@ -195,17 +195,6 @@ flag {
 } # increase_missed_frame_jank_threshold
 
 flag {
-  name: "latch_unsignaled_with_auto_refresh_changed"
-  namespace: "core_graphics"
-  description: "Ignore eAutoRefreshChanged with latch unsignaled"
-  bug: "331513837"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # latch_unsignaled_with_auto_refresh_changed
-
-flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"
@@ -234,6 +223,13 @@ flag {
   description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
   bug: "374072507"
 } # pacesetter_selection
+
+flag {
+  name: "readback_screenshot"
+  namespace: "core_graphics"
+  description: "Allows devices to use DPU readback for fullscreen screenshots"
+  bug: "384816457"
+} # readback_screenshot
 
 flag {
   name: "skip_invisible_windows_in_input"
@@ -287,6 +283,16 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # override_trusted_overlay
+
+flag {
+    name: "unify_refresh_rate_callbacks"
+    namespace: "core_graphics"
+    description: "Unifies mode changed and FrameRateOverride callbacks"
+    bug: "399482301"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+} # unify_refresh_rate_callbacks
 
 flag {
   name: "vsync_predictor_rate_change_with_aligned_sequence"

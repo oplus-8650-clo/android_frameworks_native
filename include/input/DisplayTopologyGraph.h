@@ -18,6 +18,7 @@
 
 #include <android-base/result.h>
 #include <ftl/enum.h>
+#include <ui/FloatRect.h>
 #include <ui/LogicalDisplayId.h>
 
 #include <cinttypes>
@@ -58,6 +59,7 @@ struct DisplayTopologyGraph {
     ui::LogicalDisplayId primaryDisplayId = ui::LogicalDisplayId::INVALID;
     std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>> graph;
     std::unordered_map<ui::LogicalDisplayId, int> displaysDensity;
+    std::unordered_map<ui::LogicalDisplayId, FloatRect> boundsInGlobalDp;
 
     DisplayTopologyGraph() = default;
     std::string dump() const;
@@ -68,14 +70,16 @@ struct DisplayTopologyGraph {
             ui::LogicalDisplayId primaryDisplay,
             std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>>&&
                     adjacencyGraph,
-            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap);
+            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap,
+            std::unordered_map<ui::LogicalDisplayId, FloatRect>&& boundsInGlobalDpMap);
 
 private:
     DisplayTopologyGraph(
             ui::LogicalDisplayId primaryDisplay,
             std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>>&&
                     adjacencyGraph,
-            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap);
+            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap,
+            std::unordered_map<ui::LogicalDisplayId, FloatRect>&& boundsInGlobalDp);
 };
 
 } // namespace android

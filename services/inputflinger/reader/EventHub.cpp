@@ -359,10 +359,13 @@ static base::Result<std::shared_ptr<PropertyMap>> loadConfiguration(
                                                                           CONFIGURATION);
     if (configurationFile.empty()) {
         ALOGD("No input device configuration file found for device '%s'.", ident.name.c_str());
-        return base::Result<std::shared_ptr<PropertyMap>>(nullptr);
+        return base::Error(ENOENT);
     }
     base::Result<std::shared_ptr<PropertyMap>> propertyMap =
             PropertyMap::load(configurationFile.c_str());
+    if (propertyMap.ok()) {
+        propertyMap.value()->addProperty("configurationFile", configurationFile);
+    }
 
     return propertyMap;
 }
@@ -2386,13 +2389,18 @@ void EventHub::openDeviceLocked(const std::string& devicePath) {
 
     // Load the configuration file for the device.
     std::shared_ptr<PropertyMap> configuration = nullptr;
-    base::Result<std::shared_ptr<PropertyMap>> propertyMapResult = loadConfiguration(identifier);
+    std::string configFile;
+    auto propertyMapResult = loadConfiguration(identifier);
     if (!propertyMapResult.ok()) {
-        ALOGE("Error loading input device configuration file for device '%s'. "
-              "Using default configuration. Error: %s",
-              identifier.name.c_str(), propertyMapResult.error().message().c_str());
+        // Most devices don't specify an input device configuration file, therefore suppress those
+        // prints.
+        ALOGE_IF(propertyMapResult.error().code() != ENOENT,
+                 "Error loading input device configuration file for device '%s'. "
+                 "Using default configuration. Error: %s",
+                 identifier.name.c_str(), propertyMapResult.error().message().c_str());
     } else {
         configuration = propertyMapResult.value();
+        configFile = propertyMapResult.value()->getString("configurationFile").value_or("<none>");
     }
 
     // Allocate device.  (The device object takes ownership of the fd at this point.)
@@ -2612,7 +2620,7 @@ void EventHub::openDeviceLocked(const std::string& devicePath) {
     ALOGI("New device: id=%d, fd=%d, path='%s', name='%s', classes=%s, "
           "configuration='%s', keyLayout='%s', keyCharacterMap='%s', builtinKeyboard=%s, ",
           deviceId, fd, devicePath.c_str(), device->identifier.name.c_str(),
-          device->classes.string().c_str(), device->configurationFile.c_str(),
+          device->classes.string().c_str(), configFile.c_str(),
           device->keyMap.keyLayoutFile.c_str(), device->keyMap.keyCharacterMapFile.c_str(),
           toString(mBuiltInKeyboardId == deviceId));
 
@@ -3046,7 +3054,11 @@ void EventHub::dump(std::string& dump) const {
                                      device->associatedDevice->layoutInfo->layoutType.c_str());
             }
             dump += StringPrintf(INDENT3 "ConfigurationFile: %s\n",
-                                 device->configurationFile.c_str());
+                                 device->configuration
+                                         ? device->configuration->getString("configurationFile")
+                                                   .value_or("<none>")
+                                                   .c_str()
+                                         : "<none>");
             dump += StringPrintf(INDENT3 "VideoDevice: %s\n",
                                  device->videoDevice ? device->videoDevice->dump().c_str()
                                                      : "<none>");

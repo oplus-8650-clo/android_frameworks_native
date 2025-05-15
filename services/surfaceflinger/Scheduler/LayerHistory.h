@@ -62,8 +62,8 @@ public:
     void registerLayer(Layer*, bool contentDetectionEnabled,
                        FrameRateCompatibility frameRateCompatibility);
 
-    // Sets the display size. Client is responsible for synchronization.
-    void setDisplayArea(uint32_t displayArea) { mDisplayArea = displayArea; }
+    // Client is responsible for synchronization.
+    void setDisplaySize(ui::Size displaySize);
 
     // Sets whether a mode change is pending to be applied
     void setModeChangePending(bool pending) { mModeChangePending = pending; }
@@ -163,6 +163,7 @@ private:
     LayerInfos mActiveLayerInfos GUARDED_BY(mLock);
     LayerInfos mInactiveLayerInfos GUARDED_BY(mLock);
 
+    // TODO: Track display areas on a per-display basis rather than as a single global state.
     uint32_t mDisplayArea = 0;
 
     // Whether to emit systrace output and debug logs.
@@ -171,7 +172,8 @@ private:
     // Whether to use priority sent from WindowManager to determine the relevancy of the layer.
     const bool mUseFrameRatePriority;
 
-    // Whether a mode change is in progress or not
+    // Whether a mode change is in progress or not.
+    /// TODO: Track mode change pending on a per-display basis rather than as a single global state.
     std::atomic<bool> mModeChangePending = false;
 // QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
 

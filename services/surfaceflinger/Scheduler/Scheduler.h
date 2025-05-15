@@ -255,7 +255,7 @@ public:
     void registerLayer(Layer*, FrameRateCompatibility);
     void recordLayerHistory(int32_t id, const LayerProps& layerProps, nsecs_t presentTime,
                             nsecs_t now, LayerHistory::LayerUpdateType) EXCLUDES(mDisplayLock);
-    void setModeChangePending(bool pending);
+    void setModeChangePending(PhysicalDisplayId, bool pending) EXCLUDES(mDisplayLock);
     void setDefaultFrameRateCompatibility(int32_t id, scheduler::FrameRateCompatibility);
     void setLayerProperties(int32_t id, const LayerProps&);
     void deregisterLayer(Layer*);
@@ -312,7 +312,7 @@ public:
     bool onCompositionPresented(nsecs_t presentTime);
 
     // Notifies the scheduler when the display size has changed. Called from SF's main thread
-    void onActiveDisplayAreaChanged(uint32_t displayArea);
+    void onPacesetterDisplaySizeChanged(ui::Size displaySize);
 
     // Stores the preferred refresh rate that an app should run at.
     // FrameRateOverride.refreshRateHz == 0 means no preference.
@@ -565,6 +565,7 @@ private:
         FrameTargeterPtr targeterPtr;
 
         hal::PowerMode powerMode = hal::PowerMode::OFF;
+        bool isModeChangePending = false;
     };
 
     using DisplayRef = std::reference_wrapper<Display>;

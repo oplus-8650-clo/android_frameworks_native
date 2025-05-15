@@ -305,6 +305,9 @@ cc_defaults {
         android: {
             test_suites: ["vts"],
         },
+        host: {
+            cflags: ["-DBINDER_NO_KERNEL_IPC_TESTING"],
+        },
     },
     defaults: [
         "binderRpcTest_common_defaults",

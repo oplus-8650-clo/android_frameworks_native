@@ -321,6 +321,13 @@ enum {
      * relative to true north in degrees.
      */
     ASENSOR_TYPE_HEADING = 42,
+    /**
+     * {@link ASENSOR_TYPE_MOISTURE_INTRUSION}
+     * reporting-mode: on-change
+     *
+     * A moisture sensor that detects water intrusion within the chassis of a device
+     */
+    ASENSOR_TYPE_MOISTURE_INTRUSION = 43,
 };
 
 /**

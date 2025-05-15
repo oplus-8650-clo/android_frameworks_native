@@ -1138,6 +1138,8 @@ private:
                         .value_or(false)};
     }
 
+    ui::Size findLargestFramebufferSizeLocked() const REQUIRES(mStateLock);
+
     /*
      * H/W composer
      */
@@ -1251,8 +1253,6 @@ private:
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
                                    const DisplayDevice& newFrontInternalDisplay)
             REQUIRES(mStateLock, kMainThreadContext);
-
-    void onFrontInternalDisplaySizeChanged(const DisplayDevice&);
 
     /*
      * Debugging & dumpsys

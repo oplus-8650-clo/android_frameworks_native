@@ -1724,6 +1724,11 @@ TEST_F(BinderARpcNdk, ARpcDelegateAccessorWrongInstance) {
 }
 
 TEST_F(BinderARpcNdk, ARpcDelegateNonAccessor) {
+    // TODO: test in environments we can get a proxied service?
+#ifndef __BIONIC__
+    GTEST_SKIP() << "Can only get AIDL services on device.";
+#endif
+
     auto service = defaultServiceManager()->checkService(String16(kKnownAidlService));
     ASSERT_NE(nullptr, service);
     ndk::SpAIBinder binder = ndk::SpAIBinder(AIBinder_fromPlatformBinder(service));

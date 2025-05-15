@@ -147,13 +147,13 @@ TEST_F(FlagManagerTest, readonlyReturnsValue) {
     EXPECT_CALL(mFlagManager, getBoolProperty).WillRepeatedly(Return(std::nullopt));
 
     {
-        SET_FLAG_FOR_TEST(flags::misc1, true);
-        EXPECT_EQ(true, mFlagManager.misc1());
+        SET_FLAG_FOR_TEST(flags::hdcp_level_hal, true);
+        EXPECT_EQ(true, mFlagManager.hdcp_level_hal());
     }
 
     {
-        SET_FLAG_FOR_TEST(flags::misc1, false);
-        EXPECT_EQ(false, mFlagManager.misc1());
+        SET_FLAG_FOR_TEST(flags::hdcp_level_hal, false);
+        EXPECT_EQ(false, mFlagManager.hdcp_level_hal());
     }
 }
 
