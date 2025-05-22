@@ -4300,6 +4300,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
 
     mDisplays.try_emplace(displayToken, std::move(display));
     /* QTI_BEGIN */
+    mQtiSFExtnIntf->qtiSetDisplayCount(mDisplays.size());
     mQtiSFExtnIntf->qtiCreateSmomoInstance(state);
     /* QTI_END */
 
@@ -4346,6 +4347,9 @@ void SurfaceFlinger::processDisplayRemoved(const wp<IBinder>& displayToken) {
     }
 
     mDisplays.erase(displayToken);
+    /* QTI_BEGIN */
+    mQtiSFExtnIntf->qtiSetDisplayCount(mDisplays.size());
+    /* QTI_END */
 
     if (display && display->isVirtual()) {
         static_cast<void>(mScheduler->schedule([display = std::move(display)] {
@@ -4394,6 +4398,9 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         }
 
         mDisplays.erase(displayToken);
+        /* QTI_BEGIN */
+        mQtiSFExtnIntf->qtiSetDisplayCount(mDisplays.size());
+        /* QTI_END */
 
         if (const auto& physical = currentState.physical) {
             getHwComposer().allocatePhysicalDisplay(physical->hwcDisplayId, physical->id,
