@@ -32,11 +32,7 @@ namespace android {
 namespace renderengine {
 namespace skia {
 
-VulkanBackendContext VulkanInterface::getGaneshBackendContext() {
-    return this->getGraphiteBackendContext();
-};
-
-VulkanBackendContext VulkanInterface::getGraphiteBackendContext() {
+VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
     VulkanBackendContext backendContext;
     backendContext.fInstance = mInstance;
     backendContext.fPhysicalDevice = mPhysicalDevice;
