@@ -163,6 +163,7 @@ cc_test {
     ],
     static_libs: [
         "libgmock",
+        "libselinux",
     ],
     test_suites: [
         "general-tests",

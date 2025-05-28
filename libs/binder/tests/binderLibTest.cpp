@@ -42,6 +42,7 @@
 #include <binder/unique_fd.h>
 #include <input/BlockingQueue.h>
 #include <processgroup/processgroup.h>
+#include <selinux/selinux.h>
 #include <utils/Flattenable.h>
 #include <utils/SystemClock.h>
 #include "binder/IServiceManagerUnitTestHelper.h"
@@ -366,6 +367,8 @@ class BinderLibTest : public ::testing::Test {
                     ProcessState::DriverFeature::FREEZE_NOTIFICATION);
         }
 
+        bool checkSelinuxPermissive() { return (security_getenforce() == 0); }
+
         bool getBinderPid(int32_t* pid, sp<IBinder> server) {
             Parcel data, replypid;
             if (server->transact(BINDER_LIB_TEST_GETPID, data, &replypid) != NO_ERROR) {
@@ -619,8 +622,12 @@ TEST_F(BinderLibTest, CheckServiceAccessOk) {
 
 TEST_F(BinderLibTest, CheckServiceAccessNotOk) {
     auto sm = defaultServiceManager();
-    EXPECT_FALSE(sm->checkServiceAccess(String16("u:r:some_unknown_sid:s0"), 0, 0, String16("adb"),
-                                        String16("find")));
+    if (!checkSelinuxPermissive()) {
+        EXPECT_FALSE(sm->checkServiceAccess(String16("u:r:some_unknown_sid:s0"), 0, 0,
+                                            String16("adb"), String16("find")));
+    } else {
+        GTEST_SKIP() << "Skipping test for disabled SELinux config";
+    }
 }
 
 TEST_F(BinderLibTest, CheckServiceAccessBadArgs) {

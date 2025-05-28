@@ -945,11 +945,9 @@ private:
      */
     struct ScreenshotArgs {
         // Contains the sequence ID of the parent layer if the screenshot is
-        // initiated though captureLayers(), or the displayToken or displayID
-        // that the render result will be on if initiated through captureDisplay().
-        // The monostate type is used to denote that the screenshot is initiated
-        // for region sampling.
-        std::variant<std::monostate, int32_t, sp<IBinder>, DisplayId> captureTypeVariant;
+        // initiated though captureLayers(), or the display that the render
+        // result will be on if initiated through captureDisplay()
+        std::variant<int32_t, wp<const DisplayDevice>> captureTypeVariant;
 
         // Display ID of the display the result will be on
         ftl::Optional<DisplayIdVariant> displayIdVariant{std::nullopt};
@@ -1006,12 +1004,12 @@ private:
         std::string debugName;
     };
 
-    status_t setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args);
+    bool getSnapshotsFromMainThread(ScreenshotArgs& args);
 
     void captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat,
                              const sp<IScreenCaptureListener>&);
 
-    status_t setScreenshotDisplayState(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
+    bool getDisplayStateOnMainThread(ScreenshotArgs& args) REQUIRES(kMainThreadContext);
 
     ftl::SharedFuture<FenceResult> captureScreenshot(
             ScreenshotArgs& args, const std::shared_ptr<renderengine::ExternalTexture>& buffer,

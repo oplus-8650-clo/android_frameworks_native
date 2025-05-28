@@ -68,4 +68,8 @@ bool InputFlags::scaleCursorSpeedWithDisplayDensity() {
     return com::android::input::flags::scale_cursor_speed_with_dpi();
 }
 
+bool InputFlags::doNotUseSkipScreenshotFlagForMouseCursor() {
+    return getConnectedDisplaysDevOptionValue().value_or(false);
+}
+
 } // namespace android

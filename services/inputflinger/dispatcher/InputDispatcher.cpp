@@ -5732,15 +5732,6 @@ void InputDispatcher::setFocusedDisplay(ui::LogicalDisplayId displayId) {
             // Find new focused window and validate
             sp<IBinder> newFocusedWindowToken = mFocusResolver.getFocusedWindowToken(displayId);
             sendFocusChangedCommandLocked(oldFocusedWindowToken, newFocusedWindowToken);
-
-            if (newFocusedWindowToken == nullptr) {
-                ALOGW("Focused display #%s does not have a focused window.",
-                      displayId.toString().c_str());
-                if (mFocusResolver.hasFocusedWindowTokens()) {
-                    ALOGE("But another display has a focused window\n%s",
-                          mFocusResolver.dumpFocusedWindows().c_str());
-                }
-            }
         }
     } // release lock
 

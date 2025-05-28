@@ -44,7 +44,7 @@ struct SamplingOffsetCallback;
 using gui::IRegionSamplingListener;
 
 float sampleArea(const uint32_t* data, int32_t width, int32_t height, int32_t stride,
-                 const Rect& area);
+                 uint32_t orientation, const Rect& area);
 
 class RegionSamplingThread : public IBinder::DeathRecipient {
 public:
@@ -96,7 +96,7 @@ private:
 
     std::vector<float> sampleBuffer(
             const sp<GraphicBuffer>& buffer, const Point& leftTop,
-            const std::vector<RegionSamplingThread::Descriptor>& descriptors);
+            const std::vector<RegionSamplingThread::Descriptor>& descriptors, uint32_t orientation);
 
     void doSample(std::optional<std::chrono::steady_clock::time_point> samplingDeadline);
     void binderDied(const wp<IBinder>& who) override;

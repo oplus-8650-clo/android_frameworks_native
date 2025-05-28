@@ -617,11 +617,19 @@ void getNativePixelFormat(EGLDisplay dpy, egl_connection_t* cnx, EGLConfig confi
     if (a == 0) {
         if (8 == r && 0 == g && 0 == b) {
             *format = PixelFormat::R_8;
+        } else if (12 == r && 0 == g && 0 == b) {
+            *format = PixelFormat::R_12_UINT;
+        } else if (14 == r && 0 == g && 0 == b) {
+            *format = PixelFormat::R_14_UINT;
         } else if (colorDepth <= 16) {
             *format = PixelFormat::RGB_565;
         } else {
             if (componentType == EGL_COLOR_COMPONENT_TYPE_FIXED_EXT) {
-                if (colorDepth > 24) {
+                if (12 == r && 12 == g && 0 == b) {
+                    *format = PixelFormat::RG_1212_UINT;
+                } else if (14 == r && 14 == g && 0 == b) {
+                    *format = PixelFormat::RG_1414_UINT;
+                } else if (colorDepth > 24) {
                     *format = PixelFormat::RGBA_1010102;
                 } else {
                     *format = PixelFormat::RGBX_8888;
@@ -632,7 +640,11 @@ void getNativePixelFormat(EGLDisplay dpy, egl_connection_t* cnx, EGLConfig confi
         }
     } else {
         if (componentType == EGL_COLOR_COMPONENT_TYPE_FIXED_EXT) {
-            if (colorDepth > 24) {
+            if (12 == r && 12 == g && 12 == b) {
+                *format = PixelFormat::RGBA_12121212_UINT;
+            } else if (14 == r && 14 == g && 14 == b) {
+                *format = PixelFormat::RGBA_14141414_UINT;
+            } else if (colorDepth > 24) {
                 *format = PixelFormat::RGBA_1010102;
             } else {
                 *format = PixelFormat::RGBA_8888;

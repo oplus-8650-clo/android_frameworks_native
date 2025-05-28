@@ -2764,4 +2764,58 @@ TEST_F(SurfaceTest, isBufferOwned) {
     EXPECT_EQ(OK, surface->isBufferOwned(consumerAttachableBuffer, &isOwned));
     EXPECT_FALSE(isOwned);
 }
+
+TEST_F(SurfaceTest, isBufferOwned_SameBufferBufferWithDifferentHandles) {
+    //
+    // Surface setup:
+    //
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, sp<StubSurfaceListener>::make(), false));
+
+    //
+    // Buffer setup:
+    //
+    sp<GraphicBuffer> originalBuffer =
+            sp<GraphicBuffer>::make(10, 10, PIXEL_FORMAT_RGBA_8888, 1, GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<GraphicBuffer> copiedBuffer = sp<GraphicBuffer>::make();
+
+    // Copy all the data from one buffer to the other. At time of writing, this will clone and
+    // duplicate the native handle, making them different, while the rest of the aspects of the
+    // buffers remain the same.
+    std::vector<uint8_t> bufferData(originalBuffer->getFlattenedSize());
+    std::vector<int> fdCount(originalBuffer->getFdCount());
+
+    void* data = bufferData.data();
+    size_t size = bufferData.size();
+    int* fds = fdCount.data();
+    size_t count = fdCount.size();
+    ASSERT_EQ(OK, originalBuffer->flatten(data, size, fds, count));
+
+    void const* inData = bufferData.data();
+    size = bufferData.size();
+    int const* inFds = fdCount.data();
+    count = fdCount.size();
+    ASSERT_EQ(OK, copiedBuffer->unflatten(inData, size, inFds, count));
+
+    // Double check our expectations about a flattened/unflattened buffer:
+    ASSERT_NE(originalBuffer, copiedBuffer);
+    ASSERT_EQ(originalBuffer->getId(), copiedBuffer->getId());
+
+    ASSERT_EQ(originalBuffer->handle->numFds, copiedBuffer->handle->numFds);
+    for (int i = 0; i < originalBuffer->handle->numFds; i++) {
+        ASSERT_NE(originalBuffer->handle->data[i], copiedBuffer->handle->data[i]);
+    }
+
+    //
+    // Test:
+    //
+    EXPECT_EQ(OK, surface->attachBuffer(originalBuffer->getNativeBuffer()));
+
+    bool isOwned;
+    ASSERT_EQ(OK, surface->isBufferOwned(originalBuffer, &isOwned));
+    EXPECT_TRUE(isOwned);
+
+    ASSERT_EQ(OK, surface->isBufferOwned(copiedBuffer, &isOwned));
+    EXPECT_TRUE(isOwned);
+}
 } // namespace android
