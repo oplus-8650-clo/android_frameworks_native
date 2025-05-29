@@ -42,6 +42,7 @@
 #include <binder/unique_fd.h>
 #include <input/BlockingQueue.h>
 #include <processgroup/processgroup.h>
+#include <selinux/selinux.h>
 #include <utils/Flattenable.h>
 #include <utils/SystemClock.h>
 #include "binder/IServiceManagerUnitTestHelper.h"
@@ -136,7 +137,8 @@ enum BinderLibTestTranscationCode {
     BINDER_LIB_TEST_LOCK_UNLOCK,
     BINDER_LIB_TEST_PROCESS_LOCK,
     BINDER_LIB_TEST_UNLOCK_AFTER_MS,
-    BINDER_LIB_TEST_PROCESS_TEMPORARY_LOCK
+    BINDER_LIB_TEST_PROCESS_TEMPORARY_LOCK,
+    BINDER_LIB_TEST_BINDER_SPAM,
 };
 
 pid_t start_server_process(int arg2, bool usePoll = false)
@@ -365,6 +367,8 @@ class BinderLibTest : public ::testing::Test {
             return ProcessState::isDriverFeatureEnabled(
                     ProcessState::DriverFeature::FREEZE_NOTIFICATION);
         }
+
+        bool checkSelinuxPermissive() { return (security_getenforce() == 0); }
 
         bool getBinderPid(int32_t* pid, sp<IBinder> server) {
             Parcel data, replypid;
@@ -619,8 +623,12 @@ TEST_F(BinderLibTest, CheckServiceAccessOk) {
 
 TEST_F(BinderLibTest, CheckServiceAccessNotOk) {
     auto sm = defaultServiceManager();
-    EXPECT_FALSE(sm->checkServiceAccess(String16("u:r:some_unknown_sid:s0"), 0, 0, String16("adb"),
-                                        String16("find")));
+    if (!checkSelinuxPermissive()) {
+        EXPECT_FALSE(sm->checkServiceAccess(String16("u:r:some_unknown_sid:s0"), 0, 0,
+                                            String16("adb"), String16("find")));
+    } else {
+        GTEST_SKIP() << "Skipping test for disabled SELinux config";
+    }
 }
 
 TEST_F(BinderLibTest, CheckServiceAccessBadArgs) {
@@ -2128,6 +2136,109 @@ TEST_P(BinderLibRpcTestP, SetRpcClientDebugNoKeepAliveBinder) {
     EXPECT_THAT(binder->setRpcClientDebug(std::move(socket), nullptr),
                 Debuggable(StatusEq(UNEXPECTED_NULL)));
 }
+bool runCommandGetInt(const std::string& command, int& outputValue) {
+    std::string result = "";
+    char buffer[128];
+    FILE* pipe = nullptr;
+
+    pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "Error: popen() failed!" << std::endl;
+        return false;
+    }
+
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        result += buffer;
+    }
+
+    if (pclose(pipe) == -1) {
+        std::cerr << "Error: pclose() failed!" << std::endl;
+        return false;
+    }
+
+    // Remove trailing newline characters
+    size_t endPos = result.find_last_not_of("\n\r");
+    if (std::string::npos != endPos) {
+        result = result.substr(0, endPos + 1);
+    } else {
+        result.clear();
+    }
+
+    if (result.empty()) {
+        std::cerr << "Warning: Command output is empty." << std::endl;
+        outputValue = 0;
+        return true;
+    }
+
+    char* endptr;
+    long long convertedValue = std::strtoll(result.c_str(), &endptr, 10);
+
+    // Check for conversion errors
+    if (*endptr != '\0') {
+        std::cerr << "Error: Non-numeric characters found in command output: \"" << result << "\""
+                  << std::endl;
+        outputValue = 0;
+        return false;
+    }
+
+    // Check for integer overflow/underflow
+    if (convertedValue > static_cast<long long>(INT_MAX) ||
+        convertedValue < static_cast<long long>(INT_MIN)) {
+        std::cerr << "Error: Command output value is out of the range of an int: \"" << result
+                  << "\"" << std::endl;
+        outputValue = 0;
+        return false;
+    }
+
+    outputValue = static_cast<int>(convertedValue);
+    return true; // success
+}
+
+// Ensure that this works only for non-recovery android
+#if defined(LIBBINDER_BINDER_OBSERVER) && defined(__ANDROID__) && \
+        !defined(__ANDROID_RECOVERY__) && defined(BINDER_WITH_KERNEL_IPC)
+constexpr bool kEnableBinderObserver = true;
+#else
+constexpr bool kEnableBinderObserver = false;
+#endif
+
+TEST_F(BinderLibRpcTest, BinderObserverIntegrationTest) {
+    if (!kEnableBinderObserver) {
+        GTEST_SKIP() << "Skipping test as BinderObserver isn't enabled";
+        return;
+    }
+
+    // get current count of spam calls made
+    int previousCount;
+    EXPECT_TRUE(
+            runCommandGetInt("cmd stats print-stats | grep \"Atom 1064\" | awk -F '[(),]' '{print "
+                             "$3}'",
+                             previousCount));
+    std::cerr << "previous count: " << previousCount << std::endl;
+
+    // spam calls
+    for (int i = 0; i < 250; i++) {
+        Parcel data, reply;
+        data.writeInt32(i);
+        EXPECT_THAT(m_server->transact(BINDER_LIB_TEST_BINDER_SPAM, data, &reply), NO_ERROR);
+    }
+    std::this_thread::sleep_for(8s);
+    for (int i = 0; i < 250; i++) {
+        Parcel data, reply;
+        data.writeInt32(i);
+        EXPECT_THAT(m_server->transact(BINDER_LIB_TEST_BINDER_SPAM, data, &reply), NO_ERROR);
+    }
+
+    // get latest count and confirm it is higher than previous count.
+    int latestCount;
+    EXPECT_TRUE(runCommandGetInt("cmd stats print-stats | grep \"Atom 1064\" | awk -F '[(),]' "
+                                 "'{print $3}'",
+                                 latestCount));
+    std::cerr << "previous count: " << previousCount << std::endl;
+    std::cerr << "latest count: " << latestCount << std::endl;
+    EXPECT_GT(latestCount, previousCount);
+}
+
 INSTANTIATE_TEST_SUITE_P(BinderLibTest, BinderLibRpcTestP, testing::Bool(),
                          BinderLibRpcTestP::ParamToString);
 
@@ -2550,6 +2661,10 @@ public:
                 // start local thread to unlock in 1s
                 std::thread t([=] { thisService->unlockInMs(value); });
                 t.detach();
+                return NO_ERROR;
+            }
+            case BINDER_LIB_TEST_BINDER_SPAM: {
+                // Do nothing. This is supposed to be spammed.
                 return NO_ERROR;
             }
             default:

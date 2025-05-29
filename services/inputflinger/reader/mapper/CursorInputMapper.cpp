@@ -510,6 +510,7 @@ void CursorInputMapper::configureOnChangePointerSpeed(const InputReaderConfigura
         mPointerVelocityControl.setAccelerationEnabled(false);
         mWheelXVelocityControl.setParameters(FLAT_VELOCITY_CONTROL_PARAMS);
         mWheelYVelocityControl.setParameters(FLAT_VELOCITY_CONTROL_PARAMS);
+        mXScale = mYScale = 1.0;
         return;
     }
 

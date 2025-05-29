@@ -746,6 +746,7 @@ status_t RpcState::waitForReply(const sp<RpcSession::RpcConnection>& connection,
                   " sizeofHeader=%zu parcelSize=%" PRId32 " objectTableBytesSize=%zu. Terminating!",
                   command.bodySize, rpcReplyWireSize, rpcReply.parcelDataSize,
                   objectTableBytes->size);
+            (void)session->shutdownAndWait(false);
             return BAD_VALUE;
         }
         objectTableSpan = *maybeSpan;
@@ -953,7 +954,8 @@ processTransactInternalTailCall:
                 // we need to process some other asynchronous transaction
                 // first
                 it->second.asyncTodo.push(BinderNode::AsyncTodo{
-                        .ref = target,
+                        // checked above
+                        .ref = sp<BBinder>::fromExisting(target->localBinder()),
                         .data = std::move(transactionData),
                         .ancillaryFds = std::move(ancillaryFds),
                         .asyncNumber = transaction->asyncNumber,

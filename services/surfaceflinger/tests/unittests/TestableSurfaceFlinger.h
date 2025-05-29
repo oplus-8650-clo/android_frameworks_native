@@ -20,6 +20,7 @@
 #include <memory>
 #include <variant>
 
+#include <android/gui/EarlyWakeupInfo.h>
 #include <ftl/fake_guard.h>
 #include <ftl/match.h>
 #include <gui/LayerMetadata.h>
@@ -477,7 +478,8 @@ public:
         ScreenCaptureResults captureResults;
         const auto& state = display->getCompositionDisplay()->getState();
 
-        SurfaceFlinger::ScreenshotArgs screenshotArgs{.displayIdVariant = std::nullopt,
+        SurfaceFlinger::ScreenshotArgs screenshotArgs{.captureTypeVariant = display,
+                                                      .displayIdVariant = std::nullopt,
                                                       .layers = layers,
                                                       .sourceCrop = sourceCrop,
                                                       .size = sourceCrop.getSize(),
@@ -528,12 +530,13 @@ public:
             const InputWindowCommands& inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
             bool hasListenerCallbacks, std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds) {
+            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
+            const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) {
         return mFlinger->setTransactionState(frameTimelineInfo, states, displays, flags, applyToken,
                                              inputWindowCommands, desiredPresentTime,
                                              isAutoTimestamp, uncacheBuffers, hasListenerCallbacks,
-                                             listenerCallbacks, transactionId,
-                                             mergedTransactionIds);
+                                             listenerCallbacks, transactionId, mergedTransactionIds,
+                                             earlyWakeupInfos);
     }
 
     auto setTransactionStateInternal(QueuedTransactionState& transaction) {

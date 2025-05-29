@@ -851,6 +851,7 @@ SurfaceComposerClient::Transaction::Transaction(const Transaction& other)
     mComposerStates = other.mComposerStates;
     mInputWindowCommands = other.mInputWindowCommands;
     mListenerCallbacks = other.mListenerCallbacks;
+    mEarlyWakeupInfos = other.mEarlyWakeupInfos;
     mTransactionCompletedListener = TransactionCompletedListener::getInstance();
 }
 
@@ -968,6 +969,17 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
         SAFE_PARCEL(parcel->readUint64, &mergedTransactionIds[i]);
     }
 
+    count = static_cast<size_t>(parcel->readUint32());
+    if (count > parcel->dataSize()) {
+        return BAD_VALUE;
+    }
+    std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos;
+    for (size_t i = 0; i < count; i++) {
+        gui::EarlyWakeupInfo e;
+        e.readFromParcel(parcel);
+        earlyWakeupInfos.push_back(std::move(e));
+    }
+
     // Parsing was successful. Update the object.
     mId = transactionId;
     mFlags = flags;
@@ -981,6 +993,7 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
     mApplyToken = applyToken;
     mUncacheBuffers = std::move(uncacheBuffers);
     mMergedTransactionIds = std::move(mergedTransactionIds);
+    mEarlyWakeupInfos = std::move(earlyWakeupInfos);
     return NO_ERROR;
 }
 
@@ -1039,6 +1052,11 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
     SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mMergedTransactionIds.size()));
     for (auto mergedTransactionId : mMergedTransactionIds) {
         SAFE_PARCEL(parcel->writeUint64, mergedTransactionId);
+    }
+
+    SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mEarlyWakeupInfos.size()));
+    for (auto earlyWakeupInfo : mEarlyWakeupInfos) {
+        earlyWakeupInfo.writeToParcel(parcel);
     }
 
     return NO_ERROR;
@@ -1150,7 +1168,12 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
              "Transaction %" PRIu64 " merged with transaction %" PRIu64, other.getId(), mId);
     }
 
+    for (gui::EarlyWakeupInfo& op : other.mEarlyWakeupInfos) {
+        mEarlyWakeupInfos.push_back(std::move(op));
+    }
+
     other.clear();
+
     return *this;
 }
 
@@ -1168,6 +1191,7 @@ void SurfaceComposerClient::Transaction::clear() {
     mMergedTransactionIds.clear();
     mLogCallPoints = false;
     mFlags = 0;
+    mEarlyWakeupInfos.clear();
 }
 
 uint64_t SurfaceComposerClient::Transaction::getId() {
@@ -1186,10 +1210,11 @@ void SurfaceComposerClient::doUncacheBufferTransaction(uint64_t cacheId) {
     uncacheBuffer.id = cacheId;
     Vector<ComposerState> composerStates;
     Vector<DisplayState> displayStates;
-    status_t status = sf->setTransactionState(FrameTimelineInfo{}, composerStates, displayStates,
-                                              ISurfaceComposer::eOneWay,
-                                              Transaction::getDefaultApplyToken(), {}, systemTime(),
-                                              true, {uncacheBuffer}, false, {}, generateId(), {});
+    status_t status =
+            sf->setTransactionState(FrameTimelineInfo{}, composerStates, displayStates,
+                                    ISurfaceComposer::eOneWay, Transaction::getDefaultApplyToken(),
+                                    {}, systemTime(), true, {uncacheBuffer}, false, {},
+                                    generateId(), {}, {});
     if (status != NO_ERROR) {
         ALOGE_AND_TRACE("SurfaceComposerClient::doUncacheBufferTransaction - %s",
                         strerror(-status));
@@ -1360,11 +1385,13 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
         qtiDolphinWrapper->qtiDolphinQueueBuffer(true);
     }
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
+
     status_t binderStatus =
             sf->setTransactionState(mFrameTimelineInfo, mComposerStates, mDisplayStates, mFlags,
                                     applyToken, mInputWindowCommands, mDesiredPresentTime,
                                     mIsAutoTimestamp, mUncacheBuffers, hasListenerCallbacks,
-                                    listenerCallbacks, mId, mMergedTransactionIds);
+                                    listenerCallbacks, mId, mMergedTransactionIds,
+                                    mEarlyWakeupInfos);
     mId = generateId();
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinQueueBuffer) {
@@ -1476,11 +1503,15 @@ void SurfaceComposerClient::Transaction::setAnimationTransaction() {
     mFlags |= ISurfaceComposer::eAnimation;
 }
 
-void SurfaceComposerClient::Transaction::setEarlyWakeupStart() {
+void SurfaceComposerClient::Transaction::setEarlyWakeupStart(gui::EarlyWakeupInfo earlyWakeupInfo) {
+    earlyWakeupInfo.isStartRequest = true;
+    mEarlyWakeupInfos.push_back(std::move(earlyWakeupInfo));
     mFlags |= ISurfaceComposer::eEarlyWakeupStart;
 }
 
-void SurfaceComposerClient::Transaction::setEarlyWakeupEnd() {
+void SurfaceComposerClient::Transaction::setEarlyWakeupEnd(gui::EarlyWakeupInfo earlyWakeupInfo) {
+    earlyWakeupInfo.isStartRequest = false;
+    mEarlyWakeupInfos.push_back(std::move(earlyWakeupInfo));
     mFlags |= ISurfaceComposer::eEarlyWakeupEnd;
 }
 

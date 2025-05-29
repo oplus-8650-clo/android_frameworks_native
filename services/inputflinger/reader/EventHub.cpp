@@ -86,6 +86,10 @@ static constexpr int32_t FF_WEAK_MAGNITUDE_CHANNEL_IDX = 1;
 
 static constexpr size_t EVENT_BUFFER_SIZE = 256;
 
+// Logs if the difference between the event timestamp and the read time is
+// greater than this threshold.
+static constexpr nsecs_t SLOW_READ_LOG_THRESHOLD_NS = ms2ns(100);
+
 // Mapping for input battery class node IDs lookup.
 // https://www.kernel.org/doc/Documentation/power/power_supply_class.txt
 static const std::unordered_map<std::string, InputBatteryClass> BATTERY_CLASSES =
@@ -1997,6 +2001,15 @@ std::vector<RawEvent> EventHub::getEvents(int timeoutMillis) {
                                 .code = iev.code,
                                 .value = iev.value,
                         });
+                        const nsecs_t readDeltaNs = events.back().readTime - events.back().when;
+                        if (readDeltaNs >= SLOW_READ_LOG_THRESHOLD_NS) {
+                            ALOGW(
+                                    "Slow read detected for device '%s', eventTime: %" PRId64 "ns, "
+                                    "readDelta: %" PRId64 " ns (over the threshold of %" PRId64
+                                    " ms)",
+                                    device->identifier.name.c_str(), events.back().when,
+                                    readDeltaNs, ns2ms(SLOW_READ_LOG_THRESHOLD_NS));
+                        }
                     }
                     if (events.size() >= EVENT_BUFFER_SIZE) {
                         // The result buffer is full.  Reset the pending event index

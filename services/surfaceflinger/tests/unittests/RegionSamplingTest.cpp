@@ -39,19 +39,20 @@ public:
     static int constexpr kWidth = 98;
     static int constexpr kStride = 100;
     static int constexpr kHeight = 29;
+    static int constexpr kOrientation = ui::Transform::ROT_0;
     std::array<uint32_t, kHeight * kStride> buffer;
     Rect const whole_area{0, 0, kWidth, kHeight};
 };
 
 TEST_F(RegionSamplingTest, calculate_mean_white) {
     std::fill(buffer.begin(), buffer.end(), kWhite);
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, whole_area),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, whole_area),
                 testing::FloatEq(1.0f));
 }
 
 TEST_F(RegionSamplingTest, calculate_mean_black) {
     std::fill(buffer.begin(), buffer.end(), kBlack);
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, whole_area),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, whole_area),
                 testing::FloatEq(0.0f));
 }
 
@@ -62,7 +63,7 @@ TEST_F(RegionSamplingTest, calculate_mean_partial_region) {
                                  whole_area.top + halfway_down};
     std::fill(buffer.begin(), buffer.begin() + half, 0);
     std::fill(buffer.begin() + half, buffer.end(), kWhite);
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, partial_region),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, partial_region),
                 testing::FloatEq(0.0f));
 }
 
@@ -73,14 +74,14 @@ TEST_F(RegionSamplingTest, calculate_mean_mixed_values) {
         return pixel;
     });
 
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, whole_area),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, whole_area),
                 testing::FloatNear(0.16f, 0.01f));
 }
 
 TEST_F(RegionSamplingTest, bimodal_tiebreaker) {
     std::generate(buffer.begin(), buffer.end(),
                   [n = 0]() mutable { return (n++ % 2) ? kBlack : kWhite; });
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, whole_area),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, whole_area),
                 testing::FloatEq(0.5f));
 }
 
@@ -89,19 +90,19 @@ TEST_F(RegionSamplingTest, bounds_checking) {
                   [n = 0]() mutable { return (n++ > (kStride * kHeight >> 1)) ? kBlack : kWhite; });
 
     Rect invalid_region{0, 0, 4, kHeight + 1};
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, invalid_region),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, invalid_region),
                 testing::Eq(0.0));
 
     invalid_region = Rect{0, 0, -4, kHeight};
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, invalid_region),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, invalid_region),
                 testing::Eq(0.0));
 
     invalid_region = Rect{3, 0, 2, 0};
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, invalid_region),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, invalid_region),
                 testing::Eq(0.0));
 
     invalid_region = Rect{0, 3, 0, 2};
-    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, invalid_region),
+    EXPECT_THAT(sampleArea(buffer.data(), kWidth, kHeight, kStride, kOrientation, invalid_region),
                 testing::Eq(0.0));
 }
 

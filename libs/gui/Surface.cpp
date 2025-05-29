@@ -48,14 +48,17 @@
 
 #include <android/native_window.h>
 
+#include <android-base/strings.h>
 #include <gui/FenceMonitor.h>
 #include <gui/TraceUtils.h>
+#include <utils/Errors.h>
 #include <utils/Log.h>
 #include <utils/NativeHandle.h>
 #include <utils/Trace.h>
 
 #include <ui/BufferQueueDefs.h>
 #include <ui/DynamicDisplayInfo.h>
+#include <ui/FatVector.h>
 #include <ui/Fence.h>
 #include <ui/GraphicBuffer.h>
 #include <ui/Region.h>
@@ -1128,17 +1131,33 @@ int Surface::getSlotFromBufferLocked(
         return BAD_VALUE;
     }
 
+    sp<GraphicBuffer> graphicBuffer = GraphicBuffer::from(buffer);
+
+    FatVector<int> slots; // FatVector (default size 4) to prevent heap allocations most of the time
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     for (int i = 0; i < (int)mSlots.size(); i++) {
 #else
     for (int i = 0; i < NUM_BUFFER_SLOTS; i++) {
 #endif
-        if (mSlots[i].buffer != nullptr &&
-                mSlots[i].buffer->handle == buffer->handle) {
-            return i;
+        const sp<GraphicBuffer>& slotBuffer = mSlots[i].buffer;
+        if (slotBuffer != nullptr &&
+            ((slotBuffer == graphicBuffer) || (slotBuffer->handle == graphicBuffer->handle) ||
+             (slotBuffer->getId() == graphicBuffer->getId()))) {
+            slots.push_back(i);
         }
     }
-    ALOGE("%s: unknown buffer: %p", __FUNCTION__, buffer->handle);
+
+    if (slots.size() >= 1) {
+        ALOGE_IF(slots.size() != 1,
+                 "%s: More than one slot found for buffer handle=%p id=%" PRIu64 " slots=[%s]",
+                 __FUNCTION__, buffer->handle, graphicBuffer->getId(),
+                 base::Join(slots, ", ").c_str());
+
+        return slots[0];
+    }
+
+    ALOGE("%s: unknown buffer: handle=%p id=%" PRIu64, __FUNCTION__, buffer->handle,
+          graphicBuffer->getId());
     return BAD_VALUE;
 }
 

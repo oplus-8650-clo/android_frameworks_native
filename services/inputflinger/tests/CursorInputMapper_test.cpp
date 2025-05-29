@@ -1293,6 +1293,32 @@ TEST_F(DensityDependentCursorUnitTest,
                               WithRelativeMotion(rawRelativeX, rawRelativeY)))));
 }
 
+TEST_F(DensityDependentCursorUnitTest, DoesNotScaleCursorMoveWithPointerCaptureEnabled) {
+    // Create a medium density viewport, that should have scaling enabled by default.
+    DisplayViewport mediumDensityViewport =
+            createPrimaryViewport(ui::Rotation::Rotation0, ACONFIGURATION_DENSITY_MEDIUM);
+    mReaderConfiguration.setDisplayViewports({mediumDensityViewport});
+    EXPECT_CALL((*mDevice), getAssociatedViewport).WillRepeatedly(Return(mediumDensityViewport));
+    mMapper = createInputMapper<CursorInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    // Request pointer capture after the mapper has been configured.
+    setPointerCapture(true);
+
+    // Verify pointer capture has been enabled.
+    const int32_t rawRelativeX = 10;
+    const int32_t rawRelativeY = 20;
+    std::list<NotifyArgs> args;
+    args += processRelativeMove(rawRelativeX, rawRelativeY);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(ACTION_MOVE),
+                              WithSource(AINPUT_SOURCE_MOUSE_RELATIVE),
+                              WithCoords(rawRelativeX, rawRelativeY),
+                              WithRelativeMotion(rawRelativeX, rawRelativeY),
+                              WithCursorPosition(INVALID_CURSOR_POSITION,
+                                                 INVALID_CURSOR_POSITION)))));
+}
+
 namespace {
 
 // Minimum timestamp separation between subsequent input events from a Bluetooth device.
