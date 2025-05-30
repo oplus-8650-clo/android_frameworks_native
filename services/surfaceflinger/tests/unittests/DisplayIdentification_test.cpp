@@ -130,6 +130,16 @@ const unsigned char kCtlDisplayEdid[] =
         "\x10\x3e\x96\x00\x09\x25\x21\x00\x00\x18\x00\x00\x00\x00\x00\x00"
         "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf4";
 
+const unsigned char kEdidWithMissingDescriptors[] =
+        "\x00\xff\xff\xff\xff\xff\xff\x00\x09\xe5\x76\x0a\x00\x00\x00\x00"
+        "\x19\x1f\x01\x04\xa5\x1c\x13\x78\x03\xee\x95\xa3\x54\x4c\x99\x26"
+        "\x0f\x50\x54\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01"
+        "\x01\x01\x01\x01\x01\x01\x12\x5c\xd0\x18\x81\xe0\x2d\x50\x30\x20"
+        "\x36\x00\x1d\xbe\x10\x00\x00\x1a\x62\x3d\xd0\x18\x81\xe0\x2d\x50"
+        "\x30\x20\x36\x00\x1d\xbe\x10\x00\x00\x1a\x00\x00\x00\x00\x00\x00"
+        "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02"
+        "\x00\x0d\x28\xff\x0a\x3c\xc8\x0f\x0b\x23\xc8\x00\x00\x00\x00\xcc";
+
 template <size_t N>
 DisplayIdentificationData asDisplayIdentificationData(const unsigned char (&bytes)[N]) {
     return DisplayIdentificationData(bytes, bytes + N - 1);
@@ -168,6 +178,12 @@ const DisplayIdentificationData& getHisenseTvEdid() {
 
 const DisplayIdentificationData& getCtlDisplayEdid() {
     static const DisplayIdentificationData data = asDisplayIdentificationData(kCtlDisplayEdid);
+    return data;
+}
+
+const DisplayIdentificationData& getEdidWithMissingDescriptors() {
+    static const DisplayIdentificationData data =
+            asDisplayIdentificationData(kEdidWithMissingDescriptors);
     return data;
 }
 
@@ -328,6 +344,27 @@ TEST(DisplayIdentificationTest, parseEdid) {
     EXPECT_EQ(768, edid->preferredDetailedTimingDescriptor->pixelSizeCount.height);
     EXPECT_EQ(521, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.width);
     EXPECT_EQ(293, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.height);
+
+    edid = parseEdid(getEdidWithMissingDescriptors());
+    ASSERT_TRUE(edid);
+    EXPECT_EQ("", edid->displayName);
+    EXPECT_TRUE(!edid->hashedBlockZeroSerialNumberOpt.has_value());
+    EXPECT_FALSE(edid->hashedDescriptorBlockSerialNumberOpt.has_value());
+    EXPECT_EQ(2533, edid->manufacturerId);
+    EXPECT_STREQ("BOE", edid->pnpId.data());
+    EXPECT_EQ(2678, edid->productId);
+    // modelHash derived from PNP ID and Product ID since descriptors are missing.
+    EXPECT_EQ(hash("BOE2678"), edid->modelHash);
+    EXPECT_EQ(hash("BOE2678"), 565221063);
+    EXPECT_EQ(31, edid->manufactureOrModelYear);
+    EXPECT_EQ(25, edid->manufactureWeek);
+    EXPECT_EQ(28, edid->physicalSizeInCm.width);
+    EXPECT_EQ(19, edid->physicalSizeInCm.height);
+    ASSERT_TRUE(!edid->cea861Block);
+    EXPECT_EQ(2256, edid->preferredDetailedTimingDescriptor->pixelSizeCount.width);
+    EXPECT_EQ(1504, edid->preferredDetailedTimingDescriptor->pixelSizeCount.height);
+    EXPECT_EQ(285, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.width);
+    EXPECT_EQ(190, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.height);
 }
 
 TEST(DisplayIdentificationTest, parseInvalidEdid) {

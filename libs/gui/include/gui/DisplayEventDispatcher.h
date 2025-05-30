@@ -58,6 +58,10 @@ private:
 
     virtual void dispatchHotplugConnectionError(nsecs_t timestamp, int32_t connectionError) = 0;
 
+    virtual void dispatchModeChangedWithFrameRateOverrides(
+            nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId, nsecs_t renderPeriod,
+            nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
+            std::vector<FrameRateOverride> overrides) = 0;
     virtual void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
                                      nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
                                      nsecs_t presentationDeadline) = 0;

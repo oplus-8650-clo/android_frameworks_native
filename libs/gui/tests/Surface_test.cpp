@@ -37,6 +37,7 @@
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 #include <gui/SyncScreenCaptureListener.h>
+#include <gui/TransactionState.h>
 #include <gui/view/Surface.h>
 #include <nativebase/nativebase.h>
 #include <private/gui/ComposerService.h>
@@ -676,12 +677,10 @@ public:
     }
 
     status_t setTransactionState(
-            const FrameTimelineInfo& /*frameTimelineInfo*/, Vector<ComposerState>& /*state*/,
-            Vector<DisplayState>& /*displays*/, uint32_t /*flags*/,
-            const sp<IBinder>& /*applyToken*/, InputWindowCommands /*inputWindowCommands*/,
-            int64_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/,
-            const std::vector<client_cache_t>& /*cachedBuffer*/, bool /*hasListenerCallbacks*/,
-            const std::vector<ListenerCallbacks>& /*listenerCallbacks*/, uint64_t /*transactionId*/,
+            SimpleTransactionState /*podState*/, const FrameTimelineInfo& /*frameTimelineInfo*/,
+            Vector<ComposerState>& /*state*/, Vector<DisplayState>& /*displays*/,
+            const sp<IBinder>& /*applyToken*/, const std::vector<client_cache_t>& /*cachedBuffer*/,
+            const TransactionListenerCallbacks& /*listenerCallbacks*/,
             const std::vector<uint64_t>& /*mergedTransactionIds*/,
             const std::vector<gui::EarlyWakeupInfo>& /*earlyWakeupInfos*/) override {
         return NO_ERROR;

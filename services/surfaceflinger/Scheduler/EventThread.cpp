@@ -96,6 +96,12 @@ std::string toString(const DisplayEventReceiver::Event& event) {
                                 "}",
                                 to_string(event.header.displayId).c_str(), event.vsync.count,
                                 event.vsync.vsyncData.preferredExpectedPresentationTime());
+        case DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE:
+            return StringPrintf("ModeAndFrameRateOverridesChanged{displayId=%s, modeId=%u, "
+                                "appVsyncOffset=%" PRId64 ", presentationDeadline=%" PRId64 "}",
+                                to_string(event.header.displayId).c_str(), event.modeChange.modeId,
+                                event.modeChange.appVsyncOffset,
+                                event.modeChange.presentationDeadline);
         case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE:
             return StringPrintf("ModeChanged{displayId=%s, modeId=%u, appVsyncOffset=%" PRId64
                                 ", presentationDeadline=%" PRId64 "}",
@@ -157,11 +163,11 @@ DisplayEventReceiver::Event makeVSync(PhysicalDisplayId displayId, nsecs_t times
     return event;
 }
 
-DisplayEventReceiver::Event makeModeChanged(const scheduler::FrameRateMode& mode,
-                                            scheduler::VsyncConfigSet config) {
+DisplayEventReceiver::Event makeModeChanged(
+        const scheduler::FrameRateMode& mode, scheduler::VsyncConfigSet config,
+        DisplayEventType eventType = DisplayEventType::DISPLAY_EVENT_MODE_CHANGE) {
     DisplayEventReceiver::Event event;
-    event.header = {DisplayEventType::DISPLAY_EVENT_MODE_CHANGE,
-                    mode.modePtr->getPhysicalDisplayId(), systemTime()};
+    event.header = {eventType, mode.modePtr->getPhysicalDisplayId(), systemTime()};
     event.modeChange.modeId = ftl::to_underlying(mode.modePtr->getId());
     event.modeChange.vsyncPeriod = mode.fps.getPeriodNsecs();
     event.modeChange.appVsyncOffset = config.late.appOffset;
@@ -295,6 +301,13 @@ status_t EventThreadConnection::postEvent(const DisplayEventReceiver::Event& eve
         return toStatus(size);
     }
 
+    if (FlagManager::getInstance().unify_refresh_rate_callbacks()) {
+        mPendingEvents.emplace_back(event);
+        const auto size = DisplayEventReceiver::sendEvents(&mChannel, mPendingEvents.data(),
+                                                           mPendingEvents.size());
+        mPendingEvents.clear();
+        return toStatus(size);
+    }
     auto size = DisplayEventReceiver::sendEvents(&mChannel, &event, 1);
     return toStatus(size);
 }
@@ -492,6 +505,22 @@ void EventThread::onHotplugConnectionError(int32_t errorCode) {
     mCondition.notify_all();
 }
 
+void EventThread::onModeAndFrameRateOverridesChanged(PhysicalDisplayId displayId,
+                                                     const scheduler::FrameRateMode& mode,
+                                                     std::vector<FrameRateOverride> overrides,
+                                                     scheduler::VsyncConfigSet config) {
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    for (auto frameRateOverride : overrides) {
+        mPendingEvents.push_back(makeFrameRateOverrideEvent(displayId, frameRateOverride));
+    }
+    mPendingEvents.push_back(
+            makeModeChanged(mode, config,
+                            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE));
+
+    mCondition.notify_all();
+}
+
 void EventThread::onModeChanged(const scheduler::FrameRateMode& mode,
                                 scheduler::VsyncConfigSet config) {
     std::lock_guard<std::mutex> lock(mMutex);
@@ -656,10 +685,11 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
         case DisplayEventType::DISPLAY_EVENT_HDCP_LEVELS_CHANGE:
             return true;
 
-        case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE: {
+        case DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE:
+            [[fallthrough]];
+        case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE:
             return connection->mEventRegistration.test(
                     gui::ISurfaceComposer::EventRegistration::modeChanged);
-        }
 
         case DisplayEventType::DISPLAY_EVENT_MODE_REJECTION:
             return true;

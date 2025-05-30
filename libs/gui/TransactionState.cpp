@@ -16,6 +16,7 @@
 
 #define LOG_TAG "TransactionState"
 #include <gui/LayerState.h>
+#include <gui/SimpleTransactionState.h>
 #include <gui/SurfaceComposerClient.h>
 #include <gui/TransactionState.h>
 #include <private/gui/ParcelUtils.h>
@@ -23,11 +24,71 @@
 
 namespace android {
 
-status_t TransactionState::writeToParcel(Parcel* parcel) const {
+void SimpleTransactionState::clear() {
+    *this = SimpleTransactionState();
+}
+
+void SimpleTransactionState::merge(const SimpleTransactionState& other) {
+    // TODO(b/385156191) Consider merging desired present time.
+    mFlags |= other.mFlags;
+    mInputWindowCommands.merge(other.mInputWindowCommands);
+}
+
+status_t SimpleTransactionState::writeToParcel(Parcel* parcel) const {
     SAFE_PARCEL(parcel->writeUint64, mId);
     SAFE_PARCEL(parcel->writeUint32, mFlags);
     SAFE_PARCEL(parcel->writeInt64, mDesiredPresentTime);
     SAFE_PARCEL(parcel->writeBool, mIsAutoTimestamp);
+    SAFE_PARCEL(mInputWindowCommands.write, *parcel);
+
+    return NO_ERROR;
+}
+
+status_t SimpleTransactionState::readFromParcel(const Parcel* parcel) {
+    SAFE_PARCEL(parcel->readUint64, &mId);
+    SAFE_PARCEL(parcel->readUint32, &mFlags);
+    SAFE_PARCEL(parcel->readInt64, &mDesiredPresentTime);
+    SAFE_PARCEL(parcel->readBool, &mIsAutoTimestamp);
+    SAFE_PARCEL(mInputWindowCommands.read, *parcel);
+
+    return NO_ERROR;
+}
+
+void TransactionListenerCallbacks::clear() {
+    *this = TransactionListenerCallbacks();
+}
+
+status_t TransactionListenerCallbacks::writeToParcel(Parcel* parcel) const {
+    SAFE_PARCEL(parcel->writeBool, mHasListenerCallbacks);
+    SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mFlattenedListenerCallbacks.size()));
+    for (const auto& [listener, callbackIds] : mFlattenedListenerCallbacks) {
+        SAFE_PARCEL(parcel->writeStrongBinder, listener);
+        SAFE_PARCEL(parcel->writeParcelableVector, callbackIds);
+    }
+
+    return NO_ERROR;
+}
+
+status_t TransactionListenerCallbacks::readFromParcel(const Parcel* parcel) {
+    SAFE_PARCEL(parcel->readBool, &mHasListenerCallbacks);
+    uint32_t count;
+    SAFE_PARCEL_READ_SIZE(parcel->readUint32, &count, parcel->dataSize());
+    mFlattenedListenerCallbacks.clear();
+    mFlattenedListenerCallbacks.reserve(count);
+    for (uint32_t i = 0; i < count; i++) {
+        sp<IBinder> tmpBinder;
+        SAFE_PARCEL(parcel->readStrongBinder, &tmpBinder);
+        std::vector<CallbackId> callbackIds;
+        SAFE_PARCEL(parcel->readParcelableVector, &callbackIds);
+        mFlattenedListenerCallbacks.emplace_back(tmpBinder, callbackIds);
+    }
+
+    return NO_ERROR;
+}
+
+status_t TransactionState::writeToParcel(Parcel* parcel) const {
+    SAFE_PARCEL(mSimpleState.writeToParcel, parcel);
+    SAFE_PARCEL(mCallbacks.writeToParcel, parcel);
     SAFE_PARCEL(parcel->writeParcelable, mFrameTimelineInfo);
     SAFE_PARCEL(parcel->writeStrongBinder, mApplyToken);
     SAFE_PARCEL(parcel->writeBool, mMayContainBuffer);
@@ -42,7 +103,6 @@ status_t TransactionState::writeToParcel(Parcel* parcel) const {
         composerState.write(*parcel);
     }
 
-    mInputWindowCommands.write(*parcel);
     SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mUncacheBuffers.size()));
     for (const client_cache_t& uncacheBuffer : mUncacheBuffers) {
         SAFE_PARCEL(parcel->writeStrongBinder, uncacheBuffer.token.promote());
@@ -54,21 +114,12 @@ status_t TransactionState::writeToParcel(Parcel* parcel) const {
         SAFE_PARCEL(parcel->writeUint64, mergedTransactionId);
     }
 
-    SAFE_PARCEL(parcel->writeBool, mHasListenerCallbacks);
-    SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mListenerCallbacks.size()));
-    for (const auto& [listener, callbackIds] : mListenerCallbacks) {
-        SAFE_PARCEL(parcel->writeStrongBinder, listener);
-        SAFE_PARCEL(parcel->writeParcelableVector, callbackIds);
-    }
-
     return NO_ERROR;
 }
 
 status_t TransactionState::readFromParcel(const Parcel* parcel) {
-    SAFE_PARCEL(parcel->readUint64, &mId);
-    SAFE_PARCEL(parcel->readUint32, &mFlags);
-    SAFE_PARCEL(parcel->readInt64, &mDesiredPresentTime);
-    SAFE_PARCEL(parcel->readBool, &mIsAutoTimestamp);
+    SAFE_PARCEL(mSimpleState.readFromParcel, parcel);
+    SAFE_PARCEL(mCallbacks.readFromParcel, parcel);
     SAFE_PARCEL(parcel->readParcelable, &mFrameTimelineInfo);
     SAFE_PARCEL(parcel->readNullableStrongBinder, &mApplyToken);
     SAFE_PARCEL(parcel->readBool, &mMayContainBuffer);
@@ -97,10 +148,6 @@ status_t TransactionState::readFromParcel(const Parcel* parcel) {
         mComposerStates.emplace_back(std::move(composerState));
     }
 
-    if (status_t status = mInputWindowCommands.read(*parcel) != NO_ERROR) {
-        return status;
-    }
-
     SAFE_PARCEL_READ_SIZE(parcel->readUint32, &count, parcel->dataSize())
     mUncacheBuffers.clear();
     mUncacheBuffers.reserve(count);
@@ -120,23 +167,12 @@ status_t TransactionState::readFromParcel(const Parcel* parcel) {
         SAFE_PARCEL(parcel->readUint64, &mMergedTransactionIds[i]);
     }
 
-    SAFE_PARCEL(parcel->readBool, &mHasListenerCallbacks);
-    SAFE_PARCEL_READ_SIZE(parcel->readUint32, &count, parcel->dataSize());
-    mListenerCallbacks.clear();
-    mListenerCallbacks.reserve(count);
-    for (uint32_t i = 0; i < count; i++) {
-        sp<IBinder> tmpBinder;
-        SAFE_PARCEL(parcel->readStrongBinder, &tmpBinder);
-        std::vector<CallbackId> callbackIds;
-        SAFE_PARCEL(parcel->readParcelableVector, &callbackIds);
-        mListenerCallbacks.emplace_back(tmpBinder, callbackIds);
-    }
-
     return NO_ERROR;
 }
 
 void TransactionState::merge(TransactionState&& other,
                              const std::function<void(layer_state_t&)>& onBufferOverwrite) {
+    mSimpleState.merge(other.mSimpleState);
     while (mMergedTransactionIds.size() + other.mMergedTransactionIds.size() >
                    MAX_MERGE_HISTORY_LENGTH - 1 &&
            mMergedTransactionIds.size() > 0) {
@@ -151,7 +187,7 @@ void TransactionState::merge(TransactionState&& other,
                                      other.mMergedTransactionIds.begin(),
                                      other.mMergedTransactionIds.end());
     }
-    mMergedTransactionIds.insert(mMergedTransactionIds.begin(), other.mId);
+    mMergedTransactionIds.insert(mMergedTransactionIds.begin(), other.mSimpleState.mId);
 
     for (auto const& otherState : other.mComposerStates) {
         if (auto it = std::find_if(mComposerStates.begin(), mComposerStates.end(),
@@ -185,9 +221,6 @@ void TransactionState::merge(TransactionState&& other,
         mUncacheBuffers.push_back(cacheId);
     }
 
-    mInputWindowCommands.merge(other.mInputWindowCommands);
-    // TODO(b/385156191) Consider merging desired present time.
-    mFlags |= other.mFlags;
     mMayContainBuffer |= other.mMayContainBuffer;
     mLogCallPoints |= other.mLogCallPoints;
 
@@ -211,18 +244,14 @@ void TransactionState::mergeFrameTimelineInfo(const FrameTimelineInfo& other) {
 }
 
 void TransactionState::clear() {
+    mSimpleState.clear();
+    mCallbacks.clear();
     mComposerStates.clear();
     mDisplayStates.clear();
-    mListenerCallbacks.clear();
-    mHasListenerCallbacks = false;
-    mInputWindowCommands.clear();
     mUncacheBuffers.clear();
-    mDesiredPresentTime = 0;
-    mIsAutoTimestamp = true;
     mApplyToken = nullptr;
     mFrameTimelineInfo = {};
     mMergedTransactionIds.clear();
-    mFlags = 0;
     mMayContainBuffer = false;
     mLogCallPoints = false;
 }
