@@ -219,6 +219,7 @@ TEST_F(SchedulerTest, updateDisplayModes) {
 }
 
 TEST_F(SchedulerTest, emitModeChangeEvent) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto selectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
     mScheduler->registerDisplay(kDisplayId1, selectorPtr);
@@ -253,7 +254,71 @@ TEST_F(SchedulerTest, emitModeChangeEvent) {
     mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
 }
 
+TEST_F(SchedulerTest, emitModeChangeEvent_unifyRefreshRateCallbacksEnabled) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
+    const auto selectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
+    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
+
+    mScheduler->setContentRequirements({kLayer});
+
+    // No event is emitted in response to idle.
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, _, _, _)).Times(0);
+
+    using TimerState = TestableScheduler::TimerState;
+
+    mScheduler->idleTimerCallback(TimerState::Expired);
+    selectorPtr->setActiveMode(kDisplay1Mode60->getId(), 60_Hz);
+
+    auto layer = kLayer;
+    layer.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
+    layer.desiredRefreshRate = 60_Hz;
+    mScheduler->setContentRequirements({layer});
+
+    // An event is emitted implicitly despite choosing the same mode as when idle.
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode60_60, _, _))
+            .Times(1);
+
+    mScheduler->idleTimerCallback(TimerState::Reset);
+
+    mScheduler->setContentRequirements({kLayer});
+
+    // An event is emitted explicitly for the mode change.
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+            .Times(1);
+
+    mScheduler->touchTimerCallback(TimerState::Reset);
+}
+
+TEST_F(SchedulerTest, emitModeAndFrameRateOverrideChangeEvent) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
+    const auto selectorPtr = std::make_shared<
+            RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId(),
+                                 RefreshRateSelector::
+                                         Config{.enableFrameRateOverride = RefreshRateSelector::
+                                                        Config::FrameRateOverride::Enabled,
+                                                .kernelIdleTimerController = {}});
+    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    std::vector<RefreshRateSelector::LayerRequirement> layers = {kLayer, kLayer};
+    auto& lr1 = layers[0];
+    auto& lr2 = layers[1];
+    lr1.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
+    lr1.desiredRefreshRate = 120_Hz;
+    lr1.name = "120Hz ExplicitExactOrMultiple";
+    lr2.vote = RefreshRateSelector::LayerVoteType::ExplicitExactOrMultiple;
+    lr2.desiredRefreshRate = 60_Hz;
+    lr2.name = "60Hz ExplicitExactOrMultiple";
+
+    // Emit Mode and Frame Rate override changed call
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+            .Times(1);
+    mScheduler->setContentRequirements(layers);
+    mScheduler->touchTimerCallback(TestableScheduler::TimerState::Reset);
+}
+
 TEST_F(SchedulerTest, emitModeChangeEventOnReloadPhaseConfiguration) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto selectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
     mScheduler->registerDisplay(kDisplayId1, selectorPtr);
@@ -262,6 +327,21 @@ TEST_F(SchedulerTest, emitModeChangeEventOnReloadPhaseConfiguration) {
     constexpr auto kAppDuration = Duration::fromNs(1500000);
 
     EXPECT_CALL(*mEventThread, onModeChanged(kDisplay1Mode120_120, _)).Times(1);
+    mScheduler->reloadPhaseConfiguration(kDisplay1Mode120_120, kMinSfDuration, kMaxSfDuration,
+                                         kAppDuration);
+}
+
+TEST_F(SchedulerTest, emitModeChangeEventOnReloadPhaseConfiguration_unifyRefreshRateCallbacks) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
+    const auto selectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
+    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    constexpr auto kMinSfDuration = Duration::fromNs(1000000);
+    constexpr auto kMaxSfDuration = Duration::fromNs(2000000);
+    constexpr auto kAppDuration = Duration::fromNs(1500000);
+
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+            .Times(1);
     mScheduler->reloadPhaseConfiguration(kDisplay1Mode120_120, kMinSfDuration, kMaxSfDuration,
                                          kAppDuration);
 }

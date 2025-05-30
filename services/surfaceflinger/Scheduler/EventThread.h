@@ -114,6 +114,13 @@ public:
 
     virtual void onHotplugConnectionError(int32_t connectionError) = 0;
 
+    // Called when apps need to be notified about the change in the active mode and
+    // frame rate overrides.
+    virtual void onModeAndFrameRateOverridesChanged(PhysicalDisplayId,
+                                                    const scheduler::FrameRateMode&,
+                                                    std::vector<FrameRateOverride>,
+                                                    scheduler::VsyncConfigSet) = 0;
+
     // called when SF changes the active mode or updates the WorkDuration
     // and apps needs to be notified about the change
     virtual void onModeChanged(const scheduler::FrameRateMode&, scheduler::VsyncConfigSet) = 0;
@@ -178,6 +185,10 @@ public:
     void onHotplugReceived(PhysicalDisplayId displayId, bool connected) override;
 
     void onHotplugConnectionError(int32_t connectionError) override;
+
+    void onModeAndFrameRateOverridesChanged(PhysicalDisplayId, const scheduler::FrameRateMode&,
+                                            std::vector<FrameRateOverride>,
+                                            scheduler::VsyncConfigSet) override;
 
     void onModeChanged(const scheduler::FrameRateMode&, scheduler::VsyncConfigSet) override;
 

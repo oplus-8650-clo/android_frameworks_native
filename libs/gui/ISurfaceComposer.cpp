@@ -26,6 +26,8 @@
 #include <gui/ISurfaceComposer.h>
 #include <gui/LayerState.h>
 #include <gui/SchedulingPolicy.h>
+#include <gui/SimpleTransactionState.h>
+#include <gui/TransactionState.h>
 #include <private/gui/ParcelUtils.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -50,22 +52,17 @@ using gui::IWindowInfosListener;
 using gui::LayerCaptureArgs;
 using ui::ColorMode;
 
-class BpSurfaceComposer : public BpInterface<ISurfaceComposer>
-{
+class BpSurfaceComposer : public BpInterface<ISurfaceComposer> {
 public:
-    explicit BpSurfaceComposer(const sp<IBinder>& impl)
-        : BpInterface<ISurfaceComposer>(impl)
-    {
-    }
+    explicit BpSurfaceComposer(const sp<IBinder>& impl) : BpInterface<ISurfaceComposer>(impl) {}
 
     virtual ~BpSurfaceComposer();
 
     status_t setTransactionState(
-            const FrameTimelineInfo& frameTimelineInfo, Vector<ComposerState>& state,
-            Vector<DisplayState>& displays, uint32_t flags, const sp<IBinder>& applyToken,
-            InputWindowCommands commands, int64_t desiredPresentTime, bool isAutoTimestamp,
-            const std::vector<client_cache_t>& uncacheBuffers, bool hasListenerCallbacks,
-            const std::vector<ListenerCallbacks>& listenerCallbacks, uint64_t transactionId,
+            const SimpleTransactionState simpleState, const FrameTimelineInfo& frameTimelineInfo,
+            Vector<ComposerState>& state, Vector<DisplayState>& displays,
+            const sp<IBinder>& applyToken, const std::vector<client_cache_t>& uncacheBuffers,
+            const TransactionListenerCallbacks& listenerCallbacks,
             const std::vector<uint64_t>& mergedTransactionIds,
             const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) override {
         Parcel data, reply;
@@ -83,25 +80,15 @@ public:
             SAFE_PARCEL(d.write, data);
         }
 
-        SAFE_PARCEL(data.writeUint32, flags);
+        SAFE_PARCEL(simpleState.writeToParcel, &data);
         SAFE_PARCEL(data.writeStrongBinder, applyToken);
-        SAFE_PARCEL(commands.write, data);
-        SAFE_PARCEL(data.writeInt64, desiredPresentTime);
-        SAFE_PARCEL(data.writeBool, isAutoTimestamp);
         SAFE_PARCEL(data.writeUint32, static_cast<uint32_t>(uncacheBuffers.size()));
         for (const client_cache_t& uncacheBuffer : uncacheBuffers) {
             SAFE_PARCEL(data.writeStrongBinder, uncacheBuffer.token.promote());
             SAFE_PARCEL(data.writeUint64, uncacheBuffer.id);
         }
-        SAFE_PARCEL(data.writeBool, hasListenerCallbacks);
 
-        SAFE_PARCEL(data.writeVectorSize, listenerCallbacks);
-        for (const auto& [listener, callbackIds] : listenerCallbacks) {
-            SAFE_PARCEL(data.writeStrongBinder, listener);
-            SAFE_PARCEL(data.writeParcelableVector, callbackIds);
-        }
-
-        SAFE_PARCEL(data.writeUint64, transactionId);
+        SAFE_PARCEL(listenerCallbacks.writeToParcel, &data);
 
         SAFE_PARCEL(data.writeUint32, static_cast<uint32_t>(mergedTransactionIds.size()));
         for (auto mergedTransactionId : mergedTransactionIds) {
@@ -113,12 +100,11 @@ public:
             e.writeToParcel(&data);
         }
 
-        if (flags & ISurfaceComposer::eOneWay) {
-            return remote()->transact(BnSurfaceComposer::SET_TRANSACTION_STATE,
-                    data, &reply, IBinder::FLAG_ONEWAY);
+        if (simpleState.mFlags & ISurfaceComposer::eOneWay) {
+            return remote()->transact(BnSurfaceComposer::SET_TRANSACTION_STATE, data, &reply,
+                                      IBinder::FLAG_ONEWAY);
         } else {
-            return remote()->transact(BnSurfaceComposer::SET_TRANSACTION_STATE,
-                    data, &reply);
+            return remote()->transact(BnSurfaceComposer::SET_TRANSACTION_STATE, data, &reply);
         }
     }
 };
@@ -131,9 +117,8 @@ IMPLEMENT_META_INTERFACE(SurfaceComposer, "android.ui.ISurfaceComposer");
 
 // ----------------------------------------------------------------------
 
-status_t BnSurfaceComposer::onTransact(
-    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
-{
+status_t BnSurfaceComposer::onTransact(uint32_t code, const Parcel& data, Parcel* reply,
+                                       uint32_t flags) {
     switch (code) {
         case SET_TRANSACTION_STATE: {
             CHECK_INTERFACE(ISurfaceComposer, data, reply);
@@ -160,17 +145,11 @@ status_t BnSurfaceComposer::onTransact(
                 displays.add(d);
             }
 
-            uint32_t stateFlags = 0;
-            SAFE_PARCEL(data.readUint32, &stateFlags);
+            SimpleTransactionState simpleState;
+            SAFE_PARCEL(simpleState.readFromParcel, &data);
+
             sp<IBinder> applyToken;
             SAFE_PARCEL(data.readStrongBinder, &applyToken);
-            InputWindowCommands inputWindowCommands;
-            SAFE_PARCEL(inputWindowCommands.read, data);
-
-            int64_t desiredPresentTime = 0;
-            bool isAutoTimestamp = true;
-            SAFE_PARCEL(data.readInt64, &desiredPresentTime);
-            SAFE_PARCEL(data.readBool, &isAutoTimestamp);
 
             SAFE_PARCEL_READ_SIZE(data.readUint32, &count, data.dataSize());
             std::vector<client_cache_t> uncacheBuffers(count);
@@ -181,21 +160,8 @@ status_t BnSurfaceComposer::onTransact(
                 SAFE_PARCEL(data.readUint64, &uncacheBuffers[i].id);
             }
 
-            bool hasListenerCallbacks = false;
-            SAFE_PARCEL(data.readBool, &hasListenerCallbacks);
-
-            std::vector<ListenerCallbacks> listenerCallbacks;
-            int32_t listenersSize = 0;
-            SAFE_PARCEL_READ_SIZE(data.readInt32, &listenersSize, data.dataSize());
-            for (int32_t i = 0; i < listenersSize; i++) {
-                SAFE_PARCEL(data.readStrongBinder, &tmpBinder);
-                std::vector<CallbackId> callbackIds;
-                SAFE_PARCEL(data.readParcelableVector, &callbackIds);
-                listenerCallbacks.emplace_back(tmpBinder, callbackIds);
-            }
-
-            uint64_t transactionId = -1;
-            SAFE_PARCEL(data.readUint64, &transactionId);
+            TransactionListenerCallbacks listenerCallbacks;
+            SAFE_PARCEL(listenerCallbacks.readFromParcel, &data);
 
             SAFE_PARCEL_READ_SIZE(data.readUint32, &count, data.dataSize());
             std::vector<uint64_t> mergedTransactions(count);
@@ -206,17 +172,15 @@ status_t BnSurfaceComposer::onTransact(
             count = 0;
             SAFE_PARCEL_READ_SIZE(data.readUint32, &count, data.dataSize());
             std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos;
-            state.setCapacity(count);
+            earlyWakeupInfos.reserve(count);
             for (size_t i = 0; i < count; i++) {
                 gui::EarlyWakeupInfo e;
                 e.readFromParcel(&data);
                 earlyWakeupInfos.push_back(std::move(e));
             }
 
-            return setTransactionState(frameTimelineInfo, state, displays, stateFlags, applyToken,
-                                       std::move(inputWindowCommands), desiredPresentTime,
-                                       isAutoTimestamp, uncacheBuffers, hasListenerCallbacks,
-                                       listenerCallbacks, transactionId, mergedTransactions,
+            return setTransactionState(simpleState, frameTimelineInfo, state, displays, applyToken,
+                                       uncacheBuffers, listenerCallbacks, mergedTransactions,
                                        earlyWakeupInfos);
         }
         case GET_SCHEDULING_POLICY: {

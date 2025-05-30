@@ -373,6 +373,7 @@ RpcState::CommandData::CommandData(size_t size) : mSize(size) {
     mData.reset(data);
 }
 
+// MUST ALWAYS SHUTDOWN ON ERROR, DUE TO CALLER CONSTRAITS
 status_t RpcState::rpcSend(const sp<RpcSession::RpcConnection>& connection,
                            const sp<RpcSession>& session, const char* what, iovec* iovs, int niovs,
                            const std::optional<SmallFunction<status_t()>>& altPoll,
@@ -397,6 +398,7 @@ status_t RpcState::rpcSend(const sp<RpcSession::RpcConnection>& connection,
     return OK;
 }
 
+// MUST ALWAYS SHUTDOWN ON ERROR, DUE TO CALLER CONSTRAITS
 status_t RpcState::rpcRec(const sp<RpcSession::RpcConnection>& connection,
                           const sp<RpcSession>& session, const char* what, iovec* iovs, int niovs,
                           std::vector<std::variant<unique_fd, borrowed_fd>>* ancillaryFds) {
@@ -568,6 +570,11 @@ status_t RpcState::transactAddress(const sp<RpcSession::RpcConnection>& connecti
     LOG_ALWAYS_FATAL_IF(!data.isForRpc());
     LOG_ALWAYS_FATAL_IF(data.objectsCount() != 0);
 
+    if (!(flags & IBinder::FLAG_ONEWAY)) {
+        LOG_ALWAYS_FATAL_IF(reply == nullptr,
+                            "Reply parcel must be used for synchronous transaction.");
+    }
+
     uint64_t asyncNumber = 0;
 
     if (address != 0) {
@@ -659,8 +666,8 @@ status_t RpcState::transactAddress(const sp<RpcSession::RpcConnection>& connecti
         return OK;
     }
 
-    LOG_ALWAYS_FATAL_IF(reply == nullptr, "Reply parcel must be used for synchronous transaction.");
-
+    // b/416734088
+    // NOW THAT WE'VE SENT TRANSACTION, WE MUST READ FULL RESULT FOR PROTOCOL TO BE IN SYNC
     return waitForReply(connection, session, reply);
 }
 
@@ -683,14 +690,14 @@ status_t RpcState::waitForReply(const sp<RpcSession::RpcConnection>& connection,
                                              ? &ancillaryFds
                                              : nullptr);
             status != OK)
-            return status;
+            return status; // rpcRec failure calls shutdown
 
         if (command.command == RPC_COMMAND_REPLY) break;
 
         if (status_t status = processCommand(connection, session, command, CommandType::ANY,
                                              std::move(ancillaryFds));
             status != OK)
-            return status;
+            return status; // processCommand must shutdown on failure
 
         // Reset to avoid spurious use-after-move warning from clang-tidy.
         ancillaryFds = decltype(ancillaryFds)();
@@ -722,8 +729,12 @@ status_t RpcState::waitForReply(const sp<RpcSession::RpcConnection>& connection,
             {data.data(), data.size()},
     };
     if (status_t status = rpcRec(connection, session, "reply body", iovs, countof(iovs), nullptr);
-        status != OK)
+        status != OK) {
+        // rpcRec shuts down connection on failure
         return status;
+    }
+
+    // NOW THAT WE'VE READ RESPONSE, WE CAN RETURN WITHOUT SHUTTING DOWN THE CONNECTION.
 
     if (rpcReply.status != OK) return rpcReply.status;
 
@@ -806,9 +817,13 @@ status_t RpcState::getAndExecuteCommand(const sp<RpcSession::RpcConnection>& con
                 rpcRec(connection, session, "command header (for server)", &iov, 1,
                        enableAncillaryFds(session->getFileDescriptorTransportMode()) ? &ancillaryFds
                                                                                      : nullptr);
-        status != OK)
+        status != OK) {
         return status;
+    }
 
+    // b/416734088
+    // NOW THAT WE'VE READ HEADER WE MUST READ THE REST AND WRITE FULL RESPONSE, OR OTHERWISE
+    // SHUTDOWN THE SERVICE
     return processCommand(connection, session, command, type, std::move(ancillaryFds));
 }
 
@@ -825,6 +840,9 @@ status_t RpcState::drainCommands(const sp<RpcSession::RpcConnection>& connection
     return OK;
 }
 
+// THIS FUNCTION MUST SHUTDOWN IF IT ERRORS, ACCORDING TO waitForReply.
+// THIS FUNCTION MUST ALWAYS READ THE FULL COMMAND, ACCORDING TO getAndExecuteCommand and
+// waitForReply.
 status_t RpcState::processCommand(
         const sp<RpcSession::RpcConnection>& connection, const sp<RpcSession>& session,
         const RpcWireHeader& command, CommandType type,
@@ -867,6 +885,9 @@ status_t RpcState::processCommand(
     (void)session->shutdownAndWait(false);
     return DEAD_OBJECT;
 }
+
+// THIS FUNCTION MUST SHUTDOWN IF IT ERRORS, ACCORDING TO processCommand.
+// THIS FUNCTION MUST ALWAYS READ THE FULL COMMAND, ACCORDING TO processCommand.
 status_t RpcState::processTransact(
         const sp<RpcSession::RpcConnection>& connection, const sp<RpcSession>& session,
         const RpcWireHeader& command,
@@ -883,9 +904,13 @@ status_t RpcState::processTransact(
     }
     iovec iov{transactionData.data(), transactionData.size()};
     if (status_t status = rpcRec(connection, session, "transaction body", &iov, 1, nullptr);
-        status != OK)
-        return status;
+        status != OK) {
+        return status; // rpcRec always shuts down on error
+    }
 
+    // ACCORDING TO RPC BINDER PROTOCOL:
+    // - if the transaction is oneway, we must not write a response
+    // - if the transaction is twoway, we must ALWAYS write a response
     return processTransactInternal(connection, session, std::move(transactionData),
                                    std::move(ancillaryFds));
 }
@@ -898,6 +923,11 @@ static void do_nothing_to_transact_data(const uint8_t* data, size_t dataSize,
     (void)objectsCount;
 }
 
+// ACCORDING TO RPC BINDER PROTOCOL:
+// - if the transaction is oneway, we must not write a response
+// - if the transaction is twoway, we must ALWAYS write a response
+// DUE TO CLIENT CONSTRAINTS, WE CANNOT RETURN AN ERROR WITHOUT SHUTTING DOWN THE CONNECTION
+// UNTIL THE FULL RESPONSE HAS BEEN WRITTEN.
 status_t RpcState::processTransactInternal(
         const sp<RpcSession::RpcConnection>& connection, const sp<RpcSession>& session,
         CommandData transactionData,
@@ -982,6 +1012,8 @@ processTransactInternalTailCall:
                               target.get(), numPending);
                     }
                 }
+
+                // This is a oneway transaction (scheduled later), no response is required.
                 return OK;
             }
         }
@@ -1013,6 +1045,7 @@ processTransactInternalTailCall:
                       " objectTableBytesSize=%zu. Terminating!",
                       transactionData.size(), sizeof(RpcWireTransaction),
                       transaction->parcelDataSize, objectTableBytes->size);
+                (void)session->shutdownAndWait(false);
                 return BAD_VALUE;
             }
             objectTableSpan = *maybeSpan;
@@ -1151,6 +1184,14 @@ processTransactInternalTailCall:
         replyStatus = status;
     }
 
+    // b/404210068 - we see this case with no logs in the VM. Make sure we always log in this
+    // case, so if the bug repros again, we prove that there are missing logs. Try the negative
+    // as well to be extra careful. TODO - delete this code anytime in the future.
+    if (replyStatus == NO_MEMORY || replyStatus == ENOMEM) {
+        ALOGE("Replying to transaction code: %" PRIo32 " error: %s.", transaction->code,
+              statusToString(replyStatus).c_str());
+    }
+
     auto* rpcFields = reply.maybeRpcFields();
     LOG_ALWAYS_FATAL_IF(rpcFields == nullptr);
 
@@ -1186,6 +1227,8 @@ processTransactInternalTailCall:
                    rpcFields->mFds.get());
 }
 
+// THIS FUNCTION MUST SHUTDOWN IF IT ERRORS, ACCORDING TO processCommand.
+// THIS FUNCTION MUST ALWAYS READ THE FULL COMMAND, ACCORDING TO processCommand.
 status_t RpcState::processDecStrong(const sp<RpcSession::RpcConnection>& connection,
                                     const sp<RpcSession>& session, const RpcWireHeader& command) {
     LOG_ALWAYS_FATAL_IF(command.command != RPC_COMMAND_DEC_STRONG, "command: %d", command.command);
@@ -1200,15 +1243,23 @@ status_t RpcState::processDecStrong(const sp<RpcSession::RpcConnection>& connect
     RpcDecStrong body;
     iovec iov{&body, sizeof(RpcDecStrong)};
     if (status_t status = rpcRec(connection, session, "dec ref body", &iov, 1, nullptr);
-        status != OK)
-        return status;
+        status != OK) {
+        return status; // rpcRec shutsdown if it fails
+    }
+
+    // AT THIS POINT, WE HAVE READ THE FULL TRANSACTION, SO WE CAN RETURN WITHOUT MESSING
+    // UP THE PROTOCOL
 
     uint64_t addr = RpcWireAddress::toRaw(body.address);
+
     RpcMutexUniqueLock _l(mNodeMutex);
+    if (mTerminated) return DEAD_OBJECT;
+
     auto it = mNodeForAddress.find(addr);
     if (it == mNodeForAddress.end()) {
-        ALOGE("Unknown binder address %" PRIu64 " for dec strong.", addr);
-        return OK;
+        ALOGE("Unknown binder address %" PRIu64 " for dec strong. Terminating!", addr);
+        (void)session->shutdownAndWait(false);
+        return BAD_VALUE;
     }
 
     sp<IBinder> target = it->second.binder.promote();

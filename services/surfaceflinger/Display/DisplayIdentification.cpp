@@ -318,24 +318,29 @@ std::optional<Edid> parseEdid(const DisplayIdentificationData& edid) {
         view = view.subspan(kDescriptorLength);
     }
 
+    // Prefer display name instead of using product code or (integer) serial number, since the
+    // latter have been observed to change on some displays with multiple inputs. As fields are
+    // discovered to be empty, fall back to less reliable fields.
     std::string_view modelString = displayName;
 
     if (modelString.empty()) {
-        ALOGW("Invalid EDID: falling back to serial number due to missing display name.");
+        ALOGW("EDID: falling back to serial number due to missing display name.");
         modelString = descriptorBlockSerialNumber;
     }
     if (modelString.empty()) {
-        ALOGW("Invalid EDID: falling back to ASCII text due to missing serial number.");
+        ALOGW("EDID: falling back to ASCII text due to missing serial number.");
         modelString = asciiText;
     }
+
+    std::string productString;
     if (modelString.empty()) {
-        ALOGE("Invalid EDID: display name and fallback descriptors are missing.");
-        return {};
+        ALOGW("EDID: falling back to PNP + ProductID due to missing unspecified text.");
+        productString = std::string(pnpId->data()) + std::to_string(productId);
+        modelString = productString;
     }
 
-    // Hash model string instead of using product code or (integer) serial number, since the latter
-    // have been observed to change on some displays with multiple inputs. Use a stable hash instead
-    // of std::hash which is only required to be same within a single execution of a program.
+    // Use a stable hash instead of std::hash which is only required to be same within a single
+    // execution of a program.
     const uint32_t modelHash = static_cast<uint32_t>(*ftl::stable_hash(modelString));
 
     // Parse extension blocks.
