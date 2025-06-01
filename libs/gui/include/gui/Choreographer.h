@@ -121,6 +121,10 @@ private:
                            nsecs_t timestamp);
     void dispatchHotplug(nsecs_t timestamp, PhysicalDisplayId displayId, bool connected) override;
     void dispatchHotplugConnectionError(nsecs_t timestamp, int32_t connectionError) override;
+    void dispatchModeChangedWithFrameRateOverrides(
+            nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId, nsecs_t vsyncPeriod,
+            nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
+            std::vector<FrameRateOverride> overrides) override;
     void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
                              nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
                              nsecs_t presentationDeadline) override;

@@ -21,11 +21,14 @@
 #undef LOG_TAG
 #define LOG_TAG "LibSurfaceFlingerUnittests"
 
+#include <common/test/FlagUtils.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <scheduler/VsyncConfig.h>
 #include <utils/Errors.h>
+
+#include <com_android_graphics_surfaceflinger_flags.h>
 
 #include "AsyncCallRecorder.h"
 #include "DisplayHardware/DisplayMode.h"
@@ -35,6 +38,7 @@
 #include "mock/MockVSyncTracker.h"
 #include "mock/MockVsyncController.h"
 
+using namespace com::android::graphics::surfaceflinger;
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
@@ -136,8 +140,10 @@ protected:
                                                       nsecs_t expectedPresentationDeadline);
     void expectThrottleVsyncReceived(nsecs_t expectedTimestamp, uid_t);
     void expectOnExpectedPresentTimePosted(nsecs_t expectedPresentTime);
-    void expectUidFrameRateMappingEventReceivedByConnection(PhysicalDisplayId expectedDisplayId,
-                                                            std::vector<FrameRateOverride>);
+    void expectUidFrameRateMappingEventReceivedByConnection(
+            PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride>,
+            DisplayEventType expectedEventType =
+                    DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH);
 
     void onVSyncEvent(nsecs_t timestamp, nsecs_t expectedPresentationTime,
                       nsecs_t deadlineTimestamp) {
@@ -387,7 +393,8 @@ void EventThreadTest::expectConfigChangedEventReceivedByConnection(
 }
 
 void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
-        PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride> expectedOverrides) {
+        PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride> expectedOverrides,
+        DisplayEventType expectedEventType) {
     for (const auto [uid, frameRateHz] : expectedOverrides) {
         auto args = mConnectionEventCallRecorder.waitForCall();
         ASSERT_TRUE(args.has_value());
@@ -401,7 +408,7 @@ void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
     auto args = mConnectionEventCallRecorder.waitForCall();
     ASSERT_TRUE(args.has_value());
     const auto& event = std::get<0>(args.value());
-    EXPECT_EQ(DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH, event.header.type);
+    EXPECT_EQ(expectedEventType, event.header.type);
     EXPECT_EQ(expectedDisplayId, event.header.displayId);
 }
 
@@ -903,6 +910,28 @@ TEST_F(EventThreadTest, postHcpLevelsChanged) {
     EXPECT_EQ(EXTERNAL_DISPLAY_ID, event.header.displayId);
     EXPECT_EQ(HDCP_V1, event.hdcpLevelsChange.connectedLevel);
     EXPECT_EQ(HDCP_V2, event.hdcpLevelsChange.maxLevel);
+}
+
+TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
+    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
+    setupEventThread();
+    const std::vector<FrameRateOverride> overrides = {
+            {.uid = 1, .frameRateHz = 20},
+            {.uid = 3, .frameRateHz = 40},
+            {.uid = 5, .frameRateHz = 60},
+    };
+    const auto mode = DisplayMode::Builder(hal::HWConfigId(0))
+                              .setPhysicalDisplayId(EXTERNAL_DISPLAY_ID)
+                              .setId(DisplayModeId(5))
+                              .setVsyncPeriod(16666666)
+                              .build();
+    const Fps fps = mode->getPeakFps() / 2;
+
+    mThread->onModeAndFrameRateOverridesChanged(EXTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                overrides, mOffsets);
+    expectUidFrameRateMappingEventReceivedByConnection(
+            EXTERNAL_DISPLAY_ID, overrides,
+            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE);
 }
 
 } // namespace

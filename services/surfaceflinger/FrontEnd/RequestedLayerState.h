@@ -121,7 +121,6 @@ struct RequestedLayerState : layer_state_t {
     bool potentialCursor{false};
     bool protectedByApp{false}; // application requires protected path to external sink
     ui::Transform requestedTransform;
-    std::shared_ptr<FenceTime> acquireFenceTime;
     std::shared_ptr<renderengine::ExternalTexture> externalTexture;
     gui::GameMode gameMode;
     scheduler::LayerInfo::FrameRate requestedFrameRate;
