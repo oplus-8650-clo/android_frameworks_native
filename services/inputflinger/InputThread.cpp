@@ -16,6 +16,8 @@
 
 #include "InputThread.h"
 
+#include <functional>
+
 #include <android-base/logging.h>
 #include <com_android_input_flags.h>
 #include <processgroup/processgroup.h>

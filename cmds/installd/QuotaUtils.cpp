@@ -17,6 +17,7 @@
 #include "QuotaUtils.h"
 
 #include <fstream>
+#include <mutex>
 #include <unordered_map>
 
 #include <sys/quota.h>

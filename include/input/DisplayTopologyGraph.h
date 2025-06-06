@@ -56,10 +56,14 @@ struct DisplayTopologyAdjacentDisplay {
  * Directed Graph representation of Display Topology.
  */
 struct DisplayTopologyGraph {
+    struct Properties {
+        std::vector<DisplayTopologyAdjacentDisplay> adjacentDisplays;
+        int32_t density;
+        FloatRect boundsInGlobalDp;
+    };
+
     ui::LogicalDisplayId primaryDisplayId = ui::LogicalDisplayId::INVALID;
-    std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>> graph;
-    std::unordered_map<ui::LogicalDisplayId, int> displaysDensity;
-    std::unordered_map<ui::LogicalDisplayId, FloatRect> boundsInGlobalDp;
+    std::unordered_map<ui::LogicalDisplayId, Properties> graph;
 
     DisplayTopologyGraph() = default;
     std::string dump() const;
@@ -68,18 +72,11 @@ struct DisplayTopologyGraph {
     // Returns error if a valid graph cannot be built from the supplied components.
     static base::Result<const DisplayTopologyGraph> create(
             ui::LogicalDisplayId primaryDisplay,
-            std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>>&&
-                    adjacencyGraph,
-            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap,
-            std::unordered_map<ui::LogicalDisplayId, FloatRect>&& boundsInGlobalDpMap);
+            std::unordered_map<ui::LogicalDisplayId, Properties>&& topologyGraph);
 
 private:
-    DisplayTopologyGraph(
-            ui::LogicalDisplayId primaryDisplay,
-            std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>>&&
-                    adjacencyGraph,
-            std::unordered_map<ui::LogicalDisplayId, int>&& displaysDensityMap,
-            std::unordered_map<ui::LogicalDisplayId, FloatRect>&& boundsInGlobalDp);
+    DisplayTopologyGraph(ui::LogicalDisplayId primaryDisplay,
+                         std::unordered_map<ui::LogicalDisplayId, Properties>&& topologyGraph);
 };
 
 } // namespace android

@@ -22,6 +22,8 @@
 
 #include "binderRpcTestFixture.h"
 
+#include <algorithm>
+
 using android::binder::unique_fd;
 
 namespace android {

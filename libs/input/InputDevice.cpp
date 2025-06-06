@@ -204,7 +204,6 @@ InputDeviceInfo::InputDeviceInfo(const InputDeviceInfo& other)
         mEnabled(other.mEnabled),
         mHasVibrator(other.mHasVibrator),
         mHasBattery(other.mHasBattery),
-        mHasButtonUnderPad(other.mHasButtonUnderPad),
         mHasSensor(other.mHasSensor),
         mMotionRanges(other.mMotionRanges),
         mSensors(other.mSensors),
@@ -230,7 +229,6 @@ InputDeviceInfo& InputDeviceInfo::operator=(const InputDeviceInfo& other) {
     mEnabled = other.mEnabled;
     mHasVibrator = other.mHasVibrator;
     mHasBattery = other.mHasBattery;
-    mHasButtonUnderPad = other.mHasButtonUnderPad;
     mHasSensor = other.mHasSensor;
     mMotionRanges = other.mMotionRanges;
     mSensors = other.mSensors;
@@ -260,7 +258,6 @@ void InputDeviceInfo::initialize(int32_t id, int32_t generation, int32_t control
     mEnabled = enabled;
     mHasVibrator = false;
     mHasBattery = false;
-    mHasButtonUnderPad = false;
     mHasSensor = false;
     mViewBehavior = viewBehavior;
     mUsiVersion.reset();

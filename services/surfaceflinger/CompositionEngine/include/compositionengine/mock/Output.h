@@ -48,6 +48,7 @@ public:
     MOCK_METHOD(void, setLayerFilter, (ui::LayerFilter));
     MOCK_METHOD(bool, includesLayer, (ui::LayerFilter), (const));
     MOCK_METHOD(bool, includesLayer, (const sp<compositionengine::LayerFE>&), (const));
+    MOCK_METHOD(bool, includesLayer, (compositionengine::LayerFE*), (const));
 
     MOCK_METHOD1(setColorTransform, void(const compositionengine::CompositionRefreshArgs&));
     MOCK_METHOD1(setColorProfile, void(const ColorProfile&));

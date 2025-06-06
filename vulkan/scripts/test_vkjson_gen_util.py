@@ -143,8 +143,8 @@ class TestGetVkjsonStructName(unittest.TestCase):
 
     def test_extension_with_unknown_prefix(self):
         self.assertEqual(
-            "VkJsonExtVKNVRayTracing",
-            src.get_vkjson_struct_name("VK_NV_ray_tracing")
+            "VkJsonExtVKFUCHSIAExternalSemaphore",
+            src.get_vkjson_struct_name("VK_FUCHSIA_external_semaphore")
         )
 
     def test_extension_with_numeric_suffixes(self):
@@ -176,8 +176,8 @@ class TestGetVkjsonStructVariableName(unittest.TestCase):
 
     def test_extension_with_unknown_prefix(self):
         self.assertEqual(
-            "vk_nv_ray_tracing",
-            src.get_vkjson_struct_variable_name("VK_NV_ray_tracing")
+            "vk_fuchsia_external_semaphore",
+            src.get_vkjson_struct_variable_name("VK_FUCHSIA_external_semaphore")
         )
 
     def test_extension_with_numeric_prefixes(self):
@@ -580,25 +580,15 @@ class TestGenerateVkCoreStructDefinition(BaseMockCodeFileTest):
 
 
 class TestGenerateMemsetStatements(BaseMockCodeFileTest):
-    @dataclass
-    class VkCustomExtension1:
-        memberInt: int = 0
-
-    @dataclass
-    class VkCustomExtension2:
-        memberBool: bool = False
-
-    @dataclass
-    class VkCustomExtension3:
-        memberString: str = ""
 
     @patch('vkjson_gen_util.VK')
     def test_multiple_structs(self, mock_vk):
         mock_vk.EXTENSION_INDEPENDENT_STRUCTS = [
-            self.VkCustomExtension1,
-            self.VkCustomExtension2,
-            self.VkCustomExtension3
+            'VkCustomExtension1',
+            'VkCustomExtension2',
+            'VkCustomExtension3'
         ]
+        mock_vk.ADDITIONAL_EXTENSION_INDEPENDENT_STRUCTS = []
 
         struct_1_name = src.get_struct_name("VkCustomExtension1")
         struct_2_name = src.get_struct_name("VkCustomExtension2")
@@ -1080,6 +1070,14 @@ class TestGenerateVkCoreStructsInitCode(unittest.TestCase):
     def setUp(self):
         self.mock_vk_patcher = patch('vkjson_gen_util.VK')
         mock_vk = self.mock_vk_patcher.start()
+        mock_vk.STRUCT_EXTENDS_MAPPING = {
+            "VkPhysicalDeviceVulkan11Features": "VkPhysicalDeviceFeatures2,VkDeviceCreateInfo",
+            "VkPhysicalDeviceVulkan11Properties": "VkPhysicalDeviceProperties2",
+            "VkPhysicalDeviceVulkan12Features1": "VkPhysicalDeviceFeatures2,VkDeviceCreateInfo",
+            "VkPhysicalDeviceVulkan12Properties1": "VkPhysicalDeviceProperties2",
+            "VkPhysicalDeviceVulkan12Features2": "VkPhysicalDeviceFeatures2",
+            "VkPhysicalDeviceVulkan12Properties2":"VkPhysicalDeviceProperties2",
+        }
         mock_vk.VULKAN_CORES_AND_STRUCTS_MAPPING = {
             "versions": {
                 "Core11": [
@@ -1090,8 +1088,7 @@ class TestGenerateVkCoreStructsInitCode(unittest.TestCase):
                     {"VkPhysicalDeviceVulkan12Properties1": "VK_TYPE_12_PROPS_1"},
                     {"VkPhysicalDeviceVulkan12Features1": "VK_TYPE_12_FEATS_1"},
                     {"VkPhysicalDeviceVulkan12Properties2": "VK_TYPE_12_PROPS_2"},
-                    {"VkPhysicalDeviceVulkan12Features2": "VK_TYPE_12_FEATS_2"},
-                    {"SomeThingElse": "SOME_OTHER_STRUCT"}
+                    {"VkPhysicalDeviceVulkan12Features2": "VK_TYPE_12_FEATS_2"}
                 ]
             }
         }
@@ -1164,12 +1161,6 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 {"VkPhysicalDeviceVariablePointerFeaturesKHR": "VK_STRUCT_VARIABLE"},
                 {"VkPhysicalDeviceVariablePointersFeaturesKHR": "VK_STRUCT_VARIABLES"},
                 {"SomeThingElse": "SOME_OTHER_STRUCT"}
-            ],
-            "VK_EXT_custom_border_color": [
-                {"VkPhysicalDeviceCustomBorderColorFeatsEXT": "VK_STRUCT_COLOR"}
-            ],
-            "VK_KHR_shader_float_controls": [
-                {"VkPhysicalDeviceFloatControlsFeatsKHR": "VK_STRUCT_FLOAT"}
             ]
         }
 
@@ -1182,11 +1173,11 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 '  if (HasExtension("VK_KHR_driver_state", device.extensions)) {\n'
                 f"    device.{extension_var}.reported = true;\n"
                 f"    device.{extension_var}.{struct_name}.sType = VK_STRUCT_DRIVER;\n"
-                f"    device.{extension_var}.{struct_name}.pNext = prop.pNext;\n"
-                f"    prop.pNext = &device.{extension_var}.{struct_name};\n"
+                f"    device.{extension_var}.{struct_name}.pNext = properties.pNext;\n"
+                f"    properties.pNext = &device.{extension_var}.{struct_name};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Properties", "prop")
+            src.generate_vk_extension_structs_init_code(self.mapping, "Properties")
         )
 
     def test_handles_single_extension_multiple_structs(self):
@@ -1199,45 +1190,49 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 '  if (HasExtension("VK_KHR_variable_pointers", device.extensions)) {\n'
                 f"    device.{extension_var}.reported = true;\n"
                 f"    device.{extension_var}.{struct_name1}.sType = VK_STRUCT_VARIABLE;\n"
-                f"    device.{extension_var}.{struct_name1}.pNext = feat.pNext;\n"
-                f"    feat.pNext = &device.{extension_var}.{struct_name1};\n"
+                f"    device.{extension_var}.{struct_name1}.pNext = features.pNext;\n"
+                f"    features.pNext = &device.{extension_var}.{struct_name1};\n"
                 f"    device.{extension_var}.{struct_name2}.sType = VK_STRUCT_VARIABLES;\n"
-                f"    device.{extension_var}.{struct_name2}.pNext = feat.pNext;\n"
-                f"    feat.pNext = &device.{extension_var}.{struct_name2};\n"
+                f"    device.{extension_var}.{struct_name2}.pNext = features.pNext;\n"
+                f"    features.pNext = &device.{extension_var}.{struct_name2};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Features", "feat")
+            src.generate_vk_extension_structs_init_code(self.mapping, "Features")
         )
 
     def test_handles_no_matching_struct(self):
-        self.assertEqual(
-            "",
-            src.generate_vk_extension_structs_init_code(self.mapping, "Extension", "ext")
+        self.assertRaises(
+            Exception,
+            src.generate_vk_extension_structs_init_code(self.mapping, "Extension")
         )
 
     def test_handles_multiple_extensions(self):
-        extension_var1 = src.get_vkjson_struct_variable_name("VK_EXT_custom_border_color")
-        struct_name1 = src.get_struct_name("VkPhysicalDeviceCustomBorderColorFeatsEXT")
+        # Resetting mapping as we only want extensions containing feature structs with valid structextends mapping
+        self.mapping = {
+            "VK_KHR_vulkan_memory_model": [{"VkPhysicalDeviceVulkanMemoryModelFeaturesKHR": "VK_STRUCT_MEMORY"}],
+            "VK_KHR_video_maintenance1": [{"VkPhysicalDeviceVideoMaintenance1FeaturesKHR": "VK_STRUCT_VIDEO"}],
+        }
+        extension_var1 = src.get_vkjson_struct_variable_name("VK_KHR_vulkan_memory_model")
+        struct_name1 = src.get_struct_name("VkPhysicalDeviceVulkanMemoryModelFeaturesKHR")
 
-        extension_var2 = src.get_vkjson_struct_variable_name("VK_KHR_shader_float_controls")
-        struct_name2 = src.get_struct_name("VkPhysicalDeviceFloatControlsFeatsKHR")
-
+        extension_var2 = src.get_vkjson_struct_variable_name("VK_KHR_video_maintenance1")
+        struct_name2 = src.get_struct_name("VkPhysicalDeviceVideoMaintenance1FeaturesKHR")
         self.assertEqual(
             (
-                '  if (HasExtension("VK_EXT_custom_border_color", device.extensions)) {\n'
+                '  if (HasExtension("VK_KHR_vulkan_memory_model", device.extensions)) {\n'
                 f"    device.{extension_var1}.reported = true;\n"
-                f"    device.{extension_var1}.{struct_name1}.sType = VK_STRUCT_COLOR;\n"
-                f"    device.{extension_var1}.{struct_name1}.pNext = feat.pNext;\n"
-                f"    feat.pNext = &device.{extension_var1}.{struct_name1};\n"
+                f"    device.{extension_var1}.{struct_name1}.sType = VK_STRUCT_MEMORY;\n"
+                f"    device.{extension_var1}.{struct_name1}.pNext = features.pNext;\n"
+                f"    features.pNext = &device.{extension_var1}.{struct_name1};\n"
                 '  }\n\n'
-                '  if (HasExtension("VK_KHR_shader_float_controls", device.extensions)) {\n'
+                '  if (HasExtension("VK_KHR_video_maintenance1", device.extensions)) {\n'
                 f"    device.{extension_var2}.reported = true;\n"
-                f"    device.{extension_var2}.{struct_name2}.sType = VK_STRUCT_FLOAT;\n"
-                f"    device.{extension_var2}.{struct_name2}.pNext = feat.pNext;\n"
-                f"    feat.pNext = &device.{extension_var2}.{struct_name2};\n"
+                f"    device.{extension_var2}.{struct_name2}.sType = VK_STRUCT_VIDEO;\n"
+                f"    device.{extension_var2}.{struct_name2}.pNext = features.pNext;\n"
+                f"    features.pNext = &device.{extension_var2}.{struct_name2};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Feats", "feat")
+            src.generate_vk_extension_structs_init_code(self.mapping, "Features")
         )
 
 
@@ -1263,27 +1258,27 @@ class TestGenerateVkVersionStructsInitialization(unittest.TestCase):
         self.assertEqual(
             (
                 f"device.{self.feat_struct_name}.sType = VK_STRUCTURE_TYPE_MULTIVIEW;\n"
-                f"device.{self.feat_struct_name}.pNext = feat.pNext;\n"
-                f"feat.pNext = &device.{self.feat_struct_name};\n"
+                f"device.{self.feat_struct_name}.pNext = features.pNext;\n"
+                f"features.pNext = &device.{self.feat_struct_name};\n"
             ),
-            src.generate_vk_version_structs_initialization(self.version_data, "Features", "feat")
+            src.generate_vk_version_structs_initialization(self.version_data, "Features")
         )
 
     def test_handles_multiple_matching_structs(self):
         self.assertEqual(
             (
                 f"device.{self.prop1_struct_name}.sType = VK_STRUCTURE_TYPE_DEVICE_ID;\n"
-                f"device.{self.prop1_struct_name}.pNext = prop.pNext;\n"
-                f"prop.pNext = &device.{self.prop1_struct_name};\n\n"
+                f"device.{self.prop1_struct_name}.pNext = properties.pNext;\n"
+                f"properties.pNext = &device.{self.prop1_struct_name};\n\n"
                 f"device.{self.prop2_struct_name}.sType = VK_STRUCTURE_TYPE_MAINTENANCE_3;\n"
-                f"device.{self.prop2_struct_name}.pNext = prop.pNext;\n"
-                f"prop.pNext = &device.{self.prop2_struct_name};\n"
+                f"device.{self.prop2_struct_name}.pNext = properties.pNext;\n"
+                f"properties.pNext = &device.{self.prop2_struct_name};\n"
             ),
-            src.generate_vk_version_structs_initialization(self.version_data, "Properties", "prop")
+            src.generate_vk_version_structs_initialization(self.version_data, "Properties")
         )
 
     def test_handles_no_matching_struct(self):
         self.assertEqual(
             "",
-            src.generate_vk_version_structs_initialization(self.version_data, "Custom", "cust")
+            src.generate_vk_version_structs_initialization(self.version_data, "Custom")
         )

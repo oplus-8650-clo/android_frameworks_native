@@ -160,6 +160,13 @@ public:
     MOCK_METHOD(status_t, getLuts,
                 (PhysicalDisplayId, const std::vector<sp<GraphicBuffer>>&,
                  std::vector<aidl::android::hardware::graphics::composer3::Luts>*));
+
+    MOCK_METHOD(status_t, getReadbackBufferAttributes,
+                (PhysicalDisplayId,
+                 aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes*));
+    MOCK_METHOD(status_t, setReadbackBuffer,
+                (PhysicalDisplayId, const sp<GraphicBuffer>&, const android::sp<android::Fence>&));
+    MOCK_METHOD(sp<Fence>, getReadbackBufferFence, (PhysicalDisplayId));
 };
 
 } // namespace android::mock

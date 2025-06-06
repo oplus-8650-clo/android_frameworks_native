@@ -372,6 +372,14 @@ bool isExpectedPresentWithinTimeout(TimePoint expectedPresentTime,
     return std::abs(expectedPresentTime.ns() -
                     (lastExpectedPresentTimestamp.ns() + timeoutOpt->ns())) < threshold.ns();
 }
+
+void invokeScreenCaptureError(const status_t status,
+                              const sp<IScreenCaptureListener>& captureListener) {
+    ScreenCaptureResults captureResults;
+    captureResults.fenceResult = base::unexpected(status);
+    captureListener->onScreenCaptureCompleted(captureResults);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -3168,11 +3176,15 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
             }
         }
     }
-
     refreshArgs.refreshStartTime = systemTime(SYSTEM_TIME_MONOTONIC);
+
     for (auto& [layer, layerFE] : layers) {
         layer->onPreComposition(refreshArgs.refreshStartTime);
+
+        validateForReadback(layerFE);
     }
+
+    setupOutputsForReadback(refreshArgs.outputs);
 
     for (auto& [layer, layerFE] : layers) {
         attachReleaseFenceFutureToLayer(layer, layerFE,
@@ -3197,6 +3209,9 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     }
 
     mCompositionEngine->present(refreshArgs);
+
+    finalizeReadback(refreshArgs.outputs);
+
     ftl::Flags<adpf::Workload> compositedWorkload;
     if (refreshArgs.updatingGeometryThisFrame || refreshArgs.updatingOutputGeometryThisFrame) {
         compositedWorkload |= adpf::Workload::VISIBLE_REGION;
@@ -7899,13 +7914,6 @@ ui::Dataspace pickBestDataspace(ui::Dataspace requestedDataspace, ui::ColorMode 
     return dataspaceForColorMode;
 }
 
-static void invokeScreenCaptureError(const status_t status,
-                                     const sp<IScreenCaptureListener>& captureListener) {
-    ScreenCaptureResults captureResults;
-    captureResults.fenceResult = base::unexpected(status);
-    captureListener->onScreenCaptureCompleted(captureResults);
-}
-
 // Scans through layer handles to provide a list of layer IDs that should be
 // excluded from a screenshot, or std::nullopt if any layer handle does not
 // correspond to a valid layer ID.
@@ -8061,7 +8069,6 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
         reqSize = ui::Size(crop.width() * captureArgs.frameScaleX,
                            crop.height() * captureArgs.frameScaleY);
     } // mStateLock
-
     auto excludeLayerIds = getExcludeLayerIds(captureArgs.excludeHandles);
     if (!excludeLayerIds) {
         ALOGD("Invalid layer handle passed as excludeLayer to captureLayers");
@@ -8148,14 +8155,65 @@ bool SurfaceFlinger::layersHasProtectedLayer(
 // main thread. Accessing display requires mStateLock, and contention for
 // this lock is reduced when grabbed from the main thread, thus also reducing
 // risk of deadlocks. Returns an error status if no display is found.
-status_t SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args) {
+base::expected<SurfaceFlinger::ScreenshotStrategy, status_t>
+SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args) {
     return mScheduler
-            ->schedule([=, this, &args]() REQUIRES(kMainThreadContext) {
+            ->schedule([=, this, &args]() REQUIRES(kMainThreadContext)
+                               -> base::expected<SurfaceFlinger::ScreenshotStrategy, status_t> {
                 SFTRACE_NAME_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Screenshot");
                 mPowerAdvisor->setScreenshotWorkload();
                 SFTRACE_NAME("setScreenshotSnapshotsAndDisplayState");
                 status_t status = setScreenshotDisplayState(args);
+                if (status != OK) {
+                    return base::unexpected<status_t>(status);
+                }
+
+                bool capturingDisplay =
+                        std::holds_alternative<DisplayId>(args.captureTypeVariant) ||
+                        std::holds_alternative<sp<IBinder>>(args.captureTypeVariant);
+
+                bool canDpuReadback = FlagManager::getInstance().readback_screenshot() &&
+                        // The device needs to explicitly opt-in, in addition to the trunk stable
+                        // flag being flipped.
+                        FlagManager::getInstance().productionize_readback_screenshot() &&
+                        capturingDisplay && args.snapshotRequest.excludeLayerIds.empty() &&
+                        !args.disableBlur && !args.isGrayscale &&
+                        args.dataspace == ui::Dataspace::UNKNOWN;
+
+                // TODO: we need to check for a uniform transform too. I.e., no screen rotation, no
+                // scaling, etc.
+                if (canDpuReadback) {
+                    auto displayId = *args.displayIdVariant;
+                    if (std::holds_alternative<PhysicalDisplayId>(displayId)) {
+                        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes
+                                attributes;
+                        auto status =
+                                getHwComposer().getReadbackBufferAttributes(*asPhysicalDisplayId(
+                                                                                    displayId),
+                                                                            &attributes);
+                        if (status == OK) {
+                            const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
+                                    GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
+                                    GRALLOC_USAGE_SW_WRITE_OFTEN;
+                            const auto readbackBuffer =
+                                    getFactory()
+                                            .createGraphicBuffer(args.size.getWidth(),
+                                                                 args.size.getHeight(),
+                                                                 static_cast<android_pixel_format>(
+                                                                         attributes.format),
+                                                                 1 /* layerCount */, usage,
+                                                                 "screenshot");
+                            mReadbackRequests.emplace_back(*asPhysicalDisplayId(displayId),
+                                                           readbackBuffer, args.captureListener,
+                                                           args.seamlessTransition, args.isSecure);
+                            scheduleComposite(FrameHint::kNone);
+                            return ScreenshotStrategy::Readback;
+                        }
+                    }
+                }
+
                 args.layers = getLayerSnapshotsForScreenshots(args.snapshotRequest);
+
                 // Non-threaded RenderEngine eventually returns to the main thread a 2nd time
                 // to complete the screenshot. Release fences should only be added during the 2nd
                 // hop to main thread in order to avoid potential deadlocks from waiting for the
@@ -8166,7 +8224,8 @@ status_t SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& a
                                                         ui::UNASSIGNED_LAYER_STACK);
                     }
                 }
-                return status;
+
+                return ScreenshotStrategy::Gpu;
             })
             .get();
 }
@@ -8175,9 +8234,12 @@ void SurfaceFlinger::captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat r
                                          const sp<IScreenCaptureListener>& captureListener) {
     SFTRACE_CALL();
 
-    status_t status = setScreenshotSnapshotsAndDisplayState(args);
-    if (status != OK) {
-        invokeScreenCaptureError(status, captureListener);
+    args.captureListener = captureListener;
+
+    auto result = setScreenshotSnapshotsAndDisplayState(args);
+    if (!result.ok()) {
+        invokeScreenCaptureError(result.error(), captureListener);
+        return;
     }
 
     if (exceedsMaxRenderTargetSize(args.size.getWidth(), args.size.getHeight())) {
@@ -8185,6 +8247,10 @@ void SurfaceFlinger::captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat r
               ") that exceeds render target size limit.",
               args.size.getWidth(), args.size.getHeight());
         invokeScreenCaptureError(BAD_VALUE, captureListener);
+        return;
+    }
+
+    if (result.value() == ScreenshotStrategy::Readback) {
         return;
     }
 
@@ -10354,6 +10420,63 @@ const DisplayDevice* SurfaceFlinger::getDisplayFromLayerStack(ui::LayerStack lay
         }
     }
     return nullptr;
+}
+
+void SurfaceFlinger::validateForReadback(LayerFE* layer) {
+    for (auto it = mReadbackRequests.begin(); it != mReadbackRequests.end(); it++) {
+        auto& request = *it;
+        ftl::FakeGuard guard(mStateLock);
+        if (const auto display = getCompositionDisplayLocked(request.id)) {
+            if (display->includesLayer(layer)) {
+                auto snapshot = layer->mSnapshot.get();
+                if (snapshot->isVisible &&
+                    ((!request.isSecure && snapshot->isSecure) ||
+                     (!request.seamlessTransition && isHdrLayer(*(layer->mSnapshot.get()))) ||
+                     snapshot->hasProtectedContent)) {
+                    // TODO: The clients that want this path are okay with dropping the
+                    // screenshot request on the floor and erroring out. BUT: for clients that
+                    // don't explicitly want DPU readback we can be nicer and bounce over to
+                    // renderScreenImpl() to hit the GPU path.
+                    invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
+                    mReadbackRequests.erase(it);
+                    break;
+                }
+            }
+        }
+    }
+}
+void SurfaceFlinger::setupOutputsForReadback(
+        std::vector<std::shared_ptr<compositionengine::Output>>& outputs) {
+    for (auto& request : mReadbackRequests) {
+        for (auto& output : outputs) {
+            if (request.id.value == output->getDisplayId()->value) {
+                output->editState().readbackBuffer = std::move(request.buffer);
+            }
+        }
+    }
+}
+void SurfaceFlinger::finalizeReadback(
+        std::vector<std::shared_ptr<compositionengine::Output>>& outputs) {
+    for (auto& output : outputs) {
+        if (output->getState().readbackBuffer) {
+            for (const auto& request : mReadbackRequests) {
+                if (request.id.value == output->getDisplayId()->value) {
+                    ScreenCaptureResults captureResults;
+                    captureResults.buffer = std::move(output->editState().readbackBuffer);
+                    captureResults.fenceResult = getHwComposer().getReadbackBufferFence(request.id);
+                    request.captureListener->onScreenCaptureCompleted(captureResults);
+                }
+            }
+        }
+    }
+
+    for (auto& request : mReadbackRequests) {
+        if (request.buffer) {
+            invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
+        }
+    }
+
+    mReadbackRequests.clear();
 }
 
 } // namespace android

@@ -1123,6 +1123,33 @@ status_t HWComposer::getLuts(
     return NO_ERROR;
 }
 
+status_t HWComposer::getReadbackBufferAttributes(
+        PhysicalDisplayId displayId,
+        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes* outAttributes) {
+    RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
+    auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
+    auto error = hwcDisplay->getReadbackBufferAttributes(outAttributes);
+    RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
+    return NO_ERROR;
+}
+
+status_t HWComposer::setReadbackBuffer(PhysicalDisplayId displayId, const sp<GraphicBuffer>& buffer,
+                                       const android::sp<android::Fence>& acquireFence) {
+    RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
+    auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
+    auto error = hwcDisplay->setReadbackBuffer(buffer, acquireFence);
+    RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
+    return NO_ERROR;
+}
+sp<Fence> HWComposer::getReadbackBufferFence(PhysicalDisplayId displayId) {
+    RETURN_IF_INVALID_DISPLAY(displayId, Fence::NO_FENCE);
+    auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
+    sp<Fence> fence = Fence::NO_FENCE;
+    auto error = hwcDisplay->getReadbackBufferFence(&fence);
+    RETURN_IF_HWC_ERROR(error, displayId, Fence::NO_FENCE);
+    return fence;
+}
+
 const std::unordered_map<std::string, bool>& HWComposer::getSupportedLayerGenericMetadata() const {
     return mSupportedLayerGenericMetadata;
 }
