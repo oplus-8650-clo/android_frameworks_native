@@ -26,6 +26,7 @@
 #include <statslog_gpustats.h>
 #include <utils/Trace.h>
 
+#include <algorithm>
 #include <unordered_set>
 
 namespace android {

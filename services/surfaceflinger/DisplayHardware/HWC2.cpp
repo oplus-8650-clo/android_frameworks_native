@@ -698,6 +698,28 @@ Error Display::getLuts(const std::vector<sp<GraphicBuffer>>& buffers,
     return static_cast<Error>(error);
 }
 
+Error Display::getReadbackBufferAttributes(
+        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes* outAttributes) {
+    const auto error = mComposer.getReadbackBufferAttributes(mId, outAttributes);
+    return static_cast<Error>(error);
+}
+
+Error Display::setReadbackBuffer(const sp<GraphicBuffer>& buffer,
+                                 const android::sp<android::Fence>& acquireFence) {
+    const auto error = mComposer.setReadbackBuffer(mId, buffer, acquireFence->dup());
+    return static_cast<Error>(error);
+}
+
+Error Display::getReadbackBufferFence(android::sp<android::Fence>* outReleaseFence) {
+    int fence;
+    const auto error = mComposer.getReadbackBufferFence(mId, &fence);
+    if (error != Error::NONE) {
+        return error;
+    }
+    *outReleaseFence = sp<Fence>::make(fence);
+    return static_cast<Error>(error);
+}
+
 // For use by Device
 
 void Display::setConnected(bool connected) {

@@ -86,6 +86,7 @@ public:
 
     bool includesLayer(ui::LayerFilter) const override;
     bool includesLayer(const sp<LayerFE>&) const override;
+    bool includesLayer(LayerFE*) const override;
 
     compositionengine::OutputLayer* getOutputLayerForLayer(const sp<LayerFE>&) const override;
 

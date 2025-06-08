@@ -66,6 +66,10 @@ class TestGenH(BaseMockCodeFileTest):
             #ifndef VKJSON_H_
             #define VKJSON_H_
 
+            #ifndef VK_USE_PLATFORM_ANDROID_KHR
+            #define VK_USE_PLATFORM_ANDROID_KHR
+            #endif
+
             #include <string.h>
             #include <vulkan/vulkan.h>
 

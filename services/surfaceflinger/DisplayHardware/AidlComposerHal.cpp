@@ -1824,6 +1824,51 @@ Error AidlComposer::getLuts(Display display, const std::vector<sp<GraphicBuffer>
     return Error::NONE;
 }
 
+Error AidlComposer::getReadbackBufferAttributes(Display display,
+                                                V3_0::ReadbackBufferAttributes* outAttributes) {
+    const auto status =
+            mAidlComposerClient->getReadbackBufferAttributes(translate<int64_t>(display),
+                                                             outAttributes);
+    if (!status.isOk()) {
+        ALOGE("%s failed %s", __func__, status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
+    }
+    return Error::NONE;
+}
+
+Error AidlComposer::setReadbackBuffer(Display display, const sp<GraphicBuffer>& buffer,
+                                      int acquireFence) {
+    ::aidl::android::hardware::common::NativeHandle handle;
+    if (buffer.get()) {
+        handle = ::android::dupToAidl(buffer->getNativeBuffer()->handle);
+    }
+
+    ::ndk::ScopedFileDescriptor fence;
+    fence.set(acquireFence);
+    const auto status =
+            mAidlComposerClient->setReadbackBuffer(translate<int64_t>(display), handle, fence);
+
+    if (!status.isOk()) {
+        ALOGE("%s failed %s", __func__, status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
+    }
+
+    return Error::NONE;
+}
+
+Error AidlComposer::getReadbackBufferFence(Display display, int* outReleaseFence) {
+    ndk::ScopedFileDescriptor fence;
+    const auto status =
+            mAidlComposerClient->getReadbackBufferFence(translate<int64_t>(display), &fence);
+    if (!status.isOk()) {
+        ALOGE("%s failed %s", __func__, status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
+    }
+
+    *outReleaseFence = fence.release();
+    return Error::NONE;
+}
+
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 ftl::Optional<std::reference_wrapper<QtiAidlCommandWriter>> AidlComposer::getWriter(
         Display display) REQUIRES_SHARED(mMutex) {

@@ -39,6 +39,7 @@
 #include "trace/InputTracingBackendInterface.h"
 
 #include <attestation/HmacKeyManager.h>
+#include <ftl/flags.h>
 #include <gui/InputApplication.h>
 #include <gui/WindowInfosUpdate.h>
 #include <input/Input.h>
@@ -134,9 +135,8 @@ public:
     base::Result<std::unique_ptr<InputChannel>> createInputChannel(
             const std::string& name) override;
     void setFocusedWindow(const android::gui::FocusRequest&) override;
-    base::Result<std::unique_ptr<InputChannel>> createInputMonitor(ui::LogicalDisplayId displayId,
-                                                                   const std::string& name,
-                                                                   gui::Pid pid) override;
+    base::Result<std::unique_ptr<InputChannel>> createFocusInputMonitor(
+            ui::LogicalDisplayId displayId, const std::string& name, gui::Pid pid) override;
     status_t removeInputChannel(const sp<IBinder>& connectionToken) override;
     status_t pilferPointers(const sp<IBinder>& token) override;
     void requestPointerCapture(const sp<IBinder>& windowToken, bool enabled) override;
@@ -241,16 +241,16 @@ private:
 
         // Find a monitor pid by the provided token.
         std::optional<gui::Pid> findMonitorPidByToken(const sp<IBinder>& token) const;
-        void forEachGlobalMonitorConnection(
+        void forEachMonitorConnection(
                 std::function<void(const std::shared_ptr<Connection>&)> f) const;
-        void forEachGlobalMonitorConnection(
+        void forEachMonitorConnection(
                 ui::LogicalDisplayId displayId,
                 std::function<void(const std::shared_ptr<Connection>&)> f) const;
 
-        void createGlobalInputMonitor(ui::LogicalDisplayId displayId,
-                                      std::unique_ptr<InputChannel>&& inputChannel,
-                                      const IdGenerator& idGenerator, gui::Pid pid,
-                                      std::function<int(int)> callback);
+        void createFocusInputMonitor(ui::LogicalDisplayId displayId,
+                                     std::unique_ptr<InputChannel>&& inputChannel,
+                                     const IdGenerator& idGenerator, gui::Pid pid,
+                                     std::function<int(int)> callback);
 
         status_t removeConnection(const std::shared_ptr<Connection>& connection);
 
@@ -266,8 +266,9 @@ private:
         std::unordered_map<sp<IBinder>, std::shared_ptr<Connection>, StrongPointerHash<IBinder>>
                 mConnectionsByToken;
 
-        // Input channels that will receive a copy of all input events sent to the provided display.
-        std::unordered_map<ui::LogicalDisplayId, std::vector<Monitor>> mGlobalMonitorsByDisplay;
+        // Input channels that will receive a copy of all non-pointer input events sent to the
+        // focused window on the provided display.
+        std::unordered_map<ui::LogicalDisplayId, std::vector<Monitor>> mFocusInputMonitorsByDisplay;
 
         void removeMonitorChannel(const sp<IBinder>& connectionToken);
     };
@@ -582,8 +583,8 @@ private:
     std::condition_variable mInjectionResultAvailable;
     bool shouldRejectInjectedMotionLocked(const MotionEvent& motion, DeviceId deviceId,
                                           ui::LogicalDisplayId displayId,
-                                          std::optional<gui::Uid> targetUid, int32_t flags)
-            REQUIRES(mLock);
+                                          std::optional<gui::Uid> targetUid,
+                                          ftl::Flags<MotionFlag> flags) REQUIRES(mLock);
     void setInjectionResult(const EventEntry& entry,
                             android::os::InputEventInjectionResult injectionResult);
     void transformMotionEntryForInjectionLocked(MotionEntry&,
@@ -710,8 +711,10 @@ private:
 
     // The connection tokens of the channels that the user last interacted (used for debugging and
     // when switching touch mode state).
-    std::unordered_set<sp<IBinder>, StrongPointerHash<IBinder>> mInteractionConnectionTokens
-            GUARDED_BY(mLock);
+    std::unordered_map<ui::LogicalDisplayId,
+                       std::unordered_set<sp<IBinder>, StrongPointerHash<IBinder>>>
+            mInteractionConnectionTokensByDisplay GUARDED_BY(mLock);
+
     void processInteractionsLocked(const EventEntry& entry, const std::vector<InputTarget>& targets)
             REQUIRES(mLock);
 
@@ -813,8 +816,8 @@ private:
                                ftl::Flags<InputTarget::Flags> targetFlags,
                                std::optional<nsecs_t> firstDownTimeInTarget,
                                std::vector<InputTarget>& inputTargets) const REQUIRES(mLock);
-    void addGlobalMonitoringTargetsLocked(std::vector<InputTarget>& inputTargets,
-                                          ui::LogicalDisplayId displayId) REQUIRES(mLock);
+    void addFocusInputMonitoringTargetsLocked(std::vector<InputTarget>& inputTargets,
+                                              ui::LogicalDisplayId displayId) REQUIRES(mLock);
     void pokeUserActivityLocked(const EventEntry& eventEntry) REQUIRES(mLock);
     // Enqueue a drag event if needed, and update the touch state.
     // Uses findTouchedWindowTargetsLocked to make the decision
@@ -940,7 +943,8 @@ private:
 
     // Check window ownership
     bool focusedWindowIsOwnedByLocked(gui::Pid pid, gui::Uid uid) REQUIRES(mLock);
-    bool recentWindowsAreOwnedByLocked(gui::Pid pid, gui::Uid uid) REQUIRES(mLock);
+    bool recentWindowsAreOwnedByLocked(ui::LogicalDisplayId displayId, gui::Pid pid, gui::Uid uid)
+            REQUIRES(mLock);
 
     sp<InputReporterInterface> mReporter;
 

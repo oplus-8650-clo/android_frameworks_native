@@ -15,6 +15,7 @@
  */
 #include <gtest/gtest.h>
 #include <log/log.h>
+#include <algorithm>
 #include <atomic>
 #include <latch>
 #include <string>

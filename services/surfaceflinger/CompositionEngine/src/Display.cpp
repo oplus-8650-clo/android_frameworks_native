@@ -37,6 +37,7 @@
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include <string>
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+#include <ui/DisplayId.h>
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
 #pragma clang diagnostic push
@@ -324,6 +325,12 @@ bool Display::chooseCompositionStrategy(
     const bool requiresClientComposition = anyLayersRequireClientComposition();
 
     const TimePoint hwcValidateStartTime = TimePoint::now();
+
+    const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
+
+    if (physicalDisplayId && getState().readbackBuffer) {
+        hwc.setReadbackBuffer(*physicalDisplayId, getState().readbackBuffer, Fence::NO_FENCE);
+    }
 
     if (status_t result = hwc.getDeviceCompositionChanges(*halDisplayId, requiresClientComposition,
                                                           getState().earliestPresentTime,

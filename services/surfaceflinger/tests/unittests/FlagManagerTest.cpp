@@ -62,11 +62,6 @@ TEST_F(FlagManagerTest, isSingleton) {
     EXPECT_EQ(&FlagManager::getInstance(), &FlagManager::getInstance());
 }
 
-TEST_F(FlagManagerTest, legacyCreashesIfQueriedBeforeBoot) {
-    mFlagManager.markBootIncomplete();
-    EXPECT_DEATH(FlagManager::getInstance().test_flag(), "");
-}
-
 TEST_F(FlagManagerTest, legacyReturnsOverride) {
     EXPECT_CALL(mFlagManager, getBoolProperty).WillOnce(Return(true));
     EXPECT_EQ(true, mFlagManager.test_flag());

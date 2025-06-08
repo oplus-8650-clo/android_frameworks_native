@@ -1564,6 +1564,18 @@ Error HidlComposer::getLuts(Display, const std::vector<sp<GraphicBuffer>>&,
     return Error::UNSUPPORTED;
 }
 
+Error HidlComposer::getReadbackBufferAttributes(Display, V3_0::ReadbackBufferAttributes*) {
+    return Error::UNSUPPORTED;
+}
+
+Error HidlComposer::setReadbackBuffer(Display, const sp<GraphicBuffer>&, int) {
+    return Error::UNSUPPORTED;
+}
+
+Error HidlComposer::getReadbackBufferFence(Display, int*) {
+    return Error::UNSUPPORTED;
+}
+
 Error HidlComposer::setDisplayPictureProfileId(Display, PictureProfileId) {
     return Error::UNSUPPORTED;
 }

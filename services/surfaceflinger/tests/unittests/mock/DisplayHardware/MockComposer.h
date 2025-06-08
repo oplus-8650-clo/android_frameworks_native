@@ -200,6 +200,10 @@ public:
                  std::vector<aidl::android::hardware::graphics::composer3::Luts>*));
     MOCK_METHOD4(getLayerPresentFences,
                  Error(Display, std::vector<Layer>*, std::vector<int>*, std::vector<int64_t>*));
+    MOCK_METHOD(Error, getReadbackBufferAttributes,
+                (Display, aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes*));
+    MOCK_METHOD(Error, setReadbackBuffer, (Display, const sp<GraphicBuffer>&, int));
+    MOCK_METHOD(Error, getReadbackBufferFence, (Display, int*));
 };
 
 } // namespace Hwc2::mock

@@ -1030,7 +1030,8 @@ PointerChoreographer::findDestinationDisplayLocked(const ui::LogicalDisplayId so
         LOG(WARNING) << "Source display missing from topology " << sourceDisplayId;
         return std::nullopt;
     }
-    for (const DisplayTopologyAdjacentDisplay& adjacentDisplay : sourceNode->second) {
+    for (const DisplayTopologyAdjacentDisplay& adjacentDisplay :
+         sourceNode->second.adjacentDisplays) {
         if (adjacentDisplay.position != sourceBoundary) {
             continue;
         }
@@ -1043,8 +1044,8 @@ PointerChoreographer::findDestinationDisplayLocked(const ui::LogicalDisplayId so
         }
         // As displays can have different densities we need to do all calculations in
         // density-independent-pixels a.k.a. dp values.
-        const int sourceDensity = mTopology.displaysDensity.at(sourceDisplayId);
-        const int adjacentDisplayDensity = mTopology.displaysDensity.at(adjacentDisplay.displayId);
+        const int sourceDensity = mTopology.graph.at(sourceDisplayId).density;
+        const int adjacentDisplayDensity = mTopology.graph.at(adjacentDisplay.displayId).density;
         const float sourceCursorOffsetDp = pxToDp(sourceCursorOffsetPx, sourceDensity);
         const int32_t edgeSizePx = sourceBoundary == DisplayTopologyPosition::TOP ||
                         sourceBoundary == DisplayTopologyPosition::BOTTOM

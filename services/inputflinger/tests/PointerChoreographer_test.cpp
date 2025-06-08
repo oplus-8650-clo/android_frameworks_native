@@ -152,10 +152,11 @@ protected:
             // display.
             mChoreographer.setDisplayTopology(
                     DisplayTopologyGraph::create(/*primaryDisplayId=*/displayId,
-                                                 /*adjacencyGraph=*/{},
-                                                 /*displaysDensity=*/{{displayId, DENSITY_MEDIUM}},
-                                                 /*absoluteDisplayBoundsDp=*/
-                                                 {{displayId, FloatRect(0, 0, 500, 500)}})
+                                                 /*topologyGraph=*/
+                                                 {{displayId,
+                                                   {{},
+                                                    DENSITY_MEDIUM,
+                                                    FloatRect(0, 0, 500, 500)}}})
                             .value());
         } else {
             mChoreographer.setDefaultMouseDisplayId(displayId);
@@ -2773,6 +2774,8 @@ public:
     static constexpr ui::LogicalDisplayId DISPLAY_LEFT_ID = ui::LogicalDisplayId{50};
     static constexpr ui::LogicalDisplayId DISPLAY_TOP_RIGHT_CORNER_ID = ui::LogicalDisplayId{60};
     static constexpr ui::LogicalDisplayId DISPLAY_HIGH_DENSITY_ID = ui::LogicalDisplayId{70};
+    // We can use same fake display-bounds for all displays as bounds positions are not checked.
+    static constexpr FloatRect FAKE_BOUNDS = FloatRect(0, 0, 100, 100);
 
 protected:
     // Note: viewport size is in pixels and offsets in topology are in dp
@@ -2793,37 +2796,42 @@ protected:
                     create(/*primaryDisplay=*/DISPLAY_CENTER_ID,
                            /*adjacencyGraph=*/
                            {{DISPLAY_CENTER_ID,
-                             {{DISPLAY_TOP_ID, DisplayTopologyPosition::TOP, 50.0f},
-                              // Place a high density display on the left of DISPLAY_TOP_ID with
-                              // 25 dp gap
-                              {DISPLAY_HIGH_DENSITY_ID, DisplayTopologyPosition::TOP, -75.0f},
-                              {DISPLAY_RIGHT_ID, DisplayTopologyPosition::RIGHT, 10.0f},
-                              {DISPLAY_BOTTOM_ID, DisplayTopologyPosition::BOTTOM, 10.0f},
-                              {DISPLAY_LEFT_ID, DisplayTopologyPosition::LEFT, 10.0f},
-                              {DISPLAY_TOP_RIGHT_CORNER_ID, DisplayTopologyPosition::RIGHT,
-                               -90.0f}}},
+                             {{{DISPLAY_TOP_ID, DisplayTopologyPosition::TOP, 50.0f},
+                               // Place a high density display on the left of DISPLAY_TOP_ID with
+                               // 25 dp gap
+                               {DISPLAY_HIGH_DENSITY_ID, DisplayTopologyPosition::TOP, -75.0f},
+                               {DISPLAY_RIGHT_ID, DisplayTopologyPosition::RIGHT, 10.0f},
+                               {DISPLAY_BOTTOM_ID, DisplayTopologyPosition::BOTTOM, 10.0f},
+                               {DISPLAY_LEFT_ID, DisplayTopologyPosition::LEFT, 10.0f},
+                               {DISPLAY_TOP_RIGHT_CORNER_ID, DisplayTopologyPosition::RIGHT,
+                                -90.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}},
                             // Reverse edges
                             {DISPLAY_TOP_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::BOTTOM, -50.0f}}},
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::BOTTOM, -50.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}},
                             {DISPLAY_HIGH_DENSITY_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::BOTTOM, 75.0f}}},
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::BOTTOM, 75.0f}},
+                              DENSITY_HIGH,
+                              FAKE_BOUNDS}},
                             {DISPLAY_RIGHT_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::LEFT, -10.0f}}},
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::LEFT, -10.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}},
                             {DISPLAY_BOTTOM_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::TOP, -10.0f}}},
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::TOP, -10.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}},
                             {DISPLAY_LEFT_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::RIGHT, -10.0f}}},
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::RIGHT, -10.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}},
                             {DISPLAY_TOP_RIGHT_CORNER_ID,
-                             {{DISPLAY_CENTER_ID, DisplayTopologyPosition::LEFT, 90.0f}}}},
-                           /*displaysDensityMap=*/
-                           {{DISPLAY_CENTER_ID, DENSITY_MEDIUM},
-                            {DISPLAY_TOP_ID, DENSITY_MEDIUM},
-                            {DISPLAY_RIGHT_ID, DENSITY_MEDIUM},
-                            {DISPLAY_BOTTOM_ID, DENSITY_MEDIUM},
-                            {DISPLAY_LEFT_ID, DENSITY_MEDIUM},
-                            {DISPLAY_TOP_RIGHT_CORNER_ID, DENSITY_MEDIUM},
-                            {DISPLAY_HIGH_DENSITY_ID, DENSITY_HIGH}},
-                           /*absoluteDisplayBoundsDp=*/{})
+                             {{{DISPLAY_CENTER_ID, DisplayTopologyPosition::LEFT, 90.0f}},
+                              DENSITY_MEDIUM,
+                              FAKE_BOUNDS}}})
                             .value();
 };
 
@@ -2978,43 +2986,42 @@ protected:
         // Prepare a topology with all display connected from left to right.
         ui::LogicalDisplayId previousDisplay = primaryDisplayId;
 
-        std::unordered_map<ui::LogicalDisplayId, std::vector<DisplayTopologyAdjacentDisplay>>
-                topologyGraph;
-
-        std::unordered_map<ui::LogicalDisplayId, int> displaysDensity;
-        displaysDensity[primaryDisplayId] = DENSITY_MEDIUM;
-
-        std::unordered_map<ui::LogicalDisplayId, FloatRect> absoluteDisplayBoundsDp;
-        absoluteDisplayBoundsDp.emplace(std::piecewise_construct,
-                                        std::forward_as_tuple(primaryDisplayId),
-                                        std::forward_as_tuple(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT));
+        std::unordered_map<ui::LogicalDisplayId, DisplayTopologyGraph::Properties> topologyGraph;
+        topologyGraph.emplace(primaryDisplayId,
+                              DisplayTopologyGraph::Properties{{},
+                                                               DENSITY_MEDIUM,
+                                                               FloatRect(0, 0, DISPLAY_WIDTH,
+                                                                         DISPLAY_HEIGHT)});
 
         for (ui::LogicalDisplayId adjacentDisplayId : adjacentDisplays) {
-            topologyGraph[previousDisplay].push_back({.displayId = adjacentDisplayId,
-                                                      .position = DisplayTopologyPosition::RIGHT,
-                                                      .offsetDp = 0.0f});
-            topologyGraph[adjacentDisplayId].push_back({.displayId = previousDisplay,
-                                                        .position = DisplayTopologyPosition::LEFT,
-                                                        .offsetDp = 0.0f});
+            auto& previousDisplayIt = topologyGraph.at(previousDisplay);
+            previousDisplayIt.adjacentDisplays.push_back(
+                    {.displayId = adjacentDisplayId,
+                     .position = DisplayTopologyPosition::RIGHT,
+                     .offsetDp = 0.0f});
 
-            displaysDensity[adjacentDisplayId] = DENSITY_MEDIUM;
+            const auto& previousDisplayBounds = previousDisplayIt.boundsInGlobalDp;
+            topologyGraph
+                    .emplace(adjacentDisplayId,
+                             DisplayTopologyGraph::Properties{{},
+                                                              DENSITY_MEDIUM,
+                                                              FloatRect(previousDisplayBounds.right,
+                                                                        0,
+                                                                        previousDisplayBounds
+                                                                                        .right +
+                                                                                DISPLAY_WIDTH,
+                                                                        DISPLAY_HEIGHT)});
 
-            const auto& previousDisplayBounds = absoluteDisplayBoundsDp[previousDisplay];
-            absoluteDisplayBoundsDp.emplace(std::piecewise_construct,
-                                            std::forward_as_tuple(adjacentDisplayId),
-                                            std::forward_as_tuple(previousDisplayBounds.right, 0,
-                                                                  previousDisplayBounds.right +
-                                                                          DISPLAY_WIDTH,
-                                                                  DISPLAY_HEIGHT));
+            topologyGraph[adjacentDisplayId].adjacentDisplays.push_back(
+                    {.displayId = previousDisplay,
+                     .position = DisplayTopologyPosition::LEFT,
+                     .offsetDp = 0.0f});
 
             previousDisplay = adjacentDisplayId;
         }
 
         mChoreographer.setDisplayTopology(
-                DisplayTopologyGraph::create(primaryDisplayId, std::move(topologyGraph),
-                                             std::move(displaysDensity),
-                                             std::move(absoluteDisplayBoundsDp))
-                        .value());
+                DisplayTopologyGraph::create(primaryDisplayId, std::move(topologyGraph)).value());
     }
 };
 

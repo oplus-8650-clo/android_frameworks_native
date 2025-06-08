@@ -1423,20 +1423,20 @@ TEST_F(BLASTBufferQueueTest, TransformHint) {
     ASSERT_EQ(ui::Transform::ROT_90, static_cast<ui::Transform::RotationFlags>(transformHint));
 
     ANativeWindow_Buffer buffer;
-    surface->lock(&buffer, nullptr /* inOutDirtyBounds */);
+    ASSERT_EQ(NO_ERROR, surface->lock(&buffer, nullptr /* inOutDirtyBounds */));
 
     // Transform hint is updated via callbacks or surface control updates
     mSurfaceControl->setTransformHint(ui::Transform::ROT_0);
     adapter.update(mSurfaceControl, mDisplayWidth, mDisplayHeight);
 
     // The hint does not change and matches the value used when dequeueing the buffer.
-    surface->query(NATIVE_WINDOW_TRANSFORM_HINT, &transformHint);
+    ASSERT_EQ(NO_ERROR, surface->query(NATIVE_WINDOW_TRANSFORM_HINT, &transformHint));
     ASSERT_EQ(ui::Transform::ROT_90, static_cast<ui::Transform::RotationFlags>(transformHint));
 
-    surface->unlockAndPost();
+    ASSERT_EQ(NO_ERROR, surface->unlockAndPost());
 
     // After queuing the buffer, we get the updated transform hint
-    surface->query(NATIVE_WINDOW_TRANSFORM_HINT, &transformHint);
+    ASSERT_EQ(NO_ERROR, surface->query(NATIVE_WINDOW_TRANSFORM_HINT, &transformHint));
     ASSERT_EQ(ui::Transform::ROT_0, static_cast<ui::Transform::RotationFlags>(transformHint));
 
     adapter.waitForCallbacks();
