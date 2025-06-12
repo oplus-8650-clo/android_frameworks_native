@@ -1,4 +1,5 @@
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -157,6 +158,57 @@ status_t QtiHWComposerExtension::qtiTryDrawMethod(HalDisplayId displayId, uint32
     auto halHWDisplayId = displayData.hwcDisplay->getId();
     auto error = mQtiComposerHalExtn->qtiTryDrawMethod(halHWDisplayId, drawMethod);
     if (error != Error::NONE) {
+        return BAD_VALUE;
+    }
+
+    return NO_ERROR;
+}
+
+status_t QtiHWComposerExtension::qtiSetCornerRadius(HWC2::Layer* layer, float x, float y) {
+    if (!mQtiComposerHalExtn) {
+        return NO_ERROR;
+    }
+
+    if (layer == nullptr) {
+        return BAD_VALUE;
+    }
+
+    HWC2::impl::Layer* implLayer = static_cast<HWC2::impl::Layer*>(layer);
+    auto intError = mQtiComposerHalExtn->qtiSetCornerRadius(implLayer->qtiGetDisplayId(),
+                                                            implLayer->getId(), x, y);
+    Error error = static_cast<Error>(intError);
+    if (error != Error::NONE) {
+        ALOGW("Failed to send SET_CORNER_RADIUS command to HWC");
+        return BAD_VALUE;
+    }
+
+    return NO_ERROR;
+}
+
+status_t QtiHWComposerExtension::qtiSetPrivacyRegions(HWC2::Layer* layer,
+                                                      const std::vector<Rect>& rectList,
+                                                      const std::vector<float>& radiusList,
+                                                      const std::vector<uint32_t>& indexList) {
+    if (!mQtiComposerHalExtn) {
+        return NO_ERROR;
+    }
+
+    if (layer == nullptr) {
+        return BAD_VALUE;
+    }
+
+    if (rectList.size() != radiusList.size()) {
+        ALOGW("Invalid PrivacyRegions data!");
+        return BAD_VALUE;
+    }
+
+    HWC2::impl::Layer* implLayer = static_cast<HWC2::impl::Layer*>(layer);
+    auto intError = mQtiComposerHalExtn->qtiSetPrivacyRegions(implLayer->qtiGetDisplayId(),
+                                                              implLayer->getId(), rectList,
+                                                              radiusList, indexList);
+    Error error = static_cast<Error>(intError);
+    if (error != Error::NONE) {
+        ALOGW("Failed to send SET_PRIVACY_REGIONS command to HWC");
         return BAD_VALUE;
     }
 

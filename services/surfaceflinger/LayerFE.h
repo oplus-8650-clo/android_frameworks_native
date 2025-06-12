@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <android/gui/CachingHint.h>
@@ -70,6 +77,7 @@ public:
 
 // QTI_BEGIN: 2024-07-26: Display: sf: use layer id instead of unique sequence
     int32_t getLayerId() const override;
+    vec2 getCornerRadius() const override;
 
 // QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
     std::unique_ptr<surfaceflinger::frontend::LayerSnapshot> mSnapshot;

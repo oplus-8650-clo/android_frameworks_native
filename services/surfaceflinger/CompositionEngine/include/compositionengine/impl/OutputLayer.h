@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <cstdint>
@@ -27,6 +34,9 @@
 #include <ui/FloatRect.h>
 #include <ui/PictureProfileHandle.h>
 #include <ui/Rect.h>
+// QTI_BEGIN
+#include <ui/StaticDisplayInfo.h>
+// QTI_END
 
 #include <aidl/android/hardware/graphics/composer3/Composition.h>
 
@@ -77,6 +87,10 @@ public:
     virtual uint32_t calculateOutputRelativeBufferTransform(
             uint32_t internalDisplayRotationFlags) const;
 
+    // QTI_BEGIN
+    virtual void qtiSetConnectionType(ui::DisplayConnectionType type) override;
+    // QTI_END
+
 protected:
     // Implemented by the final implementation for the final state it uses.
     virtual void dumpState(std::string&) const = 0;
@@ -105,6 +119,11 @@ private:
     bool isClientCompositionForced(bool isPeekingThrough) const;
     void updateLuts(const LayerFECompositionState&,
                     const std::optional<std::vector<std::optional<LutProperties>>>& properties);
+    // QTI_BEGIN
+    void qtiWritePrivacyRegionsToHWC(HWC2::Layer*, const LayerFECompositionState&);
+
+    ui::DisplayConnectionType mQtiDisplayConnectionType = ui::DisplayConnectionType::Internal;
+    // QTI_END
 };
 
 // This template factory function standardizes the implementation details of the
