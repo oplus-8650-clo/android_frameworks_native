@@ -17,83 +17,17 @@
 """
 This file contains unit tests for vkjson_gen_util.py
 Each test class focuses on one specific util function.
-
-TODO (b/416165162):
-* Temporary location for this file, pending CI/CD integration
-* Testing infrastructure (such as BaseMockCodeFileTest etc.) should ideally be hosted in dedicated files within the test folder
 """
 import ctypes
-import difflib
-import re
 import unittest
+
+from dataclasses import dataclass
 from enum import Enum
 from typing import List
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
+import base_test_helper as helper
 import vkjson_gen_util as src
-from dataclasses import dataclass
-
-
-class BaseCodeAssertTest(unittest.TestCase):
-
-    @staticmethod
-    def normalise_for_code_compare(code: str):
-        return re.sub(r'\s+', '', code)
-
-    @staticmethod
-    def normalise_for_diff_compare(code: str):
-        return [
-            line.strip()
-            for line in code.splitlines()
-        ]
-
-    def assertCodeEqual(self, expected_code_str: str, actual_code_str: str):
-        """
-        This code comparator lacks semantic awareness and performs a naive normalization by
-        stripping all whitespace characters, without distinguishing between executable code,
-        string literals, or comments.
-
-        Eg: It would treat "Hello world" and "Helloworld" as identical.
-        """
-
-        expected_normalised = self.normalise_for_code_compare(expected_code_str)
-        actual_normalised = self.normalise_for_code_compare(actual_code_str)
-
-        if expected_normalised == actual_normalised:
-            pass
-        else:
-            expected_for_diff = self.normalise_for_diff_compare(expected_code_str)
-            actual_for_diff = self.normalise_for_diff_compare(actual_code_str)
-
-            diff_generator = difflib.unified_diff(
-                expected_for_diff,
-                actual_for_diff,
-                fromfile="Expected Code",
-                tofile="Actual Code",
-                lineterm="",
-                n=1
-            )
-
-            diff_output = "\n".join(diff_generator)
-            standard_message = (
-                f"Test failed: Non-whitespace code differences detected."
-                f"---------------------------------------------------\n"
-                f"{diff_output}\n"
-                f"---------------------------------------------------"
-            )
-
-            failure_message = self._formatMessage(None, standard_message)
-            self.fail(failure_message)
-
-
-class BaseMockCodeFileTest(BaseCodeAssertTest):
-
-    def setUp(self):
-        self.mock_file = Mock()
-
-    def assertCodeFileWrite(self, expected_code_str: str):
-        actual_code_str = "".join([c.args[0] for c in self.mock_file.write.call_args_list])
-        self.assertCodeEqual(expected_code_str, actual_code_str)
 
 
 class TestGetCopyrightWarnings(unittest.TestCase):
@@ -272,7 +206,7 @@ class TestGetStructName(unittest.TestCase):
         )
 
 
-class TestGenerateExtensionStructDefinition(BaseMockCodeFileTest):
+class TestGenerateExtensionStructDefinition(helper.BaseMockCodeFileTest):
 
     @patch('vkjson_gen_util.VK')
     def test_extension_with_single_struct(self, mock_vk):
@@ -426,7 +360,7 @@ class TestGenerateExtensionStructDefinition(BaseMockCodeFileTest):
         self.assertCodeFileWrite("")
 
 
-class TestGenerateVkCoreStructDefinition(BaseMockCodeFileTest):
+class TestGenerateVkCoreStructDefinition(helper.BaseMockCodeFileTest):
 
     @patch('vkjson_gen_util.VK')
     def test_core_with_single_struct(self, mock_vk):
@@ -579,7 +513,7 @@ class TestGenerateVkCoreStructDefinition(BaseMockCodeFileTest):
         self.assertCodeFileWrite("")
 
 
-class TestGenerateMemsetStatements(BaseMockCodeFileTest):
+class TestGenerateMemsetStatements(helper.BaseMockCodeFileTest):
 
     @patch('vkjson_gen_util.VK')
     def test_multiple_structs(self, mock_vk):
@@ -620,7 +554,7 @@ class TestGenerateMemsetStatements(BaseMockCodeFileTest):
         self.assertCodeFileWrite("")
 
 
-class TestGenerateExtensionStructTemplate(BaseCodeAssertTest):
+class TestGenerateExtensionStructTemplate(helper.BaseCodeAssertTest):
 
     @patch('vkjson_gen_util.VK')
     def test_extension_with_single_struct(self, mock_vk):
@@ -716,7 +650,7 @@ class TestGenerateExtensionStructTemplate(BaseCodeAssertTest):
         self.assertEqual("", src.generate_extension_struct_template())
 
 
-class TestGenerateCoreTemplate(BaseCodeAssertTest):
+class TestGenerateCoreTemplate(helper.BaseCodeAssertTest):
 
     @patch('vkjson_gen_util.VK')
     def test_core_with_single_struct(self, mock_vk):
@@ -816,7 +750,7 @@ class VkTestField:
     pass
 
 
-class TestGenerateStructTemplate(BaseCodeAssertTest):
+class TestGenerateStructTemplate(helper.BaseCodeAssertTest):
     @dataclass
     class SimpleProperties:
         intField: int
@@ -971,7 +905,7 @@ class TestGenerateStructTemplate(BaseCodeAssertTest):
         self.assertCodeEqual("", src.generate_struct_template(mock_input))
 
 
-class TestEmitStructVisitsByVkVersion(BaseMockCodeFileTest):
+class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
 
     def setUp(self):
         super().setUp()

@@ -88,7 +88,7 @@ TEST_F(FrontInternalDisplayRotationFlagsTest, rotateBothWhenInnerIsFront) {
 }
 
 TEST_F(FrontInternalDisplayRotationFlagsTest, rotateBothWhenOuterIsFront) {
-    mFlinger.mutableFrontInternalDisplayId() = kOuterDisplayId;
+    mFlinger.mutableFrontInternalDisplayId() = getOuterDisplayId();
     auto displayToken = mInnerDisplay->getDisplayToken().promote();
     mFlinger.mutableDrawingState().displays.editValueFor(displayToken).orientation = ui::ROTATION_0;
     mFlinger.mutableCurrentState().displays.editValueFor(displayToken).orientation =

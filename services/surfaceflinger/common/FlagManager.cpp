@@ -24,7 +24,6 @@
 #include <log/log.h>
 #include <renderengine/RenderEngine.h>
 #include <server_configurable_flags/get_flags.h>
-#include <cinttypes>
 
 #include <android_companion_virtualdevice_flags.h>
 #include <android_hardware_flags.h>
@@ -38,10 +37,6 @@ using namespace com::android::graphics::surfaceflinger;
 
 static constexpr const char* kExperimentNamespace = "surface_flinger_native_boot";
 
-std::unique_ptr<FlagManager> FlagManager::mInstance;
-std::once_flag FlagManager::mOnce;
-
-FlagManager::FlagManager(ConstructorTag) {}
 FlagManager::~FlagManager() = default;
 
 namespace {
@@ -72,12 +67,8 @@ const FlagManager& FlagManager::getInstance() {
 }
 
 FlagManager& FlagManager::getMutableInstance() {
-    std::call_once(mOnce, [&] {
-        LOG_ALWAYS_FATAL_IF(mInstance, "Instance already created");
-        mInstance = std::make_unique<FlagManager>(ConstructorTag{});
-    });
-
-    return *mInstance;
+    static FlagManager sInstance;
+    return sInstance;
 }
 
 void FlagManager::markBootCompleted() {

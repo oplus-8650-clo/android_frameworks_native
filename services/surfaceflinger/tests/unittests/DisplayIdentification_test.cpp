@@ -419,6 +419,26 @@ TEST(DisplayIdentificationTest, parseDisplayIdentificationData) {
     EXPECT_EQ(4633127902230889474, tertiaryInfo->id.value);
 }
 
+TEST(DisplayIdentificationTest, resolveDisplayIdCollision) {
+    // 1280000 is a value such that when ORd with uint8_t decimal values, it'll show it clearly in
+    // its 3 LSB digits. So 1280000 | 12 == 1280012.
+    const auto id = PhysicalDisplayId::fromValue(1280000u);
+    constexpr uint8_t kPort = 1;
+
+    // ID should be resolved by adding port 1 to the LSBs of the ID, resulting in 1280001.
+    const auto resolvedId = resolveDisplayIdCollision(id, kPort);
+    EXPECT_NE(resolvedId, id);
+    EXPECT_EQ(1280001, resolvedId.value);
+
+    // Since the 8 LSBs of resolvedId already match the given port 1, it should be resolved by
+    // inverting the port value. The inversion of unit8_t 1 is 11111110b, which is 254 - so the
+    // expected ID is 1280254u.
+    const auto resolvedIdWithInvertedPort = resolveDisplayIdCollision(resolvedId, kPort);
+    EXPECT_NE(resolvedIdWithInvertedPort, resolvedId);
+    EXPECT_NE(resolvedIdWithInvertedPort, id);
+    EXPECT_EQ(1280254u, resolvedIdWithInvertedPort.value);
+}
+
 TEST(DisplayIdentificationTest, generateEdidDisplayId) {
     const auto firstExternalDisplayEdidOpt = parseEdid(getExternalEdid());
     ASSERT_TRUE(firstExternalDisplayEdidOpt);

@@ -33,7 +33,7 @@ using testing::Return;
 
 class TestableFlagManager : public FlagManager {
 public:
-    TestableFlagManager() : FlagManager(ConstructorTag{}) { markBootCompleted(); }
+    TestableFlagManager() { markBootCompleted(); }
     ~TestableFlagManager() = default;
 
     MOCK_METHOD(std::optional<bool>, getBoolProperty, (const char*), (const, override));

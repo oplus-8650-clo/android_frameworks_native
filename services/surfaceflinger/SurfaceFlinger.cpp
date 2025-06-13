@@ -3923,17 +3923,19 @@ bool SurfaceFlinger::configureLocked() {
     }
 
     for (const auto [hwcDisplayId, event] : events) {
-        if (auto info = getHwComposer().onHotplug(hwcDisplayId, event)) {
-            /* QTI_BEGIN */
-            mQtiSFExtnIntf->qtiUpdateOnComposerHalHotplug(hwcDisplayId, event, info);
-            /* QTI_END */
+        auto info = getHwComposer().onHotplug(hwcDisplayId, event);
+        if (!info) {
+            continue;
+        }
+        /* QTI_BEGIN */
+        mQtiSFExtnIntf->qtiUpdateOnComposerHalHotplug(hwcDisplayId, event, info);
+        /* QTI_END */
 
-            const auto displayId = info->id;
-            const ftl::Concat displayString("display ", displayId.value, "(HAL ID ", hwcDisplayId,
-                                            ')');
-            // TODO: b/393126541 - replace if with switch as all cases are handled.
-            if (event == HWComposer::HotplugEvent::Connected ||
-                event == HWComposer::HotplugEvent::LinkUnstable) {
+        const auto displayId = info->id;
+        const ftl::Concat displayString("display ", displayId.value, "(HAL ID ", hwcDisplayId, ')');
+        switch (event) {
+            case HWComposer::HotplugEvent::Connected:
+            case HWComposer::HotplugEvent::LinkUnstable: {
                 const auto activeModeIdOpt =
                         processHotplugConnect(displayId, hwcDisplayId, std::move(*info),
                                               displayString.c_str(), event);
@@ -3962,11 +3964,13 @@ bool SurfaceFlinger::configureLocked() {
                 LOG_ALWAYS_FATAL_IF(!snapshotOpt);
 
                 mDisplayModeController.registerDisplay(*snapshotOpt, *activeModeIdOpt, config);
-            } else { // event == HWComposer::HotplugEvent::Disconnected
+                break;
+            }
+            case HWComposer::HotplugEvent::Disconnected:
                 // Unregister before destroying the DisplaySnapshot below.
                 mDisplayModeController.unregisterDisplay(displayId);
-
                 processHotplugDisconnect(displayId, displayString.c_str());
+                break;
             }
 
             /* QTI_BEGIN */
@@ -3974,7 +3978,6 @@ bool SurfaceFlinger::configureLocked() {
                                                              event, displayId);
             /* QTI_END */
         }
-    }
 
     return !events.empty();
 }

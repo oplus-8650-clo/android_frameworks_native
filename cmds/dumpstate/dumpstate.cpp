@@ -221,6 +221,11 @@ static const std::string SHUTDOWN_CHECKPOINTS_FILE_PREFIX = "checkpoints-";
 // File path to default screenshot image, that used when failed to capture the real screenshot.
 static const std::string DEFAULT_SCREENSHOT_PATH = "/system/etc/default_screenshot.png";
 
+// File path of the persistent ring buffer perfetto trace. This always exists when persistent ring
+// buffer trace feature is enabled.
+static const std::string PREV_BOOT_TRACE_PATH =
+    std::string(SYSTEM_TRACE_DIR) + "/prev_boot_dump.trace";
+
 // TODO: temporary variables and functions used during C++ refactoring
 
 #define RETURN_IF_USER_DENIED_CONSENT()                                                        \
@@ -1151,6 +1156,9 @@ static void MaybeAddSystemTraceToZip() {
     // tracing was happening.
     size_t traces_found = android::os::ForEachTrace([&](const std::string& trace_path) {
         ds.AddZipEntry(ZIP_ROOT_DIR + trace_path, trace_path);
+        if (trace_path == PREV_BOOT_TRACE_PATH) {
+            return;
+        }
         android::os::UnlinkAndLogOnError(trace_path);
     });
 
@@ -3668,7 +3676,12 @@ std::future<std::string> Dumpstate::MaybeSnapshotSystemTraceAsync() {
     }
 
     // If a stale file exists already, remove it.
-    android::os::ForEachTrace([&](const std::string& trace_path) { unlink(trace_path.c_str()); });
+    android::os::ForEachTrace([&](const std::string& trace_path) {
+        if (trace_path == PREV_BOOT_TRACE_PATH) {
+            return;
+        }
+        unlink(trace_path.c_str());
+    });
 
     MYLOGI("Launching async '%s'", SERIALIZE_PERFETTO_TRACE_TASK.c_str())
 

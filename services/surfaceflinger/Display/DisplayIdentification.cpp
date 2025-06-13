@@ -28,6 +28,7 @@
 #include <string>
 #include <string_view>
 
+#include <common/FlagManager.h>
 #include <ftl/concat.h>
 #include <ftl/hash.h>
 #include <log/log.h>
@@ -418,7 +419,9 @@ std::optional<DisplayIdentificationInfo> parseDisplayIdentificationData(
         return {};
     }
 
-    const auto displayId = PhysicalDisplayId::fromEdid(port, edid->manufacturerId, edid->modelHash);
+    const auto displayId = FlagManager::getInstance().stable_edid_ids()
+            ? generateEdidDisplayId(*edid)
+            : PhysicalDisplayId::fromEdid(port, edid->manufacturerId, edid->modelHash);
     return DisplayIdentificationInfo{
             .id = displayId,
             .name = std::string(edid->displayName),
@@ -427,6 +430,16 @@ std::optional<DisplayIdentificationInfo> parseDisplayIdentificationData(
             .preferredDetailedTimingDescriptor = edid->preferredDetailedTimingDescriptor,
             .screenPartStatus = screenPartStatus,
     };
+}
+
+PhysicalDisplayId resolveDisplayIdCollision(PhysicalDisplayId id, uint8_t port) {
+    const uint8_t lowByte = static_cast<uint8_t>(id.value) == port ? ~port : port;
+    const uint64_t newIdValue = (id.value & ~0xFFULL) | lowByte;
+
+    ALOGI("Display ID %" PRIu64 " --> resolved to %" PRIu64 " using %" PRIu8 " as suffix.",
+          id.value, newIdValue, lowByte);
+
+    return PhysicalDisplayId::fromValue(newIdValue);
 }
 
 PhysicalDisplayId getVirtualDisplayId(uint32_t id) {
