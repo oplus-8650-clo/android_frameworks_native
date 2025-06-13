@@ -678,8 +678,7 @@ public:
 
     status_t setTransactionState(SimpleTransactionState /*podState*/,
                                  const ComplexTransactionState& /*complexState*/,
-                                 Vector<ComposerState>& /*state*/,
-                                 Vector<DisplayState>& /*displays*/,
+                                 MutableTransactionState& /*mutableState*/,
                                  const sp<IBinder>& /*applyToken*/
                                  ) override {
         return NO_ERROR;

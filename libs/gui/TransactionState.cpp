@@ -136,6 +136,41 @@ status_t ComplexTransactionState::readFromParcel(const Parcel* parcel) {
     return NO_ERROR;
 }
 
+status_t MutableTransactionState::writeToParcel(Parcel* parcel) const {
+    SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mComposerStates.size()));
+    for (const auto& s : mComposerStates) {
+        SAFE_PARCEL(s.write, *parcel);
+    }
+
+    SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mDisplayStates.size()));
+    for (const auto& d : mDisplayStates) {
+        SAFE_PARCEL(d.write, *parcel);
+    }
+
+    return NO_ERROR;
+}
+
+status_t MutableTransactionState::readFromParcel(const Parcel* parcel) {
+    uint32_t count = 0;
+    SAFE_PARCEL_READ_SIZE(parcel->readUint32, &count, parcel->dataSize());
+    mComposerStates.setCapacity(count);
+    for (size_t i = 0; i < count; i++) {
+        ComposerState s;
+        SAFE_PARCEL(s.read, *parcel);
+        mComposerStates.add(s);
+    }
+
+    SAFE_PARCEL_READ_SIZE(parcel->readUint32, &count, parcel->dataSize());
+    DisplayState d;
+    mDisplayStates.setCapacity(count);
+    for (size_t i = 0; i < count; i++) {
+        SAFE_PARCEL(d.read, *parcel);
+        mDisplayStates.add(d);
+    }
+
+    return NO_ERROR;
+}
+
 status_t TransactionState::writeToParcel(Parcel* parcel) const {
     SAFE_PARCEL(mSimpleState.writeToParcel, parcel);
     SAFE_PARCEL(mComplexState.writeToParcel, parcel);
@@ -217,6 +252,38 @@ void ComplexTransactionState::merge(ComplexTransactionState& other) {
     }
 }
 
+void MutableTransactionState::merge(
+        const MutableTransactionState& other,
+        const std::function<void(const layer_state_t&)>& onBufferOverwrite) {
+    for (auto const& otherState : other.mComposerStates) {
+        if (auto it = std::find_if(mComposerStates.begin(), mComposerStates.end(),
+                                   [&otherState](const auto& composerState) {
+                                       return composerState.state.surface ==
+                                               otherState.state.surface;
+                                   });
+            it != mComposerStates.end()) {
+            if (otherState.state.what & layer_state_t::eBufferChanged) {
+                onBufferOverwrite(it->state);
+            }
+            it->state.merge(otherState.state);
+        } else {
+            mComposerStates.add(otherState);
+        }
+    }
+
+    for (auto const& state : other.mDisplayStates) {
+        if (auto it = std::find_if(mDisplayStates.begin(), mDisplayStates.end(),
+                                   [&state](const auto& displayState) {
+                                       return displayState.token == state.token;
+                                   });
+            it != mDisplayStates.end()) {
+            it->merge(state);
+        } else {
+            mDisplayStates.add(state);
+        }
+    }
+}
+
 void TransactionState::merge(TransactionState&& other,
                              const std::function<void(layer_state_t&)>& onBufferOverwrite) {
     mSimpleState.merge(other.mSimpleState);
@@ -282,6 +349,11 @@ void ComplexTransactionState::clear() {
     mEarlyWakeupInfos.clear();
 }
 
+void MutableTransactionState::clear() {
+    mComposerStates.clear();
+    mDisplayStates.clear();
+}
+
 void TransactionState::clear() {
     mSimpleState.clear();
     mComplexState.clear();
@@ -290,6 +362,25 @@ void TransactionState::clear() {
     mApplyToken = nullptr;
     mMayContainBuffer = false;
     mLogCallPoints = false;
+}
+
+layer_state_t* MutableTransactionState::getLayerState(const sp<SurfaceControl>& sc) {
+    auto handle = sc->getLayerStateHandle();
+    if (auto it = std::find_if(mComposerStates.begin(), mComposerStates.end(),
+                               [&handle](const auto& composerState) {
+                                   return composerState.state.surface == handle;
+                               });
+        it != mComposerStates.end()) {
+        return &it->state;
+    }
+
+    // we don't have it, add an initialized layer_state to our list
+    ComposerState s;
+    s.state.surface = handle;
+    s.state.layerId = sc->getLayerId();
+    mComposerStates.add(s);
+
+    return &mComposerStates.editItemAt(mComposerStates.size() - 1).state;
 }
 
 layer_state_t* TransactionState::getLayerState(const sp<SurfaceControl>& sc) {
@@ -309,6 +400,20 @@ layer_state_t* TransactionState::getLayerState(const sp<SurfaceControl>& sc) {
     mComposerStates.push_back(s);
 
     return &mComposerStates.back().state;
+}
+
+DisplayState& MutableTransactionState::getDisplayState(const sp<IBinder>& token) {
+    if (auto it = std::find_if(mDisplayStates.begin(), mDisplayStates.end(),
+                               [token](const auto& display) { return display.token == token; });
+        it != mDisplayStates.end()) {
+        return *it;
+    }
+
+    // If display state doesn't exist, add a new one.
+    DisplayState s;
+    s.token = token;
+    mDisplayStates.add(s);
+    return mDisplayStates.editItemAt(mDisplayStates.size() - 1);
 }
 
 DisplayState& TransactionState::getDisplayState(const sp<IBinder>& token) {

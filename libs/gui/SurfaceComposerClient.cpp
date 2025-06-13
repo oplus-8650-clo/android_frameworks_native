@@ -841,17 +841,16 @@ SurfaceComposerClient::Transaction::Transaction() {
 SurfaceComposerClient::Transaction::Transaction(const Transaction& other)
       : mSimpleState(other.mSimpleState),
         mComplexState(other.mComplexState),
+        mMutableState(other.mMutableState),
         mMayContainBuffer(other.mMayContainBuffer),
         mApplyToken(other.mApplyToken) {
-    mDisplayStates = other.mDisplayStates;
-    mComposerStates = other.mComposerStates;
     mListenerCallbacks = other.mListenerCallbacks;
     mTransactionCompletedListener = TransactionCompletedListener::getInstance();
 }
 
 void SurfaceComposerClient::Transaction::sanitize(int pid, int uid) {
     uint32_t permissions = LayerStatePermissions::getTransactionPermissions(pid, uid);
-    for (auto& composerState : mComposerStates) {
+    for (auto& composerState : mMutableState.mComposerStates) {
         composerState.state.sanitize(permissions);
     }
     if (!mComplexState.mInputWindowCommands.empty() &&
@@ -875,25 +874,13 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
     SAFE_PARCEL(simpleState.readFromParcel, parcel);
     ComplexTransactionState complexState;
     SAFE_PARCEL(complexState.readFromParcel, parcel);
+    MutableTransactionState mutableState;
+    SAFE_PARCEL(mutableState.readFromParcel, parcel);
     const bool logCallPoints = parcel->readBool();
 
     sp<IBinder> applyToken;
     parcel->readNullableStrongBinder(&applyToken);
     size_t count = static_cast<size_t>(parcel->readUint32());
-    if (count > parcel->dataSize()) {
-        return BAD_VALUE;
-    }
-    Vector<DisplayState> displayStates;
-    displayStates.setCapacity(count);
-    for (size_t i = 0; i < count; i++) {
-        DisplayState displayState;
-        if (displayState.read(*parcel) == BAD_VALUE) {
-            return BAD_VALUE;
-        }
-        displayStates.add(displayState);
-    }
-
-    count = static_cast<size_t>(parcel->readUint32());
     if (count > parcel->dataSize()) {
         return BAD_VALUE;
     }
@@ -922,26 +909,11 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
         }
     }
 
-    count = static_cast<size_t>(parcel->readUint32());
-    if (count > parcel->dataSize()) {
-        return BAD_VALUE;
-    }
-    Vector<ComposerState> composerStates;
-    composerStates.setCapacity(count);
-    for (size_t i = 0; i < count; i++) {
-        ComposerState composerState;
-        if (composerState.read(*parcel) == BAD_VALUE) {
-            return BAD_VALUE;
-        }
-        composerStates.add(composerState);
-    }
-
     // Parsing was successful. Update the object.
     mSimpleState = std::move(simpleState);
     mComplexState = std::move(complexState);
-    mDisplayStates = std::move(displayStates);
+    mMutableState = std::move(mutableState);
     mListenerCallbacks = listenerCallbacks;
-    mComposerStates = std::move(composerStates);
     mApplyToken = applyToken;
     return NO_ERROR;
 }
@@ -962,12 +934,9 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
 
     SAFE_PARCEL(mSimpleState.writeToParcel, parcel);
     SAFE_PARCEL(mComplexState.writeToParcel, parcel);
+    SAFE_PARCEL(mMutableState.writeToParcel, parcel);
     parcel->writeBool(mLogCallPoints);
     parcel->writeStrongBinder(mApplyToken);
-    parcel->writeUint32(static_cast<uint32_t>(mDisplayStates.size()));
-    for (auto const& displayState : mDisplayStates) {
-        displayState.write(*parcel);
-    }
 
     parcel->writeUint32(static_cast<uint32_t>(mListenerCallbacks.size()));
     for (auto const& [listener, callbackInfo] : mListenerCallbacks) {
@@ -980,11 +949,6 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
         for (auto surfaceControl : callbackInfo.surfaceControls) {
             SAFE_PARCEL(surfaceControl->writeToParcel, *parcel);
         }
-    }
-
-    parcel->writeUint32(static_cast<uint32_t>(mComposerStates.size()));
-    for (auto const& composerState : mComposerStates) {
-        composerState.write(*parcel);
     }
 
     return NO_ERROR;
@@ -1011,34 +975,6 @@ void SurfaceComposerClient::Transaction::releaseBufferIfOverwriting(const layer_
 }
 
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Transaction&& other) {
-    for (auto const& otherState : other.mComposerStates) {
-        if (auto it = std::find_if(mComposerStates.begin(), mComposerStates.end(),
-                                   [&otherState](const auto& composerState) {
-                                       return composerState.state.surface ==
-                                               otherState.state.surface;
-                                   });
-            it != mComposerStates.end()) {
-            if (otherState.state.what & layer_state_t::eBufferChanged) {
-                releaseBufferIfOverwriting(it->state);
-            }
-            it->state.merge(otherState.state);
-        } else {
-            mComposerStates.add(otherState);
-        }
-    }
-
-    for (auto const& state : other.mDisplayStates) {
-        if (auto it = std::find_if(mDisplayStates.begin(), mDisplayStates.end(),
-                                   [&state](const auto& displayState) {
-                                       return displayState.token == state.token;
-                                   });
-            it != mDisplayStates.end()) {
-            it->merge(state);
-        } else {
-            mDisplayStates.add(state);
-        }
-    }
-
     for (const auto& [listener, callbackInfo] : other.mListenerCallbacks) {
         auto& [callbackIds, surfaceControls] = callbackInfo;
         mListenerCallbacks[listener].callbackIds.insert(std::make_move_iterator(
@@ -1066,6 +1002,8 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
     mComplexState.merge(other.mComplexState);
     mComplexState.mMergedTransactionIds.insert(mComplexState.mMergedTransactionIds.begin(),
                                                other.mSimpleState.mId);
+    mMutableState.merge(other.mMutableState,
+                        [this](const auto& state) { releaseBufferIfOverwriting(state); });
     mMayContainBuffer |= other.mMayContainBuffer;
     mApplyToken = other.mApplyToken;
 
@@ -1084,8 +1022,7 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
 void SurfaceComposerClient::Transaction::clear() {
     mSimpleState.clear();
     mComplexState.clear();
-    mComposerStates.clear();
-    mDisplayStates.clear();
+    mMutableState.clear();
     mListenerCallbacks.clear();
     mMayContainBuffer = false;
     mApplyToken = nullptr;
@@ -1108,12 +1045,11 @@ void SurfaceComposerClient::doUncacheBufferTransaction(uint64_t cacheId) {
     uncacheBuffer.token = BufferCache::getInstance().getToken();
     uncacheBuffer.id = cacheId;
     complexState.mUncacheBuffers.emplace_back(std::move(uncacheBuffer));
-    Vector<ComposerState> composerStates;
-    Vector<DisplayState> displayStates;
+    MutableTransactionState mutableState;
     status_t status =
             sf->setTransactionState(SimpleTransactionState(generateId(), ISurfaceComposer::eOneWay,
                                                            systemTime(), true),
-                                    complexState, composerStates, displayStates,
+                                    complexState, mutableState,
                                     Transaction::getDefaultApplyToken());
     if (status != NO_ERROR) {
         ALOGE_AND_TRACE("SurfaceComposerClient::doUncacheBufferTransaction - %s",
@@ -1127,7 +1063,7 @@ void SurfaceComposerClient::Transaction::cacheBuffers() {
     }
 
     size_t count = 0;
-    for (auto& cs : mComposerStates) {
+    for (auto& cs : mMutableState.mComposerStates) {
         layer_state_t* s = &cs.state;
         if (!(s->what & layer_state_t::eBufferChanged)) {
             continue;
@@ -1289,8 +1225,8 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     }
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
 
-    status_t binderStatus = sf->setTransactionState(mSimpleState, mComplexState, mComposerStates,
-                                                    mDisplayStates, applyToken);
+    status_t binderStatus =
+            sf->setTransactionState(mSimpleState, mComplexState, mMutableState, applyToken);
     mSimpleState.mId = generateId();
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinQueueBuffer) {
@@ -1416,22 +1352,7 @@ void SurfaceComposerClient::Transaction::setEarlyWakeupEnd(gui::EarlyWakeupInfo 
 }
 
 layer_state_t* SurfaceComposerClient::Transaction::getLayerState(const sp<SurfaceControl>& sc) {
-    auto handle = sc->getLayerStateHandle();
-    if (auto it = std::find_if(mComposerStates.begin(), mComposerStates.end(),
-                               [&handle](const auto& composerState) {
-                                   return composerState.state.surface == handle;
-                               });
-        it != mComposerStates.end()) {
-        return &it->state;
-    }
-
-    // we don't have it, add an initialized layer_state to our list
-    ComposerState s;
-    s.state.surface = handle;
-    s.state.layerId = sc->getLayerId();
-    mComposerStates.add(s);
-
-    return &mComposerStates.editItemAt(mComposerStates.size() - 1).state;
+    return mMutableState.getLayerState(sc);
 }
 
 void SurfaceComposerClient::Transaction::registerSurfaceControlForCallback(
@@ -2476,17 +2397,7 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setConte
 // ---------------------------------------------------------------------------
 
 DisplayState& SurfaceComposerClient::Transaction::getDisplayState(const sp<IBinder>& token) {
-    if (auto it = std::find_if(mDisplayStates.begin(), mDisplayStates.end(),
-                               [token](const auto& display) { return display.token == token; });
-        it != mDisplayStates.end()) {
-        return *it;
-    }
-
-    // If display state doesn't exist, add a new one.
-    DisplayState s;
-    s.token = token;
-    mDisplayStates.add(s);
-    return mDisplayStates.editItemAt(mDisplayStates.size() - 1);
+    return mMutableState.getDisplayState(token);
 }
 
 status_t SurfaceComposerClient::Transaction::setDisplaySurface(

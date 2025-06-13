@@ -60,21 +60,12 @@ public:
 
     status_t setTransactionState(const SimpleTransactionState simpleState,
                                  const ComplexTransactionState& complexState,
-                                 Vector<ComposerState>& state, Vector<DisplayState>& displays,
+                                 MutableTransactionState& mutableState,
                                  const sp<IBinder>& applyToken) override {
         Parcel data, reply;
         data.writeInterfaceToken(ISurfaceComposer::getInterfaceDescriptor());
 
-        SAFE_PARCEL(data.writeUint32, static_cast<uint32_t>(state.size()));
-        for (const auto& s : state) {
-            SAFE_PARCEL(s.write, data);
-        }
-
-        SAFE_PARCEL(data.writeUint32, static_cast<uint32_t>(displays.size()));
-        for (const auto& d : displays) {
-            SAFE_PARCEL(d.write, data);
-        }
-
+        SAFE_PARCEL(mutableState.writeToParcel, &data);
         SAFE_PARCEL(simpleState.writeToParcel, &data);
         SAFE_PARCEL(complexState.writeToParcel, &data);
         SAFE_PARCEL(data.writeStrongBinder, applyToken);
@@ -102,25 +93,8 @@ status_t BnSurfaceComposer::onTransact(uint32_t code, const Parcel& data, Parcel
         case SET_TRANSACTION_STATE: {
             CHECK_INTERFACE(ISurfaceComposer, data, reply);
 
-            uint32_t count = 0;
-            SAFE_PARCEL_READ_SIZE(data.readUint32, &count, data.dataSize());
-            Vector<ComposerState> state;
-            state.setCapacity(count);
-            for (size_t i = 0; i < count; i++) {
-                ComposerState s;
-                SAFE_PARCEL(s.read, data);
-                state.add(s);
-            }
-
-            SAFE_PARCEL_READ_SIZE(data.readUint32, &count, data.dataSize());
-            DisplayState d;
-            Vector<DisplayState> displays;
-            displays.setCapacity(count);
-            for (size_t i = 0; i < count; i++) {
-                SAFE_PARCEL(d.read, data);
-                displays.add(d);
-            }
-
+            MutableTransactionState mutableState;
+            SAFE_PARCEL(mutableState.readFromParcel, &data);
             SimpleTransactionState simpleState;
             SAFE_PARCEL(simpleState.readFromParcel, &data);
             ComplexTransactionState complexState;
@@ -129,7 +103,7 @@ status_t BnSurfaceComposer::onTransact(uint32_t code, const Parcel& data, Parcel
             sp<IBinder> applyToken;
             SAFE_PARCEL(data.readStrongBinder, &applyToken);
 
-            return setTransactionState(simpleState, complexState, state, displays, applyToken);
+            return setTransactionState(simpleState, complexState, mutableState, applyToken);
         }
         case GET_SCHEDULING_POLICY: {
             gui::SchedulingPolicy policy;

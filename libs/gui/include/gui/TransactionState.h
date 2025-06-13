@@ -51,6 +51,7 @@ struct ComplexTransactionState {
     ComplexTransactionState() = default;
     status_t writeToParcel(Parcel* parcel) const;
     status_t readFromParcel(const Parcel* parcel);
+
     void clear();
     void merge(ComplexTransactionState& other);
     bool operator==(const ComplexTransactionState& rhs) const = default;
@@ -63,6 +64,19 @@ private:
     // We keep track of the last MAX_MERGE_HISTORY_LENGTH merged transaction ids.
     // Ordered most recently merged to least recently merged.
     static constexpr size_t MAX_MERGE_HISTORY_LENGTH = 10u;
+};
+
+struct MutableTransactionState {
+    Vector<ComposerState> mComposerStates;
+    Vector<DisplayState> mDisplayStates;
+
+    void clear();
+    status_t writeToParcel(Parcel* parcel) const;
+    status_t readFromParcel(const Parcel* parcel);
+    void merge(const MutableTransactionState& other,
+               const std::function<void(const layer_state_t&)>& onBufferOverwrite);
+    layer_state_t* getLayerState(const sp<SurfaceControl>& sc);
+    DisplayState& getDisplayState(const sp<IBinder>& token);
 };
 
 // Class to store all the transaction data and the parcelling logic

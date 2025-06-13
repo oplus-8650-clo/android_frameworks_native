@@ -474,8 +474,7 @@ public:
         bool mLogCallPoints = false;
 
     protected:
-        Vector<ComposerState> mComposerStates;
-        Vector<DisplayState> mDisplayStates;
+        MutableTransactionState mMutableState;
         std::unordered_map<sp<ITransactionCompletedListener>, CallbackInfo, TCLHash>
                 mListenerCallbacks;
 

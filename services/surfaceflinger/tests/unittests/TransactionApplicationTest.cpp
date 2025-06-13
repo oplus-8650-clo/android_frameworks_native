@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "gui/TransactionState.h"
 #undef LOG_TAG
 #define LOG_TAG "TransactionApplicationTest"
 
@@ -70,8 +71,7 @@ public:
     renderengine::mock::RenderEngine* mRenderEngine = new renderengine::mock::RenderEngine();
 
     struct TransactionInfo {
-        Vector<ComposerState> states;
-        Vector<DisplayState> displays;
+        MutableTransactionState mutableState;
         uint32_t flags = 0;
         sp<IBinder> applyToken = IInterface::asBinder(TransactionCompletedListener::getIInstance());
         InputWindowCommands inputWindowCommands;
@@ -86,10 +86,10 @@ public:
     };
 
     void checkEqual(TransactionInfo info, QueuedTransactionState state) {
-        EXPECT_EQ(0u, info.states.size());
+        EXPECT_EQ(0u, info.mutableState.mComposerStates.size());
         EXPECT_EQ(0u, state.states.size());
 
-        EXPECT_EQ(0u, info.displays.size());
+        EXPECT_EQ(0u, info.mutableState.mDisplayStates.size());
         EXPECT_EQ(0u, state.displays.size());
         EXPECT_EQ(info.flags, state.flags);
         EXPECT_EQ(info.desiredPresentTime, state.desiredPresentTime);
@@ -112,9 +112,9 @@ public:
                     /*desiredPresentTime*/ systemTime(), /*isAutoTimestamp*/ true,
                     FrameTimelineInfo{});
         nsecs_t applicationTime = systemTime();
-        mFlinger.setTransactionState(transaction.frameTimelineInfo, transaction.states,
-                                     transaction.displays, transaction.flags,
-                                     transaction.applyToken, transaction.inputWindowCommands,
+        mFlinger.setTransactionState(transaction.frameTimelineInfo, transaction.mutableState,
+                                     transaction.flags, transaction.applyToken,
+                                     transaction.inputWindowCommands,
                                      transaction.desiredPresentTime, transaction.isAutoTimestamp,
                                      transaction.uncacheBuffers, mHasListenerCallbacks, mCallbacks,
                                      transaction.id, transaction.mergedTransactionIds,
@@ -140,9 +140,9 @@ public:
         setupSingle(transaction, flags, /*desiredPresentTime*/ time + s2ns(1), false,
                     FrameTimelineInfo{});
         nsecs_t applicationSentTime = systemTime();
-        mFlinger.setTransactionState(transaction.frameTimelineInfo, transaction.states,
-                                     transaction.displays, transaction.flags,
-                                     transaction.applyToken, transaction.inputWindowCommands,
+        mFlinger.setTransactionState(transaction.frameTimelineInfo, transaction.mutableState,
+                                     transaction.flags, transaction.applyToken,
+                                     transaction.inputWindowCommands,
                                      transaction.desiredPresentTime, transaction.isAutoTimestamp,
                                      transaction.uncacheBuffers, mHasListenerCallbacks, mCallbacks,
                                      transaction.id, transaction.mergedTransactionIds,
@@ -172,9 +172,9 @@ public:
                     /*isAutoTimestamp*/ true, FrameTimelineInfo{});
 
         nsecs_t applicationSentTime = systemTime();
-        mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.states,
-                                     transactionA.displays, transactionA.flags,
-                                     transactionA.applyToken, transactionA.inputWindowCommands,
+        mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.mutableState,
+                                     transactionA.flags, transactionA.applyToken,
+                                     transactionA.inputWindowCommands,
                                      transactionA.desiredPresentTime, transactionA.isAutoTimestamp,
                                      transactionA.uncacheBuffers, mHasListenerCallbacks, mCallbacks,
                                      transactionA.id, transactionA.mergedTransactionIds,
@@ -188,9 +188,9 @@ public:
         mFlinger.flushTransactionQueues();
 
         applicationSentTime = systemTime();
-        mFlinger.setTransactionState(transactionB.frameTimelineInfo, transactionB.states,
-                                     transactionB.displays, transactionB.flags,
-                                     transactionB.applyToken, transactionB.inputWindowCommands,
+        mFlinger.setTransactionState(transactionB.frameTimelineInfo, transactionB.mutableState,
+                                     transactionB.flags, transactionB.applyToken,
+                                     transactionB.inputWindowCommands,
                                      transactionB.desiredPresentTime, transactionB.isAutoTimestamp,
                                      transactionB.uncacheBuffers, mHasListenerCallbacks, mCallbacks,
                                      transactionB.id, transactionB.mergedTransactionIds,
@@ -227,8 +227,8 @@ TEST_F(TransactionApplicationTest, AddToPendingQueue) {
     TransactionInfo transactionA; // transaction to go on pending queue
     setupSingle(transactionA, /*flags*/ 0, /*desiredPresentTime*/ s2ns(1), false,
                 FrameTimelineInfo{});
-    mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.states,
-                                 transactionA.displays, transactionA.flags, transactionA.applyToken,
+    mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.mutableState,
+                                 transactionA.flags, transactionA.applyToken,
                                  transactionA.inputWindowCommands, transactionA.desiredPresentTime,
                                  transactionA.isAutoTimestamp, transactionA.uncacheBuffers,
                                  mHasListenerCallbacks, mCallbacks, transactionA.id,
@@ -248,8 +248,8 @@ TEST_F(TransactionApplicationTest, Flush_RemovesFromQueue) {
     TransactionInfo transactionA; // transaction to go on pending queue
     setupSingle(transactionA, /*flags*/ 0, /*desiredPresentTime*/ s2ns(1), false,
                 FrameTimelineInfo{});
-    mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.states,
-                                 transactionA.displays, transactionA.flags, transactionA.applyToken,
+    mFlinger.setTransactionState(transactionA.frameTimelineInfo, transactionA.mutableState,
+                                 transactionA.flags, transactionA.applyToken,
                                  transactionA.inputWindowCommands, transactionA.desiredPresentTime,
                                  transactionA.isAutoTimestamp, transactionA.uncacheBuffers,
                                  mHasListenerCallbacks, mCallbacks, transactionA.id,
@@ -263,7 +263,7 @@ TEST_F(TransactionApplicationTest, Flush_RemovesFromQueue) {
     // different process) to re-query and reset the cached expected present time
     TransactionInfo empty;
     empty.applyToken = sp<IBinder>();
-    mFlinger.setTransactionState(empty.frameTimelineInfo, empty.states, empty.displays, empty.flags,
+    mFlinger.setTransactionState(empty.frameTimelineInfo, empty.mutableState, empty.flags,
                                  empty.applyToken, empty.inputWindowCommands,
                                  empty.desiredPresentTime, empty.isAutoTimestamp,
                                  empty.uncacheBuffers, mHasListenerCallbacks, mCallbacks, empty.id,
@@ -413,7 +413,7 @@ public:
         setupSingle(transaction, kFlags, kDesiredPresentTime, kIsAutoTimestamp, kFrameTimelineInfo);
         transaction.applyToken = applyToken;
         for (const auto& state : states) {
-            transaction.states.push_back(state);
+            transaction.mutableState.mComposerStates.push_back(state);
         }
 
         return transaction;
@@ -425,7 +425,7 @@ public:
         EXPECT_EQ(0u, mFlinger.getPendingTransactionQueue().size());
         std::unordered_set<uint32_t> createdLayers;
         for (auto transaction : transactions) {
-            for (auto& state : transaction.states) {
+            for (auto& state : transaction.mutableState.mComposerStates) {
                 auto layerId = static_cast<uint32_t>(state.state.layerId);
                 if (createdLayers.find(layerId) == createdLayers.end()) {
                     mFlinger.addLayer(layerId);
@@ -439,8 +439,8 @@ public:
 
         for (auto transaction : transactions) {
             std::vector<ResolvedComposerState> resolvedStates;
-            resolvedStates.reserve(transaction.states.size());
-            for (auto& state : transaction.states) {
+            resolvedStates.reserve(transaction.mutableState.mComposerStates.size());
+            for (auto& state : transaction.mutableState.mComposerStates) {
                 ResolvedComposerState resolvedState;
                 resolvedState.state = std::move(state.state);
                 resolvedState.externalTexture =
@@ -452,8 +452,8 @@ public:
             }
 
             QueuedTransactionState transactionState(transaction.frameTimelineInfo, resolvedStates,
-                                                    transaction.displays, transaction.flags,
-                                                    transaction.applyToken,
+                                                    transaction.mutableState.mDisplayStates,
+                                                    transaction.flags, transaction.applyToken,
                                                     transaction.inputWindowCommands,
                                                     transaction.desiredPresentTime,
                                                     transaction.isAutoTimestamp, {}, systemTime(),

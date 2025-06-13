@@ -35,7 +35,9 @@
 
 #include "BuildFlags.h"
 #include "FdTrigger.h"
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
 #include "JvmUtils.h"
+#endif
 #include "OS.h"
 #include "RpcSocketAddress.h"
 #include "RpcState.h"
