@@ -81,6 +81,7 @@
 #include <gui/LayerState.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
+#include <gui/TransactionState.h>
 #include <hidl/ServiceManagement.h>
 #include <layerproto/LayerProtoParser.h>
 #include <linux/sched/types.h>
@@ -5368,13 +5369,11 @@ bool SurfaceFlinger::shouldLatchUnsignaled(const layer_state_t& state, size_t nu
     return true;
 }
 
-status_t SurfaceFlinger::setTransactionState(
-        SimpleTransactionState podState, const FrameTimelineInfo& frameTimelineInfo,
-        Vector<ComposerState>& states, Vector<DisplayState>& displays,
-        const sp<IBinder>& applyToken, const std::vector<client_cache_t>& uncacheBuffers,
-        const TransactionListenerCallbacks& listenerCallbacks,
-        const std::vector<uint64_t>& mergedTransactionIds,
-        const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) {
+status_t SurfaceFlinger::setTransactionState(SimpleTransactionState podState,
+                                             const ComplexTransactionState& complexState,
+                                             Vector<ComposerState>& states,
+                                             Vector<DisplayState>& displays,
+                                             const sp<IBinder>& applyToken) {
     SFTRACE_CALL();
     /* QTI_BEGIN */
     std::unique_lock<std::mutex> lck (mSmomoMutex, std::defer_lock);
@@ -5403,10 +5402,11 @@ status_t SurfaceFlinger::setTransactionState(
         display.sanitize(permissions);
     }
 
-    if (!podState.mInputWindowCommands.empty() &&
+    auto inputWindowCommands = complexState.mInputWindowCommands;
+    if (!inputWindowCommands.empty() &&
         (permissions & layer_state_t::Permission::ACCESS_SURFACE_FLINGER) == 0) {
         ALOGE("Only privileged callers are allowed to send input commands.");
-        podState.mInputWindowCommands.clear();
+        inputWindowCommands.clear();
     }
 
     uint32_t flags = podState.mFlags;
@@ -5440,6 +5440,7 @@ status_t SurfaceFlinger::setTransactionState(
     /* QTI_END */
 
     std::vector<uint64_t> uncacheBufferIds;
+    const auto& uncacheBuffers = complexState.mUncacheBuffers;
     uncacheBufferIds.reserve(uncacheBuffers.size());
     for (const auto& uncacheBuffer : uncacheBuffers) {
         sp<GraphicBuffer> buffer = ClientCache::getInstance().erase(uncacheBuffer);
@@ -5508,23 +5509,23 @@ status_t SurfaceFlinger::setTransactionState(
         }
     }
 
-    QueuedTransactionState state{frameTimelineInfo,
+    QueuedTransactionState state{complexState.mFrameTimelineInfo,
                                  resolvedStates,
                                  displays,
                                  flags,
                                  applyToken,
-                                 std::move(podState.mInputWindowCommands),
+                                 std::move(inputWindowCommands),
                                  podState.mDesiredPresentTime,
                                  podState.mIsAutoTimestamp,
                                  std::move(uncacheBufferIds),
                                  postTime,
-                                 listenerCallbacks.mHasListenerCallbacks,
-                                 listenerCallbacks.mFlattenedListenerCallbacks,
+                                 complexState.mCallbacks.mHasListenerCallbacks,
+                                 complexState.mCallbacks.mFlattenedListenerCallbacks,
                                  originPid,
                                  originUid,
                                  podState.mId,
-                                 mergedTransactionIds,
-                                 earlyWakeupInfos};
+                                 complexState.mMergedTransactionIds,
+                                 complexState.mEarlyWakeupInfos};
     state.workloadHint = queuedWorkload;
 
     if (mTransactionTracing) {
@@ -5548,10 +5549,12 @@ status_t SurfaceFlinger::setTransactionState(
 
     for (const auto& [displayId, data] : mNotifyExpectedPresentMap) {
         if (data.hintStatus.load() == NotifyExpectedPresentHintStatus::ScheduleOnTx) {
-            scheduleNotifyExpectedPresentHint(displayId, VsyncId{frameTimelineInfo.vsyncId});
+            scheduleNotifyExpectedPresentHint(displayId,
+                                              VsyncId{complexState.mFrameTimelineInfo.vsyncId});
         }
     }
-    setTransactionFlags(eTransactionFlushNeeded, schedule, frameHint, std::move(earlyWakeupInfos));
+    setTransactionFlags(eTransactionFlushNeeded, schedule, frameHint,
+                        std::move(complexState.mEarlyWakeupInfos));
     return NO_ERROR;
 }
 
