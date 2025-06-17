@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "gui/TransactionState.h"
 #undef LOG_TAG
 #define LOG_TAG "LibSurfaceFlingerUnittests"
 
@@ -45,7 +46,7 @@ protected:
     void setTransactionState() {
         ASSERT_TRUE(mFlinger.getTransactionQueue().isEmpty());
         TransactionInfo transaction;
-        mFlinger.setTransactionState(FrameTimelineInfo{}, transaction.states, transaction.displays,
+        mFlinger.setTransactionState(FrameTimelineInfo{}, transaction.mutableState,
                                      transaction.flags, transaction.applyToken,
                                      transaction.inputWindowCommands,
                                      TimePoint::now().ns() + s2ns(1), transaction.isAutoTimestamp,
@@ -56,8 +57,7 @@ protected:
     }
 
     struct TransactionInfo {
-        Vector<ComposerState> states;
-        Vector<DisplayState> displays;
+        MutableTransactionState mutableState;
         uint32_t flags = 0;
         sp<IBinder> applyToken = IInterface::asBinder(TransactionCompletedListener::getIInstance());
         InputWindowCommands inputWindowCommands;

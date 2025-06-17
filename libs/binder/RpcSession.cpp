@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "RpcSession"
+#define LOG_TAG "libbinder.RpcSession"
 
 #include <binder/RpcSession.h>
 
@@ -35,7 +35,9 @@
 
 #include "BuildFlags.h"
 #include "FdTrigger.h"
+#if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
 #include "JvmUtils.h"
+#endif
 #include "OS.h"
 #include "RpcSocketAddress.h"
 #include "RpcState.h"

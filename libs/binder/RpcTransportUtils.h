@@ -40,6 +40,7 @@ status_t interruptableReadOrWrite(
         return DEAD_OBJECT;
     }
 
+    // EMPTY IOVEC ISSUE
     // If iovs has one or more empty vectors at the end and
     // we somehow advance past all the preceding vectors and
     // pass some or all of the empty ones to sendmsg/recvmsg,
@@ -57,7 +58,51 @@ status_t interruptableReadOrWrite(
 
     bool havePolled = false;
     while (true) {
-        ssize_t processSize = sendOrReceiveFun(iovs, niovs);
+        ssize_t processSize = -1;
+        bool canSendFullTransaction = false;
+
+        // This block dynamically adjusts packet sizes down to work around a
+        // limitation in the vsock driver where large packets are sometimes
+        // dropped (b/419364025 b/399469406 b/421244320).
+        // TODO: only apply this workaround on vsock ???
+        // TODO: fix vsock
+        {
+            size_t limit = 65536;
+            int i = 0;
+            for (i = 0; i < niovs; i++) {
+                if (iovs[i].iov_len >= limit) {
+                    break;
+                }
+                limit -= iovs[i].iov_len;
+            }
+            canSendFullTransaction = i == niovs;
+
+            int old_niovs = niovs;
+            size_t old_len = 0xDEADBEEF;
+
+            if (!canSendFullTransaction) {
+                // pretend like we have fewer iovecs
+                niovs = i + 1; // to restore (A)
+                old_len = iovs[i].iov_len;
+                // only send up to remaining limit from this iovec
+                iovs[i].iov_len = limit; // to restore (B)
+                LOG_ALWAYS_FATAL_IF(limit == 0,
+                                    "limit should not be zero - see EMPTY IOVEC ISSUE above");
+            }
+
+            // MAIN ACTION
+            processSize = sendOrReceiveFun(iovs, niovs);
+            // MAIN ACTION
+
+            if (!canSendFullTransaction) {
+                // Now put the iovecs back. As far as the following logic
+                // is concerned, this just looks like a partial read, up
+                // to limit.
+                niovs = old_niovs;         // (A) - restored
+                iovs[i].iov_len = old_len; // (B) - restored
+            }
+        }
+
         if (processSize < 0) {
             int savedErrno = errno;
 
@@ -92,6 +137,15 @@ status_t interruptableReadOrWrite(
                 return OK;
             }
         }
+
+        // altPoll may introduce long waiting since it assumes if it cannot write
+        // data, that it needs to wait to send more to give time for the producer
+        // consumer problem to be solved - otherwise it will busy loop. However,
+        // for this worakround, we are breaking up the transaction intentionally,
+        // not because the transaction won't fit, but to avoid a bug in the kernel
+        // for how it combines messages. So, when we artificially simulate a
+        // limited send, don't poll and just keep on sending data.
+        if (!canSendFullTransaction) continue;
 
         if (altPoll) {
             if (status_t status = (*altPoll)(); status != OK) return status;

@@ -81,6 +81,7 @@
 #include <gui/LayerState.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
+#include <gui/TransactionState.h>
 #include <hidl/ServiceManagement.h>
 #include <layerproto/LayerProtoParser.h>
 #include <linux/sched/types.h>
@@ -3923,17 +3924,19 @@ bool SurfaceFlinger::configureLocked() {
     }
 
     for (const auto [hwcDisplayId, event] : events) {
-        if (auto info = getHwComposer().onHotplug(hwcDisplayId, event)) {
-            /* QTI_BEGIN */
-            mQtiSFExtnIntf->qtiUpdateOnComposerHalHotplug(hwcDisplayId, event, info);
-            /* QTI_END */
+        auto info = getHwComposer().onHotplug(hwcDisplayId, event);
+        if (!info) {
+            continue;
+        }
+        /* QTI_BEGIN */
+        mQtiSFExtnIntf->qtiUpdateOnComposerHalHotplug(hwcDisplayId, event, info);
+        /* QTI_END */
 
-            const auto displayId = info->id;
-            const ftl::Concat displayString("display ", displayId.value, "(HAL ID ", hwcDisplayId,
-                                            ')');
-            // TODO: b/393126541 - replace if with switch as all cases are handled.
-            if (event == HWComposer::HotplugEvent::Connected ||
-                event == HWComposer::HotplugEvent::LinkUnstable) {
+        const auto displayId = info->id;
+        const ftl::Concat displayString("display ", displayId.value, "(HAL ID ", hwcDisplayId, ')');
+        switch (event) {
+            case HWComposer::HotplugEvent::Connected:
+            case HWComposer::HotplugEvent::LinkUnstable: {
                 const auto activeModeIdOpt =
                         processHotplugConnect(displayId, hwcDisplayId, std::move(*info),
                                               displayString.c_str(), event);
@@ -3962,11 +3965,13 @@ bool SurfaceFlinger::configureLocked() {
                 LOG_ALWAYS_FATAL_IF(!snapshotOpt);
 
                 mDisplayModeController.registerDisplay(*snapshotOpt, *activeModeIdOpt, config);
-            } else { // event == HWComposer::HotplugEvent::Disconnected
+                break;
+            }
+            case HWComposer::HotplugEvent::Disconnected:
                 // Unregister before destroying the DisplaySnapshot below.
                 mDisplayModeController.unregisterDisplay(displayId);
-
                 processHotplugDisconnect(displayId, displayString.c_str());
+                break;
             }
 
             /* QTI_BEGIN */
@@ -3974,7 +3979,6 @@ bool SurfaceFlinger::configureLocked() {
                                                              event, displayId);
             /* QTI_END */
         }
-    }
 
     return !events.empty();
 }
@@ -5365,13 +5369,10 @@ bool SurfaceFlinger::shouldLatchUnsignaled(const layer_state_t& state, size_t nu
     return true;
 }
 
-status_t SurfaceFlinger::setTransactionState(
-        SimpleTransactionState podState, const FrameTimelineInfo& frameTimelineInfo,
-        Vector<ComposerState>& states, Vector<DisplayState>& displays,
-        const sp<IBinder>& applyToken, const std::vector<client_cache_t>& uncacheBuffers,
-        const TransactionListenerCallbacks& listenerCallbacks,
-        const std::vector<uint64_t>& mergedTransactionIds,
-        const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) {
+status_t SurfaceFlinger::setTransactionState(SimpleTransactionState podState,
+                                             const ComplexTransactionState& complexState,
+                                             MutableTransactionState& mutableState,
+                                             const sp<IBinder>& applyToken) {
     SFTRACE_CALL();
     /* QTI_BEGIN */
     std::unique_lock<std::mutex> lck (mSmomoMutex, std::defer_lock);
@@ -5386,6 +5387,7 @@ status_t SurfaceFlinger::setTransactionState(
     const int originUid = ipc->getCallingUid();
     uint32_t permissions = LayerStatePermissions::getTransactionPermissions(originPid, originUid);
     ftl::Flags<adpf::Workload> queuedWorkload;
+    auto& states = mutableState.mComposerStates;
     for (auto& composerState : states) {
         composerState.state.sanitize(permissions);
         if (composerState.state.what & layer_state_t::COMPOSITION_EFFECTS) {
@@ -5396,14 +5398,15 @@ status_t SurfaceFlinger::setTransactionState(
         }
     }
 
-    for (DisplayState& display : displays) {
+    for (DisplayState& display : mutableState.mDisplayStates) {
         display.sanitize(permissions);
     }
 
-    if (!podState.mInputWindowCommands.empty() &&
+    auto inputWindowCommands = complexState.mInputWindowCommands;
+    if (!inputWindowCommands.empty() &&
         (permissions & layer_state_t::Permission::ACCESS_SURFACE_FLINGER) == 0) {
         ALOGE("Only privileged callers are allowed to send input commands.");
-        podState.mInputWindowCommands.clear();
+        inputWindowCommands.clear();
     }
 
     uint32_t flags = podState.mFlags;
@@ -5437,6 +5440,7 @@ status_t SurfaceFlinger::setTransactionState(
     /* QTI_END */
 
     std::vector<uint64_t> uncacheBufferIds;
+    const auto& uncacheBuffers = complexState.mUncacheBuffers;
     uncacheBufferIds.reserve(uncacheBuffers.size());
     for (const auto& uncacheBuffer : uncacheBuffers) {
         sp<GraphicBuffer> buffer = ClientCache::getInstance().erase(uncacheBuffer);
@@ -5505,23 +5509,23 @@ status_t SurfaceFlinger::setTransactionState(
         }
     }
 
-    QueuedTransactionState state{frameTimelineInfo,
+    QueuedTransactionState state{complexState.mFrameTimelineInfo,
                                  resolvedStates,
-                                 displays,
+                                 mutableState.mDisplayStates,
                                  flags,
                                  applyToken,
-                                 std::move(podState.mInputWindowCommands),
+                                 std::move(inputWindowCommands),
                                  podState.mDesiredPresentTime,
                                  podState.mIsAutoTimestamp,
                                  std::move(uncacheBufferIds),
                                  postTime,
-                                 listenerCallbacks.mHasListenerCallbacks,
-                                 listenerCallbacks.mFlattenedListenerCallbacks,
+                                 complexState.mCallbacks.mHasListenerCallbacks,
+                                 complexState.mCallbacks.mFlattenedListenerCallbacks,
                                  originPid,
                                  originUid,
                                  podState.mId,
-                                 mergedTransactionIds,
-                                 earlyWakeupInfos};
+                                 complexState.mMergedTransactionIds,
+                                 complexState.mEarlyWakeupInfos};
     state.workloadHint = queuedWorkload;
 
     if (mTransactionTracing) {
@@ -5545,10 +5549,12 @@ status_t SurfaceFlinger::setTransactionState(
 
     for (const auto& [displayId, data] : mNotifyExpectedPresentMap) {
         if (data.hintStatus.load() == NotifyExpectedPresentHintStatus::ScheduleOnTx) {
-            scheduleNotifyExpectedPresentHint(displayId, VsyncId{frameTimelineInfo.vsyncId});
+            scheduleNotifyExpectedPresentHint(displayId,
+                                              VsyncId{complexState.mFrameTimelineInfo.vsyncId});
         }
     }
-    setTransactionFlags(eTransactionFlushNeeded, schedule, frameHint, std::move(earlyWakeupInfos));
+    setTransactionFlags(eTransactionFlushNeeded, schedule, frameHint,
+                        std::move(complexState.mEarlyWakeupInfos));
     return NO_ERROR;
 }
 
@@ -5899,6 +5905,7 @@ status_t SurfaceFlinger::mirrorDisplay(DisplayId displayId, const LayerCreationA
     ui::LayerStack layerStack;
     sp<Layer> rootMirrorLayer;
     status_t result = 0;
+    LayerCreationArgs mirrorArgs = LayerCreationArgs::fromOtherArgs(args);
 
     {
         Mutex::Autolock lock(mStateLock);
@@ -5909,7 +5916,6 @@ status_t SurfaceFlinger::mirrorDisplay(DisplayId displayId, const LayerCreationA
         }
 
         layerStack = display->getLayerStack();
-        LayerCreationArgs mirrorArgs = LayerCreationArgs::fromOtherArgs(args);
         mirrorArgs.flags |= ISurfaceComposerClient::eNoColorFill;
         mirrorArgs.addToRoot = true;
         mirrorArgs.layerStackToMirror = layerStack;
@@ -5917,11 +5923,11 @@ status_t SurfaceFlinger::mirrorDisplay(DisplayId displayId, const LayerCreationA
         if (result != NO_ERROR) {
             return result;
         }
-        outResult.layerId = rootMirrorLayer->sequence;
-        outResult.layerName = String16(rootMirrorLayer->getDebugName());
-        addClientLayer(mirrorArgs, outResult.handle, rootMirrorLayer /* layer */,
-                       nullptr /* parent */, nullptr /* outTransformHint */);
     }
+    outResult.layerId = rootMirrorLayer->sequence;
+    outResult.layerName = String16(rootMirrorLayer->getDebugName());
+    addClientLayer(mirrorArgs, outResult.handle, rootMirrorLayer /* layer */, nullptr /* parent */,
+                   nullptr /* outTransformHint */);
 
     setTransactionFlags(eTransactionFlushNeeded);
     return NO_ERROR;
@@ -6118,7 +6124,8 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     const bool shouldApplyOptimizationPolicy =
             FlagManager::getInstance().disable_synthetic_vsync_for_performance() &&
             FlagManager::getInstance().correct_virtual_display_power_state();
-    if (isInternalDisplay && shouldApplyOptimizationPolicy) {
+    if ((isInternalDisplay || FlagManager::getInstance().pacesetter_selection()) &&
+        shouldApplyOptimizationPolicy) {
         applyOptimizationPolicy(__func__);
     }
 
@@ -6240,7 +6247,8 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     /* QTI_END */
 
     mScheduler->setDisplayPowerMode(displayId, mode);
-    if (FlagManager::getInstance().pacesetter_selection()) {
+    if (FlagManager::getInstance().pacesetter_selection() &&
+        mScheduler->getPacesetterDisplayId() != mFrontInternalDisplayId) {
         // TODO: b/389983418 - Update pacesetter designation inside
         // Scheduler::setDisplayPowerMode().
         mScheduler->setPacesetterDisplay(mFrontInternalDisplayId);

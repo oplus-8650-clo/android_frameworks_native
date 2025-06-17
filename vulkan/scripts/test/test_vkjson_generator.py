@@ -17,23 +17,21 @@
 from unittest.mock import ANY, mock_open, patch
 
 import os
+import base_test_helper as helper
 import vkjson_generator as src
-from test_vkjson_gen_util import BaseMockCodeFileTest
 
 """
 This file contains unit tests for vkjson_generator.py
 Each test class focuses on one generated file.
-
-TODO (b/416165162):
-Temporary location for this file, pending CI/CD integration.
 """
 
 
-class TestGenH(BaseMockCodeFileTest):
+class TestGenH(helper.BaseMockCodeFileTest):
 
     @patch('builtins.open', new_callable=mock_open)
     @patch('vkjson_generator.util')
-    def test_header_file_generation(self, mock_util, mock_file_open):
+    @patch('vkjson_generator.gencom')
+    def test_header_file_generation(self, _, mock_util, mock_file_open):
         expected_abs_file_path = os.path.abspath(
             os.path.join(os.path.dirname(src.__file__), "..", "vkjson", "vkjson.h"))
 
@@ -165,4 +163,4 @@ class TestGenH(BaseMockCodeFileTest):
         )
 
         self.assertCodeFileWrite(expected_lines)
-        self.mock_file.close.assert_called_once()
+        self.mock_file.close.assert_called()

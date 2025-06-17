@@ -610,6 +610,7 @@ private:
     void loadLayerMetadataSupport();
     void loadOverlayProperties();
     void loadHdrConversionCapabilities();
+    bool hasDisplayWithId(PhysicalDisplayId displayId) const;
 
     std::unordered_map<HalDisplayId, DisplayData> mDisplayData;
     ui::PhysicalDisplaySet<uint8_t> mActivePorts;

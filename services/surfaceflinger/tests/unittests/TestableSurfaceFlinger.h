@@ -527,25 +527,25 @@ public:
     }
 
     auto setTransactionState(
-            const FrameTimelineInfo& frameTimelineInfo, Vector<ComposerState>& states,
-            Vector<DisplayState>& displays, uint32_t flags, const sp<IBinder>& applyToken,
+            const FrameTimelineInfo& frameTimelineInfo, MutableTransactionState& mutableState,
+            uint32_t flags, const sp<IBinder>& applyToken,
             const InputWindowCommands& inputWindowCommands, int64_t desiredPresentTime,
             bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
             bool hasListenerCallbacks, std::vector<ListenerCallbacks>& listenerCallbacks,
             uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
             const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) {
-        return mFlinger
-                ->setTransactionState(SimpleTransactionState(transactionId, flags,
-                                                             desiredPresentTime, isAutoTimestamp,
-                                                             InputWindowCommands(
-                                                                     inputWindowCommands)),
-                                      frameTimelineInfo, states, displays, applyToken,
-                                      uncacheBuffers,
-                                      TransactionListenerCallbacks{.mFlattenedListenerCallbacks =
-                                                                           listenerCallbacks,
-                                                                   .mHasListenerCallbacks =
-                                                                           hasListenerCallbacks},
-                                      mergedTransactionIds, earlyWakeupInfos);
+        ComplexTransactionState complexState;
+        complexState.mFrameTimelineInfo = frameTimelineInfo;
+        complexState.mUncacheBuffers = uncacheBuffers;
+        complexState.mMergedTransactionIds = mergedTransactionIds;
+        complexState.mCallbacks.mHasListenerCallbacks = hasListenerCallbacks;
+        complexState.mCallbacks.mFlattenedListenerCallbacks = listenerCallbacks;
+        complexState.mInputWindowCommands = inputWindowCommands;
+        complexState.mEarlyWakeupInfos = earlyWakeupInfos;
+        return mFlinger->setTransactionState(SimpleTransactionState(transactionId, flags,
+                                                                    desiredPresentTime,
+                                                                    isAutoTimestamp),
+                                             complexState, mutableState, applyToken);
     }
 
     auto setTransactionStateInternal(QueuedTransactionState& transaction) {
