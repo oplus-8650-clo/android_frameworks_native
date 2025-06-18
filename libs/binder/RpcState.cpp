@@ -45,7 +45,7 @@ using android::binder::borrowed_fd;
 using android::binder::unique_fd;
 
 #if RPC_FLAKE_PRONE
-void rpcMaybeWaitToFlake() {
+static unsigned rpcFlakeUnsigned() {
     [[clang::no_destroy]] static std::random_device r;
     [[clang::no_destroy]] static RpcMutex m;
     unsigned num;
@@ -53,6 +53,14 @@ void rpcMaybeWaitToFlake() {
         RpcMutexLockGuard lock(m);
         num = r();
     }
+    return num;
+}
+bool rpcMaybeFlake() {
+    return rpcFlakeUnsigned() % 10 == 0; // flake 10%
+    // return rpcFlakeUnsigned() % 4 != 0; // flake 75%
+}
+void rpcMaybeWaitToFlake() {
+    unsigned num = rpcFlakeUnsigned();
     if (num % 10 == 0) usleep(num % 1000);
 }
 #endif
@@ -353,9 +361,14 @@ RpcState::CommandData::CommandData(size_t size) : mSize(size) {
     // transaction (in some cases, additional fixed size amounts are added),
     // though for rough consistency, we should avoid cases where this data type
     // is used for multiple dynamic allocations for a single transaction.
-    if (size > binder::kRpcTransactionLimitBytes) {
-        ALOGE("Transaction requested too much data allocation: %zu bytes, failing.", size);
+    if (size > binder::kRpcTransactionTemporaryLimitBytes) {
+        ALOGE("Transaction requested WAY WAY WAY too much data allocation: %zu bytes, failing.",
+              size);
         return;
+    } else if (size > binder::kRpcTransactionLimitBytes) {
+        ALOGE("Transaction requested too much data allocation: %zu bytes, this will become a "
+              "failure!!!",
+              size);
     } else if (size > binder::kLogTransactionsOverBytes) {
         ALOGW("Transaction too large: inefficient and in danger of breaking: %zu bytes.", size);
     }
@@ -386,6 +399,12 @@ static inline status_t handleRpcError(const std::unique_ptr<RpcTransport>& trans
               transport.get(), statusToString(status).c_str());
     }
     (void)session->shutdownAndWait(false);
+
+    if (status == -ECONNRESET) {
+        LOG_RPC_DETAIL("Converting -ECONNRESET to DEAD_OBJECT.");
+        status = DEAD_OBJECT;
+    }
+
     return status;
 }
 

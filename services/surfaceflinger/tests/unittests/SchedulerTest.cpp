@@ -95,7 +95,10 @@ protected:
             ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(0), 60_Hz));
     static inline const ftl::NonNull<DisplayModePtr> kDisplay2Mode120 =
             ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(1), 120_Hz));
-    static inline const DisplayModes kDisplay2Modes = makeModes(kDisplay2Mode60, kDisplay2Mode120);
+    static inline const ftl::NonNull<DisplayModePtr> kDisplay2Mode60point01 =
+            ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(2), 60.01_Hz));
+    static inline const DisplayModes kDisplay2Modes =
+            makeModes(kDisplay2Mode60, kDisplay2Mode120, kDisplay2Mode60point01);
 
     static constexpr PhysicalDisplayId kDisplayId3 = PhysicalDisplayId::fromPort(253u);
     static inline const ftl::NonNull<DisplayModePtr> kDisplay3Mode60 =
@@ -613,7 +616,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
     }
     {
         // We should choose 60Hz despite the touch signal as pacesetter only supports 60Hz
-        mScheduler->setPacesetterDisplay(kDisplayId3);
+        mScheduler->designatePacesetterDisplay(kDisplayId3);
         const GlobalSignals globalSignals = {.touch = true};
         mScheduler->replaceTouchTimer(10);
         mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
@@ -678,7 +681,7 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
             }
 
             if (changePacesetter) {
-                scheduler.setPacesetterDisplay(kDisplayId2);
+                scheduler.designatePacesetterDisplay(kDisplayId2);
             }
 
             return committed;
@@ -860,14 +863,15 @@ TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
     mScheduler->registerDisplay(kDisplayId2,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode60->getId()));
+                                                                      kDisplay2Mode120->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
 
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
 
     EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId1, true));
     EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId2, false));
-    mScheduler->setPacesetterDisplay(kDisplayId1);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 }
 
 TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
@@ -1256,6 +1260,112 @@ TEST_F(AttachedChoreographerTest, setsFrameRateChildNotOverriddenByParent) {
     ASSERT_EQ(1u, mScheduler->mutableAttachedChoreographers().count(layer->getSequence()));
 
     EXPECT_EQ(60_Hz, mScheduler->mutableAttachedChoreographers()[layer->getSequence()].frameRate);
+}
+
+class SelectPacesetterDisplayTest : public SchedulerTest {};
+
+TEST_F(SelectPacesetterDisplayTest, SingleDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->designatePacesetterDisplay();
+
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+}
+
+TEST_F(SelectPacesetterDisplayTest, TwoDisplaysDifferentRefreshRates)
+FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode120->getId()),
+                                kActiveDisplayId);
+    // setDisplayPowerMode() should trigger pacesetter migration to display 2.
+    EXPECT_TRUE(mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
+
+    // Display2 has the higher refresh rate so should be the pacesetter.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+}
+
+TEST_F(SelectPacesetterDisplayTest, TwoDisplaysHigherIgnoredPowerOff)
+FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode120->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
+
+    mScheduler->designatePacesetterDisplay();
+
+    // Display2 has the higher refresh rate but is off so should not be considered.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+}
+
+TEST_F(SelectPacesetterDisplayTest, TwoDisplaysAllOffFirstUsed) FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::OFF);
+
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode120->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
+
+    mScheduler->designatePacesetterDisplay();
+
+    // When all displays are off just use the first display as pacesetter.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+}
+
+TEST_F(SelectPacesetterDisplayTest, TwoDisplaysWithinEpsilon) FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    auto selector2 =
+            std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
+    mScheduler->registerDisplay(kDisplayId2, selector2, kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // If the highest refresh rate is within a small epsilon of the current pacesetter display's
+    // refresh rate, let the current pacesetter stay.
+    selector2->setActiveMode(kDisplay2Mode60point01->getId(), 60.01_Hz);
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 }
 
 } // namespace android::scheduler

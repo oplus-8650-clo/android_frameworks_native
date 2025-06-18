@@ -184,6 +184,7 @@ filegroup {
         "DisplayHardware/HWComposer.cpp",
         "DisplayHardware/HidlComposerHal.cpp",
         "DisplayHardware/VirtualDisplaySurface.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.cpp",
         "PowerAdvisor/*.cpp",
     ],
 }

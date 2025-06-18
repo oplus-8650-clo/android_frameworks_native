@@ -55,9 +55,6 @@ CpuConsumer::CpuConsumer(size_t maxLockedBuffers, bool controlledByApp,
         mCurrentLockedBuffers(0) {
     // Create tracking entries for locked buffers
     mAcquiredBuffers.insertAt(0, maxLockedBuffers);
-
-    mConsumer->setConsumerUsageBits(GRALLOC_USAGE_SW_READ_OFTEN);
-    mConsumer->setMaxAcquiredBufferCount(static_cast<int32_t>(maxLockedBuffers));
 }
 
 CpuConsumer::CpuConsumer(const sp<IGraphicBufferConsumer>& bq, size_t maxLockedBuffers,
@@ -67,9 +64,16 @@ CpuConsumer::CpuConsumer(const sp<IGraphicBufferConsumer>& bq, size_t maxLockedB
         mCurrentLockedBuffers(0) {
     // Create tracking entries for locked buffers
     mAcquiredBuffers.insertAt(0, maxLockedBuffers);
+}
 
+void CpuConsumer::initializeConsumer() {
     mConsumer->setConsumerUsageBits(GRALLOC_USAGE_SW_READ_OFTEN);
-    mConsumer->setMaxAcquiredBufferCount(static_cast<int32_t>(maxLockedBuffers));
+    mConsumer->setMaxAcquiredBufferCount(static_cast<int32_t>(mMaxLockedBuffers));
+}
+
+void CpuConsumer::onFirstRef() {
+    ConsumerBase::onFirstRef();
+    initializeConsumer();
 }
 
 size_t CpuConsumer::findAcquiredBufferLocked(uintptr_t id) const {

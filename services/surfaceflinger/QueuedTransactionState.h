@@ -52,8 +52,8 @@ struct QueuedTransactionState {
     QueuedTransactionState() = default;
 
     QueuedTransactionState(const FrameTimelineInfo& frameTimelineInfo,
-                           std::vector<ResolvedComposerState>& composerStates,
-                           const Vector<DisplayState>& displayStates, uint32_t transactionFlags,
+                           std::vector<ResolvedComposerState> composerStates,
+                           std::vector<DisplayState> displayStates, uint32_t transactionFlags,
                            const sp<IBinder>& applyToken,
                            const InputWindowCommands& inputWindowCommands,
                            int64_t desiredPresentTime, bool isAutoTimestamp,
@@ -65,7 +65,7 @@ struct QueuedTransactionState {
                            std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos)
           : frameTimelineInfo(frameTimelineInfo),
             states(std::move(composerStates)),
-            displays(displayStates),
+            displays(std::move(displayStates)),
             flags(transactionFlags),
             applyToken(applyToken),
             inputWindowCommands(inputWindowCommands),
@@ -131,7 +131,7 @@ struct QueuedTransactionState {
 
     FrameTimelineInfo frameTimelineInfo;
     std::vector<ResolvedComposerState> states;
-    Vector<DisplayState> displays;
+    std::vector<DisplayState> displays;
     uint32_t flags;
     sp<IBinder> applyToken;
     InputWindowCommands inputWindowCommands;

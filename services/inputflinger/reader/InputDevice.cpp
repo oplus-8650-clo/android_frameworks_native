@@ -19,6 +19,7 @@
 #include "InputDevice.h"
 
 #include <algorithm>
+#include <string>
 
 #include <android/sysprop/InputProperties.sysprop.h>
 #include <ftl/flags.h>
@@ -147,20 +148,16 @@ void InputDevice::dump(std::string& dump, const std::string& eventHubDevStr) {
     const std::vector<InputDeviceInfo::MotionRange>& ranges = deviceInfo.getMotionRanges();
     if (!ranges.empty()) {
         dump += INDENT2 "Motion Ranges:\n";
-        for (size_t i = 0; i < ranges.size(); i++) {
-            const InputDeviceInfo::MotionRange& range = ranges[i];
-            const char* label = InputEventLookup::getAxisLabel(range.axis);
-            char name[32];
-            if (label) {
-                strncpy(name, label, sizeof(name));
-                name[sizeof(name) - 1] = '\0';
+        for (const auto& range : ranges) {
+            dump += INDENT3;
+            if (const char* label = InputEventLookup::getAxisLabel(range.axis); label != nullptr) {
+                dump += label;
             } else {
-                snprintf(name, sizeof(name), "%d", range.axis);
+                dump += std::to_string(range.axis);
             }
-            dump += StringPrintf(INDENT3
-                                 "%s: source=%s, "
+            dump += StringPrintf(": source=%s, "
                                  "min=%0.3f, max=%0.3f, flat=%0.3f, fuzz=%0.3f, resolution=%0.3f\n",
-                                 name, inputEventSourceToString(range.source).c_str(), range.min,
+                                 inputEventSourceToString(range.source).c_str(), range.min,
                                  range.max, range.flat, range.fuzz, range.resolution);
         }
     }

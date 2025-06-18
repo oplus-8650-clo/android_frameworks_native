@@ -315,6 +315,16 @@ flag {
  } # vsync_predictor_recovery
 
 flag {
+  name: "vsync_predictor_predicts_within_threshold"
+  namespace: "core_graphics"
+  description: "VSyncPredictor to ignore vsyncs before the given threshold for period and intercept calculation"
+  bug: "411593328"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+ } # vsync_predictor_predicts_within_threshold
+
+flag {
   name: "wb_virtualdisplay2"
   namespace: "core_graphics"
   description: "When enabled, use VirtualDisplaySurface2 instead of the legacy one"

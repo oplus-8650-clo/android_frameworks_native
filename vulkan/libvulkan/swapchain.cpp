@@ -1922,7 +1922,7 @@ VkResult CreateSwapchainKHR(VkDevice device,
     VkImageFormatListCreateInfo extra_mutable_formats = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR,
     };
-    VkImageFormatListCreateInfo* extra_mutable_formats_ptr;
+    VkImageFormatListCreateInfo* extra_mutable_formats_ptr = nullptr;
 
     // Look through the create_info pNext chain passed to createSwapchainKHR
     // for an image compression control struct.

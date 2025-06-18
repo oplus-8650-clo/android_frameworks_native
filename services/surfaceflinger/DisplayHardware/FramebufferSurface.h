@@ -61,6 +61,7 @@ public:
 
     virtual const sp<Fence>& getClientTargetAcquireFence() const override;
 
+    void onFirstRef() override;
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     virtual surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() {
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
@@ -71,8 +72,11 @@ public:
     }
 
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
+
 private:
     friend class FramebufferSurfaceTest;
+
+    void initializeConsumer();
 
     // Limits the width and height by the maximum width specified.
     ui::Size limitSize(const ui::Size&);
@@ -87,6 +91,8 @@ private:
     virtual void dumpLocked(String8& result, const char* prefix) const;
 
     const PhysicalDisplayId mDisplayId;
+
+    const ui::Size mLimitedSize;
 
     // Framebuffer size has a dimension limitation in pixels based on the graphics capabilities of
     // the device.

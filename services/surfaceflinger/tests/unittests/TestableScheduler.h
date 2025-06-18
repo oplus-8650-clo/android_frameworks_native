@@ -107,18 +107,23 @@ public:
 
     testing::MockFunction<void(PhysicalDisplayId, bool)> mockRequestHardwareVsync;
 
-    void setDisplayPowerMode(PhysicalDisplayId displayId, hal::PowerMode powerMode) {
+    bool setDisplayPowerMode(PhysicalDisplayId displayId, hal::PowerMode powerMode) {
         ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::setDisplayPowerMode(displayId, powerMode);
+        return Scheduler::setDisplayPowerMode(displayId, powerMode);
     }
 
     std::optional<PhysicalDisplayId> pacesetterDisplayId() const NO_THREAD_SAFETY_ANALYSIS {
         return mPacesetterDisplayId;
     }
 
-    void setPacesetterDisplay(PhysicalDisplayId displayId) {
+    void designatePacesetterDisplay(PhysicalDisplayId displayId) {
         ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::setPacesetterDisplay(displayId);
+        Scheduler::designatePacesetterDisplay(displayId);
+    }
+
+    void designatePacesetterDisplay() {
+        ftl::FakeGuard guard(kMainThreadContext);
+        Scheduler::designatePacesetterDisplay();
     }
 
     std::optional<hal::PowerMode> getDisplayPowerMode(PhysicalDisplayId id) {

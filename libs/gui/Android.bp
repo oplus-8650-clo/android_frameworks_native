@@ -42,6 +42,19 @@ cc_aconfig_library {
 }
 
 cc_aconfig_library {
+    name: "aconfig_libgui_flags_c_lib",
+    min_sdk_version: "30",
+    vendor_available: true,
+    double_loadable: true,
+    host_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.media.swcodec",
+    ],
+    aconfig_declarations: "libgui_flags",
+}
+
+cc_aconfig_library {
     name: "libguiflags_no_apex",
     aconfig_declarations: "libgui_flags",
 }

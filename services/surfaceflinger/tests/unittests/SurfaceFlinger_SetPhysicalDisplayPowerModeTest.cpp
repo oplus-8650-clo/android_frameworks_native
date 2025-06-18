@@ -333,9 +333,6 @@ void SetPhysicalDisplayPowerModeTest::transitionDisplayCommon() {
     const auto displayIdOpt = asPhysicalDisplayId(Case::Display::DISPLAY_ID::get());
     ASSERT_TRUE(displayIdOpt);
     injectMockScheduler(*displayIdOpt);
-    // TODO: b/389983418 - Remove once the Scheduler is no longer dependent on front internal
-    // display.
-    mFlinger.mutableFrontInternalDisplayId() = *displayIdOpt;
 
     Case::Doze::setupComposerCallExpectations(this);
     auto display =

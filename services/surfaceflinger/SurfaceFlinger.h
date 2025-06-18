@@ -55,7 +55,6 @@
 #include <gui/ISurfaceComposer.h>
 #include <gui/ITransactionCompletedListener.h>
 #include <gui/LayerState.h>
-#include <gui/SimpleTransactionState.h>
 #include <gui/TransactionState.h>
 #include <layerproto/LayerProtoHeader.h>
 #include <math/mat4.h>
@@ -131,7 +130,6 @@
 #include <aidl/android/hardware/graphics/common/DisplayHotplugEvent.h>
 #include <aidl/android/hardware/graphics/composer3/RefreshRateChangedDebugData.h>
 #include "Client.h"
-#include "gui/SimpleTransactionState.h"
 
 using namespace android::surfaceflinger;
 
@@ -584,10 +582,7 @@ private:
     }
 
     sp<IBinder> getPhysicalDisplayToken(PhysicalDisplayId displayId) const;
-    status_t setTransactionState(SimpleTransactionState podState,
-                                 const ComplexTransactionState& complexState,
-                                 MutableTransactionState& mutableState,
-                                 const sp<IBinder>& applyToken) override;
+    status_t setTransactionState(TransactionState&& state, const sp<IBinder>& applyToken) override;
     void bootFinished();
     status_t getSupportedFrameTimestamps(std::vector<FrameEvent>* outSupported) const;
     sp<IDisplayEventConnection> createDisplayEventConnection(
@@ -838,7 +833,7 @@ private:
      */
     bool applyTransactionState(const FrameTimelineInfo& info,
                                std::vector<ResolvedComposerState>& state,
-                               Vector<DisplayState>& displays, uint32_t flags,
+                               std::vector<DisplayState>& displays, uint32_t flags,
                                const InputWindowCommands& inputWindowCommands,
                                const int64_t desiredPresentTime, bool isAutoTimestamp,
                                const std::vector<uint64_t>& uncacheBufferIds,
@@ -948,7 +943,7 @@ private:
         // that the render result will be on if initiated through captureDisplay().
         // The monostate type is used to denote that the screenshot is initiated
         // for region sampling.
-        std::variant<std::monostate, int32_t, sp<IBinder>, DisplayId> captureTypeVariant;
+        std::variant<std::monostate, uint32_t, sp<IBinder>, DisplayId> captureTypeVariant;
 
         // Display ID of the display the result will be on
         ftl::Optional<DisplayIdVariant> displayIdVariant{std::nullopt};
@@ -971,6 +966,12 @@ private:
 
         // Composition dataspace of the render area
         ui::Dataspace dataspace;
+
+        // Scaling factor for the screenshot's width
+        float frameScaleX{0.f};
+
+        // Scaling factor for the screenshot's height
+        float frameScaleY{0.f};
 
         // Whether blur should be disabled, such as for region sampling
         bool disableBlur{false};
@@ -1261,6 +1262,8 @@ private:
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
                                    const DisplayDevice& newFrontInternalDisplay)
             REQUIRES(mStateLock, kMainThreadContext);
+
+    void onNewPacesetterDisplay() REQUIRES(mStateLock, kMainThreadContext);
 
     /*
      * Debugging & dumpsys

@@ -127,17 +127,29 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
     }
     mOutputFormat = mDefaultOutputFormat;
 
-    ConsumerBase::mName = String8::format("VDS: %s", mDisplayName.c_str());
-    mConsumer->setConsumerName(ConsumerBase::mName);
-    mConsumer->setConsumerUsageBits(GRALLOC_USAGE_HW_COMPOSER);
-    mConsumer->setDefaultBufferSize(sinkWidth, sinkHeight);
     sink->setAsyncMode(true);
-    IGraphicBufferProducer::QueueBufferOutput output;
-    mSource[SOURCE_SCRATCH]->connect(nullptr, NATIVE_WINDOW_API_EGL, false, &output);
 
     for (size_t i = 0; i < sizeof(mHwcBufferIds) / sizeof(mHwcBufferIds[0]); ++i) {
         mHwcBufferIds[i] = UINT64_MAX;
     }
+}
+
+void VirtualDisplaySurface::initializeConsumer() {
+    ConsumerBase::mName = String8::format("VDS: %s", mDisplayName.c_str());
+    mConsumer->setConsumerName(ConsumerBase::mName);
+    mConsumer->setConsumerUsageBits(GRALLOC_USAGE_HW_COMPOSER);
+    mConsumer->setDefaultBufferSize(mSinkBufferWidth, mSinkBufferHeight);
+}
+
+void VirtualDisplaySurface::initializeProducer() {
+    IGraphicBufferProducer::QueueBufferOutput output;
+    mSource[SOURCE_SCRATCH]->connect(nullptr, NATIVE_WINDOW_API_EGL, false, &output);
+}
+
+void VirtualDisplaySurface::onFirstRef() {
+    ConsumerBase::onFirstRef();
+    initializeConsumer();
+    initializeProducer();
 }
 
 VirtualDisplaySurface::~VirtualDisplaySurface() {
