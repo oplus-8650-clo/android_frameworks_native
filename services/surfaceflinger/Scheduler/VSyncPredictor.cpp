@@ -66,6 +66,7 @@ VSyncPredictor::VSyncPredictor(std::unique_ptr<Clock> clock, ftl::NonNull<Displa
         kHistorySize(historySize),
         kMinimumSamplesForPrediction(minimumSamplesForPrediction),
         kOutlierTolerancePercent(std::min(outlierTolerancePercent, kMaxPercent)),
+        kPredictorThreshold(ms2ns(200)),
         mDisplayModePtr(modePtr),
         mNumVsyncsForFrame(numVsyncsPerFrame(mDisplayModePtr)) {
     resetModel();
@@ -91,7 +92,8 @@ nsecs_t VSyncPredictor::idealPeriod() const {
 
 bool VSyncPredictor::validate(nsecs_t timestamp) const {
     SFTRACE_CALL();
-    if (mLastTimestampIndex < 0 || mTimestamps.empty()) {
+    if (mLastTimestampIndex < 0 || mTimestamps.empty() ||
+        getSampleSizeAndOldestVsync(timestamp).first == 0) {
         SFTRACE_INSTANT("timestamp valid (first)");
         return true;
     }
@@ -109,9 +111,21 @@ bool VSyncPredictor::validate(nsecs_t timestamp) const {
         return false;
     }
 
+    const auto isThresholdEnabled =
+            FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
+            mDisplayModePtr->getVrrConfig();
     const auto iter = std::min_element(mTimestamps.begin(), mTimestamps.end(),
-                                       [timestamp](nsecs_t a, nsecs_t b) {
-                                           return std::abs(timestamp - a) < std::abs(timestamp - b);
+                                       [=, this](nsecs_t a, nsecs_t b) {
+                                           nsecs_t diffA = std::abs(timestamp - a);
+                                           nsecs_t diffB = std::abs(timestamp - b);
+                                           if (isThresholdEnabled) {
+                                               bool withinThresholdA = diffA <= kPredictorThreshold;
+                                               bool withinThresholdB = diffB <= kPredictorThreshold;
+                                               if (withinThresholdA != withinThresholdB) {
+                                                   return withinThresholdA;
+                                               }
+                                           }
+                                           return diffA < diffB;
                                        });
     const auto distancePercent = std::abs(*iter - timestamp) * kMaxPercent / idealPeriod();
     if (distancePercent < kOutlierTolerancePercent) {
@@ -180,8 +194,11 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
 
     traceInt64If("VSP-ts", timestamp);
 
-    const size_t numSamples = mTimestamps.size();
-    if (numSamples < kMinimumSamplesForPrediction) {
+    const auto [numSamples, oldestTs] = getSampleSizeAndOldestVsync(timestamp);
+    traceInt64If("VSP-numSamples", static_cast<int64_t>(numSamples));
+    mOldestVsync = oldestTs;
+    const auto minNumSamples = getMinSamplesRequiredForPrediction();
+    if (numSamples < minNumSamples) {
         mRateMap[idealPeriod()] = {idealPeriod(), 0};
         return true;
     }
@@ -205,12 +222,12 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
     std::vector<nsecs_t> ordinals(numSamples);
 
     // Normalizing to the oldest timestamp cuts down on error in calculating the intercept.
-    const auto oldestTS = *std::min_element(mTimestamps.begin(), mTimestamps.end());
     auto it = mRateMap.find(idealPeriod());
     // Calculated slope over the period of time can become outdated as the new timestamps are
     // stored. Using idealPeriod instead provides a rate which is valid at all the times.
-    auto const currentPeriod =
-            mDisplayModePtr->getVrrConfig() && FlagManager::getInstance().vsync_predictor_recovery()
+    auto const currentPeriod = mDisplayModePtr->getVrrConfig() &&
+                    (FlagManager::getInstance().vsync_predictor_recovery() ||
+                     FlagManager::getInstance().vsync_predictor_predicts_within_threshold())
             ? idealPeriod()
             : it->second.slope;
 
@@ -220,18 +237,25 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
 
     nsecs_t meanTS = 0;
     nsecs_t meanOrdinal = 0;
-
-    for (size_t i = 0; i < numSamples; i++) {
-        const auto timestamp = mTimestamps[i] - oldestTS;
-        vsyncTS[i] = timestamp;
-        meanTS += timestamp;
+    size_t vsyncIndex = 0;
+    for (size_t i = 0; i < mTimestamps.size(); i++) {
+        // Timestamp outside the threshold are not used for the calculation as the older
+        // timestamps accumulate drifts and causes the anticipatedPeriod and intercept to
+        // reflect that drift which no longer aligns with the current system state.
+        if (!isVsyncWithinThreshold(timestamp, mTimestamps[i])) continue;
+        const auto ts = mTimestamps[i] - oldestTs;
+        vsyncTS[vsyncIndex] = ts;
+        meanTS += ts;
 
         const auto ordinal = currentPeriod == 0
                 ? 0
-                : (vsyncTS[i] + currentPeriod / 2) / currentPeriod * kScalingFactor;
-        ordinals[i] = ordinal;
+                : (vsyncTS[vsyncIndex] + currentPeriod / 2) / currentPeriod * kScalingFactor;
+        ordinals[vsyncIndex] = ordinal;
         meanOrdinal += ordinal;
+        ++vsyncIndex;
     }
+    LOG_FATAL_IF(vsyncIndex != numSamples,
+                 "samples size does not match with the number of vsyncs in window for prediction");
 
     meanTS /= numSamples;
     meanOrdinal /= numSamples;
@@ -284,9 +308,11 @@ nsecs_t VSyncPredictor::snapToVsync(nsecs_t timePoint) const {
         return knownTimestamp + numPeriodsOut * idealPeriod();
     }
 
-    auto const oldest = *std::min_element(mTimestamps.begin(), mTimestamps.end());
-
     // See b/145667109, the ordinal calculation must take into account the intercept.
+    const auto oldest = mDisplayModePtr->getVrrConfig() &&
+                    FlagManager::getInstance().vsync_predictor_predicts_within_threshold()
+            ? mOldestVsync
+            : *std::min_element(mTimestamps.begin(), mTimestamps.end());
     auto const zeroPoint = oldest + intercept;
     auto const ordinalRequest = (timePoint - zeroPoint + slope) / slope;
     auto const prediction = (ordinalRequest * slope) + intercept + oldest;
@@ -308,6 +334,46 @@ nsecs_t VSyncPredictor::snapToVsync(nsecs_t timePoint) const {
                         printer().c_str());
 
     return prediction;
+}
+
+bool VSyncPredictor::isVsyncWithinThreshold(nsecs_t currentTimestamp,
+                                            nsecs_t previousTimestamp) const {
+    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
+        mDisplayModePtr->getVrrConfig()) {
+        return currentTimestamp - previousTimestamp <= kPredictorThreshold;
+    }
+    return true;
+}
+
+std::pair<size_t, nsecs_t> VSyncPredictor::getSampleSizeAndOldestVsync(
+        nsecs_t currentTimestamp) const {
+    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
+        mDisplayModePtr->getVrrConfig()) {
+        size_t numSamples = 0;
+        nsecs_t oldestTimestamp = currentTimestamp;
+        for (auto vsync : mTimestamps) {
+            if (isVsyncWithinThreshold(currentTimestamp, vsync)) {
+                ++numSamples;
+                if (vsync < oldestTimestamp) {
+                    oldestTimestamp = vsync;
+                }
+            }
+        }
+        return {numSamples, oldestTimestamp};
+    }
+    return {mTimestamps.size(), *std::min_element(mTimestamps.begin(), mTimestamps.end())};
+}
+
+size_t VSyncPredictor::getMinSamplesRequiredForPrediction() const {
+    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
+        mDisplayModePtr->getVrrConfig() && mRenderRateOpt) {
+        const size_t minimumSamplesForPrediction =
+                std::max(static_cast<size_t>(kAbsoluteMinSamplesForPrediction),
+                         static_cast<size_t>(kPredictorThreshold /
+                                             mRenderRateOpt->getPeriodNsecs()));
+        return std::min(kMinimumSamplesForPrediction, minimumSamplesForPrediction);
+    }
+    return kMinimumSamplesForPrediction;
 }
 
 nsecs_t VSyncPredictor::nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
@@ -601,7 +667,7 @@ void VSyncPredictor::clearTimestamps(bool clearTimelines) {
 
 bool VSyncPredictor::needsMoreSamples() const {
     std::lock_guard lock(mMutex);
-    return mTimestamps.size() < kMinimumSamplesForPrediction;
+    return mTimestamps.size() < getMinSamplesRequiredForPrediction();
 }
 
 void VSyncPredictor::resetModel() {

@@ -278,8 +278,9 @@ TEST_F(DisplayTransactionCommitTest, ignoresHotplugConnectIfPrimaryAndExternalAl
     // TODO: This is an unnecessary call.
     EXPECT_CALL(*mComposer,
                 getDisplayIdentificationData(TertiaryDisplayVariant::HWC_DISPLAY_ID, _, _, _))
-            .WillOnce(DoAll(SetArgPointee<1>(TertiaryDisplay<kSecure>::PORT),
-                            SetArgPointee<2>(TertiaryDisplay<kSecure>::GET_IDENTIFICATION_DATA()),
+            .WillOnce(DoAll(SetArgPointee<1>(TertiaryDisplay<Secure::TRUE>::PORT),
+                            SetArgPointee<2>(
+                                    TertiaryDisplay<Secure::TRUE>::GET_IDENTIFICATION_DATA()),
                             SetArgPointee<3>(android::ScreenPartStatus::UNSUPPORTED),
                             Return(Error::NONE)));
 
@@ -295,8 +296,9 @@ TEST_F(DisplayTransactionCommitTest,
     // TODO: This is an unnecessary call.
     EXPECT_CALL(*mComposer,
                 getDisplayIdentificationData(TertiaryDisplayVariant::HWC_DISPLAY_ID, _, _, _))
-            .WillOnce(DoAll(SetArgPointee<1>(TertiaryDisplay<kSecure>::PORT),
-                            SetArgPointee<2>(TertiaryDisplay<kSecure>::GET_IDENTIFICATION_DATA()),
+            .WillOnce(DoAll(SetArgPointee<1>(TertiaryDisplay<Secure::TRUE>::PORT),
+                            SetArgPointee<2>(
+                                    TertiaryDisplay<Secure::TRUE>::GET_IDENTIFICATION_DATA()),
                             SetArgPointee<3>(android::ScreenPartStatus::UNSUPPORTED),
                             Return(Error::NONE)));
 

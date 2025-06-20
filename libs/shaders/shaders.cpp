@@ -191,6 +191,7 @@ void generateEffectiveOOTF(bool undoPremultipliedAlpha, LinearEffect::SkSLType t
             )");
             break;
     }
+    // TODO(b/425457165): skia may premul unconditionally so investigate removing the predicate
     if (undoPremultipliedAlpha) {
         shader.append(R"(
             c.rgb = c.rgb / (c.a + 0.0019);
@@ -288,14 +289,22 @@ std::vector<tonemap::ShaderUniform> buildLinearEffectUniforms(
                         .value = buildUniformValue<mat3>(inputColorSpace.getXYZtoRGB())});
     // Transforms xyz colors to linear source colors, then applies the color transform, then
     // transforms to linear extended RGB for skia to color manage.
-    uniforms.push_back({.name = "in_colorTransform",
-                        .value = buildUniformValue<mat4>(
-                                mat4(ColorSpace::linearExtendedSRGB().getXYZtoRGB()) *
-                                // TODO: the color transform ideally should be applied
-                                // in the source colorspace, but doing that breaks
-                                // renderengine tests
-                                mat4(outputColorSpace.getRGBtoXYZ()) * colorTransform *
-                                mat4(outputColorSpace.getXYZtoRGB()))});
+
+    const bool needsCustomOETF = (linearEffect.fakeOutputDataspace & HAL_DATASPACE_TRANSFER_MASK) ==
+            HAL_DATASPACE_TRANSFER_GAMMA2_2;
+    uniforms.push_back(
+            {.name = "in_colorTransform",
+             .value = buildUniformValue<mat4>(
+                     // Skia normally can color manage for us with fromLinearSrgb, but if we're
+                     // applying a custom OETF we need to apply the OETF in the destination
+                     // colorspace.
+                     (needsCustomOETF ? mat4()
+                                      : mat4(ColorSpace::linearExtendedSRGB().getXYZtoRGB()) *
+                                      // TODO: the color transform ideally should be applied
+                                      // in the source colorspace, but doing that breaks
+                                      // renderengine tests
+                                      mat4(outputColorSpace.getRGBtoXYZ())) *
+                     colorTransform * mat4(outputColorSpace.getXYZtoRGB()))});
 
     tonemap::Metadata metadata{.displayMaxLuminance = maxDisplayLuminance,
                                // If the input luminance is unknown, use display luminance (aka,

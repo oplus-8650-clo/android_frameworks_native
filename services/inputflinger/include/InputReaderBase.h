@@ -190,6 +190,9 @@ struct InputReaderConfiguration {
     // True to enable system gestures (three- and four-finger swipes) on touchpads.
     bool touchpadSystemGesturesEnabled;
 
+    // True to enable touchpads.
+    bool touchpadsEnabled;
+
     // The set of currently disabled input devices.
     std::set<int32_t> disabledDevices;
 
@@ -233,6 +236,7 @@ struct InputReaderConfiguration {
             touchpadRightClickZoneEnabled(false),
             touchpadThreeFingerTapShortcutEnabled(false),
             touchpadSystemGesturesEnabled(true),
+            touchpadsEnabled(true),
             stylusButtonMotionEventsEnabled(true),
             stylusPointerIconEnabled(false),
             mouseReverseVerticalScrollingEnabled(false),

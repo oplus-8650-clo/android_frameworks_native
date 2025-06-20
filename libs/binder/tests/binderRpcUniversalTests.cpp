@@ -213,7 +213,8 @@ TEST_P(BinderRpc, SendLargeVector) {
     auto proc = createRpcTestSocketServerProcess({});
 
     // see libbinder internal Constants.h
-    const size_t kLargeSize = 15 * 1024 * 1024;
+    // We use a smaller size for TIPC because a 15MB test is too slow and times out
+    size_t kLargeSize = socketType() == SocketType::TIPC ? 128 * 1024 : 15 * 1024 * 1024;
     const std::vector<uint8_t> kTestValue(kLargeSize / sizeof(uint8_t), 42);
 
     std::vector<uint8_t> result;
