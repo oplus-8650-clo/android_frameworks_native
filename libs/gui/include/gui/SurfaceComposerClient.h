@@ -54,7 +54,6 @@
 #include <gui/ISurfaceComposer.h>
 #include <gui/ITransactionCompletedListener.h>
 #include <gui/LayerState.h>
-#include <gui/SimpleTransactionState.h>
 #include <gui/SurfaceControl.h>
 #include <gui/TransactionState.h>
 #include <gui/WindowInfosListenerReporter.h>
@@ -466,15 +465,13 @@ public:
         void releaseBufferIfOverwriting(const layer_state_t& state);
         static void mergeFrameTimelineInfo(FrameTimelineInfo& t, const FrameTimelineInfo& other);
 
-        SimpleTransactionState mSimpleState;
-        ComplexTransactionState mComplexState;
         // Tracks registered callbacks
         sp<TransactionCompletedListener> mTransactionCompletedListener = nullptr;
         // Prints debug logs when enabled.
         bool mLogCallPoints = false;
 
     protected:
-        MutableTransactionState mMutableState;
+        TransactionState mState;
         std::unordered_map<sp<ITransactionCompletedListener>, CallbackInfo, TCLHash>
                 mListenerCallbacks;
 

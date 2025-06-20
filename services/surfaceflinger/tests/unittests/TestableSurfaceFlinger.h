@@ -26,7 +26,6 @@
 #include <gui/LayerMetadata.h>
 #include <gui/LayerState.h>
 #include <gui/ScreenCaptureResults.h>
-#include <gui/SimpleTransactionState.h>
 #include <gui/TransactionState.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <ui/ScreenPartStatus.h>
@@ -526,26 +525,8 @@ public:
         return mFlinger->mTransactionHandler.mPendingTransactionCount.load();
     }
 
-    auto setTransactionState(
-            const FrameTimelineInfo& frameTimelineInfo, MutableTransactionState& mutableState,
-            uint32_t flags, const sp<IBinder>& applyToken,
-            const InputWindowCommands& inputWindowCommands, int64_t desiredPresentTime,
-            bool isAutoTimestamp, const std::vector<client_cache_t>& uncacheBuffers,
-            bool hasListenerCallbacks, std::vector<ListenerCallbacks>& listenerCallbacks,
-            uint64_t transactionId, const std::vector<uint64_t>& mergedTransactionIds,
-            const std::vector<gui::EarlyWakeupInfo>& earlyWakeupInfos) {
-        ComplexTransactionState complexState;
-        complexState.mFrameTimelineInfo = frameTimelineInfo;
-        complexState.mUncacheBuffers = uncacheBuffers;
-        complexState.mMergedTransactionIds = mergedTransactionIds;
-        complexState.mCallbacks.mHasListenerCallbacks = hasListenerCallbacks;
-        complexState.mCallbacks.mFlattenedListenerCallbacks = listenerCallbacks;
-        complexState.mInputWindowCommands = inputWindowCommands;
-        complexState.mEarlyWakeupInfos = earlyWakeupInfos;
-        return mFlinger->setTransactionState(SimpleTransactionState(transactionId, flags,
-                                                                    desiredPresentTime,
-                                                                    isAutoTimestamp),
-                                             complexState, mutableState, applyToken);
+    auto setTransactionState(TransactionState&& transactionState, const sp<IBinder>& applyToken) {
+        return mFlinger->setTransactionState(std::move(transactionState), applyToken);
     }
 
     auto setTransactionStateInternal(QueuedTransactionState& transaction) {

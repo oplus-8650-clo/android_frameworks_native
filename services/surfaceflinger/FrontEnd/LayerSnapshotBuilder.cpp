@@ -324,17 +324,6 @@ void clearChanges(LayerSnapshot& snapshot) {
     snapshot.surfaceDamage.clear();
 }
 
-// TODO (b/259407931): Remove.
-uint32_t getPrimaryDisplayRotationFlags(
-        const ui::DisplayMap<ui::LayerStack, frontend::DisplayInfo>& displays) {
-    for (auto& [_, display] : displays) {
-        if (display.isPrimary) {
-            return display.rotationFlags;
-        }
-    }
-    return 0;
-}
-
 } // namespace
 
 LayerSnapshot LayerSnapshotBuilder::getRootSnapshot() {
@@ -1336,6 +1325,17 @@ void LayerSnapshotBuilder::forEachInputSnapshot(const ConstVisitor& visitor) con
         }
         visitor(snapshot);
     }
+}
+
+// TODO (b/259407931): Remove.
+uint32_t LayerSnapshotBuilder::getPrimaryDisplayRotationFlags(
+        const ui::DisplayMap<ui::LayerStack, frontend::DisplayInfo>& displays) const {
+    for (auto& [_, display] : displays) {
+        if (display.isPrimary) {
+            return display.rotationFlags;
+        }
+    }
+    return 0;
 }
 
 void LayerSnapshotBuilder::updateTouchableRegionCrop(const Args& args) {

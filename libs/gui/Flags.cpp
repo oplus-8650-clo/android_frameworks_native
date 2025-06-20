@@ -109,7 +109,7 @@ sp<SurfaceType> mediaSurfaceToCameraSurfaceType(const sp<MediaSurfaceType>& mst,
 #if WB_LIBCAMERASERVICE_WITH_DEPENDENCIES
     return mst;
 #else
-    return mst->getGraphicBufferProducer();
+    return mst->getIGraphicBufferProducer();
 #endif
 #else
 #if WB_LIBCAMERASERVICE_WITH_DEPENDENCIES

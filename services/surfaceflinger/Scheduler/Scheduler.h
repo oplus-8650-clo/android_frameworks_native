@@ -99,9 +99,10 @@ public:
 
     void startTimers();
 
-    // TODO: b/241285191 - Remove this API by promoting pacesetter in onScreen{Acquired,Released}.
-    void setPacesetterDisplay(PhysicalDisplayId) REQUIRES(kMainThreadContext)
-            EXCLUDES(mDisplayLock, mVsyncConfigLock);
+    // Automatically selects a pacesetter display and designates if required. Returns true if a new
+    // display was chosen as the pacesetter.
+    bool designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId = std::nullopt)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     PhysicalDisplayId getPacesetterDisplayId() const EXCLUDES(mDisplayLock);
 
@@ -280,7 +281,8 @@ public:
     // Indicates that touch interaction is taking place.
     void onTouchHint();
 
-    void setDisplayPowerMode(PhysicalDisplayId, hal::PowerMode) REQUIRES(kMainThreadContext);
+    // Returns true if the pacesetter display designation was changed due to power mode change.
+    bool setDisplayPowerMode(PhysicalDisplayId, hal::PowerMode) REQUIRES(kMainThreadContext);
 
     // TODO(b/255635821): Track this per display.
     void setActiveDisplayPowerModeForRefreshRateStats(hal::PowerMode) REQUIRES(kMainThreadContext);
@@ -524,6 +526,16 @@ private:
     Period getVsyncPeriod(uid_t) override EXCLUDES(mDisplayLock);
     void resync() override EXCLUDES(mDisplayLock);
     void onExpectedPresentTimePosted(TimePoint expectedPresentTime) override EXCLUDES(mDisplayLock);
+
+    // Returns the powered-on display with the highest refresh rate in |mDisplays| as the new
+    // pacesetter, but does not set the display as pacesetter.
+    // NOTE: If displays with highest refresh rates have roughly equal refresh rates,
+    // and the current pacesetter is among them, then the current pacesetter will remain the
+    // pacesetter.
+    PhysicalDisplayId selectPacesetterDisplay() const REQUIRES(kMainThreadContext)
+            EXCLUDES(mDisplayLock);
+    PhysicalDisplayId selectPacesetterDisplayLocked() const
+            REQUIRES(kMainThreadContext, mDisplayLock);
 
     std::unique_ptr<EventThread> mRenderEventThread;
     std::unique_ptr<EventThread> mLastCompositeEventThread;

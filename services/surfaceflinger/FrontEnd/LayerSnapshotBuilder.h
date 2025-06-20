@@ -97,6 +97,9 @@ public:
     // Visit each snapshot interesting to input reverse z-order
     void forEachInputSnapshot(const ConstVisitor& visitor) const;
 
+    uint32_t getPrimaryDisplayRotationFlags(
+            const ui::DisplayMap<ui::LayerStack, frontend::DisplayInfo>& displays) const;
+
 private:
     friend class LayerSnapshotTest;
 

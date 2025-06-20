@@ -95,14 +95,6 @@ class VirtualDisplaySurface : public compositionengine::DisplaySurface,
                               public BnGraphicBufferProducer,
                               private ConsumerBase {
 public:
-    VirtualDisplaySurface(HWComposer&, VirtualDisplayIdVariant,
-                          const sp<IGraphicBufferProducer>& sink,
-                          const sp<IGraphicBufferProducer>& bqProducer,
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
-                          const sp<IGraphicBufferConsumer>& bqConsumer, const std::string& name,
-                          bool qtiSecure = false);
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-
     //
     // DisplaySurface interface
     //
@@ -117,6 +109,8 @@ public:
     // any client composition prediction.
     virtual bool supportsCompositionStrategyPrediction() const override { return false; };
 
+    void onFirstRef() override;
+
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     virtual android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf*
     qtiGetDisplaySurfaceExtn() {
@@ -125,6 +119,14 @@ public:
 
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 private:
+    VirtualDisplaySurface(HWComposer&, VirtualDisplayIdVariant,
+                          const sp<IGraphicBufferProducer>& sink,
+                          const sp<IGraphicBufferProducer>& bqProducer,
+                          const sp<IGraphicBufferConsumer>& bqConsumer, const std::string& name,
+                          bool qtiSecure = false);
+
+    friend class sp<VirtualDisplaySurface>;
+
     enum Source : size_t {
         SOURCE_SINK = 0,
         SOURCE_SCRATCH = 1,
@@ -132,6 +134,9 @@ private:
         ftl_first = SOURCE_SINK,
         ftl_last = SOURCE_SCRATCH,
     };
+
+    void initializeConsumer();
+    void initializeProducer();
 
     virtual ~VirtualDisplaySurface();
 

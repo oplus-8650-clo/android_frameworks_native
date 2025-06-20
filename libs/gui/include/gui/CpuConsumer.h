@@ -127,6 +127,10 @@ class CpuConsumer : public ConsumerBase
                 bool controlledByApp = false)
             __attribute((deprecated("Prefer ctors that create their own surface and consumer.")));
 
+    void initializeConsumer();
+
+    void onFirstRef() override;
+
     // Maximum number of buffers that can be locked at a time
     const size_t mMaxLockedBuffers;
 

@@ -118,11 +118,20 @@ void Scheduler::startTimers() {
     }
 }
 
-void Scheduler::setPacesetterDisplay(PhysicalDisplayId pacesetterId) {
+bool Scheduler::designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId) {
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        pacesetterId = selectPacesetterDisplay();
+    }
+
+    // Skip an unnecessary demotion/promotion cycle if there's no work to do.
+    if ((ftl::FakeGuard(mDisplayLock), mPacesetterDisplayId == *pacesetterId)) {
+        return false;
+    }
+
     constexpr PromotionParams kPromotionParams = {.toggleIdleTimer = true};
 
     demotePacesetterDisplay(kPromotionParams);
-    promotePacesetterDisplay(pacesetterId, kPromotionParams);
+    promotePacesetterDisplay(*pacesetterId, kPromotionParams);
 
     // Cancel the pending refresh rate change, if any, before updating the phase configuration.
     mVsyncModulator->cancelRefreshRateChange();
@@ -132,7 +141,60 @@ void Scheduler::setPacesetterDisplay(PhysicalDisplayId pacesetterId) {
         mVsyncConfiguration->reset();
     }
 
-    updatePhaseConfiguration(pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
+    updatePhaseConfiguration(*pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
+
+    return true;
+}
+
+PhysicalDisplayId Scheduler::selectPacesetterDisplay() const {
+    std::scoped_lock lock(mDisplayLock);
+    return selectPacesetterDisplayLocked();
+}
+
+PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked() const {
+    // The first display should be the new pacesetter if none of the displays are powered on.
+    const auto& [firstDisplayId, firstDisplay] = *mDisplays.begin();
+    PhysicalDisplayId newPacesetterId = firstDisplayId;
+    // Only assigning the actual refresh rate if the first display is powered on ensures that any
+    // other powered-on display will take over the new pacesetter designation regardless of its
+    // refresh rate.
+    Fps newPacesetterVsyncRate = Fps::fromValue(0);
+    if (firstDisplay.powerMode == hal::PowerMode::ON) {
+        newPacesetterVsyncRate = firstDisplay.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+    }
+
+    // Attempt to set the fastest powered-on display as the pacesetter.
+    for (const auto& [id, display] : mDisplays) {
+        if (display.powerMode != hal::PowerMode::ON) {
+            continue;
+        }
+
+        const Fps displayVsyncRate = display.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+        if (isStrictlyLess(newPacesetterVsyncRate, displayVsyncRate)) {
+            newPacesetterId = id;
+            newPacesetterVsyncRate = displayVsyncRate;
+        }
+    }
+
+    // If the current pacesetter display is powered on and its refresh rate is not too far off from
+    // the newly selected pacesetter display, prefer to keep the current one to avoid churn.
+    if (const auto pacesetterOpt = pacesetterDisplayLocked()) {
+        const auto& pacesetter = pacesetterOpt->get();
+        if (pacesetter.powerMode == hal::PowerMode::ON) {
+            const Fps currentPacesetterVsyncRate =
+                    pacesetter.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+            const float rateDiff =
+                    newPacesetterVsyncRate.getValue() - currentPacesetterVsyncRate.getValue();
+            constexpr float kRefreshRateEpsilon = 0.1f;
+
+            if (rateDiff < kRefreshRateEpsilon) {
+                newPacesetterId = pacesetter.displayId;
+                newPacesetterVsyncRate = currentPacesetterVsyncRate;
+            }
+        }
+    }
+
+    return newPacesetterId;
 }
 
 PhysicalDisplayId Scheduler::getPacesetterDisplayId() const {
@@ -871,16 +933,7 @@ void Scheduler::onTouchHint() {
     }
 }
 
-void Scheduler::setDisplayPowerMode(PhysicalDisplayId id, hal::PowerMode powerMode) {
-    const bool isPacesetter = [this, id]() REQUIRES(kMainThreadContext) {
-        ftl::FakeGuard guard(mDisplayLock);
-        return id == mPacesetterDisplayId;
-    }();
-    if (isPacesetter) {
-        // TODO (b/255657128): This needs to be handled per display.
-        std::lock_guard<std::mutex> lock(mPolicyLock);
-        mPolicy.displayPowerMode = powerMode;
-    }
+bool Scheduler::setDisplayPowerMode(PhysicalDisplayId id, hal::PowerMode powerMode) {
     {
         std::scoped_lock lock(mDisplayLock);
 
@@ -891,7 +944,21 @@ void Scheduler::setDisplayPowerMode(PhysicalDisplayId id, hal::PowerMode powerMo
         display.powerMode = powerMode;
         display.schedulePtr->getController().setDisplayPowerMode(powerMode);
     }
-    if (!isPacesetter) return;
+
+    bool didPacesetterChange = false;
+    // The power mode needs to be updated before we try to update the pacesetter.
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        didPacesetterChange = designatePacesetterDisplay();
+    }
+
+    const bool isPacesetter = (ftl::FakeGuard(mDisplayLock), mPacesetterDisplayId == id);
+    if (!isPacesetter) return didPacesetterChange;
+
+    {
+        // TODO: b/371584290 - This needs to be handled per display.
+        std::scoped_lock lock(mPolicyLock);
+        mPolicy.displayPowerMode = powerMode;
+    }
 
     if (mDisplayPowerTimer) {
         mDisplayPowerTimer->reset();
@@ -900,6 +967,8 @@ void Scheduler::setDisplayPowerMode(PhysicalDisplayId id, hal::PowerMode powerMo
     // Display Power event will boost the refresh rate to performance.
     // Clear Layer History to get fresh FPS detection
     mLayerHistory.clear();
+
+    return didPacesetterChange;
 }
 
 auto Scheduler::getVsyncSchedule(std::optional<PhysicalDisplayId> idOpt) const
@@ -1098,7 +1167,10 @@ void Scheduler::promotePacesetterDisplay(PhysicalDisplayId pacesetterId, Promoti
 
 std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
         PhysicalDisplayId pacesetterId, PromotionParams params) {
-    // TODO: b/241286431 - Choose the pacesetter among mDisplays.
+    if (FlagManager::getInstance().pacesetter_selection()) {
+        pacesetterId = selectPacesetterDisplayLocked();
+    }
+
     mPacesetterDisplayId = pacesetterId;
     ALOGI("Display %s is the pacesetter", to_string(pacesetterId).c_str());
 

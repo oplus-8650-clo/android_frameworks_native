@@ -36,4 +36,7 @@ constexpr size_t kLogTransactionsOverBytes = 300 * 1024;
  */
 constexpr size_t kRpcTransactionLimitBytes = 600 * 1024;
 
+// TODO(b/424526253): remove high limit again
+constexpr size_t kRpcTransactionTemporaryLimitBytes = 20 * 1024 * 1024;
+
 } // namespace android::binder
