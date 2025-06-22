@@ -29,6 +29,8 @@
 #include <include/gpu/graphite/vk/precompile/VulkanPrecompileShader.h>
 #include <include/gpu/vk/VulkanTypes.h>
 
+#include <type_traits>
+
 #include "skia/filters/RuntimeEffectManager.h"
 
 namespace android::renderengine::skia {
@@ -51,6 +53,12 @@ struct PrecompileSettings {
                 fRenderPassProps == superSet.fRenderPassProps;
     }
 };
+
+// Used in lieu of SkEnumBitMask to avoid adding casts when copying in precompile cases.
+static constexpr DrawTypeFlags operator|(DrawTypeFlags a, DrawTypeFlags b) {
+    return static_cast<DrawTypeFlags>(static_cast<std::underlying_type<DrawTypeFlags>::type>(a) |
+                                      static_cast<std::underlying_type<DrawTypeFlags>::type>(b));
+}
 
 sk_sp<PrecompileShader> vulkan_ycbcr_image_shader(uint64_t format,
                                                   VkSamplerYcbcrModelConversion model,
@@ -475,6 +483,19 @@ PaintOptions ImagePremulYCbCr238Srcover() {
     return paintOptions;
 }
 
+PaintOptions TransparentPaintImagePremulYCbCr238Srcover() {
+    PaintOptions paintOptions;
+
+    // HardwareImage(3: kHoAAO4AAAAAAAAA)
+    paintOptions.setShaders({ vulkan_ycbcr_image_shader(238,
+                                                        VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+                                                        VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
+                                                        VK_CHROMA_LOCATION_MIDPOINT) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setPaintColorIsOpaque(false);
+    return paintOptions;
+}
+
 PaintOptions ImagePremulYCbCr240Srcover() {
     PaintOptions paintOptions;
 
@@ -641,111 +662,76 @@ void GraphitePipelineManager::PrecompilePipelines(
     // external/skia/tests/graphite/precompile/AndroidPrecompileTest.cpp
     // clang-format off
     const PrecompileSettings precompileCases[] = {
-// 100% (1/1) handles: 0
 /*  0 */ { ImagePremulHWOnlySrcover(),         DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
-// 100% (2/2) handles: 23 45
 /*  1 */ { ImagePremulHWOnlySrcover(),         kRRectAndNonAARect,              kRGBA_1_D },
-// 50% (2/4) handles: 66 75 - due to the w/o msaa load variants not being used
+
 /*  2 */ { ImagePremulHWOnlySrcover(),         kRRectAndNonAARect,              kRGBA_4_DS },
 
-// 100% (1/1) handles: 1
 /*  3 */ { ImageHWOnlySRGBSrcover(),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_SRGB },
-// 100% (2/2) handles: 25 47
 /*  4 */ { ImageHWOnlySRGBSrcover(),           kRRectAndNonAARect,              kRGBA_1_D_SRGB },
 
-// 100% (2/2) handles: 9 29
 /*  5 */ { TransparentPaintImagePremulHWOnlySrcover(), kRRectAndNonAARect,      kRGBA_1_D },
-// 50% (2/4) handles 64 69 - due to the w/o msaa load variants not being used
 /*  6 */ { TransparentPaintImagePremulHWOnlySrcover(), kRRectAndNonAARect,      kRGBA_4_DS },
 
-// 100% (2/2) handles 10 30
 /*  7 */ { TransparentPaintImageSRGBHWOnlySrcover(), kRRectAndNonAARect,        kRGBA_1_D_SRGB },
 
-// 75% (2/2) handles 28 59 60
 /*  8 */ { SolidSrcSrcover(),                  kRRectAndNonAARect,              kRGBA_1_D },
-// 50% (1/2) handles 77 - due to the w/o msaa load variants not being used
-/*  9 */ { SolidSrcover(),                     DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
 
-// 100% (2/2) handles 19 39
+/*  9 */ { SolidSrcover(),                     kRRectAndNonAARect,              kRGBA_4_DS },
+
 /* 10 */ { ImagePremulHWOnlyMatrixCFSrcover(), kRRectAndNonAARect,              kRGBA_1_D },
 
-// 100% (1/1) handles 12
 /* 11 */ { TransparentPaintImagePremulHWOnlyMatrixCFSrcover(),
-                                            DrawTypeFlags::kAnalyticRRect,   kRGBA_1_D },
+                                               DrawTypeFlags::kAnalyticRRect,   kRGBA_1_D },
 
-// 100% (2/2) handles 14 31
 /* 12 */ { TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover(),
-                                            kRRectAndNonAARect,              kRGBA_1_D },
-// 50% (1/2) handles 71 - due to the w/o msaa load variants not being used
+                                               kRRectAndNonAARect,              kRGBA_1_D },
 /* 13 */ { TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover(),
-                                            DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+                                               DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
 
-// 100% (2/2) handles 16 33
 /* 14 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(), kRRectAndNonAARect,        kRGBA_1_D },
-// 50% (1/2) handles 72 - due to the w/o msaa load variants not being used
+
 /* 15 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_4_DS },
 
-// 100% (2/2) handles 15 32
 /* 16 */ { TransparentPaintImageSRGBHWOnlyMatrixCFDitherSrcover(),
-                                            kRRectAndNonAARect,              kRGBA_1_D_SRGB },
+                                               kRRectAndNonAARect,              kRGBA_1_D_SRGB },
 
-// 100% (2/2) handles 17 35
 /* 17 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(), kRRectAndNonAARect,          kRGBA_1_D_SRGB },
-// 50% (1/2) handles 80 - due to the w/o msaa load variants not being used
+
 /* 18 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kAnalyticRRect, kRGBA_4_DS_SRGB },
 
-// 100% (2/2) handles 22 42
-/* 19 */ { SolidMatrixCFSrcover(),             kRRectAndNonAARect,              kRGBA_1_D },
-// 50% (1/2) handles 83
-/* 20 */ { SolidMatrixCFSrcover(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+/* 19 */ { ImageAlphaPremulHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_1_D },
 
-// 100% (1/1) handles 37
-/* 21 */ { ImageAlphaPremulHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_1_D },
-// 50% (1/2) handles 73 - due to the w/o msaa load variants not being used
-/* 22 */ { ImageAlphaPremulHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_4_DS },
+/* 20 */ { ImageAlphaPremulHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_4_DS },
 
-// 100% (1/1) handles 38
-/* 23 */ { ImageAlphaSRGBHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_1_D_SRGB },
+/* 21 */ { ImageAlphaSRGBHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_1_D_SRGB },
 
-// 100% (1/1) handles 44
-/* 24 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-// 100% (1/1) handles 62
-/* 25 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kPerEdgeAAQuad,   kRGBA_1_D },
-// 50% (1/2) handles 74 - due to the w/o msaa load variants not being used
-/* 26 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+/* 22 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 23 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kPerEdgeAAQuad,   kRGBA_1_D },
+/* 24 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
 
-// 100% (1/1) handles 5
-/* 27 */ { MouriMapBlur(effectManager),                     DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
-// 100% (1/1) handles 58
-/* 28 */ { MouriMapToneMap(effectManager),                  DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D_SRGB },
-// 100% (1/1) handles 7
-/* 29 */ { MouriMapCrosstalkAndChunk16x16(effectManager),   DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_SRGB },
-// 100% (1/1) handles 6
-/* 30 */ { MouriMapChunk8x8Effect(effectManager),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
-// 100% (2/2) handles 55, 56
-/* 31 */ { KawaseBlurLowSrcSrcOver(effectManager),          DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-// 100% (1/1) handles 54
-/* 32 */ { KawaseBlurHighSrc(effectManager),                DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-// 100% (1/1) handles 52
-/* 33 */ { BlurFilterMix(effectManager),                    DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 25 */ { MouriMapBlur(effectManager),                     DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
+/* 26 */ { MouriMapToneMap(effectManager),                  DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D_SRGB },
+/* 27 */ { MouriMapCrosstalkAndChunk16x16(effectManager),   DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_SRGB },
+/* 28 */ { MouriMapChunk8x8Effect(effectManager),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
+/* 29 */ { KawaseBlurLowSrcSrcOver(effectManager),          DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 30 */ { KawaseBlurHighSrc(effectManager),                DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 31 */ { BlurFilterMix(effectManager),                    DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
 
 // These two are solid colors drawn w/ a LinearEffect
 
-// 100% (1/1) handles 4
-/* 34 */ { LinearEffect(kUNKNOWN__SRGB__false__UNKNOWN__Shader,
+/* 32 */ { LinearEffect(kUNKNOWN__SRGB__false__UNKNOWN__Shader,
                         ChildType::kSolidColor,
                         SkBlendMode::kSrcOver),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA16F_1_D_SRGB },
-// 100% (1/1) handles 57
-/* 35 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+/* 33 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
                         ChildType::kSolidColor,
                         SkBlendMode::kSrc),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA_1_D_SRGB },
 
-// 100% (1/1) handles 2
-/* 36 */ { LinearEffect(kUNKNOWN__SRGB__false__UNKNOWN__Shader,
+/* 34 */ { LinearEffect(kUNKNOWN__SRGB__false__UNKNOWN__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver),
            DrawTypeFlags::kNonAAFillRect,
@@ -753,14 +739,12 @@ void GraphitePipelineManager::PrecompilePipelines(
 
 // These next two only differ by dst surface
 
-// 100% (1/1) handles 27
-/* 37 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 35 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver),
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
-// 50% (1/2) handles 67 - due to the w/o msaa load variants not being used
-/* 38 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 36 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver),
            DrawTypeFlags::kAnalyticRRect,
@@ -768,15 +752,14 @@ void GraphitePipelineManager::PrecompilePipelines(
 
 // These next two are the same as the above two but w/ transparent paints
 
-// 100% (1/1) handles 11
-/* 39 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 37 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ false),
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
-// 50% (1/2) handlers 65 - due to the w/o msaa load variants not being used
-/* 40 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+// 50% (1/2) handlers 62 - due to the w/o msaa load variants not being used
+/* 38 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ false),
@@ -784,24 +767,21 @@ void GraphitePipelineManager::PrecompilePipelines(
            kRGBA_4_DS_SRGB },
 
 // The next 3 have a RE_LinearEffect and a MatrixFilter along w/ different ancillary additions
-// 100% (1/1) handles 20
-/* 41 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 39 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
                         /* matrixColorFilter= */ true),
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
-// 100% (1/1) handles 13
-/* 42 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 40 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ false,
                         /* matrixColorFilter= */ true),
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
-// 100% (1/1) handles 18
-/* 43 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+/* 41 */ { LinearEffect(k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
                         ChildType::kHWTexture,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
@@ -810,21 +790,83 @@ void GraphitePipelineManager::PrecompilePipelines(
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
 
-// 100% (2/2) handles 26 50
-/* 44 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_1_D },
-// 100% (1/1) handles 49
-/* 45 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-// 50% (1/2) handles 76
-/* 46 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
-// 50% (1/2) handles 70
-/* 47 */ { TransparentPaintImagePremulYCbCr240Srcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_4_DS },
-// 100% (1/1) handles 8
-/* 48 */ { MouriMapCrosstalkAndChunk16x16YCbCr247(effectManager),DrawTypeFlags::kNonAAFillRect,kRGBA16F_1_D_SRGB },
+/* 42 */ { SolidSrcover(), DrawTypeFlags::kNonSimpleShape, kRGBA_4_DS },
+
+// AnalyticClip block - all the PrecompileOptions here are just clones of earlier ones
+// with an additional kAnalyticClip flag
+
+/* 43 */ { ImagePremulHWOnlySrcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D },
+
+/* 44 */ { ImagePremulHWOnlySrcover(),
+           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_4_DS },
+
+/* 45 */ { ImageHWOnlySRGBSrcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D_SRGB },
+
+/* 46 */ { TransparentPaintImagePremulHWOnlySrcover(),
+           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D },
+
+/* 47 */ { SolidSrcSrcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D },
+
+/* 48 */ { SolidSrcSrcover(),
+           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_4_DS },
+
+/* 49 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D },
+
+/* 50 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D_SRGB },
+
+//--------------------------------------------------
+
+/* 51 */ { {}, // ignored
+           DrawTypeFlags::kDropShadows,
+           kRGBA_1_D },
+
+/* 52 */ { {}, // ignored
+           DrawTypeFlags::kDropShadows,
+           kRGBA_4_DS },
+
+// 238 block ----------------
+
+/* 53 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_1_D },
+
+/* 54 */ { ImagePremulYCbCr238Srcover(),
+           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D },
+
+/* 55 */ { TransparentPaintImagePremulYCbCr238Srcover(), kRRectAndNonAARect,    kRGBA_1_D },
+/* 56 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_4_DS },
+
+/* 57 */ { ImagePremulYCbCr238Srcover(),
+           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_4_DS },
+
+// 240 block ----------------
+
+/* 58 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 59 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+/* 50 */ { TransparentPaintImagePremulYCbCr240Srcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_4_DS },
+
+// 247 block ----------------
+
+/* 61 */ { MouriMapCrosstalkAndChunk16x16YCbCr247(effectManager),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA16F_1_D_SRGB },
 
 // The next 2 have the same PaintOptions but different destination surfaces
 
-// 100% (2/2) handles 21 40
-/* 49 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+/* 62 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
                         ChildType::kHWTextureYCbCr247,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
@@ -833,8 +875,7 @@ void GraphitePipelineManager::PrecompilePipelines(
            kRRectAndNonAARect,
            kRGBA_1_D_SRGB },
 
-// 100% (1/1) handles 82
-/* 50 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+/* 63 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
                         ChildType::kHWTextureYCbCr247,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
@@ -842,6 +883,15 @@ void GraphitePipelineManager::PrecompilePipelines(
                         /* dither= */ true),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA_4_DS_SRGB },
+
+/* 64 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+                        ChildType::kHWTextureYCbCr247,
+                        SkBlendMode::kSrcOver,
+                        /* paintColorIsOpaque= */ true,
+                        /* matrixColorFilter= */ false,
+                        /* dither= */ true),
+           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
+           kRGBA_1_D_SRGB },
     };
     // clang-format on
 

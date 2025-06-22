@@ -23,6 +23,7 @@
 
 #include <android/sysprop/InputProperties.sysprop.h>
 #include <ftl/flags.h>
+#include <input/Input.h>
 
 #include "CursorInputMapper.h"
 #include "ExternalStylusInputMapper.h"
@@ -91,7 +92,11 @@ std::list<NotifyArgs> InputDevice::updateEnableState(nsecs_t when,
     }
 
     std::list<NotifyArgs> out;
-    if (isEnabled() == enable) {
+    // Generally, we can't enable/disable subdevices - this is only possible for the "InputDevice"
+    // object, which is the composite device. However, for touchpads, it's possible that a touchpad
+    // is a subdevice. For those cases, we need to go into the code below to see if this touchpad is
+    // part of a device.
+    if (isEnabled() == enable && !isFromSource(mSources, AINPUT_SOURCE_TOUCHPAD)) {
         return out;
     }
 
@@ -99,7 +104,20 @@ std::list<NotifyArgs> InputDevice::updateEnableState(nsecs_t when,
     // performed. The querying must happen when the device is enabled, so we reset after enabling
     // but before disabling the device. See MultiTouchMotionAccumulator::reset for more information.
     if (enable) {
-        for_each_subdevice([](auto& context) { context.enableDevice(); });
+        for_each_subdevice([this, &readerConfig](auto& context) {
+            uint32_t sources = 0;
+            for_each_mapper_in_subdevice(context.getEventHubId(),
+                                         [&](auto& mapper) { sources |= mapper.getSources(); });
+            if (!readerConfig.touchpadsEnabled && isFromSource(sources, AINPUT_SOURCE_TOUCHPAD)) {
+                ALOGI("Disabling subdevice of '%s' with eventHubId %d because touchpads are "
+                      "disabled and it has source %s",
+                      getName().c_str(), context.getEventHubId(),
+                      inputEventSourceToString(sources).c_str());
+                context.disableDevice();
+            } else {
+                context.enableDevice();
+            }
+        });
         out += reset(when);
     } else {
         out += reset(when);

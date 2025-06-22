@@ -3990,6 +3990,13 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
         PhysicalDisplayId displayId, hal::HWDisplayId hwcDisplayId,
         display::DisplayIdentificationInfo&& info, const char* displayString,
         HWComposer::HotplugEvent event) {
+    if (FlagManager::getInstance().stable_edid_ids() &&
+        info.hotplugStatus == display::HotplugStatus::Connected && hasDisplayWithId(displayId)) {
+        ALOGE("Display with HAL ID %" PRIu64 " produced a duplicate display ID %" PRIu64 ".",
+              hwcDisplayId, displayId.value);
+        return std::nullopt;
+    }
+
     auto [displayModes, activeMode] = loadDisplayModes(displayId);
     if (!activeMode) {
         ALOGE("Failed to hotplug %s", displayString);
