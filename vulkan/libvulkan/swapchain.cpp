@@ -1071,7 +1071,18 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
             case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR: {
                 VkSurfaceProtectedCapabilitiesKHR* protected_caps =
                     reinterpret_cast<VkSurfaceProtectedCapabilitiesKHR*>(pNext);
-                protected_caps->supportsProtected = VK_TRUE;
+
+                // Check if the device's gralloc can support protected content
+                AHardwareBuffer_Desc desc = {
+                    .width = 1,
+                    .height = 1,
+                    .layers = 1,
+                    .format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM,
+                    .usage = AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER | AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
+                        AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT
+                };
+
+                protected_caps->supportsProtected = AHardwareBuffer_isSupported(&desc) ? VK_TRUE : VK_FALSE;
             } break;
 
             case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT: {

@@ -13,7 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define LOG_TAG "libbinder.BinderStatsPusher"
+
 #include "BinderStatsPusher.h"
+
 #include <android-base/properties.h>
 #include <android/os/IStatsBootstrapAtomService.h>
 #include <binder/Functional.h>

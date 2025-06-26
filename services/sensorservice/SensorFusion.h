@@ -42,8 +42,8 @@ class SensorFusion : public Singleton<SensorFusion> {
 
     SensorDevice& mSensorDevice;
     Sensor mAcc;
-    std::optional<Sensor> mMag;
-    std::optional<Sensor> mGyro;
+    Sensor mMag;
+    Sensor mGyro;
 
     Fusion mFusions[NUM_FUSION_MODE]; // normal, no_mag, no_gyro
 

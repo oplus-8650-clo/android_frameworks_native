@@ -282,6 +282,7 @@ cc_defaults {
         "-Wunused-const-variable",
         "-Wunused-result",
         "-Wexit-time-destructors",
+        "-Wshadow",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         // Hide symbols by default and set the BUILDING_LIBBINDER macro so that

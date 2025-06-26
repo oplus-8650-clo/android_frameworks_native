@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define LOG_TAG "libbinder.libbinder_rpc_unstable"
 
 #include <binder_rpc_unstable.hpp>
 
