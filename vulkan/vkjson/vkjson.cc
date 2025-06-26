@@ -1053,7 +1053,9 @@ inline bool Iterate(Visitor* visitor,
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonExtHostImageCopy* structs) {
   return visitor->Visit("hostImageCopyFeaturesEXT",
-                        &structs->host_image_copy_features_ext);
+                        &structs->host_image_copy_features_ext) &&
+         visitor->Visit("hostImageCopyPropertiesEXT",
+                        &structs->host_image_copy_properties_ext);
 }
 
 template <typename Visitor>
@@ -3943,6 +3945,23 @@ inline bool Iterate(Visitor* visitor,
   return
 
       visitor->Visit("hostImageCopy", &features->hostImageCopy);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkPhysicalDeviceHostImageCopyProperties* properties) {
+  return
+
+      visitor->Visit("copySrcLayoutCount", &properties->copySrcLayoutCount) &&
+      visitor->VisitArray("pCopySrcLayouts", properties->copySrcLayoutCount,
+                          &properties->pCopySrcLayouts) &&
+      visitor->Visit("copyDstLayoutCount", &properties->copyDstLayoutCount) &&
+      visitor->VisitArray("pCopyDstLayouts", properties->copyDstLayoutCount,
+                          &properties->pCopyDstLayouts) &&
+      visitor->Visit("optimalTilingLayoutUUID",
+                     &properties->optimalTilingLayoutUUID) &&
+      visitor->Visit("identicalMemoryTypeRequirements",
+                     &properties->identicalMemoryTypeRequirements);
 }
 
 template <typename Visitor>
@@ -7340,6 +7359,8 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
                             &device->pipeline_robustness_properties) &&
              visitor->Visit("hostImageCopyFeatures",
                             &device->host_image_copy_features) &&
+             visitor->Visit("hostImageCopyProperties",
+                            &device->host_image_copy_properties) &&
              visitor->Visit("core14", &device->core14);
       FALLTHROUGH_INTENDED;
     case VK_API_VERSION_1_3:

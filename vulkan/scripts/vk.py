@@ -2254,6 +2254,15 @@ class VkPhysicalDeviceHostImageCopyFeatures:
     hostImageCopy: VkBool32
 
 @dataclass
+class VkPhysicalDeviceHostImageCopyProperties:
+    copySrcLayoutCount: uint32_t
+    pCopySrcLayouts: List[VkImageLayout]
+    copyDstLayoutCount: uint32_t
+    pCopyDstLayouts: List[VkImageLayout]
+    optimalTilingLayoutUUID: uint8_t * VK_UUID_SIZE
+    identicalMemoryTypeRequirements: VkBool32
+
+@dataclass
 class VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT:
     primitivesGeneratedQuery: VkBool32
     primitivesGeneratedQueryWithRasterizerDiscard: VkBool32
@@ -3026,6 +3035,7 @@ VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR = VkPhysicalDeviceShaderTer
 VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE = VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT
 VkPhysicalDeviceSynchronization2FeaturesKHR = VkPhysicalDeviceSynchronization2Features
 VkPhysicalDeviceHostImageCopyFeaturesEXT = VkPhysicalDeviceHostImageCopyFeatures
+VkPhysicalDeviceHostImageCopyPropertiesEXT = VkPhysicalDeviceHostImageCopyProperties
 VkPhysicalDevicePipelineProtectedAccessFeaturesEXT = VkPhysicalDevicePipelineProtectedAccessFeatures
 VkPhysicalDeviceShaderIntegerDotProductFeaturesKHR = VkPhysicalDeviceShaderIntegerDotProductFeatures
 VkPhysicalDeviceShaderIntegerDotProductPropertiesKHR = VkPhysicalDeviceShaderIntegerDotProductProperties
@@ -3170,6 +3180,8 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceHdrVividFeaturesHUAWEI,
     VkPhysicalDeviceHostImageCopyFeatures,
     VkPhysicalDeviceHostImageCopyFeaturesEXT,
+    VkPhysicalDeviceHostImageCopyProperties,
+    VkPhysicalDeviceHostImageCopyPropertiesEXT,
     VkPhysicalDeviceHostQueryResetFeatures,
     VkPhysicalDeviceHostQueryResetFeaturesEXT,
     VkPhysicalDeviceIDProperties,
@@ -3528,7 +3540,8 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_EXT_global_priority_query': [   {   'VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES'}],
     'VK_EXT_graphics_pipeline_library': [   {   'VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT'},
                                             {   'VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT'}],
-    'VK_EXT_host_image_copy': [   {   'VkPhysicalDeviceHostImageCopyFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES'}],
+    'VK_EXT_host_image_copy': [   {   'VkPhysicalDeviceHostImageCopyFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES'},
+                                  {   'VkPhysicalDeviceHostImageCopyPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES'}],
     'VK_EXT_host_query_reset': [   {   'VkPhysicalDeviceHostQueryResetFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES'}],
     'VK_EXT_image_2d_view_of_3d': [   {   'VkPhysicalDeviceImage2DViewOf3DFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT'}],
     'VK_EXT_image_compression_control': [   {   'VkPhysicalDeviceImageCompressionControlFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT'}],
@@ -3869,7 +3882,8 @@ VULKAN_VERSIONS_AND_STRUCTS_MAPPING = {   'VK_VERSION_1_0': [],
                           {   'VkPhysicalDevicePipelineProtectedAccessFeatures': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES'},
                           {   'VkPhysicalDevicePipelineRobustnessFeatures': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES'},
                           {   'VkPhysicalDevicePipelineRobustnessProperties': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES'},
-                          {   'VkPhysicalDeviceHostImageCopyFeatures': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES'}]}
+                          {   'VkPhysicalDeviceHostImageCopyFeatures': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES'},
+                          {   'VkPhysicalDeviceHostImageCopyProperties': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES'}]}
 
 
 # --- Extension Independent Structs ---
@@ -3891,6 +3905,7 @@ EXTENSION_INDEPENDENT_STRUCTS = [   'VkPhysicalDevice16BitStorageFeatures',
     'VkPhysicalDeviceFloatControlsProperties',
     'VkPhysicalDeviceGlobalPriorityQueryFeatures',
     'VkPhysicalDeviceHostImageCopyFeatures',
+    'VkPhysicalDeviceHostImageCopyProperties',
     'VkPhysicalDeviceHostQueryResetFeatures',
     'VkPhysicalDeviceIDProperties',
     'VkPhysicalDeviceImageRobustnessFeatures',
@@ -3974,6 +3989,10 @@ LIST_TYPE_FIELD_AND_SIZE_MAPPING = {   'memoryHeaps': 'memoryHeapCount',
     'pCopySrcLayouts': 'copySrcLayoutCount',
     'pLayeredApis': 'layeredApiCount',
     'physicalDevices': 'physicalDeviceCount'}
+
+STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING = {   'VkPhysicalDeviceHostImageCopyProperties': {'pCopyDstLayouts', 'pCopySrcLayouts'},
+    'VkPhysicalDeviceLayeredApiPropertiesListKHR': {'pLayeredApis'},
+    'VkPhysicalDeviceVulkan14Properties': {'pCopyDstLayouts', 'pCopySrcLayouts'}}
 
 # --- STRUCTS USED BY VULKAN_API_1_0 ---
 VULKAN_API_1_0_STRUCTS = [
@@ -4118,6 +4137,8 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceHdrVividFeaturesHUAWEI': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostImageCopyFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostImageCopyFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceHostImageCopyProperties': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceHostImageCopyPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceHostQueryResetFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostQueryResetFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceIDProperties': 'VkPhysicalDeviceProperties2',

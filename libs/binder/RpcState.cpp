@@ -676,6 +676,9 @@ status_t RpcState::transactAddress(const sp<RpcSession::RpcConnection>& connecti
             waitUs = 1;
         }
 
+        // This is restricted to "CONTROL_ONLY" because we should not receive any
+        // nested transactions until the entire transaction is sent and starts
+        // executing.
         return drainCommands(connection, session, CommandType::CONTROL_ONLY);
     };
     if (status_t status = rpcSend(connection, session, "transaction", iovs, countof(iovs),
@@ -899,7 +902,12 @@ status_t RpcState::processCommand(
 
     switch (command.command) {
         case RPC_COMMAND_TRANSACT:
-            if (type != CommandType::ANY) return BAD_TYPE;
+            if (type != CommandType::ANY) {
+                ALOGE("CommandType %d, but got RPC command %d.", static_cast<int>(type),
+                      command.command);
+                (void)session->shutdownAndWait(false);
+                return BAD_TYPE;
+            }
             result = processTransact(connection, session, command, std::move(ancillaryFds));
             break;
         case RPC_COMMAND_DEC_STRONG:

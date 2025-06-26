@@ -634,9 +634,14 @@ struct VkJsonExtHostImageCopy {
     reported = false;
     memset(&host_image_copy_features_ext, 0,
            sizeof(VkPhysicalDeviceHostImageCopyFeaturesEXT));
+    memset(&host_image_copy_properties_ext, 0,
+           sizeof(VkPhysicalDeviceHostImageCopyPropertiesEXT));
   }
   bool reported;
   VkPhysicalDeviceHostImageCopyFeaturesEXT host_image_copy_features_ext;
+  VkPhysicalDeviceHostImageCopyPropertiesEXT host_image_copy_properties_ext;
+  std::vector<VkImageLayout> copy_src_layouts;
+  std::vector<VkImageLayout> copy_dst_layouts;
 };
 
 struct VkJsonExtHostQueryReset {
@@ -1706,6 +1711,7 @@ struct VkJsonKHRMaintenance7 {
   VkPhysicalDeviceMaintenance7FeaturesKHR maintenance7_features_khr;
   VkPhysicalDeviceMaintenance7PropertiesKHR maintenance7_properties_khr;
   VkPhysicalDeviceLayeredApiPropertiesListKHR layered_api_properties_list_khr;
+  std::vector<VkPhysicalDeviceLayeredApiPropertiesKHR> layered_apis;
 };
 
 struct VkJsonKHRMaintenance8 {
@@ -2959,6 +2965,8 @@ struct VkJsonDevice {
            sizeof(VkPhysicalDeviceGlobalPriorityQueryFeatures));
     memset(&host_image_copy_features, 0,
            sizeof(VkPhysicalDeviceHostImageCopyFeatures));
+    memset(&host_image_copy_properties, 0,
+           sizeof(VkPhysicalDeviceHostImageCopyProperties));
     memset(&host_query_reset_features, 0,
            sizeof(VkPhysicalDeviceHostQueryResetFeatures));
     memset(&id_properties, 0, sizeof(VkPhysicalDeviceIDProperties));
@@ -3348,6 +3356,7 @@ struct VkJsonDevice {
   VkPhysicalDeviceFloatControlsProperties float_controls_properties;
   VkPhysicalDeviceGlobalPriorityQueryFeatures global_priority_query_features;
   VkPhysicalDeviceHostImageCopyFeatures host_image_copy_features;
+  VkPhysicalDeviceHostImageCopyProperties host_image_copy_properties;
   VkPhysicalDeviceHostQueryResetFeatures host_query_reset_features;
   VkPhysicalDeviceIDProperties id_properties;
   VkPhysicalDeviceImageRobustnessFeatures image_robustness_features;
@@ -3426,6 +3435,8 @@ struct VkJsonDevice {
   VkPhysicalDeviceProperties properties;
   VkPhysicalDeviceFeatures features;
   VkPhysicalDeviceMemoryProperties memory;
+  std::vector<VkImageLayout> copy_src_layouts;
+  std::vector<VkImageLayout> copy_dst_layouts;
   std::vector<VkQueueFamilyProperties> queues;
   std::vector<VkExtensionProperties> extensions;
   std::vector<VkLayerProperties> layers;

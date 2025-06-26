@@ -82,18 +82,26 @@ interface IPackageManagerNative {
      int getPackageUid(in @utf8InCpp String packageName, in long flags, in int userId);
 
     /**
+     * Checks whether the specified package has the specified permission.
+     *
+     * @param permName The name of the permission you are checking for.
+     * @param packageName The name of the package you are checking against.
+     * @return If the package has the permission, PERMISSION_GRANTED (0) is returned.  If it
+     *         does not have the permission, PERMISSION_DENIED (1) is returned.
+     */
+    int checkPermission(in String permName, in String packageName, in int userId);
+
+    /**
      * Returns the name of the installer (a package) which installed the named
      * package. Preloaded packages return the string "preload". Sideloaded packages
      * return an empty string. Unknown or unknowable are returned as empty strings.
      */
-
     @utf8InCpp String getInstallerForPackage(in String packageName);
 
     /**
      * Returns the version code of the named package.
      * Unknown or unknowable versions are returned as 0.
      */
-
     long getVersionCodeForPackage(in String packageName);
 
     /**

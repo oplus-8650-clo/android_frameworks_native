@@ -312,6 +312,16 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
                             .graphics_pipeline_library_properties_ext;
   }
 
+  if (HasExtension("VK_EXT_host_image_copy", device.extensions)) {
+    device.ext_host_image_copy.reported = true;
+    device.ext_host_image_copy.host_image_copy_properties_ext.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES;
+    device.ext_host_image_copy.host_image_copy_properties_ext.pNext =
+        properties.pNext;
+    properties.pNext =
+        &device.ext_host_image_copy.host_image_copy_properties_ext;
+  }
+
   if (HasExtension("VK_EXT_inline_uniform_block", device.extensions)) {
     device.ext_inline_uniform_block.reported = true;
     device.ext_inline_uniform_block.inline_uniform_block_properties_ext.sType =
@@ -1065,6 +1075,42 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
   }
 
   vkGetPhysicalDeviceProperties2(physical_device, &properties);
+
+  if (device.ext_host_image_copy.host_image_copy_properties_ext
+              .copyDstLayoutCount > 0 ||
+      device.ext_host_image_copy.host_image_copy_properties_ext
+              .copySrcLayoutCount > 0) {
+    if (device.ext_host_image_copy.host_image_copy_properties_ext
+            .copyDstLayoutCount > 0) {
+      device.ext_host_image_copy.copy_dst_layouts.resize(
+          device.ext_host_image_copy.host_image_copy_properties_ext
+              .copyDstLayoutCount);
+      device.ext_host_image_copy.host_image_copy_properties_ext
+          .pCopyDstLayouts = device.ext_host_image_copy.copy_dst_layouts.data();
+    }
+
+    if (device.ext_host_image_copy.host_image_copy_properties_ext
+            .copySrcLayoutCount > 0) {
+      device.ext_host_image_copy.copy_src_layouts.resize(
+          device.ext_host_image_copy.host_image_copy_properties_ext
+              .copySrcLayoutCount);
+      device.ext_host_image_copy.host_image_copy_properties_ext
+          .pCopySrcLayouts = device.ext_host_image_copy.copy_src_layouts.data();
+    }
+
+    vkGetPhysicalDeviceProperties2(physical_device, &properties);
+  }
+
+  if (device.khr_maintenance7.layered_api_properties_list_khr.layeredApiCount >
+      0) {
+    device.khr_maintenance7.layered_apis.resize(
+        device.khr_maintenance7.layered_api_properties_list_khr
+            .layeredApiCount);
+    device.khr_maintenance7.layered_api_properties_list_khr.pLayeredApis =
+        device.khr_maintenance7.layered_apis.data();
+    vkGetPhysicalDeviceProperties2(physical_device, &properties);
+  }
+
   device.properties = properties.properties;
 
   VkPhysicalDeviceFeatures2 features = {
@@ -3877,12 +3923,36 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     device.pipeline_robustness_properties.pNext = properties.pNext;
     properties.pNext = &device.pipeline_robustness_properties;
 
+    device.host_image_copy_properties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES;
+    device.host_image_copy_properties.pNext = properties.pNext;
+    properties.pNext = &device.host_image_copy_properties;
+
     device.core14.properties.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_PROPERTIES;
     device.core14.properties.pNext = properties.pNext;
     properties.pNext = &device.core14.properties;
 
     vkGetPhysicalDeviceProperties2(physical_device, &properties);
+
+    if (device.host_image_copy_properties.copyDstLayoutCount > 0 ||
+        device.host_image_copy_properties.copySrcLayoutCount > 0) {
+      if (device.host_image_copy_properties.copyDstLayoutCount > 0) {
+        device.copy_dst_layouts.resize(
+            device.host_image_copy_properties.copyDstLayoutCount);
+        device.host_image_copy_properties.pCopyDstLayouts =
+            device.copy_dst_layouts.data();
+      }
+
+      if (device.host_image_copy_properties.copySrcLayoutCount > 0) {
+        device.copy_src_layouts.resize(
+            device.host_image_copy_properties.copySrcLayoutCount);
+        device.host_image_copy_properties.pCopySrcLayouts =
+            device.copy_src_layouts.data();
+      }
+
+      vkGetPhysicalDeviceProperties2(physical_device, &properties);
+    }
 
     if (device.core14.properties.copySrcLayoutCount > 0 ||
         device.core14.properties.copyDstLayoutCount > 0) {
