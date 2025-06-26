@@ -95,7 +95,7 @@ static constexpr int kKernelThreads = 17; // anything different than the default
 
 static String16 binderLibTestServiceName = String16("test.binderLib");
 
-enum BinderLibTestTranscationCode {
+enum BinderLibTestTransactionCode {
     BINDER_LIB_TEST_NOP_TRANSACTION = IBinder::FIRST_CALL_TRANSACTION,
     BINDER_LIB_TEST_REGISTER_SERVER,
     BINDER_LIB_TEST_ADD_SERVER,
@@ -486,6 +486,8 @@ class BinderLibTestEvent
         pthread_t m_triggeringThread;
 };
 
+[[clang::no_destroy]] static const StaticString16 kBinderLibTestCallbackDescriptor(
+        u"BinderLibTestCallBack");
 class BinderLibTestCallBack : public BBinder, public BinderLibTestEvent
 {
     public:
@@ -500,6 +502,9 @@ class BinderLibTestCallBack : public BBinder, public BinderLibTestEvent
         }
 
     private:
+        virtual const String16& getInterfaceDescriptor() const override {
+            return kBinderLibTestCallbackDescriptor;
+        }
         virtual status_t onTransact(uint32_t code,
                                     const Parcel& data, Parcel* reply,
                                     uint32_t flags = 0)
@@ -2242,6 +2247,8 @@ TEST_F(BinderLibRpcTest, BinderObserverIntegrationTest) {
 INSTANTIATE_TEST_SUITE_P(BinderLibTest, BinderLibRpcTestP, testing::Bool(),
                          BinderLibRpcTestP::ParamToString);
 
+[[clang::no_destroy]] static const StaticString16 kBinderLibTestServiceDescriptor(
+        u"BinderLibTestService");
 class BinderLibTestService : public BBinder {
 public:
     explicit BinderLibTestService(int32_t id, bool exitOnDestroy = true)
@@ -2266,6 +2273,9 @@ public:
         }
     }
 
+    virtual const String16& getInterfaceDescriptor() const override {
+        return kBinderLibTestServiceDescriptor;
+    }
     virtual status_t onTransact(uint32_t code, const Parcel &data, Parcel *reply,
                                 uint32_t flags = 0) {
         // TODO(b/182914638): also checks getCallingUid() for RPC

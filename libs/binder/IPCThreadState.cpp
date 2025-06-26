@@ -133,7 +133,7 @@ static const char* getReturnString(uint32_t cmd)
     if (idx < sizeof(kReturnStrings) / sizeof(kReturnStrings[0]))
         return kReturnStrings[idx];
     else
-        return "unknown";
+        return "(BR_* unknown)";
 }
 
 static const void* printBinderTransactionData(std::ostream& out, const void* data) {
@@ -1723,8 +1723,9 @@ void IPCThreadState::logExtendedError() {
     }
 #endif
 
-    ALOGE_IF(ee.command != BR_OK, "Binder transaction failure. id: %d, BR_*: %d, error: %d (%s)",
-             ee.id, ee.command, ee.param, strerror(-ee.param));
+    ALOGE_IF(ee.command != BR_OK,
+             "Binder transaction failure. id: %d, cmd: %s (%d), error: %d (%s)", ee.id,
+             getReturnString(ee.command), ee.command, ee.param, strerror(-ee.param));
 }
 
 void IPCThreadState::freeBuffer(const uint8_t* data, size_t /*dataSize*/,
