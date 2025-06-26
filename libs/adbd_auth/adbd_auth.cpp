@@ -151,8 +151,6 @@ void AdbdAuthContext::HandlePacket(std::string_view packet) EXCLUDES(mutex_) {
   }
   if (!handled_packet) {
     LOG(ERROR) << "adbd_auth: unhandled packet: " << packet;
-    std::lock_guard<std::mutex> lock(mutex_);
-    ReplaceFrameworkFd(unique_fd());
   }
 }
 
