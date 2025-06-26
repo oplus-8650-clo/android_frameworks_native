@@ -311,7 +311,22 @@ class VkFormat(Enum):
     VK_FORMAT_PVRTC1_4BPP_SRGB_BLOCK_IMG = 1000054005
     VK_FORMAT_PVRTC2_2BPP_SRGB_BLOCK_IMG = 1000054006
     VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG = 1000054007
+    VK_FORMAT_R8_BOOL_ARM = 1000460000
     VK_FORMAT_R16G16_SFIXED5_NV = 1000464000
+    VK_FORMAT_R10X6_UINT_PACK16_ARM = 1000609000
+    VK_FORMAT_R10X6G10X6_UINT_2PACK16_ARM = 1000609001
+    VK_FORMAT_R10X6G10X6B10X6A10X6_UINT_4PACK16_ARM = 1000609002
+    VK_FORMAT_R12X4_UINT_PACK16_ARM = 1000609003
+    VK_FORMAT_R12X4G12X4_UINT_2PACK16_ARM = 1000609004
+    VK_FORMAT_R12X4G12X4B12X4A12X4_UINT_4PACK16_ARM = 1000609005
+    VK_FORMAT_R14X2_UINT_PACK16_ARM = 1000609006
+    VK_FORMAT_R14X2G14X2_UINT_2PACK16_ARM = 1000609007
+    VK_FORMAT_R14X2G14X2B14X2A14X2_UINT_4PACK16_ARM = 1000609008
+    VK_FORMAT_R14X2_UNORM_PACK16_ARM = 1000609009
+    VK_FORMAT_R14X2G14X2_UNORM_2PACK16_ARM = 1000609010
+    VK_FORMAT_R14X2G14X2B14X2A14X2_UNORM_4PACK16_ARM = 1000609011
+    VK_FORMAT_G14X2_B14X2R14X2_2PLANE_420_UNORM_3PACK16_ARM = 1000609012
+    VK_FORMAT_G14X2_B14X2R14X2_2PLANE_422_UNORM_3PACK16_ARM = 1000609013
 
 class VkRayTracingInvocationReorderModeNV(Enum):
     VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_NV = 0
@@ -383,7 +398,7 @@ class VkDriverId(Enum):
     VK_DRIVER_ID_MESA_NVK = 24
     VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA = 25
     VK_DRIVER_ID_MESA_HONEYKRISP = 26
-    VK_DRIVER_ID_RESERVED_27 = 27
+    VK_DRIVER_ID_VULKAN_SC_EMULATION_ON_VULKAN = 27
 
 class VkShaderFloatControlsIndependence(Enum):
     VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY = 0
@@ -412,6 +427,10 @@ class VkPhysicalDeviceLayeredApiKHR(Enum):
 class VkLayeredDriverUnderlyingApiMSFT(Enum):
     VK_LAYERED_DRIVER_UNDERLYING_API_NONE_MSFT = 0
     VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT = 1
+
+class VkDefaultVertexAttributeValueKHR(Enum):
+    VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ZERO_KHR = 0
+    VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ONE_KHR = 1
 
 
 # --- API Constant values extracted from vk.xml ---
@@ -442,7 +461,9 @@ VK_MAX_GLOBAL_PRIORITY_SIZE = 16
 VK_MAX_SHADER_MODULE_IDENTIFIER_SIZE_EXT = 32
 VK_MAX_PIPELINE_BINARY_KEY_SIZE_KHR = 32
 VK_MAX_VIDEO_AV1_REFERENCES_PER_FRAME_KHR = 7
+VK_MAX_VIDEO_VP9_REFERENCES_PER_FRAME_KHR = 3
 VK_SHADER_INDEX_UNUSED_AMDX = 4294967295
+VK_PARTITIONED_ACCELERATION_STRUCTURE_PARTITION_INDEX_GLOBAL_NV = 4294967295
 
 
 # --- Computed VK_API_VERSION Constants ---
@@ -485,6 +506,7 @@ VkShaderStageFlags = VkFlags
 VkImageUsageFlags = VkFlags
 VkImageCreateFlags = VkFlags
 VkImageViewCreateFlags = VkFlags
+VkPipelineCreateFlags = VkFlags
 VkColorComponentFlags = VkFlags
 VkFenceCreateFlags = VkFlags
 VkSemaphoreCreateFlags = VkFlags
@@ -517,6 +539,7 @@ VkPipelineStageFlags2 = VkFlags64
 VkFormatFeatureFlags2 = VkFlags64
 VkRenderingFlags = VkFlags
 VkMemoryDecompressionMethodFlagsNV = VkFlags64
+VkIndirectCommandsInputModeFlagsEXT = VkFlags
 VkSurfaceTransformFlagsKHR = VkFlags
 VkExternalMemoryHandleTypeFlagsNV = VkFlags
 VkExternalMemoryFeatureFlagsNV = VkFlags
@@ -832,6 +855,21 @@ class VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV:
     minIndirectCommandsBufferOffsetAlignment: uint32_t
 
 @dataclass
+class VkPhysicalDeviceClusterAccelerationStructureFeaturesNV:
+    clusterAccelerationStructure: VkBool32
+
+@dataclass
+class VkPhysicalDeviceClusterAccelerationStructurePropertiesNV:
+    maxVerticesPerCluster: uint32_t
+    maxTrianglesPerCluster: uint32_t
+    clusterScratchByteAlignment: uint32_t
+    clusterByteAlignment: uint32_t
+    clusterTemplateByteAlignment: uint32_t
+    clusterBottomLevelByteAlignment: uint32_t
+    clusterTemplateBoundsByteAlignment: uint32_t
+    maxClusterGeometryIndex: uint32_t
+
+@dataclass
 class VkPhysicalDeviceMultiDrawPropertiesEXT:
     maxMultiDrawCount: uint32_t
 
@@ -919,8 +957,16 @@ class VkPhysicalDevicePresentIdFeaturesKHR:
     presentId: VkBool32
 
 @dataclass
+class VkPhysicalDevicePresentId2FeaturesKHR:
+    presentId2: VkBool32
+
+@dataclass
 class VkPhysicalDevicePresentWaitFeaturesKHR:
     presentWait: VkBool32
+
+@dataclass
+class VkPhysicalDevicePresentWait2FeaturesKHR:
+    presentWait2: VkBool32
 
 @dataclass
 class VkPhysicalDeviceDiscardRectanglePropertiesEXT:
@@ -1062,6 +1108,19 @@ class VkPhysicalDeviceMaintenance7PropertiesKHR:
 class VkPhysicalDeviceLayeredApiPropertiesListKHR:
     layeredApiCount: uint32_t
     pLayeredApis: List[VkPhysicalDeviceLayeredApiPropertiesKHR]
+
+@dataclass
+class VkPhysicalDeviceMaintenance8FeaturesKHR:
+    maintenance8: VkBool32
+
+@dataclass
+class VkPhysicalDeviceMaintenance9FeaturesKHR:
+    maintenance9: VkBool32
+
+@dataclass
+class VkPhysicalDeviceMaintenance9PropertiesKHR:
+    image2DViewOf3DSparse: VkBool32
+    defaultVertexAttributeValue: VkDefaultVertexAttributeValueKHR
 
 @dataclass
 class VkPhysicalDeviceShaderDrawParametersFeatures:
@@ -1314,9 +1373,13 @@ class VkPhysicalDeviceCornerSampledImageFeaturesNV:
     cornerSampledImage: VkBool32
 
 @dataclass
-class VkPhysicalDeviceComputeShaderDerivativesFeaturesNV:
+class VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR:
     computeDerivativeGroupQuads: VkBool32
     computeDerivativeGroupLinear: VkBool32
+
+@dataclass
+class VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR:
+    meshAndTaskShaderDerivatives: VkBool32
 
 @dataclass
 class VkPhysicalDeviceShaderImageFootprintFeaturesNV:
@@ -1487,7 +1550,7 @@ class VkPhysicalDeviceFragmentDensityMap2FeaturesEXT:
     fragmentDensityMapDeferred: VkBool32
 
 @dataclass
-class VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM:
+class VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT:
     fragmentDensityMapOffset: VkBool32
 
 @dataclass
@@ -1504,7 +1567,7 @@ class VkPhysicalDeviceFragmentDensityMap2PropertiesEXT:
     maxDescriptorSetSubsampledSamplers: uint32_t
 
 @dataclass
-class VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM:
+class VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT:
     fragmentDensityOffsetGranularity: VkExtent2D
 
 @dataclass
@@ -2004,6 +2067,14 @@ class VkPhysicalDeviceExtendedDynamicState3PropertiesEXT:
     dynamicPrimitiveTopologyUnrestricted: VkBool32
 
 @dataclass
+class VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV:
+    partitionedAccelerationStructure: VkBool32
+
+@dataclass
+class VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV:
+    maxPartitionCount: uint32_t
+
+@dataclass
 class VkPhysicalDeviceDiagnosticsConfigFeaturesNV:
     diagnosticsConfig: VkBool32
 
@@ -2016,13 +2087,13 @@ class VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR:
     shaderSubgroupUniformControlFlow: VkBool32
 
 @dataclass
-class VkPhysicalDeviceRobustness2FeaturesEXT:
+class VkPhysicalDeviceRobustness2FeaturesKHR:
     robustBufferAccess2: VkBool32
     robustImageAccess2: VkBool32
     nullDescriptor: VkBool32
 
 @dataclass
-class VkPhysicalDeviceRobustness2PropertiesEXT:
+class VkPhysicalDeviceRobustness2PropertiesKHR:
     robustStorageBufferAccessSizeAlignment: VkDeviceSize
     robustUniformBufferAccessSizeAlignment: VkDeviceSize
 
@@ -2126,6 +2197,34 @@ class VkPhysicalDeviceDepthClipControlFeaturesEXT:
     depthClipControl: VkBool32
 
 @dataclass
+class VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT:
+    zeroInitializeDeviceMemory: VkBool32
+
+@dataclass
+class VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT:
+    deviceGeneratedCommands: VkBool32
+    dynamicGeneratedPipelineLayout: VkBool32
+
+@dataclass
+class VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT:
+    maxIndirectPipelineCount: uint32_t
+    maxIndirectShaderObjectCount: uint32_t
+    maxIndirectSequenceCount: uint32_t
+    maxIndirectCommandsTokenCount: uint32_t
+    maxIndirectCommandsTokenOffset: uint32_t
+    maxIndirectCommandsIndirectStride: uint32_t
+    supportedIndirectCommandsInputModes: VkIndirectCommandsInputModeFlagsEXT
+    supportedIndirectCommandsShaderStages: VkShaderStageFlags
+    supportedIndirectCommandsShaderStagesPipelineBinding: VkShaderStageFlags
+    supportedIndirectCommandsShaderStagesShaderBinding: VkShaderStageFlags
+    deviceGeneratedCommandsTransformFeedback: VkBool32
+    deviceGeneratedCommandsMultiDrawIndirectCount: VkBool32
+
+@dataclass
+class VkPhysicalDeviceDepthClampControlFeaturesEXT:
+    depthClampControl: VkBool32
+
+@dataclass
 class VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT:
     vertexInputDynamicState: VkBool32
 
@@ -2144,6 +2243,11 @@ class VkPhysicalDeviceColorWriteEnableFeaturesEXT:
 @dataclass
 class VkPhysicalDeviceSynchronization2Features:
     synchronization2: VkBool32
+
+@dataclass
+class VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR:
+    unifiedImageLayouts: VkBool32
+    unifiedImageLayoutsVideo: VkBool32
 
 @dataclass
 class VkPhysicalDeviceHostImageCopyFeatures:
@@ -2170,6 +2274,22 @@ class VkPhysicalDevicePipelineProtectedAccessFeatures:
 @dataclass
 class VkPhysicalDeviceVideoMaintenance1FeaturesKHR:
     videoMaintenance1: VkBool32
+
+@dataclass
+class VkPhysicalDeviceVideoMaintenance2FeaturesKHR:
+    videoMaintenance2: VkBool32
+
+@dataclass
+class VkPhysicalDeviceVideoDecodeVP9FeaturesKHR:
+    videoDecodeVP9: VkBool32
+
+@dataclass
+class VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR:
+    videoEncodeQuantizationMap: VkBool32
+
+@dataclass
+class VkPhysicalDeviceVideoEncodeAV1FeaturesKHR:
+    videoEncodeAV1: VkBool32
 
 @dataclass
 class VkPhysicalDeviceInheritedViewportScissorFeaturesNV:
@@ -2298,6 +2418,11 @@ class VkPhysicalDeviceRayTracingMotionBlurFeaturesNV:
 @dataclass
 class VkPhysicalDeviceRayTracingValidationFeaturesNV:
     rayTracingValidation: VkBool32
+
+@dataclass
+class VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV:
+    spheres: VkBool32
+    linearSweptSpheres: VkBool32
 
 @dataclass
 class VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT:
@@ -2436,10 +2561,6 @@ class VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT:
     attachmentFeedbackLoopLayout: VkBool32
 
 @dataclass
-class VkPhysicalDeviceDepthClampZeroOneFeaturesEXT:
-    depthClampZeroOne: VkBool32
-
-@dataclass
 class VkPhysicalDeviceAddressBindingReportFeaturesEXT:
     reportAddressBinding: VkBool32
 
@@ -2570,6 +2691,15 @@ class VkPhysicalDeviceAntiLagFeaturesAMD:
     antiLag: VkBool32
 
 @dataclass
+class VkPhysicalDeviceTileMemoryHeapFeaturesQCOM:
+    tileMemoryHeap: VkBool32
+
+@dataclass
+class VkPhysicalDeviceTileMemoryHeapPropertiesQCOM:
+    queueSubmitBoundary: VkBool32
+    tileBufferTransfers: VkBool32
+
+@dataclass
 class VkPhysicalDeviceCubicClampFeaturesQCOM:
     cubicRangeClamp: VkBool32
 
@@ -2613,15 +2743,6 @@ class VkPhysicalDeviceExternalFormatResolvePropertiesANDROID:
     externalFormatResolveChromaOffsetY: VkChromaLocation
 
 @dataclass
-class VkPhysicalDeviceCudaKernelLaunchFeaturesNV:
-    cudaKernelLaunchFeatures: VkBool32
-
-@dataclass
-class VkPhysicalDeviceCudaKernelLaunchPropertiesNV:
-    computeCapabilityMinor: uint32_t
-    computeCapabilityMajor: uint32_t
-
-@dataclass
 class VkPhysicalDeviceSchedulingControlsFeaturesARM:
     schedulingControls: VkBool32
 
@@ -2641,6 +2762,10 @@ class VkPhysicalDeviceRenderPassStripedFeaturesARM:
 class VkPhysicalDeviceRenderPassStripedPropertiesARM:
     renderPassStripeGranularity: VkExtent2D
     maxRenderPassStripes: uint32_t
+
+@dataclass
+class VkPhysicalDevicePipelineOpacityMicromapFeaturesARM:
+    pipelineOpacityMicromap: VkBool32
 
 @dataclass
 class VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR:
@@ -2682,6 +2807,12 @@ class VkPhysicalDeviceMapMemoryPlacedPropertiesEXT:
     minPlacedMemoryMapAlignment: VkDeviceSize
 
 @dataclass
+class VkPhysicalDeviceShaderBfloat16FeaturesKHR:
+    shaderBFloat16Type: VkBool32
+    shaderBFloat16DotProduct: VkBool32
+    shaderBFloat16CooperativeMatrix: VkBool32
+
+@dataclass
 class VkPhysicalDeviceRawAccessChainsFeaturesNV:
     shaderRawAccessChains: VkBool32
 
@@ -2700,6 +2831,123 @@ class VkPhysicalDeviceImageAlignmentControlPropertiesMESA:
 @dataclass
 class VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT:
     shaderReplicatedComposites: VkBool32
+
+@dataclass
+class VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT:
+    presentModeFifoLatestReady: VkBool32
+
+@dataclass
+class VkPhysicalDeviceCooperativeMatrix2FeaturesNV:
+    cooperativeMatrixWorkgroupScope: VkBool32
+    cooperativeMatrixFlexibleDimensions: VkBool32
+    cooperativeMatrixReductions: VkBool32
+    cooperativeMatrixConversions: VkBool32
+    cooperativeMatrixPerElementOperations: VkBool32
+    cooperativeMatrixTensorAddressing: VkBool32
+    cooperativeMatrixBlockLoads: VkBool32
+
+@dataclass
+class VkPhysicalDeviceCooperativeMatrix2PropertiesNV:
+    cooperativeMatrixWorkgroupScopeMaxWorkgroupSize: uint32_t
+    cooperativeMatrixFlexibleDimensionsMaxDimension: uint32_t
+    cooperativeMatrixWorkgroupScopeReservedSharedMemory: uint32_t
+
+@dataclass
+class VkPhysicalDeviceHdrVividFeaturesHUAWEI:
+    hdrVivid: VkBool32
+
+@dataclass
+class VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT:
+    vertexAttributeRobustness: VkBool32
+
+@dataclass
+class VkPhysicalDeviceDepthClampZeroOneFeaturesKHR:
+    depthClampZeroOne: VkBool32
+
+@dataclass
+class VkPhysicalDeviceCooperativeVectorFeaturesNV:
+    cooperativeVector: VkBool32
+    cooperativeVectorTraining: VkBool32
+
+@dataclass
+class VkPhysicalDeviceCooperativeVectorPropertiesNV:
+    cooperativeVectorSupportedStages: VkShaderStageFlags
+    cooperativeVectorTrainingFloat16Accumulation: VkBool32
+    cooperativeVectorTrainingFloat32Accumulation: VkBool32
+    maxCooperativeVectorComponents: uint32_t
+
+@dataclass
+class VkPhysicalDeviceTileShadingFeaturesQCOM:
+    tileShading: VkBool32
+    tileShadingFragmentStage: VkBool32
+    tileShadingColorAttachments: VkBool32
+    tileShadingDepthAttachments: VkBool32
+    tileShadingStencilAttachments: VkBool32
+    tileShadingInputAttachments: VkBool32
+    tileShadingSampledAttachments: VkBool32
+    tileShadingPerTileDraw: VkBool32
+    tileShadingPerTileDispatch: VkBool32
+    tileShadingDispatchTile: VkBool32
+    tileShadingApron: VkBool32
+    tileShadingAnisotropicApron: VkBool32
+    tileShadingAtomicOps: VkBool32
+    tileShadingImageProcessing: VkBool32
+
+@dataclass
+class VkPhysicalDeviceTileShadingPropertiesQCOM:
+    maxApronSize: uint32_t
+    preferNonCoherent: VkBool32
+    tileGranularity: VkExtent2D
+    maxTileShadingRate: VkExtent2D
+
+@dataclass
+class VkPhysicalDeviceExternalComputeQueuePropertiesNV:
+    externalDataSize: uint32_t
+    maxExternalQueues: uint32_t
+
+@dataclass
+class VkPhysicalDeviceFormatPackFeaturesARM:
+    formatPack: VkBool32
+
+@dataclass
+class VkPhysicalDeviceTensorPropertiesARM:
+    maxTensorDimensionCount: uint32_t
+    maxTensorElements: uint64_t
+    maxPerDimensionTensorElements: uint64_t
+    maxTensorStride: int64_t
+    maxTensorSize: uint64_t
+    maxTensorShaderAccessArrayLength: uint32_t
+    maxTensorShaderAccessSize: uint32_t
+    maxDescriptorSetStorageTensors: uint32_t
+    maxPerStageDescriptorSetStorageTensors: uint32_t
+    maxDescriptorSetUpdateAfterBindStorageTensors: uint32_t
+    maxPerStageDescriptorUpdateAfterBindStorageTensors: uint32_t
+    shaderStorageTensorArrayNonUniformIndexingNative: VkBool32
+    shaderTensorSupportedStages: VkShaderStageFlags
+
+@dataclass
+class VkPhysicalDeviceTensorFeaturesARM:
+    tensorNonPacked: VkBool32
+    shaderTensorAccess: VkBool32
+    shaderStorageTensorArrayDynamicIndexing: VkBool32
+    shaderStorageTensorArrayNonUniformIndexing: VkBool32
+    descriptorBindingStorageTensorUpdateAfterBind: VkBool32
+    tensors: VkBool32
+
+@dataclass
+class VkPhysicalDeviceDescriptorBufferTensorPropertiesARM:
+    tensorCaptureReplayDescriptorDataSize: size_t
+    tensorViewCaptureReplayDescriptorDataSize: size_t
+    tensorDescriptorSize: size_t
+
+@dataclass
+class VkPhysicalDeviceDescriptorBufferTensorFeaturesARM:
+    descriptorBufferTensorDescriptors: VkBool32
+
+@dataclass
+class VkPhysicalDeviceShaderFloat8FeaturesEXT:
+    shaderFloat8: VkBool32
+    shaderFloat8CooperativeMatrix: VkBool32
 
 
 # --- Physical Device Struct Aliases ---
@@ -2735,7 +2983,7 @@ VkPhysicalDeviceFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8Featur
 VkPhysicalDeviceFloatControlsPropertiesKHR = VkPhysicalDeviceFloatControlsProperties
 VkPhysicalDeviceHostQueryResetFeaturesEXT = VkPhysicalDeviceHostQueryResetFeatures
 VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR = VkPhysicalDeviceGlobalPriorityQueryFeatures
-VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT = VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR
+VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT = VkPhysicalDeviceGlobalPriorityQueryFeatures
 VkPhysicalDeviceDescriptorIndexingFeaturesEXT = VkPhysicalDeviceDescriptorIndexingFeatures
 VkPhysicalDeviceDescriptorIndexingPropertiesEXT = VkPhysicalDeviceDescriptorIndexingProperties
 VkPhysicalDeviceTimelineSemaphoreFeaturesKHR = VkPhysicalDeviceTimelineSemaphoreFeatures
@@ -2747,7 +2995,10 @@ VkPhysicalDeviceShaderAtomicInt64FeaturesKHR = VkPhysicalDeviceShaderAtomicInt64
 VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR = VkPhysicalDeviceVertexAttributeDivisorFeatures
 VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT = VkPhysicalDeviceVertexAttributeDivisorFeatures
 VkPhysicalDeviceDepthStencilResolvePropertiesKHR = VkPhysicalDeviceDepthStencilResolveProperties
+VkPhysicalDeviceComputeShaderDerivativesFeaturesNV = VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
 VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV = VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR
+VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM = VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT
+VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM = VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT
 VkPhysicalDeviceScalarBlockLayoutFeaturesEXT = VkPhysicalDeviceScalarBlockLayoutFeatures
 VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR = VkPhysicalDeviceUniformBufferStandardLayoutFeatures
 VkPhysicalDeviceBufferDeviceAddressFeaturesKHR = VkPhysicalDeviceBufferDeviceAddressFeatures
@@ -2762,12 +3013,14 @@ VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT = VkPhysicalDeviceTexelBufferA
 VkPhysicalDeviceSubgroupSizeControlFeaturesEXT = VkPhysicalDeviceSubgroupSizeControlFeatures
 VkPhysicalDeviceSubgroupSizeControlPropertiesEXT = VkPhysicalDeviceSubgroupSizeControlProperties
 VkPhysicalDeviceLineRasterizationFeaturesKHR = VkPhysicalDeviceLineRasterizationFeatures
-VkPhysicalDeviceLineRasterizationFeaturesEXT = VkPhysicalDeviceLineRasterizationFeaturesKHR
+VkPhysicalDeviceLineRasterizationFeaturesEXT = VkPhysicalDeviceLineRasterizationFeatures
 VkPhysicalDeviceLineRasterizationPropertiesKHR = VkPhysicalDeviceLineRasterizationProperties
-VkPhysicalDeviceLineRasterizationPropertiesEXT = VkPhysicalDeviceLineRasterizationPropertiesKHR
+VkPhysicalDeviceLineRasterizationPropertiesEXT = VkPhysicalDeviceLineRasterizationProperties
 VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT = VkPhysicalDevicePipelineCreationCacheControlFeatures
 VkPhysicalDeviceToolPropertiesEXT = VkPhysicalDeviceToolProperties
 VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR = VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures
+VkPhysicalDeviceRobustness2FeaturesEXT = VkPhysicalDeviceRobustness2FeaturesKHR
+VkPhysicalDeviceRobustness2PropertiesEXT = VkPhysicalDeviceRobustness2PropertiesKHR
 VkPhysicalDeviceImageRobustnessFeaturesEXT = VkPhysicalDeviceImageRobustnessFeatures
 VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR = VkPhysicalDeviceShaderTerminateInvocationFeatures
 VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE = VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT
@@ -2780,6 +3033,7 @@ VkPhysicalDeviceDynamicRenderingFeaturesKHR = VkPhysicalDeviceDynamicRenderingFe
 VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM = VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT
 VkPhysicalDevicePipelineRobustnessFeaturesEXT = VkPhysicalDevicePipelineRobustnessFeatures
 VkPhysicalDevicePipelineRobustnessPropertiesEXT = VkPhysicalDevicePipelineRobustnessProperties
+VkPhysicalDeviceDepthClampZeroOneFeaturesEXT = VkPhysicalDeviceDepthClampZeroOneFeaturesKHR
 VkPhysicalDeviceShaderSubgroupRotateFeaturesKHR = VkPhysicalDeviceShaderSubgroupRotateFeatures
 VkPhysicalDeviceShaderExpectAssumeFeaturesKHR = VkPhysicalDeviceShaderExpectAssumeFeatures
 VkPhysicalDeviceShaderFloatControls2FeaturesKHR = VkPhysicalDeviceShaderFloatControls2Features
@@ -2812,31 +3066,38 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceBufferDeviceAddressFeatures,
     VkPhysicalDeviceBufferDeviceAddressFeaturesEXT,
     VkPhysicalDeviceBufferDeviceAddressFeaturesKHR,
+    VkPhysicalDeviceClusterAccelerationStructureFeaturesNV,
+    VkPhysicalDeviceClusterAccelerationStructurePropertiesNV,
     VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI,
     VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI,
     VkPhysicalDeviceCoherentMemoryFeaturesAMD,
     VkPhysicalDeviceColorWriteEnableFeaturesEXT,
     VkPhysicalDeviceCommandBufferInheritanceFeaturesNV,
+    VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR,
     VkPhysicalDeviceComputeShaderDerivativesFeaturesNV,
+    VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR,
     VkPhysicalDeviceConditionalRenderingFeaturesEXT,
     VkPhysicalDeviceConservativeRasterizationPropertiesEXT,
+    VkPhysicalDeviceCooperativeMatrix2FeaturesNV,
+    VkPhysicalDeviceCooperativeMatrix2PropertiesNV,
     VkPhysicalDeviceCooperativeMatrixFeaturesKHR,
     VkPhysicalDeviceCooperativeMatrixFeaturesNV,
     VkPhysicalDeviceCooperativeMatrixPropertiesKHR,
     VkPhysicalDeviceCooperativeMatrixPropertiesNV,
+    VkPhysicalDeviceCooperativeVectorFeaturesNV,
+    VkPhysicalDeviceCooperativeVectorPropertiesNV,
     VkPhysicalDeviceCopyMemoryIndirectFeaturesNV,
     VkPhysicalDeviceCopyMemoryIndirectPropertiesNV,
     VkPhysicalDeviceCornerSampledImageFeaturesNV,
     VkPhysicalDeviceCoverageReductionModeFeaturesNV,
     VkPhysicalDeviceCubicClampFeaturesQCOM,
     VkPhysicalDeviceCubicWeightsFeaturesQCOM,
-    VkPhysicalDeviceCudaKernelLaunchFeaturesNV,
-    VkPhysicalDeviceCudaKernelLaunchPropertiesNV,
     VkPhysicalDeviceCustomBorderColorFeaturesEXT,
     VkPhysicalDeviceCustomBorderColorPropertiesEXT,
     VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV,
     VkPhysicalDeviceDepthBiasControlFeaturesEXT,
-    VkPhysicalDeviceDepthClampZeroOneFeaturesEXT,
+    VkPhysicalDeviceDepthClampControlFeaturesEXT,
+    VkPhysicalDeviceDepthClampZeroOneFeaturesKHR,
     VkPhysicalDeviceDepthClipControlFeaturesEXT,
     VkPhysicalDeviceDepthClipEnableFeaturesEXT,
     VkPhysicalDeviceDepthStencilResolveProperties,
@@ -2844,6 +3105,8 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT,
     VkPhysicalDeviceDescriptorBufferFeaturesEXT,
     VkPhysicalDeviceDescriptorBufferPropertiesEXT,
+    VkPhysicalDeviceDescriptorBufferTensorFeaturesARM,
+    VkPhysicalDeviceDescriptorBufferTensorPropertiesARM,
     VkPhysicalDeviceDescriptorIndexingFeatures,
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT,
     VkPhysicalDeviceDescriptorIndexingProperties,
@@ -2851,7 +3114,9 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV,
     VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE,
     VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV,
+    VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT,
     VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV,
+    VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT,
     VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV,
     VkPhysicalDeviceDeviceMemoryReportFeaturesEXT,
     VkPhysicalDeviceDiagnosticsConfigFeaturesNV,
@@ -2871,6 +3136,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT,
     VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV,
     VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV,
+    VkPhysicalDeviceExternalComputeQueuePropertiesNV,
     VkPhysicalDeviceExternalFormatResolveFeaturesANDROID,
     VkPhysicalDeviceExternalFormatResolvePropertiesANDROID,
     VkPhysicalDeviceExternalMemoryHostPropertiesEXT,
@@ -2879,10 +3145,13 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceFloat16Int8FeaturesKHR,
     VkPhysicalDeviceFloatControlsProperties,
     VkPhysicalDeviceFloatControlsPropertiesKHR,
+    VkPhysicalDeviceFormatPackFeaturesARM,
     VkPhysicalDeviceFragmentDensityMap2FeaturesEXT,
     VkPhysicalDeviceFragmentDensityMap2PropertiesEXT,
     VkPhysicalDeviceFragmentDensityMapFeaturesEXT,
+    VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT,
     VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM,
+    VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT,
     VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM,
     VkPhysicalDeviceFragmentDensityMapPropertiesEXT,
     VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR,
@@ -2898,6 +3167,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR,
     VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT,
     VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT,
+    VkPhysicalDeviceHdrVividFeaturesHUAWEI,
     VkPhysicalDeviceHostImageCopyFeatures,
     VkPhysicalDeviceHostImageCopyFeaturesEXT,
     VkPhysicalDeviceHostQueryResetFeatures,
@@ -2956,6 +3226,9 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceMaintenance6PropertiesKHR,
     VkPhysicalDeviceMaintenance7FeaturesKHR,
     VkPhysicalDeviceMaintenance7PropertiesKHR,
+    VkPhysicalDeviceMaintenance8FeaturesKHR,
+    VkPhysicalDeviceMaintenance9FeaturesKHR,
+    VkPhysicalDeviceMaintenance9PropertiesKHR,
     VkPhysicalDeviceMapMemoryPlacedFeaturesEXT,
     VkPhysicalDeviceMapMemoryPlacedPropertiesEXT,
     VkPhysicalDeviceMemoryDecompressionFeaturesNV,
@@ -2986,6 +3259,8 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceOpticalFlowPropertiesNV,
     VkPhysicalDevicePCIBusInfoPropertiesEXT,
     VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT,
+    VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV,
+    VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV,
     VkPhysicalDevicePerStageDescriptorSetFeaturesNV,
     VkPhysicalDevicePerformanceQueryFeaturesKHR,
     VkPhysicalDevicePerformanceQueryPropertiesKHR,
@@ -2995,6 +3270,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT,
     VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR,
     VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT,
+    VkPhysicalDevicePipelineOpacityMicromapFeaturesARM,
     VkPhysicalDevicePipelinePropertiesFeaturesEXT,
     VkPhysicalDevicePipelineProtectedAccessFeatures,
     VkPhysicalDevicePipelineProtectedAccessFeaturesEXT,
@@ -3005,7 +3281,10 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDevicePointClippingProperties,
     VkPhysicalDevicePointClippingPropertiesKHR,
     VkPhysicalDevicePresentBarrierFeaturesNV,
+    VkPhysicalDevicePresentId2FeaturesKHR,
     VkPhysicalDevicePresentIdFeaturesKHR,
+    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT,
+    VkPhysicalDevicePresentWait2FeaturesKHR,
     VkPhysicalDevicePresentWaitFeaturesKHR,
     VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT,
     VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT,
@@ -3024,6 +3303,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceRayQueryFeaturesKHR,
     VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV,
     VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV,
+    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV,
     VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR,
     VkPhysicalDeviceRayTracingMotionBlurFeaturesNV,
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR,
@@ -3036,7 +3316,9 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceRenderPassStripedPropertiesARM,
     VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV,
     VkPhysicalDeviceRobustness2FeaturesEXT,
+    VkPhysicalDeviceRobustness2FeaturesKHR,
     VkPhysicalDeviceRobustness2PropertiesEXT,
+    VkPhysicalDeviceRobustness2PropertiesKHR,
     VkPhysicalDeviceSampleLocationsPropertiesEXT,
     VkPhysicalDeviceSamplerFilterMinmaxProperties,
     VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT,
@@ -3053,6 +3335,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceShaderAtomicFloatFeaturesEXT,
     VkPhysicalDeviceShaderAtomicInt64Features,
     VkPhysicalDeviceShaderAtomicInt64FeaturesKHR,
+    VkPhysicalDeviceShaderBfloat16FeaturesKHR,
     VkPhysicalDeviceShaderClockFeaturesKHR,
     VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM,
     VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM,
@@ -3068,6 +3351,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceShaderExpectAssumeFeaturesKHR,
     VkPhysicalDeviceShaderFloat16Int8Features,
     VkPhysicalDeviceShaderFloat16Int8FeaturesKHR,
+    VkPhysicalDeviceShaderFloat8FeaturesEXT,
     VkPhysicalDeviceShaderFloatControls2Features,
     VkPhysicalDeviceShaderFloatControls2FeaturesKHR,
     VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT,
@@ -3109,18 +3393,25 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT,
     VkPhysicalDeviceSynchronization2Features,
     VkPhysicalDeviceSynchronization2FeaturesKHR,
+    VkPhysicalDeviceTensorFeaturesARM,
+    VkPhysicalDeviceTensorPropertiesARM,
     VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT,
     VkPhysicalDeviceTexelBufferAlignmentProperties,
     VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT,
     VkPhysicalDeviceTextureCompressionASTCHDRFeatures,
     VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT,
+    VkPhysicalDeviceTileMemoryHeapFeaturesQCOM,
+    VkPhysicalDeviceTileMemoryHeapPropertiesQCOM,
     VkPhysicalDeviceTilePropertiesFeaturesQCOM,
+    VkPhysicalDeviceTileShadingFeaturesQCOM,
+    VkPhysicalDeviceTileShadingPropertiesQCOM,
     VkPhysicalDeviceTimelineSemaphoreFeatures,
     VkPhysicalDeviceTimelineSemaphoreFeaturesKHR,
     VkPhysicalDeviceTimelineSemaphoreProperties,
     VkPhysicalDeviceTimelineSemaphorePropertiesKHR,
     VkPhysicalDeviceTransformFeedbackFeaturesEXT,
     VkPhysicalDeviceTransformFeedbackPropertiesEXT,
+    VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR,
     VkPhysicalDeviceUniformBufferStandardLayoutFeatures,
     VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR,
     VkPhysicalDeviceVariablePointerFeatures,
@@ -3133,8 +3424,13 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceVertexAttributeDivisorProperties,
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT,
     VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR,
+    VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT,
     VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT,
+    VkPhysicalDeviceVideoDecodeVP9FeaturesKHR,
+    VkPhysicalDeviceVideoEncodeAV1FeaturesKHR,
+    VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR,
     VkPhysicalDeviceVideoMaintenance1FeaturesKHR,
+    VkPhysicalDeviceVideoMaintenance2FeaturesKHR,
     VkPhysicalDeviceVulkan11Features,
     VkPhysicalDeviceVulkan11Properties,
     VkPhysicalDeviceVulkan12Features,
@@ -3149,6 +3445,7 @@ ALL_STRUCTS_EXTENDING_FEATURES_OR_PROPERTIES = [
     VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT,
     VkPhysicalDeviceYcbcrDegammaFeaturesQCOM,
     VkPhysicalDeviceYcbcrImageArraysFeaturesEXT,
+    VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT,
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures,
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR,
 ]
@@ -3171,6 +3468,8 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_AMD_shader_early_and_late_fragment_tests': [   {   'VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD'}],
     'VK_ANDROID_external_format_resolve': [   {   'VkPhysicalDeviceExternalFormatResolveFeaturesANDROID': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FORMAT_RESOLVE_FEATURES_ANDROID'},
                                               {   'VkPhysicalDeviceExternalFormatResolvePropertiesANDROID': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FORMAT_RESOLVE_PROPERTIES_ANDROID'}],
+    'VK_ARM_format_pack': [   {   'VkPhysicalDeviceFormatPackFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FORMAT_PACK_FEATURES_ARM'}],
+    'VK_ARM_pipeline_opacity_micromap': [   {   'VkPhysicalDevicePipelineOpacityMicromapFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM'}],
     'VK_ARM_rasterization_order_attachment_access': [   {   'VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT'}],
     'VK_ARM_render_pass_striped': [   {   'VkPhysicalDeviceRenderPassStripedFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM'},
                                       {   'VkPhysicalDeviceRenderPassStripedPropertiesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM'}],
@@ -3179,6 +3478,10 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_ARM_shader_core_builtins': [   {   'VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM'},
                                        {   'VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM'}],
     'VK_ARM_shader_core_properties': [   {   'VkPhysicalDeviceShaderCorePropertiesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM'}],
+    'VK_ARM_tensors': [   {   'VkPhysicalDeviceTensorPropertiesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TENSOR_PROPERTIES_ARM'},
+                          {   'VkPhysicalDeviceTensorFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TENSOR_FEATURES_ARM'},
+                          {   'VkPhysicalDeviceDescriptorBufferTensorFeaturesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_TENSOR_FEATURES_ARM'},
+                          {   'VkPhysicalDeviceDescriptorBufferTensorPropertiesARM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_TENSOR_PROPERTIES_ARM'}],
     'VK_EXT_4444_formats': [   {   'VkPhysicalDevice4444FormatsFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT'}],
     'VK_EXT_astc_decode_mode': [   {   'VkPhysicalDeviceASTCDecodeFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT'}],
     'VK_EXT_attachment_feedback_loop_dynamic_state': [   {   'VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT'}],
@@ -3194,7 +3497,7 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_EXT_custom_border_color': [   {   'VkPhysicalDeviceCustomBorderColorPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT'},
                                       {   'VkPhysicalDeviceCustomBorderColorFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT'}],
     'VK_EXT_depth_bias_control': [   {   'VkPhysicalDeviceDepthBiasControlFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT'}],
-    'VK_EXT_depth_clamp_zero_one': [   {   'VkPhysicalDeviceDepthClampZeroOneFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT'}],
+    'VK_EXT_depth_clamp_control': [   {   'VkPhysicalDeviceDepthClampControlFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT'}],
     'VK_EXT_depth_clip_control': [   {   'VkPhysicalDeviceDepthClipControlFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT'}],
     'VK_EXT_depth_clip_enable': [   {   'VkPhysicalDeviceDepthClipEnableFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT'}],
     'VK_EXT_descriptor_buffer': [   {   'VkPhysicalDeviceDescriptorBufferPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT'},
@@ -3204,6 +3507,8 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                       {   'VkPhysicalDeviceDescriptorIndexingPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES'}],
     'VK_EXT_device_address_binding_report': [   {   'VkPhysicalDeviceAddressBindingReportFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT'}],
     'VK_EXT_device_fault': [   {   'VkPhysicalDeviceFaultFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT'}],
+    'VK_EXT_device_generated_commands': [   {   'VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT'},
+                                            {   'VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT'}],
     'VK_EXT_device_memory_report': [   {   'VkPhysicalDeviceDeviceMemoryReportFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT'}],
     'VK_EXT_discard_rectangles': [   {   'VkPhysicalDeviceDiscardRectanglePropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT'}],
     'VK_EXT_dynamic_rendering_unused_attachments': [   {   'VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT'}],
@@ -3216,6 +3521,8 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                        {   'VkPhysicalDeviceFragmentDensityMapPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT'}],
     'VK_EXT_fragment_density_map2': [   {   'VkPhysicalDeviceFragmentDensityMap2FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT'},
                                         {   'VkPhysicalDeviceFragmentDensityMap2PropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT'}],
+    'VK_EXT_fragment_density_map_offset': [   {   'VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_EXT'},
+                                              {   'VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_EXT'}],
     'VK_EXT_fragment_shader_interlock': [   {   'VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT'}],
     'VK_EXT_frame_boundary': [   {   'VkPhysicalDeviceFrameBoundaryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT'}],
     'VK_EXT_global_priority_query': [   {   'VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES'}],
@@ -3260,6 +3567,7 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_EXT_pipeline_protected_access': [   {   'VkPhysicalDevicePipelineProtectedAccessFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES'}],
     'VK_EXT_pipeline_robustness': [   {   'VkPhysicalDevicePipelineRobustnessFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES'},
                                       {   'VkPhysicalDevicePipelineRobustnessPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES'}],
+    'VK_EXT_present_mode_fifo_latest_ready': [   {   'VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT'}],
     'VK_EXT_primitive_topology_list_restart': [   {   'VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT'}],
     'VK_EXT_primitives_generated_query': [   {   'VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT'}],
     'VK_EXT_private_data': [   {   'VkPhysicalDevicePrivateDataFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES'}],
@@ -3267,14 +3575,15 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                    {   'VkPhysicalDeviceProvokingVertexPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT'}],
     'VK_EXT_rasterization_order_attachment_access': [   {   'VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT'}],
     'VK_EXT_rgba10x6_formats': [   {   'VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT'}],
-    'VK_EXT_robustness2': [   {   'VkPhysicalDeviceRobustness2FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT'},
-                              {   'VkPhysicalDeviceRobustness2PropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT'}],
+    'VK_EXT_robustness2': [   {   'VkPhysicalDeviceRobustness2FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_KHR'},
+                              {   'VkPhysicalDeviceRobustness2PropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_KHR'}],
     'VK_EXT_sample_locations': [   {   'VkPhysicalDeviceSampleLocationsPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT'}],
     'VK_EXT_sampler_filter_minmax': [   {   'VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES'}],
     'VK_EXT_scalar_block_layout': [   {   'VkPhysicalDeviceScalarBlockLayoutFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES'}],
     'VK_EXT_shader_atomic_float': [   {   'VkPhysicalDeviceShaderAtomicFloatFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT'}],
     'VK_EXT_shader_atomic_float2': [   {   'VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT'}],
     'VK_EXT_shader_demote_to_helper_invocation': [   {   'VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES'}],
+    'VK_EXT_shader_float8': [   {   'VkPhysicalDeviceShaderFloat8FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT8_FEATURES_EXT'}],
     'VK_EXT_shader_image_atomic_int64': [   {   'VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT'}],
     'VK_EXT_shader_module_identifier': [   {   'VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT'},
                                            {   'VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT'}],
@@ -3294,11 +3603,14 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                      {   'VkPhysicalDeviceTransformFeedbackPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT'}],
     'VK_EXT_vertex_attribute_divisor': [   {   'VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT'},
                                            {   'VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES'}],
+    'VK_EXT_vertex_attribute_robustness': [   {   'VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT'}],
     'VK_EXT_vertex_input_dynamic_state': [   {   'VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT'}],
     'VK_EXT_ycbcr_2plane_444_formats': [   {   'VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT'}],
     'VK_EXT_ycbcr_image_arrays': [   {   'VkPhysicalDeviceYcbcrImageArraysFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT'}],
+    'VK_EXT_zero_initialize_device_memory': [   {   'VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_DEVICE_MEMORY_FEATURES_EXT'}],
     'VK_HUAWEI_cluster_culling_shader': [   {   'VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI'},
                                             {   'VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI'}],
+    'VK_HUAWEI_hdr_vivid': [   {   'VkPhysicalDeviceHdrVividFeaturesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI'}],
     'VK_HUAWEI_invocation_mask': [   {   'VkPhysicalDeviceInvocationMaskFeaturesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI'}],
     'VK_HUAWEI_subpass_shading': [   {   'VkPhysicalDeviceSubpassShadingFeaturesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI'},
                                      {   'VkPhysicalDeviceSubpassShadingPropertiesHUAWEI': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI'}],
@@ -3309,8 +3621,11 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_KHR_acceleration_structure': [   {   'VkPhysicalDeviceAccelerationStructureFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR'},
                                          {   'VkPhysicalDeviceAccelerationStructurePropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR'}],
     'VK_KHR_buffer_device_address': [   {   'VkPhysicalDeviceBufferDeviceAddressFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES'}],
+    'VK_KHR_compute_shader_derivatives': [   {   'VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR'},
+                                             {   'VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR'}],
     'VK_KHR_cooperative_matrix': [   {   'VkPhysicalDeviceCooperativeMatrixFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR'},
                                      {   'VkPhysicalDeviceCooperativeMatrixPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR'}],
+    'VK_KHR_depth_clamp_zero_one': [   {   'VkPhysicalDeviceDepthClampZeroOneFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR'}],
     'VK_KHR_depth_stencil_resolve': [   {   'VkPhysicalDeviceDepthStencilResolvePropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES'}],
     'VK_KHR_driver_properties': [   {   'VkPhysicalDeviceDriverPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES'}],
     'VK_KHR_dynamic_rendering': [   {   'VkPhysicalDeviceDynamicRenderingFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES'}],
@@ -3336,6 +3651,9 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_KHR_maintenance7': [   {   'VkPhysicalDeviceMaintenance7FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR'},
                                {   'VkPhysicalDeviceMaintenance7PropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR'},
                                {   'VkPhysicalDeviceLayeredApiPropertiesListKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR'}],
+    'VK_KHR_maintenance8': [   {   'VkPhysicalDeviceMaintenance8FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR'}],
+    'VK_KHR_maintenance9': [   {   'VkPhysicalDeviceMaintenance9FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR'},
+                               {   'VkPhysicalDeviceMaintenance9PropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_PROPERTIES_KHR'}],
     'VK_KHR_multiview': [   {   'VkPhysicalDeviceMultiviewFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES'},
                             {   'VkPhysicalDeviceMultiviewPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES'}],
     'VK_KHR_performance_query': [   {   'VkPhysicalDevicePerformanceQueryFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR'},
@@ -3344,16 +3662,21 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                   {   'VkPhysicalDevicePipelineBinaryPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR'}],
     'VK_KHR_pipeline_executable_properties': [   {   'VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR'}],
     'VK_KHR_present_id': [   {   'VkPhysicalDevicePresentIdFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR'}],
+    'VK_KHR_present_id2': [   {   'VkPhysicalDevicePresentId2FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR'}],
     'VK_KHR_present_wait': [   {   'VkPhysicalDevicePresentWaitFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR'}],
+    'VK_KHR_present_wait2': [   {   'VkPhysicalDevicePresentWait2FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR'}],
     'VK_KHR_push_descriptor': [   {   'VkPhysicalDevicePushDescriptorPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES'}],
     'VK_KHR_ray_query': [   {   'VkPhysicalDeviceRayQueryFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR'}],
     'VK_KHR_ray_tracing_maintenance1': [   {   'VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR'}],
     'VK_KHR_ray_tracing_pipeline': [   {   'VkPhysicalDeviceRayTracingPipelineFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR'},
                                        {   'VkPhysicalDeviceRayTracingPipelinePropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR'}],
     'VK_KHR_ray_tracing_position_fetch': [   {   'VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR'}],
+    'VK_KHR_robustness2': [   {   'VkPhysicalDeviceRobustness2FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_KHR'},
+                              {   'VkPhysicalDeviceRobustness2PropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_KHR'}],
     'VK_KHR_sampler_ycbcr_conversion': [   {   'VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES'}],
     'VK_KHR_separate_depth_stencil_layouts': [   {   'VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES'}],
     'VK_KHR_shader_atomic_int64': [   {   'VkPhysicalDeviceShaderAtomicInt64FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES'}],
+    'VK_KHR_shader_bfloat16': [   {   'VkPhysicalDeviceShaderBfloat16FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_BFLOAT16_FEATURES_KHR'}],
     'VK_KHR_shader_clock': [   {   'VkPhysicalDeviceShaderClockFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR'}],
     'VK_KHR_shader_expect_assume': [   {   'VkPhysicalDeviceShaderExpectAssumeFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES'}],
     'VK_KHR_shader_float16_int8': [   {   'VkPhysicalDeviceShaderFloat16Int8FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES'},
@@ -3372,12 +3695,17 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_KHR_synchronization2': [   {   'VkPhysicalDeviceSynchronization2FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES'}],
     'VK_KHR_timeline_semaphore': [   {   'VkPhysicalDeviceTimelineSemaphoreFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES'},
                                      {   'VkPhysicalDeviceTimelineSemaphorePropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES'}],
+    'VK_KHR_unified_image_layouts': [   {   'VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR'}],
     'VK_KHR_uniform_buffer_standard_layout': [   {   'VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES'}],
     'VK_KHR_variable_pointers': [   {   'VkPhysicalDeviceVariablePointerFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES'},
                                     {   'VkPhysicalDeviceVariablePointersFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES'}],
     'VK_KHR_vertex_attribute_divisor': [   {   'VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES'},
                                            {   'VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES'}],
+    'VK_KHR_video_decode_vp9': [   {   'VkPhysicalDeviceVideoDecodeVP9FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_DECODE_VP9_FEATURES_KHR'}],
+    'VK_KHR_video_encode_av1': [   {   'VkPhysicalDeviceVideoEncodeAV1FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_AV1_FEATURES_KHR'}],
+    'VK_KHR_video_encode_quantization_map': [   {   'VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUANTIZATION_MAP_FEATURES_KHR'}],
     'VK_KHR_video_maintenance1': [   {   'VkPhysicalDeviceVideoMaintenance1FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR'}],
+    'VK_KHR_video_maintenance2': [   {   'VkPhysicalDeviceVideoMaintenance2FeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR'}],
     'VK_KHR_vulkan_memory_model': [   {   'VkPhysicalDeviceVulkanMemoryModelFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES'}],
     'VK_KHR_workgroup_memory_explicit_layout': [   {   'VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR'}],
     'VK_KHR_zero_initialize_workgroup_memory': [   {   'VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES'}],
@@ -3385,16 +3713,20 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                            {   'VkPhysicalDeviceImageAlignmentControlPropertiesMESA': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA'}],
     'VK_MSFT_layered_driver': [   {   'VkPhysicalDeviceLayeredDriverPropertiesMSFT': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT'}],
     'VK_NVX_multiview_per_view_attributes': [   {   'VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX'}],
+    'VK_NV_cluster_acceleration_structure': [   {   'VkPhysicalDeviceClusterAccelerationStructureFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV'},
+                                                {   'VkPhysicalDeviceClusterAccelerationStructurePropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_PROPERTIES_NV'}],
     'VK_NV_command_buffer_inheritance': [   {   'VkPhysicalDeviceCommandBufferInheritanceFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV'}],
-    'VK_NV_compute_shader_derivatives': [   {   'VkPhysicalDeviceComputeShaderDerivativesFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV'}],
+    'VK_NV_compute_shader_derivatives': [   {   'VkPhysicalDeviceComputeShaderDerivativesFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR'}],
     'VK_NV_cooperative_matrix': [   {   'VkPhysicalDeviceCooperativeMatrixFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV'},
                                     {   'VkPhysicalDeviceCooperativeMatrixPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV'}],
+    'VK_NV_cooperative_matrix2': [   {   'VkPhysicalDeviceCooperativeMatrix2FeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV'},
+                                     {   'VkPhysicalDeviceCooperativeMatrix2PropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_PROPERTIES_NV'}],
+    'VK_NV_cooperative_vector': [   {   'VkPhysicalDeviceCooperativeVectorPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_PROPERTIES_NV'},
+                                    {   'VkPhysicalDeviceCooperativeVectorFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV'}],
     'VK_NV_copy_memory_indirect': [   {   'VkPhysicalDeviceCopyMemoryIndirectFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV'},
                                       {   'VkPhysicalDeviceCopyMemoryIndirectPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV'}],
     'VK_NV_corner_sampled_image': [   {   'VkPhysicalDeviceCornerSampledImageFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV'}],
     'VK_NV_coverage_reduction_mode': [   {   'VkPhysicalDeviceCoverageReductionModeFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV'}],
-    'VK_NV_cuda_kernel_launch': [   {   'VkPhysicalDeviceCudaKernelLaunchFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV'},
-                                    {   'VkPhysicalDeviceCudaKernelLaunchPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV'}],
     'VK_NV_dedicated_allocation_image_aliasing': [   {   'VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV'}],
     'VK_NV_descriptor_pool_overallocation': [   {   'VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV'}],
     'VK_NV_device_diagnostics_config': [   {   'VkPhysicalDeviceDiagnosticsConfigFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV'}],
@@ -3403,6 +3735,7 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
     'VK_NV_device_generated_commands_compute': [   {   'VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV'}],
     'VK_NV_extended_sparse_address_space': [   {   'VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV'},
                                                {   'VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV'}],
+    'VK_NV_external_compute_queue': [   {   'VkPhysicalDeviceExternalComputeQueuePropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_COMPUTE_QUEUE_PROPERTIES_NV'}],
     'VK_NV_external_memory_rdma': [   {   'VkPhysicalDeviceExternalMemoryRDMAFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV'}],
     'VK_NV_fragment_shading_rate_enums': [   {   'VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV'},
                                              {   'VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV'}],
@@ -3414,12 +3747,15 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                              {   'VkPhysicalDeviceMeshShaderPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV'}],
     'VK_NV_optical_flow': [   {   'VkPhysicalDeviceOpticalFlowFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV'},
                               {   'VkPhysicalDeviceOpticalFlowPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV'}],
+    'VK_NV_partitioned_acceleration_structure': [   {   'VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV'},
+                                                    {   'VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_PROPERTIES_NV'}],
     'VK_NV_per_stage_descriptor_set': [   {   'VkPhysicalDevicePerStageDescriptorSetFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV'}],
     'VK_NV_present_barrier': [   {   'VkPhysicalDevicePresentBarrierFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV'}],
     'VK_NV_raw_access_chains': [   {   'VkPhysicalDeviceRawAccessChainsFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV'}],
     'VK_NV_ray_tracing': [   {   'VkPhysicalDeviceRayTracingPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV'}],
     'VK_NV_ray_tracing_invocation_reorder': [   {   'VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV'},
                                                 {   'VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV'}],
+    'VK_NV_ray_tracing_linear_swept_spheres': [   {   'VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV'}],
     'VK_NV_ray_tracing_motion_blur': [   {   'VkPhysicalDeviceRayTracingMotionBlurFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV'}],
     'VK_NV_ray_tracing_validation': [   {   'VkPhysicalDeviceRayTracingValidationFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV'}],
     'VK_NV_representative_fragment_test': [   {   'VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV'}],
@@ -3432,15 +3768,19 @@ VULKAN_EXTENSIONS_AND_STRUCTS_MAPPING = {"extensions":
                                     {   'VkPhysicalDeviceShadingRateImagePropertiesNV': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV'}],
     'VK_QCOM_filter_cubic_clamp': [   {   'VkPhysicalDeviceCubicClampFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM'}],
     'VK_QCOM_filter_cubic_weights': [   {   'VkPhysicalDeviceCubicWeightsFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM'}],
-    'VK_QCOM_fragment_density_map_offset': [   {   'VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM'},
-                                               {   'VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM'}],
+    'VK_QCOM_fragment_density_map_offset': [   {   'VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_EXT'},
+                                               {   'VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_EXT'}],
     'VK_QCOM_image_processing': [   {   'VkPhysicalDeviceImageProcessingFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM'},
                                     {   'VkPhysicalDeviceImageProcessingPropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM'}],
     'VK_QCOM_image_processing2': [   {   'VkPhysicalDeviceImageProcessing2FeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM'},
                                      {   'VkPhysicalDeviceImageProcessing2PropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM'}],
     'VK_QCOM_multiview_per_view_render_areas': [   {   'VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM'}],
     'VK_QCOM_multiview_per_view_viewports': [   {   'VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM'}],
+    'VK_QCOM_tile_memory_heap': [   {   'VkPhysicalDeviceTileMemoryHeapFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_MEMORY_HEAP_FEATURES_QCOM'},
+                                    {   'VkPhysicalDeviceTileMemoryHeapPropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_MEMORY_HEAP_PROPERTIES_QCOM'}],
     'VK_QCOM_tile_properties': [   {   'VkPhysicalDeviceTilePropertiesFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM'}],
+    'VK_QCOM_tile_shading': [   {   'VkPhysicalDeviceTileShadingFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_FEATURES_QCOM'},
+                                {   'VkPhysicalDeviceTileShadingPropertiesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_PROPERTIES_QCOM'}],
     'VK_QCOM_ycbcr_degamma': [   {   'VkPhysicalDeviceYcbcrDegammaFeaturesQCOM': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM'}],
     'VK_SEC_amigo_profiling': [   {   'VkPhysicalDeviceAmigoProfilingFeaturesSEC': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC'}],
     'VK_VALVE_descriptor_set_host_mapping': [   {   'VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE': 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE'}],
@@ -3672,31 +4012,39 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceBufferDeviceAddressFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceBufferDeviceAddressFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceBufferDeviceAddressFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceClusterAccelerationStructureFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceClusterAccelerationStructurePropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCoherentMemoryFeaturesAMD': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceColorWriteEnableFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCommandBufferInheritanceFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceComputeShaderDerivativesFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceConditionalRenderingFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceConservativeRasterizationPropertiesEXT': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceCooperativeMatrix2FeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceCooperativeMatrix2PropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCooperativeMatrixFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCooperativeMatrixFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCooperativeMatrixPropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCooperativeMatrixPropertiesNV': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceCooperativeVectorFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceCooperativeVectorPropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCopyMemoryIndirectFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCopyMemoryIndirectPropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCornerSampledImageFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCoverageReductionModeFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCubicClampFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCubicWeightsFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
-    'VkPhysicalDeviceCudaKernelLaunchFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
-    'VkPhysicalDeviceCudaKernelLaunchPropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceCustomBorderColorFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceCustomBorderColorPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDepthBiasControlFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceDepthClampControlFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDepthClampZeroOneFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceDepthClampZeroOneFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDepthClipControlFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDepthClipEnableFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDepthStencilResolveProperties': 'VkPhysicalDeviceProperties2',
@@ -3704,6 +4052,8 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceDescriptorBufferFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDescriptorBufferPropertiesEXT': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceDescriptorBufferTensorFeaturesARM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceDescriptorBufferTensorPropertiesARM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceDescriptorIndexingFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDescriptorIndexingFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDescriptorIndexingProperties': 'VkPhysicalDeviceProperties2',
@@ -3711,7 +4061,9 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceDeviceMemoryReportFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceDiagnosticsConfigFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3731,6 +4083,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceExtendedDynamicStateFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceExternalComputeQueuePropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceExternalFormatResolveFeaturesANDROID': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceExternalFormatResolvePropertiesANDROID': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceExternalMemoryHostPropertiesEXT': 'VkPhysicalDeviceProperties2',
@@ -3739,10 +4092,13 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceFloat16Int8FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceFloatControlsProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceFloatControlsPropertiesKHR': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceFormatPackFeaturesARM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceFragmentDensityMap2FeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceFragmentDensityMap2PropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceFragmentDensityMapFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceFragmentDensityMapOffsetFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceFragmentDensityMapOffsetPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceFragmentDensityMapPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3759,6 +4115,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceHdrVividFeaturesHUAWEI': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostImageCopyFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostImageCopyFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceHostQueryResetFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3817,6 +4174,9 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceMaintenance6PropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceMaintenance7FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceMaintenance7PropertiesKHR': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceMaintenance8FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceMaintenance9FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceMaintenance9PropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceMapMemoryPlacedFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceMapMemoryPlacedPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceMemoryDecompressionFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3847,6 +4207,8 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceOpticalFlowPropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDevicePCIBusInfoPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDevicePerStageDescriptorSetFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePerformanceQueryFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePerformanceQueryPropertiesKHR': 'VkPhysicalDeviceProperties2',
@@ -3856,6 +4218,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePipelineOpacityMicromapFeaturesARM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePipelinePropertiesFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePipelineProtectedAccessFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePipelineProtectedAccessFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3866,7 +4229,10 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDevicePointClippingProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDevicePointClippingPropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDevicePresentBarrierFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePresentId2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePresentIdFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDevicePresentWait2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePresentWaitFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3885,6 +4251,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceRayQueryFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRayTracingMotionBlurFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRayTracingPipelineFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3897,7 +4264,9 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceRenderPassStripedPropertiesARM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRobustness2FeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceRobustness2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceRobustness2PropertiesEXT': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceRobustness2PropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceSampleLocationsPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceSamplerFilterMinmaxProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT': 'VkPhysicalDeviceProperties2',
@@ -3914,6 +4283,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceShaderAtomicFloatFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderAtomicInt64Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderAtomicInt64FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceShaderBfloat16FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderClockFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM': 'VkPhysicalDeviceProperties2',
@@ -3929,6 +4299,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceShaderExpectAssumeFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderFloat16Int8Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderFloat16Int8FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceShaderFloat8FeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderFloatControls2Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderFloatControls2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3970,18 +4341,25 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceSynchronization2Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceSynchronization2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTensorFeaturesARM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTensorPropertiesARM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceTexelBufferAlignmentProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTextureCompressionASTCHDRFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTileMemoryHeapFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTileMemoryHeapPropertiesQCOM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTilePropertiesFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTileShadingFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceTileShadingPropertiesQCOM': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTimelineSemaphoreFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceTimelineSemaphoreFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceTimelineSemaphoreProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTimelineSemaphorePropertiesKHR': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceTransformFeedbackFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceTransformFeedbackPropertiesEXT': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceUniformBufferStandardLayoutFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceVariablePointerFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -3994,8 +4372,13 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceVertexAttributeDivisorProperties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR': 'VkPhysicalDeviceProperties2',
+    'VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceVideoDecodeVP9FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceVideoEncodeAV1FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceVideoMaintenance1FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceVideoMaintenance2FeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceVulkan11Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceVulkan11Properties': 'VkPhysicalDeviceProperties2',
     'VkPhysicalDeviceVulkan12Features': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
@@ -4010,6 +4393,7 @@ STRUCT_EXTENDS_MAPPING = {   'VkPhysicalDevice16BitStorageFeatures': 'VkPhysical
     'VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceYcbcrDegammaFeaturesQCOM': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceYcbcrImageArraysFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
+    'VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo',
     'VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR': 'VkPhysicalDeviceFeatures2,VkDeviceCreateInfo'}
 
@@ -4280,7 +4664,22 @@ ENUM_TRAITS_MAPPING = {   'VkImageLayout': {   'VK_IMAGE_LAYOUT_UNDEFINED': '0',
                     'VK_FORMAT_PVRTC1_4BPP_SRGB_BLOCK_IMG': '1000054005',
                     'VK_FORMAT_PVRTC2_2BPP_SRGB_BLOCK_IMG': '1000054006',
                     'VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG': '1000054007',
-                    'VK_FORMAT_R16G16_SFIXED5_NV': '1000464000'},
+                    'VK_FORMAT_R8_BOOL_ARM': '1000460000',
+                    'VK_FORMAT_R16G16_SFIXED5_NV': '1000464000',
+                    'VK_FORMAT_R10X6_UINT_PACK16_ARM': '1000609000',
+                    'VK_FORMAT_R10X6G10X6_UINT_2PACK16_ARM': '1000609001',
+                    'VK_FORMAT_R10X6G10X6B10X6A10X6_UINT_4PACK16_ARM': '1000609002',
+                    'VK_FORMAT_R12X4_UINT_PACK16_ARM': '1000609003',
+                    'VK_FORMAT_R12X4G12X4_UINT_2PACK16_ARM': '1000609004',
+                    'VK_FORMAT_R12X4G12X4B12X4A12X4_UINT_4PACK16_ARM': '1000609005',
+                    'VK_FORMAT_R14X2_UINT_PACK16_ARM': '1000609006',
+                    'VK_FORMAT_R14X2G14X2_UINT_2PACK16_ARM': '1000609007',
+                    'VK_FORMAT_R14X2G14X2B14X2A14X2_UINT_4PACK16_ARM': '1000609008',
+                    'VK_FORMAT_R14X2_UNORM_PACK16_ARM': '1000609009',
+                    'VK_FORMAT_R14X2G14X2_UNORM_2PACK16_ARM': '1000609010',
+                    'VK_FORMAT_R14X2G14X2B14X2A14X2_UNORM_4PACK16_ARM': '1000609011',
+                    'VK_FORMAT_G14X2_B14X2R14X2_2PLANE_420_UNORM_3PACK16_ARM': '1000609012',
+                    'VK_FORMAT_G14X2_B14X2R14X2_2PLANE_422_UNORM_3PACK16_ARM': '1000609013'},
     'VkRayTracingInvocationReorderModeNV': {   'VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_NV': '0',
                                                'VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_NV': '1'},
     'VkSampleCountFlagBits': {   'VK_SAMPLE_COUNT_1_BIT': '0',
@@ -4336,7 +4735,7 @@ ENUM_TRAITS_MAPPING = {   'VkImageLayout': {   'VK_IMAGE_LAYOUT_UNDEFINED': '0',
                       'VK_DRIVER_ID_MESA_NVK': '24',
                       'VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA': '25',
                       'VK_DRIVER_ID_MESA_HONEYKRISP': '26',
-                      'VK_DRIVER_ID_RESERVED_27': '27'},
+                      'VK_DRIVER_ID_VULKAN_SC_EMULATION_ON_VULKAN': '27'},
     'VkShaderFloatControlsIndependence': {   'VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY': '0',
                                              'VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL': '1',
                                              'VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE': '2'},
@@ -4354,7 +4753,9 @@ ENUM_TRAITS_MAPPING = {   'VkImageLayout': {   'VK_IMAGE_LAYOUT_UNDEFINED': '0',
                                          'VK_PHYSICAL_DEVICE_LAYERED_API_OPENGL_KHR': '3',
                                          'VK_PHYSICAL_DEVICE_LAYERED_API_OPENGLES_KHR': '4'},
     'VkLayeredDriverUnderlyingApiMSFT': {   'VK_LAYERED_DRIVER_UNDERLYING_API_NONE_MSFT': '0',
-                                            'VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT': '1'}}
+                                            'VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT': '1'},
+    'VkDefaultVertexAttributeValueKHR': {   'VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ZERO_KHR': '0',
+                                            'VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ONE_KHR': '1'}}
 
 
 # --- VK Format Mapping ---
@@ -4503,10 +4904,27 @@ VK_FORMAT_MAPPING = {   'VK_VERSION_1_1': [   ('VK_FORMAT_G8B8G8R8_422_UNORM', 1
                                                1000330003)],
     'VK_EXT_4444_formats': [   ('VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT', 1000340000),
                                ('VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT', 1000340001)],
+    'VK_ARM_tensors': [('VK_FORMAT_R8_BOOL_ARM', 1000460000)],
     'VK_NV_optical_flow': [   ('VK_FORMAT_R16G16_SFIXED5_NV', 1000464000),
                               ('VK_FORMAT_R16G16_S10_5_NV', 1000464000)],
     'VK_KHR_maintenance5': [   ('VK_FORMAT_A1B5G5R5_UNORM_PACK16_KHR', 1000470000),
                                ('VK_FORMAT_A8_UNORM_KHR', 1000470001)],
+    'VK_ARM_format_pack': [   ('VK_FORMAT_R10X6_UINT_PACK16_ARM', 1000609000),
+                              ('VK_FORMAT_R10X6G10X6_UINT_2PACK16_ARM', 1000609001),
+                              ('VK_FORMAT_R10X6G10X6B10X6A10X6_UINT_4PACK16_ARM', 1000609002),
+                              ('VK_FORMAT_R12X4_UINT_PACK16_ARM', 1000609003),
+                              ('VK_FORMAT_R12X4G12X4_UINT_2PACK16_ARM', 1000609004),
+                              ('VK_FORMAT_R12X4G12X4B12X4A12X4_UINT_4PACK16_ARM', 1000609005),
+                              ('VK_FORMAT_R14X2_UINT_PACK16_ARM', 1000609006),
+                              ('VK_FORMAT_R14X2G14X2_UINT_2PACK16_ARM', 1000609007),
+                              ('VK_FORMAT_R14X2G14X2B14X2A14X2_UINT_4PACK16_ARM', 1000609008),
+                              ('VK_FORMAT_R14X2_UNORM_PACK16_ARM', 1000609009),
+                              ('VK_FORMAT_R14X2G14X2_UNORM_2PACK16_ARM', 1000609010),
+                              ('VK_FORMAT_R14X2G14X2B14X2A14X2_UNORM_4PACK16_ARM', 1000609011),
+                              (   'VK_FORMAT_G14X2_B14X2R14X2_2PLANE_420_UNORM_3PACK16_ARM',
+                                  1000609012),
+                              (   'VK_FORMAT_G14X2_B14X2R14X2_2PLANE_422_UNORM_3PACK16_ARM',
+                                  1000609013)],
     'VK_VERSION_1_0': [   ('VK_FORMAT_R4G4_UNORM_PACK8', 1),
                           ('VK_FORMAT_R4G4B4A4_UNORM_PACK16', 2),
                           ('VK_FORMAT_B4G4R4A4_UNORM_PACK16', 3),

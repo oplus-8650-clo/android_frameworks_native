@@ -18,6 +18,7 @@
 package android.content.pm;
 
 import android.content.pm.IStagedApexObserver;
+import android.content.pm.PackageInfoNative;
 import android.content.pm.StagedApexInfo;
 
 /**
@@ -41,6 +42,32 @@ interface IPackageManagerNative {
      * strings.
      */
     @utf8InCpp String[] getNamesForUids(in int[] uids);
+
+    /**
+     * Retrieve package signing information for an application package that is installed on the
+     * system.
+     *
+     * Note that the PackageInfoNative returned may contain unset @nullable fields.  This method
+     * only populates the signingInfo field, as well as the (non-@nullable) packageName.
+     *
+     * @param packageName The full name (i.e. com.google.apps.contacts) of the desired package.
+     * @param userId of the user that has the installed package.
+     *
+     * @return A PackageInfoNative object containing the package name and signing info.
+     */
+    @nullable PackageInfoNative getPackageInfoWithSigningInfo(String packageName, int userId);
+
+    /**
+     * Retrieve signing information for application packages associated with the specified uid.
+     *
+     * Note that the PackageInfoNative returned may contain unset @nullable fields.  This method
+     * only populates the signingInfo field, as well as the (non-@nullable) packageName.
+     *
+     * @param uid The uid for which associated package information should be returned.
+     *
+     * @return An array of PackageInfoNative objects containing package names and signing info.
+     */
+    @nullable PackageInfoNative[] getPackageInfoWithSigningInfoForUid(int uid);
 
     /**
      * Return the UID associated with the given package name.
