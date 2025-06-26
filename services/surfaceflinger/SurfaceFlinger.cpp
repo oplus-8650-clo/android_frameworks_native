@@ -5094,7 +5094,7 @@ status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinde
         mNewLayerArgs.emplace_back(std::move(args));
     }
 
-    setTransactionFlags(eTransactionNeeded);
+    setTransactionFlags(eTransactionFlushNeeded | eTransactionNeeded);
     return NO_ERROR;
 }
 
@@ -5117,6 +5117,7 @@ void SurfaceFlinger::setTransactionFlags(uint32_t mask, TransactionSchedule sche
     SFTRACE_INT("mTransactionFlags", transactionFlags);
 
     if (const bool scheduled = transactionFlags & mask; !scheduled) {
+        if (FlagManager::getInstance().resync_on_tx()) { mScheduler->resync(); }
         scheduleCommit(frameHint);
     } else if (frameHint == FrameHint::kActive) {
         // Even if the next frame is already scheduled, we should reset the idle timer

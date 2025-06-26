@@ -61,6 +61,7 @@ public:
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
     bool readback_screenshot() const;
+    bool resync_on_tx() const;
     bool refresh_rate_overlay_on_external_display() const;
     bool vsync_predictor_rate_change_with_aligned_sequence() const;
     bool unify_refresh_rate_callbacks() const;

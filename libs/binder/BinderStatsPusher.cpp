@@ -16,6 +16,8 @@
 #include "BinderStatsPusher.h"
 #include <android-base/properties.h>
 #include <android/os/IStatsBootstrapAtomService.h>
+#include <binder/Functional.h>
+#include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <utils/SystemClock.h>
 #include "BinderStatsUtils.h"
@@ -72,12 +74,26 @@ void BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& 
             it->second.durationSumMicros += (datum.endTimeNanos - datum.startTimeNanos) / 1000;
         }
     }
+    if (!service) return;
     // Ensure that if this is a local binder and this thread isn't attached
     // to the VM then skip pushing. This is required since StatsBootstrap is
     // a Java service and needs a JNI interface to be called from native code.
-    if (!service || (IInterface::asBinder(service)->localBinder() && getJavaVM() == nullptr)) {
+    bool isProcessSystemServer = IInterface::asBinder(service)->localBinder() != nullptr;
+    if (isProcessSystemServer && getJavaVM() == nullptr) {
         return;
     }
+    // Clear calling identity if this is called from system server. This
+    // will allow libStatsBootstrap to verify calling uid correctly.
+    int64_t callingIdentity;
+    if (isProcessSystemServer) {
+        callingIdentity = IPCThreadState::self()->clearCallingIdentity();
+    }
+    auto callingIdentityGuard = binder::impl::make_scope_guard([&] {
+        if (isProcessSystemServer) {
+            IPCThreadState::self()->restoreCallingIdentity(callingIdentity);
+        }
+    });
+
     for (auto outerIt = mStatsBuffer.begin(); outerIt != mStatsBuffer.end();
          /* no increment */) {
         int32_t secondsWithAtLeast125Calls = 0;

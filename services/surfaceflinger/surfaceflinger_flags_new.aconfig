@@ -232,6 +232,16 @@ flag {
 } # readback_screenshot
 
 flag {
+  name: "resync_on_tx"
+  namespace: "core_graphics"
+  description: "Resync to vsync on an incoming transaction"
+  bug: "425994753"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+ } # resync_on_tx
+
+flag {
   name: "skip_invisible_windows_in_input"
   namespace: "window_surfaces"
   description: "Only send visible windows to input list"
