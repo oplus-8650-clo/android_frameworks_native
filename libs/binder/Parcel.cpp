@@ -344,8 +344,7 @@ status_t Parcel::unflattenBinder(sp<IBinder>* out) const
 {
     if (const auto* rpcFields = maybeRpcFields()) {
         int32_t isPresent;
-        status_t status = readInt32(&isPresent);
-        if (status != OK) return status;
+        if (status_t status = readInt32(&isPresent); status != OK) return status;
 
         sp<IBinder> binder;
 
@@ -600,12 +599,13 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                           __FUNCTION__, numObjects, kernelFields->mObjectsSize);
                     return NO_MEMORY; // overflow
                 }
-                binder_size_t* objects = (binder_size_t*)realloc(kernelFields->mObjects,
-                                                                 newSize * sizeof(binder_size_t));
-                if (objects == (binder_size_t*)nullptr) {
+                binder_size_t* reallocObjects =
+                        (binder_size_t*)realloc(kernelFields->mObjects,
+                                                newSize * sizeof(binder_size_t));
+                if (reallocObjects == (binder_size_t*)nullptr) {
                     return NO_MEMORY;
                 }
-                kernelFields->mObjects = objects;
+                kernelFields->mObjects = reallocObjects;
                 kernelFields->mObjectsCapacity = newSize;
             }
 

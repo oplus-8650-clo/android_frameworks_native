@@ -436,7 +436,7 @@ on late-init && property:ro.boot.hypervisor.vm.supported=1
     chmod 0440 /sys/kernel/tracing/hyp/events/hyp/host_mem_abort/id
 
 # Ensure correct permissions on GPU related events
-on late-fs
+on property:sys.boot_completed=1
     chmod 0666 /sys/kernel/debug/tracing/events/power/gpu_frequency/enable
     chmod 0666 /sys/kernel/tracing/events/power/gpu_frequency/enable
     chmod 0666 /sys/kernel/debug/tracing/events/power/gpu_work_period/enable

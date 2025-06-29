@@ -47,7 +47,10 @@ struct PrecompileSettings {
     PaintOptions fPaintOptions;
     DrawTypeFlags fDrawTypeFlags = skgpu::graphite::DrawTypeFlags::kNone;
     RenderPassProperties fRenderPassProps;
+    bool fAnalyticClipping = false;
 
+    // 'superSet' may have a wider range of DrawTypeFlags.
+    // We're intentionally omitting the 'fAnalyticClipping' field here.
     bool isSubsetOf(const PrecompileSettings& superSet) const {
         return (fDrawTypeFlags & superSet.fDrawTypeFlags) &&
                 fRenderPassProps == superSet.fRenderPassProps;
@@ -540,6 +543,66 @@ skgpu::graphite::PaintOptions MouriMapCrosstalkAndChunk16x16YCbCr247(RuntimeEffe
     return paintOptions;
 }
 
+skgpu::graphite::PaintOptions EdgeExtensionPremulSrcover(RuntimeEffectManager& effectManager) {
+    // This usage of kUnpremul is non-obvious. It acts to short circuit the identity-colorspace
+    // optimization for runtime effects. In this case, the Pipeline requires a
+    // ColorSpaceTransformPremul instead of the (optimized) Passthrough.
+    SkColorInfo ci { kRGBA_8888_SkColorType, kUnpremul_SkAlphaType, nullptr };
+
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> edgeEffect = PrecompileRuntimeEffects::MakePrecompileShader(
+            effectManager.getKnownRuntimeEffect(RuntimeEffectManager::KnownId::kEdgeExtensionEffect),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(edgeEffect) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions TransparentPaintEdgeExtensionPassthroughSrcover(RuntimeEffectManager& effectManager) {
+    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> edgeEffect = PrecompileRuntimeEffects::MakePrecompileShader(
+            effectManager.getKnownRuntimeEffect(RuntimeEffectManager::KnownId::kEdgeExtensionEffect),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(edgeEffect) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setPaintColorIsOpaque(false);
+
+    return paintOptions;
+}
+
+skgpu::graphite::PaintOptions TransparentPaintEdgeExtensionPremulSrcover(RuntimeEffectManager& effectManager) {
+    // This usage of kUnpremul is non-obvious. It acts to short circuit the identity-colorspace
+    // optimization for runtime effects. In this case, the Pipeline requires a
+    // ColorSpaceTransformPremul instead of the (optimized) Passthrough.
+    SkColorInfo ci { kRGBA_8888_SkColorType, kUnpremul_SkAlphaType, nullptr };
+
+    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
+                                                           { &ci, 1 },
+                                                           {});
+
+    sk_sp<PrecompileShader> edgeEffect = PrecompileRuntimeEffects::MakePrecompileShader(
+            effectManager.getKnownRuntimeEffect(RuntimeEffectManager::KnownId::kEdgeExtensionEffect),
+            { { std::move(img) } });
+
+    PaintOptions paintOptions;
+    paintOptions.setShaders({ std::move(edgeEffect) });
+    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setPaintColorIsOpaque(false);
+
+    return paintOptions;
+}
+
 // clang-format on
 
 // =======================================
@@ -612,6 +675,8 @@ const skgpu::graphite::RenderPassProperties kRGBA16F_1_D_SRGB {
 // NOTE: keep in sync with upstream external/skia/tests/graphite/precompile/PrecompileTestUtils.h
 // clang-format off
 
+constexpr bool kWithAnalyticClip = true;
+
 constexpr skgpu::graphite::DrawTypeFlags kRRectAndNonAARect =
         static_cast<skgpu::graphite::DrawTypeFlags>(skgpu::graphite::DrawTypeFlags::kAnalyticRRect |
                                                     skgpu::graphite::DrawTypeFlags::kNonAAFillRect);
@@ -663,19 +728,31 @@ void GraphitePipelineManager::PrecompilePipelines(
     // clang-format off
     const PrecompileSettings precompileCases[] = {
 /*  0 */ { ImagePremulHWOnlySrcover(),         DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
-/*  1 */ { ImagePremulHWOnlySrcover(),         kRRectAndNonAARect,              kRGBA_1_D },
+/*  1 */ { ImagePremulHWOnlySrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
 
 /*  2 */ { ImagePremulHWOnlySrcover(),         kRRectAndNonAARect,              kRGBA_4_DS },
 
 /*  3 */ { ImageHWOnlySRGBSrcover(),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_SRGB },
-/*  4 */ { ImageHWOnlySRGBSrcover(),           kRRectAndNonAARect,              kRGBA_1_D_SRGB },
+/*  4 */ { ImageHWOnlySRGBSrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D_SRGB,
+           kWithAnalyticClip },
 
-/*  5 */ { TransparentPaintImagePremulHWOnlySrcover(), kRRectAndNonAARect,      kRGBA_1_D },
+/*  5 */ { TransparentPaintImagePremulHWOnlySrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
 /*  6 */ { TransparentPaintImagePremulHWOnlySrcover(), kRRectAndNonAARect,      kRGBA_4_DS },
 
 /*  7 */ { TransparentPaintImageSRGBHWOnlySrcover(), kRRectAndNonAARect,        kRGBA_1_D_SRGB },
 
-/*  8 */ { SolidSrcSrcover(),                  kRRectAndNonAARect,              kRGBA_1_D },
+/*  8 */ { SolidSrcSrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
 
 /*  9 */ { SolidSrcover(),                     kRRectAndNonAARect,              kRGBA_4_DS },
 
@@ -689,14 +766,20 @@ void GraphitePipelineManager::PrecompilePipelines(
 /* 13 */ { TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover(),
                                                DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
 
-/* 14 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(), kRRectAndNonAARect,        kRGBA_1_D },
+/* 14 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
 
 /* 15 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_4_DS },
 
 /* 16 */ { TransparentPaintImageSRGBHWOnlyMatrixCFDitherSrcover(),
                                                kRRectAndNonAARect,              kRGBA_1_D_SRGB },
 
-/* 17 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(), kRRectAndNonAARect,          kRGBA_1_D_SRGB },
+/* 17 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D_SRGB,
+           kWithAnalyticClip },
 
 /* 18 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kAnalyticRRect, kRGBA_4_DS_SRGB },
 
@@ -706,7 +789,7 @@ void GraphitePipelineManager::PrecompilePipelines(
 
 /* 21 */ { ImageAlphaSRGBHWOnlyMatrixCFSrcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_1_D_SRGB },
 
-/* 22 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 22 */ { ImagePremulHWOnlySrc(),             kRRectAndNonAARect,              kRGBA_1_D },
 /* 23 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kPerEdgeAAQuad,   kRGBA_1_D },
 /* 24 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
 
@@ -716,7 +799,7 @@ void GraphitePipelineManager::PrecompilePipelines(
 /* 28 */ { MouriMapChunk8x8Effect(effectManager),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
 /* 29 */ { KawaseBlurLowSrcSrcOver(effectManager),          DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
 /* 30 */ { KawaseBlurHighSrc(effectManager),                DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-/* 31 */ { BlurFilterMix(effectManager),                    DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 31 */ { BlurFilterMix(effectManager),                    kRRectAndNonAARect,              kRGBA_1_D },
 
 // These two are solid colors drawn w/ a LinearEffect
 
@@ -795,87 +878,78 @@ void GraphitePipelineManager::PrecompilePipelines(
 // AnalyticClip block - all the PrecompileOptions here are just clones of earlier ones
 // with an additional kAnalyticClip flag
 
+// Note: this didn't get folded into #2 since the RRect draw isn't appearing w/ a clip
 /* 43 */ { ImagePremulHWOnlySrcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D },
-
-/* 44 */ { ImagePremulHWOnlySrcover(),
            DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
            kRGBA_4_DS },
 
-/* 45 */ { ImageHWOnlySRGBSrcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D_SRGB },
-
-/* 46 */ { TransparentPaintImagePremulHWOnlySrcover(),
-           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D },
-
-/* 47 */ { SolidSrcSrcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D },
-
-/* 48 */ { SolidSrcSrcover(),
+// Note: this didn't get folded into #9 since the RRect draw isn't appearing w/ a clip
+/* 44 */ { SolidSrcSrcover(),
            DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
            kRGBA_4_DS },
-
-/* 49 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D },
-
-/* 50 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D_SRGB },
 
 //--------------------------------------------------
 
-/* 51 */ { {}, // ignored
+/* 45 */ { {}, // ignored
            DrawTypeFlags::kDropShadows,
            kRGBA_1_D },
 
-/* 52 */ { {}, // ignored
+/* 46 */ { {}, // ignored
            DrawTypeFlags::kDropShadows,
            kRGBA_4_DS },
 
-// 238 block ----------------
-
-/* 53 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_1_D },
-
-/* 54 */ { ImagePremulYCbCr238Srcover(),
-           kRRectAndNonAARect | DrawTypeFlags::kAnalyticClip,
+/* 47 */ { EdgeExtensionPremulSrcover(effectManager),
+           DrawTypeFlags::kNonAAFillRect,
            kRGBA_1_D },
 
-/* 55 */ { TransparentPaintImagePremulYCbCr238Srcover(), kRRectAndNonAARect,    kRGBA_1_D },
-/* 56 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_4_DS },
+/* 48 */ { TransparentPaintEdgeExtensionPassthroughSrcover(effectManager),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA_1_D },
 
-/* 57 */ { ImagePremulYCbCr238Srcover(),
+/* 49 */ { TransparentPaintEdgeExtensionPremulSrcover(effectManager),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA_1_D },
+
+// 238 block ----------------
+
+/* 50 */ { ImagePremulYCbCr238Srcover(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
+
+/* 51 */ { TransparentPaintImagePremulYCbCr238Srcover(), kRRectAndNonAARect,    kRGBA_1_D },
+/* 52 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_4_DS },
+
+// Note: this didn't get folded into #52 since the RRect draw isn't appearing w/ a clip
+/* 53 */ { ImagePremulYCbCr238Srcover(),
            DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
            kRGBA_4_DS },
 
 // 240 block ----------------
 
-/* 58 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-/* 59 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
-/* 50 */ { TransparentPaintImagePremulYCbCr240Srcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_4_DS },
+/* 54 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
+/* 55 */ { ImagePremulYCbCr240Srcover(),       DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+/* 56 */ { TransparentPaintImagePremulYCbCr240Srcover(), DrawTypeFlags::kNonAAFillRect,kRGBA_4_DS },
 
 // 247 block ----------------
 
-/* 61 */ { MouriMapCrosstalkAndChunk16x16YCbCr247(effectManager),
+/* 57 */ { MouriMapCrosstalkAndChunk16x16YCbCr247(effectManager),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA16F_1_D_SRGB },
 
 // The next 2 have the same PaintOptions but different destination surfaces
 
-/* 62 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+/* 58 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
                         ChildType::kHWTextureYCbCr247,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
                         /* matrixColorFilter= */ false,
                         /* dither= */ true),
            kRRectAndNonAARect,
-           kRGBA_1_D_SRGB },
+           kRGBA_1_D_SRGB,
+           kWithAnalyticClip },
 
-/* 63 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
+/* 59 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
                         ChildType::kHWTextureYCbCr247,
                         SkBlendMode::kSrcOver,
                         /* paintColorIsOpaque= */ true,
@@ -883,15 +957,6 @@ void GraphitePipelineManager::PrecompilePipelines(
                         /* dither= */ true),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA_4_DS_SRGB },
-
-/* 64 */ { LinearEffect(kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader,
-                        ChildType::kHWTextureYCbCr247,
-                        SkBlendMode::kSrcOver,
-                        /* paintColorIsOpaque= */ true,
-                        /* matrixColorFilter= */ false,
-                        /* dither= */ true),
-           DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
-           kRGBA_1_D_SRGB },
     };
     // clang-format on
 
@@ -901,6 +966,13 @@ void GraphitePipelineManager::PrecompilePipelines(
         const PrecompileSettings& settings = precompileCases[i];
         Precompile(precompileContext.get(), settings.fPaintOptions, settings.fDrawTypeFlags,
                    {&settings.fRenderPassProps, 1});
+
+        if (settings.fAnalyticClipping) {
+            DrawTypeFlags newFlags = settings.fDrawTypeFlags | DrawTypeFlags::kAnalyticClip;
+
+            Precompile(precompileContext.get(), settings.fPaintOptions,
+                       static_cast<DrawTypeFlags>(newFlags), {&settings.fRenderPassProps, 1});
+        }
     }
 
     ALOGD("Pipeline precompilation finished");

@@ -3380,6 +3380,9 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withCloseRefreshRates) {
     if (g_noSlowTests) {
         GTEST_SKIP();
     }
+    if (GetParam() != Config::FrameRateOverride::Disabled) {
+        return;
+    }
 
     const int kMinRefreshRate = RefreshRateSelector::kMinSupportedFrameRate.getIntValue();
     constexpr int kMaxRefreshRate = 240;

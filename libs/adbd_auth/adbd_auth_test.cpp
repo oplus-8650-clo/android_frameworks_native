@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>
@@ -138,7 +137,7 @@ class Framework {
     auto packet_id = runner->Context()->ReceivedPackets();
     Send(msg);
 
-    while(runner->Context()->ReceivedPackets() < packet_id + 1) {
+    while(runner->Context()->ReceivedPackets() == packet_id) {
       std::this_thread::sleep_for(10ms);
     }
   }
@@ -252,4 +251,26 @@ TEST(AdbAuthTest, WifiLifeCycle) {
 
     framework.SendAndWaitContext("W0", runner.get());
     ASSERT_EQ(stop_message_received,true);
+}
+
+
+TEST(AdbAuthTest, UnhandledPacket) {
+    AdbdAuthCallbacksV2 callbacks{};
+    callbacks.version = 2;
+    auto runner= CreateContextRunner(callbacks);
+    Framework framework{};
+
+    uint16_t port = 19;
+    adbd_auth_send_tls_server_port(runner->Context(), port);
+
+    // Send an unhandled packet. This should not reset the stack.
+    framework.SendAndWaitContext("XX", runner.get());
+
+    // Check that libauth did not reset the socket.
+    auto msg = framework.Recv();
+    ASSERT_EQ(4, msg.size());
+    ASSERT_EQ(msg[0], 'T');
+    ASSERT_EQ(msg[1], 'P');
+    ASSERT_EQ(msg[2], port);
+    ASSERT_EQ(msg[3], 0);
 }

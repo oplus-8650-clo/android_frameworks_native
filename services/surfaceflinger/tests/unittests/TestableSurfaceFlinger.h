@@ -619,6 +619,10 @@ public:
         mFlinger->mNewLayers.emplace_back(std::move(layer));
     }
 
+    void enableLayerCachingTexturePool(PhysicalDisplayId id, bool enable) {
+        FTL_FAKE_GUARD(kMainThreadContext, mFlinger->enableLayerCachingTexturePool(id, enable));
+    }
+
     /* ------------------------------------------------------------------------
      * Read-only access to private data to assert post-conditions.
      */

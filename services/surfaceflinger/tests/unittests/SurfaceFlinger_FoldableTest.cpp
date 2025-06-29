@@ -219,7 +219,14 @@ TEST_P(FoldableTest, disableVsyncOnPowerOffPacesetter) {
     ASSERT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), getOuterDisplayId());
 }
 
-TEST_F(FoldableTest, layerCachingTexturePoolOnFrontInternal) {
+TEST_P(FoldableTest, layerCachingTexturePoolOnFrontInternal) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, GetParam());
+
+    ON_CALL(mFlinger.mockSchedulerCallback(), enableLayerCachingTexturePool)
+            .WillByDefault([&](PhysicalDisplayId displayId, bool enable) {
+                mFlinger.enableLayerCachingTexturePool(displayId, enable);
+            });
+
     ASSERT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), getInnerDisplayId());
 
     // In order for TexturePool to be enabled, layer caching needs to be enabled.

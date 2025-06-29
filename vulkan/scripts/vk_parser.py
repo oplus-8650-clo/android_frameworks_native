@@ -210,7 +210,7 @@ REQUIRED_DATA_MEMBERS = []
 # Mappings derived from parsing
 alias_map: Dict[str, str] = {}  # Maps alias name to original name
 feature_api_map: Dict[str, List[Dict[str, str]]] = defaultdict(list)  # Maps feature name to list of {struct: type_enum}
-disabled_structs = ["VkPhysicalDeviceHostImageCopyProperties"]  # TODO:- b/415705512 handle VkPhysicalDeviceHostImageCopyProperties
+disabled_structs = []
 structs_with_valid_extends = []
 enum_member_map = {}
 additional_vk_format_values = {}
@@ -1114,9 +1114,10 @@ def generate_core_struct_mapping(struct_names: list[str], vk_py_file_handle: IO[
 
 
 # --- Ancillary Mappings & Lists for vk.py ---
-def extract_list_size_mapping(struct_elements: List[ET.Element]) -> Dict[str, str]:
+def extract_list_size_mapping(struct_elements: List[ET.Element]) :
     """Extracts mappings from list members to their corresponding size-indicating members within structs."""
     member_map = {}  # Stores {list_member_name: size_member_name}
+    struct_with_dynamic_size_list_variables = {} # Stores {struct_name: set of list variables}
     for type_element in struct_elements:
         struct_name = type_element.get(ATTR_NAME)
         # Skip invalid or non-physical device structs
@@ -1128,19 +1129,46 @@ def extract_list_size_mapping(struct_elements: List[ET.Element]) -> Dict[str, st
             len_attribute_value = member_element.get(ATTR_LEN)  # Name of the member holding the size
             name_tag = member_element.find(TAG_NAME)
             name_value = get_element_text(name_tag)  # Name of the list/array member
+            member_type_element = member_element.find(ATTR_TYPE)
+            is_pointer = '*' in member_type_element.tail if member_type_element.tail else False
+
             # Store the mapping if valid (names exist, len is not "null-terminated")
             if name_value and len_attribute_value and len_attribute_value.strip().lower() != "null-terminated":
                 member_map[name_value] = len_attribute_value.strip()
-    return member_map
+                if is_pointer:
+                    struct_with_dynamic_size_list_variables.setdefault(struct_name, set()).add(name_value)
+    return member_map, struct_with_dynamic_size_list_variables
 
 
 def write_list_size_mapping(struct_elements: List[ET.Element], vk_py_file_handle: IO[str]):
+
+    def sort_dict_by_key_and_content(input_dict):
+        """
+        Sorts a dictionary first by its keys alphabetically,
+        and then sorts the elements within the sets associated with each key.
+        """
+        sorted_items_by_key = sorted(input_dict.items())
+        sorted_dict = {}
+        for key, value_set in sorted_items_by_key:
+            sorted_elements = sorted(list(value_set))
+            sorted_dict[key] = set(sorted_elements)
+
+        return sorted_dict
+
+    def write_formatted_code(list_variable_name, list_data):
+        formatted_list_code = pprint.pformat(list_data, indent=4, width=100)
+        formatted_content = f"""{list_variable_name} = {formatted_list_code}\n\n"""
+        write_py_file(vk_py_file_handle, formatted_content)
+
     """Extracts and writes the list-member-to-size-member mapping to a Python file."""
-    list_size_map = extract_list_size_mapping(struct_elements)
     content = "# --- List Size Mappings (Field name to size field name) ---\n"
-    list_size_str = pprint.pformat(list_size_map, indent=4, width=100)
-    content += f"LIST_TYPE_FIELD_AND_SIZE_MAPPING = {list_size_str}\n\n"
     write_py_file(vk_py_file_handle, content)
+
+    list_size_map, dynamic_list_variables = extract_list_size_mapping(struct_elements)
+    write_formatted_code("LIST_TYPE_FIELD_AND_SIZE_MAPPING", list_size_map)
+
+    sorted_dynamic_list_variables = sort_dict_by_key_and_content(dynamic_list_variables)
+    write_formatted_code("STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING", sorted_dynamic_list_variables)
 
 
 def write_all_structs(vk_py_file_handle: IO[str]) -> None:

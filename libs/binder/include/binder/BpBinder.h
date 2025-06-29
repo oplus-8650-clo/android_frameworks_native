@@ -217,6 +217,7 @@ private:
 
     void reportOneDeath(const Obituary& obit);
     bool isDescriptorCached() const;
+    bool isDescriptorCachedLocked() const;
 
     mutable RpcMutex mLock;
     volatile int32_t mAlive;

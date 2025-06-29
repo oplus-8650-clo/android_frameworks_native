@@ -292,8 +292,20 @@ std::optional<int32_t> BpBinder::getDebugBinderHandle() const {
     }
 }
 
+// Macro makes this simpler to call, since we need to allocate, and
+// we return something with a temporary lifetime.
+//
+// If you are missing an interface descriptor, try adding:
+//   'if (getpid() > 500) getInterfaceDescriptor();' in onFirstRef
+#define BPBINDER_BEST_DESCRIPTOR_LOCKED \
+    (isDescriptorCachedLocked() ? String8(mDescriptorCache).c_str() : "(not cached)")
+
 bool BpBinder::isDescriptorCached() const {
     RpcMutexUniqueLock _l(mLock);
+    return isDescriptorCachedLocked();
+}
+
+bool BpBinder::isDescriptorCachedLocked() const {
     return mDescriptorCache.c_str() != kDescriptorUninit.c_str();
 }
 
@@ -404,9 +416,9 @@ status_t BpBinder::transact(
 
         if (data.dataSize() > binder::kLogTransactionsOverBytes) {
             RpcMutexUniqueLock _l(mLock);
-            ALOGW("Large outgoing transaction of %zu bytes, interface descriptor %s, code %d was "
-                  "sent",
-                  data.dataSize(), String8(mDescriptorCache).c_str(), code);
+            ALOGW("Large outgoing transaction of %zu bytes, interface descriptor '%s', code %d, "
+                  "flags %d was sent",
+                  data.dataSize(), BPBINDER_BEST_DESCRIPTOR_LOCKED, code, flags);
         }
 
         if (status == DEAD_OBJECT) mAlive = 0;
@@ -802,8 +814,8 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
     Vector<Obituary>* obits = mObituaries;
     if(obits != nullptr) {
         if (!obits->isEmpty()) {
-            ALOGI("onLastStrongRef automatically unlinking death recipients: %s",
-                  String8(mDescriptorCache).c_str());
+            ALOGI("onLastStrongRef automatically unlinking death recipients for descriptor: '%s'",
+                  BPBINDER_BEST_DESCRIPTOR_LOCKED);
         }
 
         if (ipc) ipc->clearDeathNotification(binderHandle(), this);

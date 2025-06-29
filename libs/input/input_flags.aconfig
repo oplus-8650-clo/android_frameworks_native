@@ -245,3 +245,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "clear_relative_axes_in_resampled_coords"
+  namespace: "input"
+  description: "Relative axes are cleared in resampled event coordinates"
+  bug: "423433478"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

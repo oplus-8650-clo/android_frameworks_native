@@ -133,7 +133,7 @@ static const char* getReturnString(uint32_t cmd)
     if (idx < sizeof(kReturnStrings) / sizeof(kReturnStrings[0]))
         return kReturnStrings[idx];
     else
-        return "unknown";
+        return "(BR_* unknown)";
 }
 
 static const void* printBinderTransactionData(std::ostream& out, const void* data) {
@@ -1597,15 +1597,18 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
             proxy->sendObituary();
             mOut.writeInt32(BC_DEAD_BINDER_DONE);
             mOut.writePointer((uintptr_t)proxy);
-        } break;
+        }
+        break;
 
     case BR_CLEAR_DEATH_NOTIFICATION_DONE:
         {
             BpBinder *proxy = (BpBinder*)mIn.readPointer();
             proxy->getWeakRefs()->decWeak(proxy);
-        } break;
+        }
+        break;
 
-        case BR_FROZEN_BINDER: {
+    case BR_FROZEN_BINDER:
+        {
             const struct binder_frozen_state_info* data =
                     reinterpret_cast<const struct binder_frozen_state_info*>(
                             mIn.readInplace(sizeof(struct binder_frozen_state_info)));
@@ -1614,16 +1617,18 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
                 break;
             }
             BpBinder* proxy = (BpBinder*)data->cookie;
-            bool isFrozen = mIn.readInt32() > 0;
             proxy->getPrivateAccessor().onFrozenStateChanged(data->is_frozen);
             mOut.writeInt32(BC_FREEZE_NOTIFICATION_DONE);
             mOut.writePointer(data->cookie);
-        } break;
+        }
+        break;
 
-        case BR_CLEAR_FREEZE_NOTIFICATION_DONE: {
+   case BR_CLEAR_FREEZE_NOTIFICATION_DONE:
+        {
             BpBinder* proxy = (BpBinder*)mIn.readPointer();
             proxy->getWeakRefs()->decWeak(proxy);
-        } break;
+        }
+        break;
 
     case BR_FINISHED:
         result = TIMED_OUT;
@@ -1718,8 +1723,9 @@ void IPCThreadState::logExtendedError() {
     }
 #endif
 
-    ALOGE_IF(ee.command != BR_OK, "Binder transaction failure. id: %d, BR_*: %d, error: %d (%s)",
-             ee.id, ee.command, ee.param, strerror(-ee.param));
+    ALOGE_IF(ee.command != BR_OK,
+             "Binder transaction failure. id: %d, cmd: %s (%d), error: %d (%s)", ee.id,
+             getReturnString(ee.command), ee.command, ee.param, strerror(-ee.param));
 }
 
 void IPCThreadState::freeBuffer(const uint8_t* data, size_t /*dataSize*/,

@@ -252,6 +252,7 @@ public:
         ftl::FakeGuard guard(kMainThreadContext);
         resyncToHardwareVsyncLocked(id, allowToEnable, modePtr);
     }
+    void resync() override EXCLUDES(mDisplayLock);
     void forceNextResync() { mLastResyncTime = 0; }
 
     // Passes a vsync sample to VsyncController. Returns true if
@@ -524,7 +525,6 @@ private:
     bool throttleVsync(TimePoint, uid_t) override;
     // Get frame interval
     Period getVsyncPeriod(uid_t) override EXCLUDES(mDisplayLock);
-    void resync() override EXCLUDES(mDisplayLock);
     void onExpectedPresentTimePosted(TimePoint expectedPresentTime) override EXCLUDES(mDisplayLock);
 
     // Returns the powered-on display with the highest refresh rate in |mDisplays| as the new

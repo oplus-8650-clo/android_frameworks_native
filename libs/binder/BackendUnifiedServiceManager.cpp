@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define LOG_TAG "libbinder.BackendUnifiedServiceManager"
+
 #include "BackendUnifiedServiceManager.h"
 
 #include <android-base/strings.h>
@@ -182,7 +184,7 @@ Status BackendUnifiedServiceManager::updateCache(const std::string& serviceName,
     if (atrace_is_tag_enabled(ATRACE_TAG_AIDL)) {
         traceStr = "BinderCacheWithInvalidation::updateCache : " + serviceName;
     }
-    binder::ScopedTrace aidlTrace(ATRACE_TAG_AIDL, traceStr.c_str());
+    binder::ScopedTrace outerAidlTrace(ATRACE_TAG_AIDL, traceStr.c_str());
     if (!binder) {
         binder::ScopedTrace
                 aidlTrace(ATRACE_TAG_AIDL,
