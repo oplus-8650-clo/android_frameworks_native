@@ -99,8 +99,9 @@ public:
 
     void startTimers();
 
-    // Automatically selects a pacesetter display and designates if required. Returns true if a new
-    // display was chosen as the pacesetter.
+    // Automatically selects a pacesetter display and designates if |pacesetterId| is not present,
+    // otherwise promotes `pacesetterId` to pacesetter. Returns true if a new display was chosen as
+    // the pacesetter.
     bool designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId = std::nullopt)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
@@ -111,15 +112,12 @@ public:
     using ConstVsyncSchedulePtr = std::shared_ptr<const VsyncSchedule>;
     using VsyncSchedulePtr = std::shared_ptr<VsyncSchedule>;
 
-    // After registration/unregistration, `activeDisplayId` is promoted to pacesetter. Note that the
-    // active display is never unregistered, since hotplug disconnect never happens for activatable
-    // displays, i.e. a foldable's internal displays or otherwise the (internal or external) primary
-    // display.
-    // TODO: b/255635821 - Remove active display parameters.
+    // TODO: b/255635821 - Remove `defaultPacesetterId` parameter once the pacesetter_selection flag
+    // is live.
     void registerDisplay(PhysicalDisplayId, RefreshRateSelectorPtr,
-                         PhysicalDisplayId activeDisplayId) REQUIRES(kMainThreadContext)
-            EXCLUDES(mDisplayLock);
-    void unregisterDisplay(PhysicalDisplayId, PhysicalDisplayId activeDisplayId)
+                         std::optional<PhysicalDisplayId> defaultPacesetterId)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+    void unregisterDisplay(PhysicalDisplayId, std::optional<PhysicalDisplayId> defaultPacesetterId)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     void run();
@@ -445,7 +443,7 @@ private:
         bool toggleIdleTimer;
     };
 
-    void promotePacesetterDisplay(PhysicalDisplayId pacesetterId, PromotionParams)
+    void promotePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId, PromotionParams)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     // Changes to the displays (e.g. registering and unregistering) must be made
@@ -454,8 +452,8 @@ private:
     // MessageQueue and EventThread need to use the new pacesetter's
     // VsyncSchedule, and this must happen while mDisplayLock is *not* locked,
     // or else we may deadlock with EventThread.
-    std::shared_ptr<VsyncSchedule> promotePacesetterDisplayLocked(PhysicalDisplayId pacesetterId,
-                                                                  PromotionParams)
+    std::shared_ptr<VsyncSchedule> promotePacesetterDisplayLocked(
+            std::optional<PhysicalDisplayId> pacesetterId, PromotionParams)
             REQUIRES(kMainThreadContext, mDisplayLock);
     void applyNewVsyncSchedule(std::shared_ptr<VsyncSchedule>) EXCLUDES(mDisplayLock);
 
@@ -466,8 +464,8 @@ private:
             EXCLUDES(mDisplayLock, mPolicyLock);
 
     void registerDisplayInternal(PhysicalDisplayId, RefreshRateSelectorPtr, VsyncSchedulePtr,
-                                 PhysicalDisplayId activeDisplayId) REQUIRES(kMainThreadContext)
-            EXCLUDES(mDisplayLock);
+                                 std::optional<PhysicalDisplayId> defaultPacesetterId)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     struct Policy;
 

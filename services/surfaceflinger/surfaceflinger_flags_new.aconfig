@@ -225,6 +225,13 @@ flag {
 } # pacesetter_selection
 
 flag {
+  name: "parse_edid_version_and_input_type"
+  namespace: "desktop_display"
+  description: "Extends the display information parsed and provided by SurfaceFlinger to include EDID version and input type."
+  bug: "420767380"
+} # parse_edid_version_and_input_type
+
+flag {
   name: "readback_screenshot"
   namespace: "core_graphics"
   description: "Allows devices to use DPU readback for fullscreen screenshots"

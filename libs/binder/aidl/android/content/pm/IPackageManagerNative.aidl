@@ -86,8 +86,8 @@ interface IPackageManagerNative {
      *
      * @param permName The name of the permission you are checking for.
      * @param packageName The name of the package you are checking against.
-     * @return If the package has the permission, PERMISSION_GRANTED (0) is returned.  If it
-     *         does not have the permission, PERMISSION_DENIED (1) is returned.
+     * @return PackageManager#PERMISSION_GRANTED (0) is returned if the specified package has the
+     *         specified permission, or PackageManager#PERMISSION_DENIED (-1) if it does not.
      */
     int checkPermission(in String permName, in String packageName, in int userId);
 

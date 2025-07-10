@@ -119,7 +119,7 @@ void Scheduler::startTimers() {
 }
 
 bool Scheduler::designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId) {
-    if (FlagManager::getInstance().pacesetter_selection()) {
+    if (FlagManager::getInstance().pacesetter_selection() && !pacesetterId.has_value()) {
         pacesetterId = selectPacesetterDisplay();
     }
 
@@ -204,7 +204,7 @@ PhysicalDisplayId Scheduler::getPacesetterDisplayId() const {
 }
 
 void Scheduler::registerDisplay(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
-                                PhysicalDisplayId activeDisplayId) {
+                                std::optional<PhysicalDisplayId> defaultPacesetterId) {
     auto schedulePtr =
             std::make_shared<VsyncSchedule>(selectorPtr->getActiveMode().modePtr, mFeatures,
                                             [this](PhysicalDisplayId id, bool enable) {
@@ -212,13 +212,13 @@ void Scheduler::registerDisplay(PhysicalDisplayId displayId, RefreshRateSelector
                                             });
 
     registerDisplayInternal(displayId, std::move(selectorPtr), std::move(schedulePtr),
-                            activeDisplayId);
+                            defaultPacesetterId);
 }
 
 void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
                                         RefreshRateSelectorPtr selectorPtr,
                                         VsyncSchedulePtr schedulePtr,
-                                        PhysicalDisplayId activeDisplayId) {
+                                        std::optional<PhysicalDisplayId> defaultPacesetterId) {
     const bool isPrimary = (ftl::FakeGuard(mDisplayLock), !mPacesetterDisplayId);
 
     // Start the idle timer for the first registered (i.e. primary) display.
@@ -233,7 +233,7 @@ void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
                                                        std::move(schedulePtr), mFeatures)
                                    .second;
 
-        return std::make_pair(promotePacesetterDisplayLocked(activeDisplayId, promotionParams),
+        return std::make_pair(promotePacesetterDisplayLocked(defaultPacesetterId, promotionParams),
                               isNew);
     }();
 
@@ -247,8 +247,10 @@ void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
     dispatchHotplug(displayId, Hotplug::Connected);
 }
 
-void Scheduler::unregisterDisplay(PhysicalDisplayId displayId, PhysicalDisplayId activeDisplayId) {
-    LOG_ALWAYS_FATAL_IF(displayId == activeDisplayId, "Cannot unregister the active display!");
+void Scheduler::unregisterDisplay(PhysicalDisplayId displayId,
+                                  std::optional<PhysicalDisplayId> defaultPacesetterId) {
+    LOG_ALWAYS_FATAL_IF(displayId == defaultPacesetterId,
+                        "Cannot unregister the front internal display!");
 
     dispatchHotplug(displayId, Hotplug::Disconnected);
 
@@ -265,7 +267,8 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId, PhysicalDisplayId
         // headless virtual display.)
         LOG_ALWAYS_FATAL_IF(mDisplays.empty(), "Cannot unregister all displays!");
 
-        pacesetterVsyncSchedule = promotePacesetterDisplayLocked(activeDisplayId, kPromotionParams);
+        pacesetterVsyncSchedule =
+                promotePacesetterDisplayLocked(defaultPacesetterId, kPromotionParams);
     }
     applyNewVsyncSchedule(std::move(pacesetterVsyncSchedule));
 }
@@ -1155,7 +1158,8 @@ bool Scheduler::updateFrameRateOverridesLocked(GlobalSignals consideredSignals,
     return mFrameRateOverrideMappings.updateFrameRateOverridesByContent(frameRateOverrides);
 }
 
-void Scheduler::promotePacesetterDisplay(PhysicalDisplayId pacesetterId, PromotionParams params) {
+void Scheduler::promotePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId,
+                                         PromotionParams params) {
     std::shared_ptr<VsyncSchedule> pacesetterVsyncSchedule;
     {
         std::scoped_lock lock(mDisplayLock);
@@ -1166,13 +1170,13 @@ void Scheduler::promotePacesetterDisplay(PhysicalDisplayId pacesetterId, Promoti
 }
 
 std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
-        PhysicalDisplayId pacesetterId, PromotionParams params) {
-    if (FlagManager::getInstance().pacesetter_selection()) {
+        std::optional<PhysicalDisplayId> pacesetterId, PromotionParams params) {
+    if (FlagManager::getInstance().pacesetter_selection() && !pacesetterId.has_value()) {
         pacesetterId = selectPacesetterDisplayLocked();
     }
 
-    mPacesetterDisplayId = pacesetterId;
-    ALOGI("Display %s is the pacesetter", to_string(pacesetterId).c_str());
+    mPacesetterDisplayId = *pacesetterId;
+    ALOGI("Display %s is the pacesetter", to_string(*pacesetterId).c_str());
 
     std::shared_ptr<VsyncSchedule> newVsyncSchedulePtr;
     if (const auto pacesetterOpt = pacesetterDisplayLocked()) {
@@ -1184,21 +1188,21 @@ std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
                                   .onExpired = [this] { idleTimerCallback(TimerState::Expired); }},
                      .kernel = {.onReset =
                                         [this, pacesetterId] {
-                                            kernelIdleTimerCallback(pacesetterId,
+                                            kernelIdleTimerCallback(*pacesetterId,
                                                                     TimerState::Reset);
                                         },
                                 .onExpired =
                                         [this, pacesetterId] {
-                                            kernelIdleTimerCallback(pacesetterId,
+                                            kernelIdleTimerCallback(*pacesetterId,
                                                                     TimerState::Expired);
                                         }},
                      .vrr = {.onReset =
                                      [this, pacesetterId] {
-                                         mSchedulerCallback.vrrDisplayIdle(pacesetterId, false);
+                                         mSchedulerCallback.vrrDisplayIdle(*pacesetterId, false);
                                      },
                              .onExpired =
                                      [this, pacesetterId] {
-                                         mSchedulerCallback.vrrDisplayIdle(pacesetterId, true);
+                                         mSchedulerCallback.vrrDisplayIdle(*pacesetterId, true);
                                      }}});
 
             pacesetter.selectorPtr->startIdleTimer();
@@ -1211,7 +1215,7 @@ std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
         newVsyncSchedulePtr->onDisplayModeChanged(pacesetterActiveModePtr, kForce);
 
         if (FlagManager::getInstance().pacesetter_selection()) {
-            mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, true);
+            mSchedulerCallback.enableLayerCachingTexturePool(*pacesetterId, true);
             onPacesetterDisplaySizeChanged(pacesetterActiveModePtr->getResolution());
         }
     }

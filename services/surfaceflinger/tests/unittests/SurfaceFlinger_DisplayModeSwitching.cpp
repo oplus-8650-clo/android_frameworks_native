@@ -602,6 +602,11 @@ TEST_F(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
     EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
     EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
 
+    // Manually designate the inner display as the pacesetter to prevent pacesetter change when the
+    // outer display is powered off. A pacesetter change cancels the refresh rate change on the
+    // VsyncModulator which breaks the early phase check in ModeSwitchingTo().
+    mFlinger.scheduler()->designatePacesetterDisplay(innerDisplay->getPhysicalId());
+
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId90, 120_Hz)));

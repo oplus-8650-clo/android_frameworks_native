@@ -414,6 +414,13 @@ public:
                                               requestedRefreshRate);
     }
 
+    auto acquireVirtualDisplay(ui::Size resolution, ui::PixelFormat format,
+                               const std::string& uniqueId,
+                               compositionengine::DisplayCreationArgsBuilder& builder) {
+        ftl::FakeGuard guard(mFlinger->mStateLock);
+        return mFlinger->acquireVirtualDisplay(resolution, format, uniqueId, builder);
+    }
+
     auto destroyVirtualDisplay(const sp<IBinder>& displayToken) {
         return mFlinger->destroyVirtualDisplay(displayToken);
     }
@@ -784,6 +791,13 @@ public:
                 SurfaceFlinger::NotifyExpectedPresentHintStatus::Start;
     }
 
+    void injectDisplayIdGenerators(
+            std::unique_ptr<DisplayIdGenerator<GpuVirtualDisplayId>> gpuIdGenerator,
+            std::unique_ptr<DisplayIdGenerator<HalVirtualDisplayId>> halIdGenerator) {
+        mFlinger->mVirtualDisplayIdGenerators.gpu = std::move(gpuIdGenerator);
+        mFlinger->mVirtualDisplayIdGenerators.hal = std::move(halIdGenerator);
+    }
+
     ~TestableSurfaceFlinger() {
         // All these pointer and container clears help ensure that GMock does
         // not report a leaked object, since the SurfaceFlinger instance may
@@ -1148,10 +1162,10 @@ public:
                                                                       refreshRate, refreshRate);
 
                 if (mFlinger.scheduler() && mSchedulerRegistration) {
-                    mFlinger.scheduler()->registerDisplay(*physicalId,
-                                                          mCreationArgs.refreshRateSelector,
-                                                          std::move(controller), std::move(tracker),
-                                                          mFlinger.mutableFrontInternalDisplayId());
+                    mFlinger.scheduler()
+                            ->registerDisplay(*physicalId, mCreationArgs.refreshRateSelector,
+                                              std::move(controller), std::move(tracker),
+                                              mFlinger.flinger()->getDefaultPacesetterDisplay());
                 }
             }
 

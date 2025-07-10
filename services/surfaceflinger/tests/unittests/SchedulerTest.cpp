@@ -872,6 +872,9 @@ TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
     EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId2, false));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // Flush EXPECT_CALLs here so that additional mock calls in the dtor does not trigger a failure.
+    testing::Mock::VerifyAndClearExpectations(&mSchedulerCallback);
 }
 
 TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
@@ -889,7 +892,6 @@ TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
 }
 
 TEST_F(SchedulerTest, pendingModeChangeMultiDisplay) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
     SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
 
     mScheduler->registerDisplay(kDisplayId2,

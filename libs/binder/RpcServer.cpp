@@ -657,6 +657,8 @@ unique_fd RpcServer::releaseServer() {
 
 status_t RpcServer::setupExternalServer(
         unique_fd serverFd, std::function<status_t(const RpcServer&, RpcTransportFd*)>&& acceptFn) {
+    if (status_t res = binder::os::setNonBlocking(serverFd); res != OK) return res;
+
     RpcMutexLockGuard _l(mLock);
     if (mServer.fd.ok()) {
         ALOGE("Each RpcServer can only have one server.");
