@@ -239,6 +239,16 @@ flag {
 } # readback_screenshot
 
 flag {
+  name: "reset_model_flushes_fence"
+  namespace: "core_graphics"
+  description: "VsyncReactor flushes pending fence before calling to reset model"
+  bug: "272802278"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # reset_model_flushes_fence
+
+flag {
   name: "resync_on_tx"
   namespace: "core_graphics"
   description: "Resync to vsync on an incoming transaction"

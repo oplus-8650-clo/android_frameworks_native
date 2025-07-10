@@ -184,8 +184,8 @@ filegroup {
         "DisplayHardware/HWC2.cpp",
         "DisplayHardware/HWComposer.cpp",
         "DisplayHardware/HidlComposerHal.cpp",
-        "DisplayHardware/VirtualDisplaySurface.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.cpp",
+        "DisplayHardware/VirtualDisplaySurface.cpp",
         "PowerAdvisor/*.cpp",
     ],
 }
@@ -195,6 +195,12 @@ cc_library_headers {
     export_include_dirs: ["."],
     static_libs: ["libserviceutils"],
     export_static_lib_headers: ["libserviceutils"],
+}
+
+cc_library_headers {
+    name: "liblocklessqueue_headers",
+    host_supported: true,
+    export_include_dirs: ["."],
 }
 
 filegroup {

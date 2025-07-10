@@ -16,12 +16,14 @@
 
 #pragma once
 
+#include <array>
 #include <bitset>
 #include <climits>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <ostream>
 #include <string>

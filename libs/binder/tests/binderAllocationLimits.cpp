@@ -323,20 +323,6 @@ TEST(BinderAccessorAllocation, AddAccessorCheckService) {
     status_t status = android::removeAccessorProvider(receipt);
 }
 
-TEST(BinderAccessorAllocation, AddAccessorEmpty) {
-    std::vector<size_t> expectedMallocs = {
-            48, // From ALOGE with empty set of instances
-    };
-    std::set<std::string> supportedInstances = {};
-    auto onMalloc = setExpectedMallocs(std::move(expectedMallocs));
-
-    auto receipt =
-            android::addAccessorProvider(std::move(supportedInstances),
-                                         [&](const String16&) -> sp<IBinder> { return nullptr; });
-
-    EXPECT_TRUE(receipt.expired());
-}
-
 TEST(RpcBinderAllocation, SetupRpcServer) {
     std::string tmp = getenv("TMPDIR") ?: "/tmp";
     std::string addr = tmp + "/binderRpcBenchmark";

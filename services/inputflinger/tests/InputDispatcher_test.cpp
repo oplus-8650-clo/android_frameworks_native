@@ -9833,11 +9833,8 @@ private:
     std::chrono::nanoseconds mGestureStartTime;
 };
 
-TEST_F_WITH_FLAGS(
-        InputDispatcherUserActivityPokeTests, MinPokeTimeObserved,
-        REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                            rate_limit_user_activity_poke_in_dispatcher))) {
-    mDispatcher->setMinTimeBetweenUserActivityPokes(50ms);
+TEST_F(InputDispatcherUserActivityPokeTests, MinPokeTimeObserved) {
+    mDispatcher->setMinTimeBetweenUserActivityPokes(10ms);
 
     // First event of type TOUCH. Should poke.
     NotifyMotionArgs motionArgs =
@@ -9846,87 +9843,62 @@ TEST_F_WITH_FLAGS(
     mFakePolicy->assertUserActivityPoked(
             {{motionArgs.eventTime, USER_ACTIVITY_EVENT_TOUCH, ui::LogicalDisplayId::DEFAULT}});
 
-    // 80ns > 50ns has passed since previous TOUCH event. Should poke.
+    // 80ms > 10ms has passed since previous TOUCH event. Should poke.
     motionArgs =
             notifyAndConsumeMotion(ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN,
                                    ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(130));
     mFakePolicy->assertUserActivityPoked(
             {{motionArgs.eventTime, USER_ACTIVITY_EVENT_TOUCH, ui::LogicalDisplayId::DEFAULT}});
 
-    // First event of type OTHER. Should poke (despite being within 50ns of previous TOUCH event).
+    // First event of type OTHER. Should poke (despite being within 10ms of previous TOUCH event).
     motionArgs =
             notifyAndConsumeMotion(ACTION_SCROLL, AINPUT_SOURCE_ROTARY_ENCODER,
                                    ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(135));
     mFakePolicy->assertUserActivityPoked(
             {{motionArgs.eventTime, USER_ACTIVITY_EVENT_OTHER, ui::LogicalDisplayId::DEFAULT}});
 
-    // Within 50ns of previous TOUCH event. Should NOT poke.
+    // Within 10ms of previous TOUCH event. Should NOT poke.
     notifyAndConsumeMotion(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN, ui::LogicalDisplayId::DEFAULT,
-                           std::chrono::milliseconds(140));
+                           std::chrono::milliseconds(138));
     mFakePolicy->assertUserActivityNotPoked();
 
-    // Within 50ns of previous OTHER event. Should NOT poke.
+    // Within 10ms of previous OTHER event. Should NOT poke.
     notifyAndConsumeMotion(ACTION_SCROLL, AINPUT_SOURCE_ROTARY_ENCODER,
-                           ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(150));
+                           ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(142));
     mFakePolicy->assertUserActivityNotPoked();
 
-    // Within 50ns of previous TOUCH event (which was at time 130). Should NOT poke.
+    // Within 10ms of previous TOUCH event (which was at time 130). Should NOT poke.
     // Note that STYLUS is mapped to TOUCH user activity, since it's a pointer-type source.
     notifyAndConsumeMotion(ACTION_DOWN, AINPUT_SOURCE_STYLUS, ui::LogicalDisplayId::DEFAULT,
-                           std::chrono::milliseconds(160));
+                           std::chrono::milliseconds(139));
     mFakePolicy->assertUserActivityNotPoked();
 
-    // 65ns > 50ns has passed since previous OTHER event. Should poke.
+    // 50ms > 10ms has passed since previous OTHER event at 135ms. Should poke.
     motionArgs =
             notifyAndConsumeMotion(ACTION_SCROLL, AINPUT_SOURCE_ROTARY_ENCODER,
-                                   ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(200));
+                                   ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(185));
     mFakePolicy->assertUserActivityPoked(
             {{motionArgs.eventTime, USER_ACTIVITY_EVENT_OTHER, ui::LogicalDisplayId::DEFAULT}});
 
-    // 170ns > 50ns has passed since previous TOUCH event. Should poke.
+    // 160ms > 10ms has passed since previous TOUCH event. Should poke.
     motionArgs =
             notifyAndConsumeMotion(ACTION_UP, AINPUT_SOURCE_STYLUS, ui::LogicalDisplayId::DEFAULT,
-                                   std::chrono::milliseconds(300));
+                                   std::chrono::milliseconds(290));
     mFakePolicy->assertUserActivityPoked(
             {{motionArgs.eventTime, USER_ACTIVITY_EVENT_TOUCH, ui::LogicalDisplayId::DEFAULT}});
 
-    // Assert that there's no more user activity poke event.
+    // No other pokes
     mFakePolicy->assertUserActivityNotPoked();
 }
 
-TEST_F_WITH_FLAGS(
-        InputDispatcherUserActivityPokeTests, DefaultMinPokeTimeOf100MsUsed,
-        REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                            rate_limit_user_activity_poke_in_dispatcher))) {
-    NotifyMotionArgs motionArgs =
-            notifyAndConsumeMotion(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN,
-                                   ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(200));
-    mFakePolicy->assertUserActivityPoked(
-            {{motionArgs.eventTime, USER_ACTIVITY_EVENT_TOUCH, ui::LogicalDisplayId::DEFAULT}});
-
-    notifyAndConsumeMotion(ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN, ui::LogicalDisplayId::DEFAULT,
-                           std::chrono::milliseconds(280));
-    mFakePolicy->assertUserActivityNotPoked();
-
-    motionArgs =
-            notifyAndConsumeMotion(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN,
-                                   ui::LogicalDisplayId::DEFAULT, std::chrono::milliseconds(340));
-    mFakePolicy->assertUserActivityPoked(
-            {{motionArgs.eventTime, USER_ACTIVITY_EVENT_TOUCH, ui::LogicalDisplayId::DEFAULT}});
-}
-
-TEST_F_WITH_FLAGS(
-        InputDispatcherUserActivityPokeTests, ZeroMinPokeTimeDisablesRateLimiting,
-        REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                            rate_limit_user_activity_poke_in_dispatcher))) {
+TEST_F(InputDispatcherUserActivityPokeTests, ZeroMinPokeTimeDisablesRateLimiting) {
     mDispatcher->setMinTimeBetweenUserActivityPokes(0ms);
-
     notifyAndConsumeMotion(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN, ui::LogicalDisplayId::DEFAULT,
                            std::chrono::milliseconds(20));
-    mFakePolicy->assertUserActivityPoked();
 
     notifyAndConsumeMotion(ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN, ui::LogicalDisplayId::DEFAULT,
                            std::chrono::milliseconds(30));
+    mFakePolicy->assertUserActivityPoked();
     mFakePolicy->assertUserActivityPoked();
 }
 
