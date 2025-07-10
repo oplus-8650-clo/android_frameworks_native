@@ -119,9 +119,7 @@ void Scheduler::startTimers() {
 }
 
 bool Scheduler::designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId) {
-    if (FlagManager::getInstance().pacesetter_selection() && !pacesetterId.has_value()) {
-        pacesetterId = selectPacesetterDisplay();
-    }
+    pacesetterId = selectPacesetterDisplay(pacesetterId);
 
     // Skip an unnecessary demotion/promotion cycle if there's no work to do.
     if ((ftl::FakeGuard(mDisplayLock), mPacesetterDisplayId == *pacesetterId)) {
@@ -146,12 +144,30 @@ bool Scheduler::designatePacesetterDisplay(std::optional<PhysicalDisplayId> pace
     return true;
 }
 
-PhysicalDisplayId Scheduler::selectPacesetterDisplay() const {
-    std::scoped_lock lock(mDisplayLock);
-    return selectPacesetterDisplayLocked();
+bool Scheduler::forcePacesetterDisplay(PhysicalDisplayId pacesetterId) {
+    {
+        std::scoped_lock lock(mDisplayLock);
+        mForcedPacesetterDisplayId = pacesetterId;
+    }
+    return designatePacesetterDisplay();
 }
 
-PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked() const {
+PhysicalDisplayId Scheduler::selectPacesetterDisplay(
+        std::optional<PhysicalDisplayId> desiredPacesetterId) const {
+    std::scoped_lock lock(mDisplayLock);
+    return selectPacesetterDisplayLocked(desiredPacesetterId);
+}
+
+PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
+        std::optional<PhysicalDisplayId> desiredPacesetterId) const {
+    if (mForcedPacesetterDisplayId.has_value()) {
+        return *mForcedPacesetterDisplayId;
+    }
+
+    if (desiredPacesetterId.has_value()) {
+        return *desiredPacesetterId;
+    }
+
     // The first display should be the new pacesetter if none of the displays are powered on.
     const auto& [firstDisplayId, firstDisplay] = *mDisplays.begin();
     PhysicalDisplayId newPacesetterId = firstDisplayId;
@@ -195,6 +211,19 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked() const {
     }
 
     return newPacesetterId;
+}
+
+bool Scheduler::resetForcedPacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId) {
+    {
+        std::scoped_lock lock(mDisplayLock);
+        if (!mForcedPacesetterDisplayId.has_value()) {
+            return false;
+        }
+
+        mForcedPacesetterDisplayId.reset();
+    }
+
+    return designatePacesetterDisplay(pacesetterId);
 }
 
 PhysicalDisplayId Scheduler::getPacesetterDisplayId() const {
@@ -266,6 +295,10 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId,
         // there to be at least one display. (This may be relaxed in the future with
         // headless virtual display.)
         LOG_ALWAYS_FATAL_IF(mDisplays.empty(), "Cannot unregister all displays!");
+
+        if (mForcedPacesetterDisplayId == displayId) {
+            mForcedPacesetterDisplayId.reset();
+        }
 
         pacesetterVsyncSchedule =
                 promotePacesetterDisplayLocked(defaultPacesetterId, kPromotionParams);
@@ -1077,6 +1110,7 @@ void Scheduler::dump(utils::Dumper& dumper) const {
             std::scoped_lock lock(mDisplayLock);
             ftl::FakeGuard guard(kMainThreadContext);
             dumper.dump("pacesetterDisplayId"sv, mPacesetterDisplayId);
+            dumper.dump("forcedPacesetterDisplayId"sv, mForcedPacesetterDisplayId);
         }
         dumper.dump("layerHistory"sv, mLayerHistory.dump());
         dumper.dump("touchTimer"sv, mTouchTimer.transform(&OneShotTimer::interval));
@@ -1171,11 +1205,10 @@ void Scheduler::promotePacesetterDisplay(std::optional<PhysicalDisplayId> pacese
 
 std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
         std::optional<PhysicalDisplayId> pacesetterId, PromotionParams params) {
-    if (FlagManager::getInstance().pacesetter_selection() && !pacesetterId.has_value()) {
-        pacesetterId = selectPacesetterDisplayLocked();
-    }
+    pacesetterId = selectPacesetterDisplayLocked(pacesetterId);
 
     mPacesetterDisplayId = *pacesetterId;
+
     ALOGI("Display %s is the pacesetter", to_string(*pacesetterId).c_str());
 
     std::shared_ptr<VsyncSchedule> newVsyncSchedulePtr;

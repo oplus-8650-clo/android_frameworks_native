@@ -9468,6 +9468,31 @@ void SurfaceFlinger::sfdo_forceClientComposition(bool enabled) {
     scheduleRepaint();
 }
 
+status_t SurfaceFlinger::sfdo_forcePacesetter(PhysicalDisplayId displayId) {
+    return mScheduler
+            ->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext)
+                               FTL_FAKE_GUARD(mStateLock) -> status_t {
+                                   if (!mPhysicalDisplays.contains(displayId)) {
+                                       return NAME_NOT_FOUND;
+                                   }
+                                   if (mScheduler->forcePacesetterDisplay(displayId)) {
+                                       onNewPacesetterDisplay();
+                                   }
+                                   return OK;
+                               })
+            .get();
+}
+
+void SurfaceFlinger::sfdo_resetForcedPacesetter() {
+    mScheduler
+            ->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) FTL_FAKE_GUARD(mStateLock) {
+                if (mScheduler->resetForcedPacesetterDisplay(getDefaultPacesetterDisplay())) {
+                    onNewPacesetterDisplay();
+                }
+            })
+            .wait();
+}
+
 // gui::ISurfaceComposer
 
 binder::Status SurfaceComposerAIDL::bootFinished() {
@@ -10408,6 +10433,26 @@ binder::Status SurfaceComposerAIDL::removeJankListener(int32_t layerId,
                                                        const sp<gui::IJankListener>& listener,
                                                        int64_t afterVsync) {
     JankTracker::removeJankListener(layerId, IInterface::asBinder(listener), afterVsync);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::forcePacesetter(int64_t displayId) {
+    status_t status = checkAccessPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+
+    const PhysicalDisplayId id = PhysicalDisplayId::fromValue(static_cast<uint64_t>(displayId));
+    return binderStatusFromStatusT(mFlinger->sfdo_forcePacesetter(id));
+}
+
+binder::Status SurfaceComposerAIDL::resetForcedPacesetter() {
+    status_t status = checkAccessPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+
+    mFlinger->sfdo_resetForcedPacesetter();
     return binder::Status::ok();
 }
 

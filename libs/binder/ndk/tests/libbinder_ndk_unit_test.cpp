@@ -25,6 +25,7 @@
 #include <android/binder_process.h>
 #include <gtest/gtest.h>
 #include <iface/iface.h>
+#include <selinux/selinux.h>
 #include <utils/Looper.h>
 
 // warning: this is assuming that libbinder_ndk is using the same copy
@@ -1098,9 +1099,10 @@ TEST(NdkBinder, CheckServiceAccessOk) {
 }
 
 TEST(NdkBinder, CheckServiceAccessNotOk) {
-    EXPECT_FALSE(AServiceManager_checkServiceAccess(
-            "u:r:some_unknown_sid:s0", 0, 0, "adb",
-            AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND));
+    bool is_enforcing = security_getenforce() == 1;
+    EXPECT_NE(is_enforcing, AServiceManager_checkServiceAccess(
+                                    "u:r:some_unknown_sid:s0", 0, 0, "adb",
+                                    AServiceManager_PermissionType::CHECK_ACCESS_PERMISSION_FIND));
 }
 
 TEST(NdkBinder, InvalidCheckServiceAccessArgs) {

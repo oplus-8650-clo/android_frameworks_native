@@ -231,10 +231,17 @@ status_t RpcServer::recvmsgSocketConnection(const RpcServer& server, RpcTranspor
     iovec iov{&zero, sizeof(zero)};
     std::vector<std::variant<unique_fd, borrowed_fd>> fds;
 
+    // TODO: this should delegate to RpcState::rpcRec to handle transaction errors
+    // consistently
     ssize_t num_bytes = binder::os::receiveMessageFromSocket(server.mServer, &iov, 1, &fds);
     if (num_bytes < 0) {
         int savedErrno = errno;
         ALOGE("Failed recvmsg: %s", strerror(savedErrno));
+
+        if (savedErrno == ECONNRESET) {
+            return DEAD_OBJECT;
+        }
+
         return -savedErrno;
     }
     if (num_bytes == 0) {
@@ -272,10 +279,12 @@ void RpcServer::join() {
 
         RpcTransportFd clientSocket;
         if ((status = mAcceptFn(*this, &clientSocket)) != OK) {
-            if (status == DEAD_OBJECT)
+            if (status == DEAD_OBJECT) {
                 break;
-            else
+            } else {
+                ALOGE("Accept returned error %s", statusToString(status).c_str());
                 continue;
+            }
         }
 
         LOG_RPC_DETAIL("accept on fd %d yields fd %d", mServer.fd.get(), clientSocket.fd.get());

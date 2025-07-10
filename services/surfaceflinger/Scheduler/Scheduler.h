@@ -99,10 +99,22 @@ public:
 
     void startTimers();
 
-    // Automatically selects a pacesetter display and designates if |pacesetterId| is not present,
+    // Automatically selects a pacesetter display and designates if `pacesetterId` is not present,
     // otherwise promotes `pacesetterId` to pacesetter. Returns true if a new display was chosen as
     // the pacesetter.
     bool designatePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId = std::nullopt)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+
+    // Force `pacesetterId` as the pacesetter display, which will remain as the pacesetter display
+    // until it is unregistered or the forced pacesetter is reset. Returns true if the forced
+    // pacesetter is different from the previous pacesetter.
+    bool forcePacesetterDisplay(PhysicalDisplayId pacesetterId) REQUIRES(kMainThreadContext)
+            EXCLUDES(mDisplayLock);
+
+    // Clears forced pacesetter display if present and sets the pacesetter to
+    // `pacesetterId` if present, otherwise automatically selects one. No-op if
+    // `mForcedPacesetterDisplayId` is not set.
+    bool resetForcedPacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     PhysicalDisplayId getPacesetterDisplayId() const EXCLUDES(mDisplayLock);
@@ -525,14 +537,17 @@ private:
     Period getVsyncPeriod(uid_t) override EXCLUDES(mDisplayLock);
     void onExpectedPresentTimePosted(TimePoint expectedPresentTime) override EXCLUDES(mDisplayLock);
 
-    // Returns the powered-on display with the highest refresh rate in |mDisplays| as the new
-    // pacesetter, but does not set the display as pacesetter.
+    // Returns the display that should be promoted to pacesetter using the following priority:
+    // 1. `mForcedPacesetterDisplayId`, if present
+    // 2. `desiredPacesetterId`, if specified
+    // 3. powered-on display with the highest refresh rate in `mDisplays`
     // NOTE: If displays with highest refresh rates have roughly equal refresh rates,
     // and the current pacesetter is among them, then the current pacesetter will remain the
     // pacesetter.
-    PhysicalDisplayId selectPacesetterDisplay() const REQUIRES(kMainThreadContext)
-            EXCLUDES(mDisplayLock);
-    PhysicalDisplayId selectPacesetterDisplayLocked() const
+    PhysicalDisplayId selectPacesetterDisplay(std::optional<PhysicalDisplayId> desiredPacesetterId)
+            const REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+    PhysicalDisplayId selectPacesetterDisplayLocked(
+            std::optional<PhysicalDisplayId> desiredPacesetterId) const
             REQUIRES(kMainThreadContext, mDisplayLock);
 
     std::unique_ptr<EventThread> mRenderEventThread;
@@ -600,6 +615,9 @@ private:
 
     // May be read from any thread, but must only be written from the main thread.
     ftl::Optional<PhysicalDisplayId> mPacesetterDisplayId GUARDED_BY(mDisplayLock);
+
+    ftl::Optional<PhysicalDisplayId> mForcedPacesetterDisplayId GUARDED_BY(mDisplayLock)
+            GUARDED_BY(kMainThreadContext);
 
     ftl::Optional<DisplayRef> pacesetterDisplayLocked() REQUIRES(mDisplayLock) {
         return static_cast<const Scheduler*>(this)->pacesetterDisplayLocked().transform(

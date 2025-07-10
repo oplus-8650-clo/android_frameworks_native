@@ -51,6 +51,25 @@ VSyncReactor::VSyncReactor(PhysicalDisplayId id, std::unique_ptr<Clock> clock,
 
 VSyncReactor::~VSyncReactor() = default;
 
+bool VSyncReactor::updateTrackerWithSignaledFences() {
+    bool timestampAccepted = true;
+    for (auto it = mUnfiredFences.begin(); it != mUnfiredFences.end();) {
+        auto const time = FlagManager::getInstance().reset_model_flushes_fence()
+                ? (*it)->getSignalTime()
+                : (*it)->getCachedSignalTime();
+        if (time == Fence::SIGNAL_TIME_PENDING) {
+            it++;
+        } else if (time == Fence::SIGNAL_TIME_INVALID) {
+            it = mUnfiredFences.erase(it);
+        } else {
+            timestampAccepted &= mTracker.addVsyncTimestamp(time);
+
+            it = mUnfiredFences.erase(it);
+        }
+    }
+    return timestampAccepted;
+}
+
 bool VSyncReactor::addPresentFence(std::shared_ptr<FenceTime> fence) {
     SFTRACE_CALL();
 
@@ -70,20 +89,7 @@ bool VSyncReactor::addPresentFence(std::shared_ptr<FenceTime> fence) {
         return true;
     }
 
-    bool timestampAccepted = true;
-    for (auto it = mUnfiredFences.begin(); it != mUnfiredFences.end();) {
-        auto const time = (*it)->getCachedSignalTime();
-        if (time == Fence::SIGNAL_TIME_PENDING) {
-            it++;
-        } else if (time == Fence::SIGNAL_TIME_INVALID) {
-            it = mUnfiredFences.erase(it);
-        } else {
-            timestampAccepted &= mTracker.addVsyncTimestamp(time);
-
-            it = mUnfiredFences.erase(it);
-        }
-    }
-
+    bool timestampAccepted = updateTrackerWithSignaledFences();
     if (signalTime == Fence::SIGNAL_TIME_PENDING) {
         if (mPendingLimit == mUnfiredFences.size()) {
             mUnfiredFences.erase(mUnfiredFences.begin());
@@ -115,6 +121,9 @@ void VSyncReactor::setIgnorePresentFencesInternal(bool ignore) {
 
 void VSyncReactor::updateIgnorePresentFencesInternal() {
     if (mExternalIgnoreFences || mInternalIgnoreFences) {
+        if (FlagManager::getInstance().reset_model_flushes_fence()) {
+            updateTrackerWithSignaledFences();
+        }
         mUnfiredFences.clear();
     }
 }
@@ -231,6 +240,12 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
 void VSyncReactor::setDisplayPowerMode(hal::PowerMode powerMode) {
     std::scoped_lock lock(mMutex);
     mDisplayPowerMode = powerMode;
+}
+
+void VSyncReactor::resetModel() {
+    std::lock_guard lock(mMutex);
+    updateTrackerWithSignaledFences();
+    mTracker.resetModel();
 }
 
 void VSyncReactor::dump(std::string& result) const {

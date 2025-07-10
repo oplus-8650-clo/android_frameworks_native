@@ -184,7 +184,11 @@ void VsyncSchedule::enableHardwareVsync() {
 void VsyncSchedule::enableHardwareVsyncLocked() {
     SFTRACE_CALL();
     if (mHwVsyncState == HwVsyncState::Disabled) {
-        getTracker().resetModel();
+        if (FlagManager::getInstance().reset_model_flushes_fence()) {
+            mController->resetModel();
+        } else {
+            getTracker().resetModel();
+        }
         mRequestHardwareVsync(mId, true);
         mHwVsyncState = HwVsyncState::Enabled;
     }

@@ -53,6 +53,8 @@ public:
 
     void setDisplayPowerMode(hal::PowerMode powerMode) final;
 
+    void resetModel() final;
+
     void dump(std::string& result) const final;
 
 private:
@@ -62,6 +64,7 @@ private:
     void endPeriodTransition() REQUIRES(mMutex);
     bool periodConfirmed(nsecs_t vsync_timestamp, std::optional<nsecs_t> hwcVsyncPeriod)
             REQUIRES(mMutex);
+    bool updateTrackerWithSignaledFences() REQUIRES(mMutex);
 
     const PhysicalDisplayId mId;
     std::unique_ptr<Clock> const mClock;

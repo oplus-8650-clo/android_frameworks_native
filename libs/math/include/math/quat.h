@@ -24,18 +24,14 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#ifndef PURE
-#define PURE __attribute__((pure))
-#endif
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
-#pragma clang diagnostic ignored "-Wnested-anon-types"
-
 namespace android {
 // -------------------------------------------------------------------------------------
 
 namespace details {
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
+#pragma clang diagnostic ignored "-Wnested-anon-types"
 
 template <typename T>
 class TQuaternion : public TVecAddOperators<TQuaternion, T>,
@@ -130,10 +126,13 @@ public:
 
     // constructs a quaternion from an axis and angle
     template <typename A, typename B>
-    constexpr static TQuaternion PURE fromAxisAngle(const TVec3<A>& axis, B angle) {
-        return TQuaternion(std::sin(angle*0.5) * normalize(axis), std::cos(angle*0.5));
+    constexpr static TQuaternion __attribute__((pure)) fromAxisAngle(const TVec3<A>& axis,
+                                                                     B angle) {
+        return TQuaternion(std::sin(angle * 0.5) * normalize(axis), std::cos(angle * 0.5));
     }
 };
+
+#pragma clang diagnostic pop
 
 }  // namespace details
 
@@ -188,7 +187,3 @@ constexpr inline quatd operator""_kd(unsigned long long v) {  // NOLINT
 }  // namespace android
 
 TVECHELPERS_STD_HASH(android::details::TQuaternion);
-
-#pragma clang diagnostic pop
-
-#undef PURE

@@ -120,14 +120,9 @@ public:
         return mPacesetterDisplayId;
     }
 
-    void designatePacesetterDisplay(PhysicalDisplayId displayId) {
+    bool designatePacesetterDisplay(std::optional<PhysicalDisplayId> displayId = std::nullopt) {
         ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::designatePacesetterDisplay(displayId);
-    }
-
-    void designatePacesetterDisplay() {
-        ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::designatePacesetterDisplay();
+        return Scheduler::designatePacesetterDisplay(displayId);
     }
 
     std::optional<hal::PowerMode> getDisplayPowerMode(PhysicalDisplayId id) {

@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/input-event-codes.h>
 #include <linux/ioctl.h>
 #include <memory.h>
 #include <stdint.h>
@@ -679,8 +680,10 @@ void EventHub::Device::populateAbsoluteAxisStates() {
         }
         struct input_absinfo info {};
         if (ioctl(fd, EVIOCGABS(axis), &info)) {
-            ALOGE("Error reading absolute controller %d for device %s fd %d: %s", axis,
-                  identifier.name.c_str(), fd, strerror(errno));
+            ALOGE("Error reading axis info for device '%s' axis %s fd %d: %s",
+                  identifier.name.c_str(),
+                  InputEventLookup::getLinuxEvdevLabel(EV_ABS, axis, 0).code.c_str(), fd,
+                  strerror(errno));
             continue;
         }
         auto& [axisInfo, value] = absState[axis];
