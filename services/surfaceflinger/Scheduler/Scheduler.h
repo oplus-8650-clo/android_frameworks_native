@@ -262,7 +262,8 @@ public:
         ftl::FakeGuard guard(kMainThreadContext);
         resyncToHardwareVsyncLocked(id, allowToEnable, modePtr);
     }
-    void resync() override EXCLUDES(mDisplayLock);
+
+    void resync(ResyncCaller) override EXCLUDES(mDisplayLock);
     void forceNextResync() { mLastResyncTime = 0; }
 
     // Passes a vsync sample to VsyncController. Returns true if

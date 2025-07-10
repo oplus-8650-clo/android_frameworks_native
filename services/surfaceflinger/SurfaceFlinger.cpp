@@ -5136,7 +5136,7 @@ void SurfaceFlinger::setTransactionFlags(uint32_t mask, TransactionSchedule sche
     if (const bool scheduled = transactionFlags & mask; !scheduled) {
         if (FlagManager::getInstance().resync_on_tx() &&
                 FlagManager::getInstance().vsync_predictor_predicts_within_threshold()) {
-            mScheduler->resync();
+            mScheduler->resync(IEventThreadCallback::ResyncCaller::Transaction);
         }
         scheduleCommit(frameHint);
     } else if (frameHint == FrameHint::kActive) {

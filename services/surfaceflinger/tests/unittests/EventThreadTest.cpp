@@ -114,7 +114,7 @@ protected:
     // IEventThreadCallback overrides
     bool throttleVsync(TimePoint, uid_t) override;
     Period getVsyncPeriod(uid_t) override;
-    void resync() override;
+    void resync(ResyncCaller) override;
     void onExpectedPresentTimePosted(TimePoint) override;
 
     void setupEventThread();
@@ -166,7 +166,7 @@ protected:
             mVSyncCallbackRegisterRecorder{scheduler::VSyncDispatch::CallbackToken(0)};
     AsyncCallRecorder<void (*)(scheduler::VSyncDispatch::CallbackToken)>
             mVSyncCallbackUnregisterRecorder;
-    AsyncCallRecorder<void (*)()> mResyncCallRecorder;
+    AsyncCallRecorder<void (*)(ResyncCaller)> mResyncCallRecorder;
     AsyncCallRecorder<void (*)(nsecs_t, uid_t)> mThrottleVsyncCallRecorder;
     AsyncCallRecorder<void (*)(nsecs_t)> mOnExpectedPresentTimePostedRecorder;
     ConnectionEventRecorder mConnectionEventCallRecorder{0};
@@ -224,8 +224,8 @@ Period EventThreadTest::getVsyncPeriod(uid_t) {
     return mVsyncPeriod;
 }
 
-void EventThreadTest::resync() {
-    mResyncCallRecorder.recordCall();
+void EventThreadTest::resync(ResyncCaller caller) {
+    mResyncCallRecorder.recordCall(caller);
 }
 
 void EventThreadTest::onExpectedPresentTimePosted(TimePoint expectedPresentTime) {
@@ -451,7 +451,9 @@ TEST_F(EventThreadTest, requestNextVsyncPostsASingleVSyncEventToTheConnection) {
     mThread->requestNextVsync(mConnection);
 
     // EventThread should immediately request a resync.
-    EXPECT_TRUE(mResyncCallRecorder.waitForCall().has_value());
+    const auto resyncCallOpt = mResyncCallRecorder.waitForCall();
+    ASSERT_TRUE(resyncCallOpt.has_value());
+    EXPECT_EQ(ResyncCaller::RequestNextVsync, std::get<0>((resyncCallOpt.value())));
 
     // EventThread should enable schedule a vsync callback
     expectVSyncCallbackScheduleReceived(true);
@@ -532,7 +534,9 @@ TEST_F(EventThreadTest, getLatestVsyncEventData) {
     VsyncEventData vsyncEventData = mThread->getLatestVsyncEventData(mConnection, now);
 
     // Check EventThread immediately requested a resync.
-    EXPECT_TRUE(mResyncCallRecorder.waitForCall().has_value());
+    const auto resyncCallOpt = mResyncCallRecorder.waitForCall();
+    ASSERT_TRUE(resyncCallOpt.has_value());
+    EXPECT_EQ(ResyncCaller::RequestNextVsync, std::get<0>((resyncCallOpt.value())));
 
     expectVsyncEventDataFrameTimelinesValidLength(vsyncEventData);
     EXPECT_GT(vsyncEventData.frameTimelines[0].deadlineTimestamp, now)
@@ -873,7 +877,9 @@ TEST_F(EventThreadTest, requestNextVsyncWithThrottleVsyncDoesntPostVSync) {
     mThread->requestNextVsync(mThrottledConnection);
 
     // EventThread should immediately request a resync.
-    EXPECT_TRUE(mResyncCallRecorder.waitForCall().has_value());
+    const auto resyncCallOpt = mResyncCallRecorder.waitForCall();
+    ASSERT_TRUE(resyncCallOpt.has_value());
+    EXPECT_EQ(ResyncCaller::RequestNextVsync, std::get<0>((resyncCallOpt.value())));
 
     // EventThread should enable vsync callbacks.
     expectVSyncCallbackScheduleReceived(true);

@@ -424,7 +424,7 @@ void EventThread::setVsyncRate(uint32_t rate, const sp<EventThreadConnection>& c
 }
 
 void EventThread::requestNextVsync(const sp<EventThreadConnection>& connection) {
-    mCallback.resync();
+    mCallback.resync(IEventThreadCallback::ResyncCaller::RequestNextVsync);
 
     std::lock_guard<std::mutex> lock(mMutex);
 
@@ -440,7 +440,7 @@ VsyncEventData EventThread::getLatestVsyncEventData(const sp<EventThreadConnecti
                                                     nsecs_t now) const {
     // Resync so that the vsync is accurate with hardware. getLatestVsyncEventData is an alternate
     // way to get vsync data (instead of posting callbacks to Choreographer).
-    mCallback.resync();
+    mCallback.resync(IEventThreadCallback::ResyncCaller::RequestNextVsync);
 
     VsyncEventData vsyncEventData;
     const Period frameInterval = mCallback.getVsyncPeriod(connection->mOwnerUid);

@@ -833,13 +833,17 @@ Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,
     return Fps::fromPeriodNsecs(frameInterval.ns());
 }
 
-void Scheduler::resync() {
-    static constexpr nsecs_t kIgnoreDelay = ms2ns(750);
+void Scheduler::resync(ResyncCaller caller) {
+    static constexpr nsecs_t kRequestNextVsyncIgnoreDelay = ms2ns(750);
 
     const nsecs_t now = systemTime();
     const nsecs_t last = mLastResyncTime.exchange(now);
 
-    if (now - last > kIgnoreDelay) {
+    const auto ignoreDelay = caller == ResyncCaller::Transaction
+            ? VSyncTracker::kPredictorThreshold.ns()
+            : kRequestNextVsyncIgnoreDelay;
+
+    if (now - last > ignoreDelay) {
         resyncAllToHardwareVsync(false /* allowToEnable */);
     }
 }
