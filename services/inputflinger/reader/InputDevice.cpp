@@ -52,6 +52,7 @@ InputDevice::InputDevice(InputReaderContext* context, int32_t id, int32_t genera
         mSources(0),
         mIsWaking(false),
         mIsExternal(false),
+        mIsVirtualDevice(false),
         mHasMic(false),
         mDropUntilNextSync(false) {}
 
@@ -136,6 +137,7 @@ void InputDevice::dump(std::string& dump, const std::string& eventHubDevStr) {
     dump += StringPrintf(INDENT "%s", eventHubDevStr.c_str());
     dump += StringPrintf(INDENT2 "Generation: %d\n", mGeneration);
     dump += StringPrintf(INDENT2 "IsExternal: %s\n", toString(mIsExternal));
+    dump += StringPrintf(INDENT2 "IsVirtualDevice: %s\n", toString(mIsVirtualDevice));
     dump += StringPrintf(INDENT2 "IsWaking: %s\n", toString(mIsWaking));
     dump += StringPrintf(INDENT2 "AssociatedDisplayPort: ");
     if (mAssociatedDisplayPort) {
@@ -285,6 +287,15 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     getValueByKey(readerConfig.deviceTypeAssociations, mIdentifier.location);
             mIsWaking = mConfiguration.getBool("device.wake").value_or(false);
             mShouldSmoothScroll = mConfiguration.getBool("device.viewBehavior_smoothScroll");
+        }
+
+        if (!changes.any() || changes.test(Change::VIRTUAL_DEVICES)) {
+            const bool isVirtualDevice =
+                    readerConfig.virtualDevicePorts.contains(mIdentifier.location);
+            if (mIsVirtualDevice != isVirtualDevice) {
+                mIsVirtualDevice = isVirtualDevice;
+                bumpGeneration();
+            }
         }
 
         if (!changes.any() || changes.test(Change::DEVICE_ALIAS)) {
@@ -481,7 +492,7 @@ std::list<NotifyArgs> InputDevice::updateExternalStylusState(const StylusState& 
 InputDeviceInfo InputDevice::getDeviceInfo() {
     InputDeviceInfo outDeviceInfo;
     outDeviceInfo.initialize(mId, mGeneration, mControllerNumber, mIdentifier, mAlias, mIsExternal,
-                             mHasMic,
+                             mIsVirtualDevice, mHasMic,
                              getAssociatedDisplayId().value_or(ui::LogicalDisplayId::INVALID),
                              {mShouldSmoothScroll}, isEnabled());
     outDeviceInfo.setKeyboardType(static_cast<int32_t>(mKeyboardType));

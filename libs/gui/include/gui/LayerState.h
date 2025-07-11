@@ -28,6 +28,7 @@
 #include <android/gui/LayerCaptureArgs.h>
 #include <android/gui/TrustedPresentationThresholds.h>
 #include <android/native_window.h>
+#include <gui/CornerRadii.h>
 #include <gui/DisplayLuts.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/ITransactionCompletedListener.h>
@@ -391,8 +392,8 @@ struct layer_state_t {
     uint32_t mask;
     uint8_t reserved;
     matrix22_t matrix;
-    float cornerRadius;
-    float clientDrawnCornerRadius;
+    gui::CornerRadii cornerRadii;
+    gui::CornerRadii clientDrawnCornerRadii;
     uint32_t backgroundBlurRadius;
     float backgroundBlurScale;
 

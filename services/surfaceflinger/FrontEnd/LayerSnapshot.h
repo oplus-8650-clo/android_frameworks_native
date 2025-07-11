@@ -18,6 +18,7 @@
 
 #include <PowerAdvisor/Workload.h>
 #include <compositionengine/LayerFECompositionState.h>
+#include <gui/CornerRadii.h>
 #include <renderengine/LayerSettings.h>
 #include "DisplayHardware/ComposerHal.h"
 #include "LayerHierarchy.h"
@@ -34,19 +35,22 @@ struct RoundedCornerState {
     // Rounded rectangle in local layer coordinate space.
     FloatRect cropRect = FloatRect();
     // Radius of the rounded rectangle for composition
-    vec2 radius;
+    gui::CornerRadii radii;
     // Requested radius of the rounded rectangle
-    vec2 requestedRadius;
+    gui::CornerRadii requestedRadii;
     // Radius drawn by client for the rounded rectangle
-    vec2 clientDrawnRadius;
-    bool hasClientDrawnRadius() const {
-        return clientDrawnRadius.x > 0.0f && clientDrawnRadius.y > 0.0f;
+    gui::CornerRadii clientDrawnRadii;
+
+    bool hasClientDrawnRadius() const { return radii.isEmpty() && !clientDrawnRadii.isEmpty(); }
+    bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }
+    bool hasRoundedCorners() const {
+        return !radii.isEmpty() ||
+                (!clientDrawnRadii.isEmpty() && clientDrawnRadii == requestedRadii);
     }
-    bool hasRequestedRadius() const { return requestedRadius.x > 0.0f && requestedRadius.y > 0.0f; }
-    bool hasRoundedCorners() const { return radius.x > 0.0f && radius.y > 0.0f; }
+
     bool operator==(RoundedCornerState const& rhs) const {
-        return cropRect == rhs.cropRect && radius == rhs.radius &&
-                clientDrawnRadius == rhs.clientDrawnRadius;
+        return cropRect == rhs.cropRect && radii == rhs.radii &&
+                requestedRadii == rhs.requestedRadii && clientDrawnRadii == rhs.clientDrawnRadii;
     }
 };
 

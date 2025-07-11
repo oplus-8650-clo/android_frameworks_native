@@ -287,8 +287,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 
 sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      std::shared_ptr<gui::DisplayLuts> displayLuts,
-                                     ui::Dataspace srcDataspace,
-                                     sk_sp<SkColorSpace> outColorSpace) {
+                                     ui::Dataspace srcDataspace) {
     if (mBuilder == nullptr) {
         mBuilder = std::make_unique<SkRuntimeShaderBuilder>(mEffect);
     }

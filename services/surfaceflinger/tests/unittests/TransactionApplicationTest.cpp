@@ -302,7 +302,7 @@ TEST_F(TransactionApplicationTest, ApplyTokensUseDifferentQueues) {
                                                /* pixelFormat */ 0, /* outUsage */ 0);
     mFlinger.addLayer(1);
     bool out;
-    mFlinger.updateLayerSnapshots(VsyncId{1}, 0, /* transactionsFlushed */ true, out);
+    mFlinger.updateLayerSnapshots(VsyncId{1}, 0, 0, /* transactionsFlushed */ true, out);
     transaction1.states[0].externalTexture =
             std::make_shared<FakeExternalTexture>(*transaction1.states[0].state.bufferData);
     transaction1.states[0].state.surface = mFlinger.getLegacyLayer(1)->getHandle();
@@ -404,6 +404,7 @@ public:
         }
         bool unused;
         bool mustComposite = mFlinger.updateLayerSnapshots(VsyncId{1}, /*frameTimeNs=*/0,
+                                                           /*expectedPresentTimeNs=*/0,
                                                            /*transactionsFlushed=*/true, unused);
 
         for (auto transaction : transactions) {
@@ -431,7 +432,8 @@ public:
                                      static_cast<int>(getuid()),
                                      transaction.transactionState.getId(),
                                      transaction.transactionState.mMergedTransactionIds,
-                                     transaction.transactionState.mEarlyWakeupInfos);
+                                     transaction.transactionState.mEarlyWakeupInfos,
+                                     transaction.transactionState.mBarriers);
             mFlinger.setTransactionStateInternal(transactionState);
         }
         mFlinger.flushTransactionQueues();

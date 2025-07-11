@@ -274,6 +274,7 @@ private:
     ui::Size mSize GUARDED_BY(mMutex);
     ui::Size mRequestedSize GUARDED_BY(mMutex);
     int32_t mFormat GUARDED_BY(mMutex);
+    bool mSetBufferBarrier GUARDED_BY(mMutex) = false;
 
     // Keep a copy of the current picture profile handle, so it can be moved to a new
     // SurfaceControl when BBQ migrates via ::update.

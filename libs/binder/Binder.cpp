@@ -41,6 +41,7 @@
 #include "Constants.h"
 #include "OS.h"
 #include "RpcState.h"
+#include "Utils.h"
 
 namespace android {
 
@@ -374,6 +375,8 @@ const String16& BBinder::getInterfaceDescriptor() const
 status_t BBinder::transact(
     uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
 {
+    const auto startTime = std::chrono::steady_clock::now();
+
     data.setDataPosition(0);
 
     if (reply != nullptr && (flags & FLAG_CLEAR_BUF)) {
@@ -436,6 +439,14 @@ status_t BBinder::transact(
                 ALOGI("Failed to create RecordedTransaction object.");
             }
         }
+    }
+
+    const uint64_t transactionMs = to_ms(std::chrono::steady_clock::now() - startTime);
+    if (transactionMs > 1000lu) {
+        ALOGW("Binder transaction to %s code %" PRIu32 " took %" PRIu64
+              "ms. Data bytes: %zu Reply bytes: %zu Flags: %d",
+              String8(getInterfaceDescriptor()).c_str(), code, transactionMs, data.dataSize(),
+              reply ? reply->dataSize() : 0u, flags);
     }
 
     return err;

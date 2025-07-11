@@ -83,8 +83,6 @@ private:
                                SpamStatsKeyHash,   // Hash
                                SpamStatsKeyEqual>; // KeyEqual
 
-    // TODO(b/299356196): replace with gSystemBootCompleted
-    bool mBootComplete = false;
     // If last service check was a success.
     bool mLastServiceCheckSucceeded = true;
     // time of last check

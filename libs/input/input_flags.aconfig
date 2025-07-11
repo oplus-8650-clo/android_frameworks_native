@@ -255,3 +255,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "abort_device_opening_on_enodev"
+  namespace: "input"
+  description: "Stop opening a device if it is removed before we can cache all of its axis information"
+  bug: "424789999"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

@@ -17,6 +17,7 @@
 #include "FakeInputTracingBackend.h"
 
 #include <android-base/logging.h>
+#include <android/input.h>
 #include <utils/Errors.h>
 
 namespace android::inputdispatcher {
@@ -42,11 +43,11 @@ MotionEvent toInputEvent(const trace::TracedMotionEvent& e,
                          const std::array<uint8_t, 32>& hmac) {
     MotionEvent traced;
     traced.initialize(e.id, e.deviceId, e.source, e.displayId, hmac, e.action, e.actionButton,
-                      dispatchArgs.resolvedMotionFlags, e.edgeFlags, e.metaState, e.buttonState,
-                      e.classification, dispatchArgs.transform, e.xPrecision, e.yPrecision,
-                      e.xCursorPosition, e.yCursorPosition, dispatchArgs.rawTransform, e.downTime,
-                      e.eventTime, e.pointerProperties.size(), e.pointerProperties.data(),
-                      e.pointerCoords.data());
+                      dispatchArgs.resolvedMotionFlags, AMOTION_EVENT_EDGE_FLAG_NONE, e.metaState,
+                      e.buttonState, e.classification, dispatchArgs.transform, e.xPrecision,
+                      e.yPrecision, e.xCursorPosition, e.yCursorPosition, dispatchArgs.rawTransform,
+                      e.downTime, e.eventTime, e.pointerProperties.size(),
+                      e.pointerProperties.data(), e.pointerCoords.data());
     return traced;
 }
 

@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <sstream>
@@ -50,6 +51,8 @@
 #include "ui/Rotation.h"
 
 namespace android {
+
+using std::chrono_literals::operator""ms;
 
 namespace input_flags = com::android::input::flags;
 
@@ -1393,6 +1396,9 @@ std::list<NotifyArgs> TouchInputMapper::sync(nsecs_t when, nsecs_t readTime) {
         std::string line;
         while (std::getline(stream, line, '\n')) {
             ALOGD(INDENT "%s", line.c_str());
+            // To prevent overwhelming liblog, add a small delay between each line to give it
+            // time to process the data written so far.
+            std::this_thread::sleep_for(1ms);
         }
     }
 

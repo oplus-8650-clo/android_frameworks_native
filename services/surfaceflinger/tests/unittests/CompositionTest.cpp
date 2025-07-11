@@ -211,7 +211,7 @@ void CompositionTest::captureScreenComposition() {
     auto future = mFlinger.renderScreenImpl(mDisplay, sourceCrop, ui::Dataspace::V0_SRGB, layers,
                                             mCaptureScreenBuffer,
                                             /* disableBlur */ false, mDisplay->isSecure(),
-                                            /* seamlessTransition */ true);
+                                            /* preserveDisplayColors */ true);
     ASSERT_TRUE(future.valid());
     const auto fenceResult = future.get();
 
@@ -582,8 +582,14 @@ struct BaseLayerProperties {
                     EXPECT_THAT(layer.source.buffer.fence, Not(IsNull()));
                     EXPECT_EQ(true, layer.source.buffer.usePremultipliedAlpha);
                     EXPECT_EQ(false, layer.source.buffer.isOpaque);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.x);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.y);
                     EXPECT_EQ(ui::Dataspace::V0_SRGB, layer.sourceDataspace);
                     EXPECT_EQ(LayerProperties::COLOR[3], layer.alpha);
                     return resultFuture;
@@ -632,8 +638,14 @@ struct BaseLayerProperties {
                     EXPECT_EQ(half3(LayerProperties::COLOR[0], LayerProperties::COLOR[1],
                                     LayerProperties::COLOR[2]),
                               layer.source.solidColor);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.x);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.y);
                     EXPECT_EQ(ui::Dataspace::V0_SRGB, layer.sourceDataspace);
                     EXPECT_EQ(LayerProperties::COLOR[3], layer.alpha);
                     return resultFuture;
@@ -712,8 +724,14 @@ struct CommonSecureLayerProperties : public BaseLayerProperties<LayerProperties>
                     const renderengine::LayerSettings layer = layerSettings.back();
                     EXPECT_THAT(layer.source.buffer.buffer, IsNull());
                     EXPECT_EQ(half3(0.0f, 0.0f, 0.0f), layer.source.solidColor);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.x);
-                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadius.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.topRight.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomLeft.y);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.x);
+                    EXPECT_EQ(0.0, layer.geometry.roundedCornersRadii.bottomRight.y);
                     EXPECT_EQ(ui::Dataspace::V0_SRGB, layer.sourceDataspace);
                     EXPECT_EQ(1.0f, layer.alpha);
                     return resultFuture;

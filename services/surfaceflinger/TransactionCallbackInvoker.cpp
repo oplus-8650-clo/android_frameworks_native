@@ -52,9 +52,9 @@ static bool containsOnCommitCallbacks(const std::vector<CallbackId>& callbacks) 
 }
 
 void TransactionCallbackInvoker::addEmptyTransaction(const ListenerCallbacks& listenerCallbacks) {
-    auto& [listener, callbackIds] = listenerCallbacks;
+    auto& [listener, callbackIds, transactionHandles] = listenerCallbacks;
     auto& transactionStatsDeque = mCompletedTransactions[listener];
-    transactionStatsDeque.emplace_back(callbackIds);
+    transactionStatsDeque.emplace_back(callbackIds, transactionHandles);
 }
 
 status_t TransactionCallbackInvoker::addOnCommitCallbackHandles(
@@ -94,6 +94,7 @@ status_t TransactionCallbackInvoker::addCallbackHandles(
 
 status_t TransactionCallbackInvoker::findOrCreateTransactionStats(
         const sp<IBinder>& listener, const std::vector<CallbackId>& callbackIds,
+        const std::vector<sp<IBinder>>& transactionHandles,
         TransactionStats** outTransactionStats) {
     auto& transactionStatsDeque = mCompletedTransactions[listener];
 
@@ -105,7 +106,7 @@ status_t TransactionCallbackInvoker::findOrCreateTransactionStats(
             return NO_ERROR;
         }
     }
-    *outTransactionStats = &transactionStatsDeque.emplace_back(callbackIds);
+    *outTransactionStats = &transactionStatsDeque.emplace_back(callbackIds, transactionHandles);
     return NO_ERROR;
 }
 
@@ -113,8 +114,8 @@ status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>&
     // If we can't find the transaction stats something has gone wrong. The client should call
     // startRegistration before trying to add a callback handle.
     TransactionStats* transactionStats;
-    status_t err =
-            findOrCreateTransactionStats(handle->listener, handle->callbackIds, &transactionStats);
+    status_t err = findOrCreateTransactionStats(handle->listener, handle->callbackIds,
+                                                handle->transactionHandles, &transactionStats);
     if (err != NO_ERROR) {
         return err;
     }
@@ -239,8 +240,13 @@ void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
 // -----------------------------------------------------------------------
 
 CallbackHandle::CallbackHandle(const sp<IBinder>& transactionListener,
-                               const std::vector<CallbackId>& ids, const sp<IBinder>& sc)
-      : listener(transactionListener), callbackIds(ids), surfaceControl(sc) {}
+                               const std::vector<CallbackId>& ids,
+                               const std::vector<sp<IBinder>>& transactionHandles,
+                               const sp<IBinder>& sc)
+      : listener(transactionListener),
+        callbackIds(ids),
+        transactionHandles(transactionHandles),
+        surfaceControl(sc) {}
 
 } // namespace android
 

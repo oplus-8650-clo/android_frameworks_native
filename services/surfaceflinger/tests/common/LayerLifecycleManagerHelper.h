@@ -412,7 +412,20 @@ public:
 
         transactions.back().states.front().state.what = layer_state_t::eCornerRadiusChanged;
         transactions.back().states.front().layerId = id;
-        transactions.back().states.front().state.cornerRadius = radius;
+        android::gui::CornerRadii radii(radius);
+        transactions.back().states.front().state.cornerRadii = radii;
+        mLifecycleManager.applyTransactions(transactions);
+    }
+
+    void setRoundedCorners(uint32_t id, float tl, float tr, float bl, float br) {
+        std::vector<QueuedTransactionState> transactions;
+        transactions.emplace_back();
+        transactions.back().states.push_back({});
+
+        transactions.back().states.front().state.what = layer_state_t::eCornerRadiusChanged;
+        transactions.back().states.front().layerId = id;
+        android::gui::CornerRadii radii(tl, tr, bl, br);
+        transactions.back().states.front().state.cornerRadii = radii;
         mLifecycleManager.applyTransactions(transactions);
     }
 
@@ -502,7 +515,21 @@ public:
         transactions.back().states.front().state.what =
                 layer_state_t::eClientDrawnCornerRadiusChanged;
         transactions.back().states.front().layerId = id;
-        transactions.back().states.front().state.clientDrawnCornerRadius = clientDrawnCornerRadius;
+        android::gui::CornerRadii radii(clientDrawnCornerRadius);
+        transactions.back().states.front().state.clientDrawnCornerRadii = radii;
+        mLifecycleManager.applyTransactions(transactions);
+    }
+
+    void setClientDrawnCornerRadius(uint32_t id, float tl, float tr, float bl, float br) {
+        std::vector<QueuedTransactionState> transactions;
+        transactions.emplace_back();
+        transactions.back().states.push_back({});
+
+        transactions.back().states.front().state.what =
+                layer_state_t::eClientDrawnCornerRadiusChanged;
+        transactions.back().states.front().layerId = id;
+        android::gui::CornerRadii radii(tl, tr, bl, br);
+        transactions.back().states.front().state.clientDrawnCornerRadii = radii;
         mLifecycleManager.applyTransactions(transactions);
     }
 

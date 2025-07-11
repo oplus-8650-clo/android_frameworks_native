@@ -1035,6 +1035,9 @@ protected:
     int32_t mAction;
     int32_t mActionButton;
     ftl::Flags<MotionFlag> mFlags;
+    // The input subsystem no longer sets edge flags to anything except NONE. However, some users of
+    // the input API, such as Launcher, use it to store metadata about an event, so we have to keep
+    // it around.
     int32_t mEdgeFlags;
     int32_t mMetaState;
     int32_t mButtonState;

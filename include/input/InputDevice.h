@@ -282,7 +282,8 @@ public:
 
     void initialize(int32_t id, int32_t generation, int32_t controllerNumber,
                     const InputDeviceIdentifier& identifier, const std::string& alias,
-                    bool isExternal, bool hasMic, ui::LogicalDisplayId associatedDisplayId,
+                    bool isExternal, bool isVirtualDevice, bool hasMic,
+                    ui::LogicalDisplayId associatedDisplayId,
                     InputDeviceViewBehavior viewBehavior = {{}}, bool enabled = true);
 
     inline int32_t getId() const { return mId; }
@@ -294,6 +295,7 @@ public:
         return mAlias.empty() ? mIdentifier.name : mAlias;
     }
     inline bool isExternal() const { return mIsExternal; }
+    inline bool isVirtualDevice() const { return mIsVirtualDevice; }
     inline bool hasMic() const { return mHasMic; }
     inline uint32_t getSources() const { return mSources; }
 
@@ -357,6 +359,7 @@ private:
     InputDeviceIdentifier mIdentifier;
     std::string mAlias;
     bool mIsExternal;
+    bool mIsVirtualDevice;
     bool mHasMic;
     std::optional<KeyboardLayoutInfo> mKeyboardLayoutInfo;
     uint32_t mSources;

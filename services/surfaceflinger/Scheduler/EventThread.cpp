@@ -692,7 +692,8 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
                     gui::ISurfaceComposer::EventRegistration::modeChanged);
 
         case DisplayEventType::DISPLAY_EVENT_MODE_REJECTION:
-            return true;
+            return connection->mEventRegistration.test(
+                    gui::ISurfaceComposer::EventRegistration::modeRejected);
 
         case DisplayEventType::DISPLAY_EVENT_VSYNC:
             switch (connection->vsyncRequest) {

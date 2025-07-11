@@ -314,6 +314,12 @@ SkiaRenderEngine::Contexts SkiaGLRenderEngine::createContexts() {
     return contexts;
 }
 
+bool SkiaGLRenderEngine::supportsFastRotatedClipRRectAA() const {
+    // clipRRect can take 1-10ms depending on the rrect size due to generating the
+    // clip mask on the CPU.
+    return false;
+}
+
 bool SkiaGLRenderEngine::supportsForwardPixelKill() const {
     // ARM gpu support this since 2013
     constexpr std::string kArm = "ARM";

@@ -68,6 +68,7 @@ public:
     inline bool hasEventHubDevices() const { return !mDevices.empty(); }
 
     inline virtual bool isExternal() { return mIsExternal; }
+    inline virtual bool isVirtualDevice() const { return mIsVirtualDevice; }
     inline std::optional<uint8_t> getAssociatedDisplayPort() const {
         return mAssociatedDisplayPort;
     }
@@ -210,6 +211,7 @@ private:
     uint32_t mSources;
     bool mIsWaking;
     bool mIsExternal;
+    bool mIsVirtualDevice;
     KeyboardType mKeyboardType = KeyboardType::NONE;
     std::optional<uint8_t> mAssociatedDisplayPort;
     std::optional<std::string> mAssociatedDisplayUniqueIdByPort;
@@ -458,6 +460,7 @@ public:
     inline const std::string getDescriptor() { return mDevice.getDescriptor(); }
     inline const std::string getLocation() { return mDevice.getLocation(); }
     inline bool isExternal() const { return mDevice.isExternal(); }
+    inline bool isVirtualDevice() const { return mDevice.isVirtualDevice(); }
     inline std::optional<uint8_t> getAssociatedDisplayPort() const {
         return mDevice.getAssociatedDisplayPort();
     }

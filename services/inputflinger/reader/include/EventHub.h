@@ -701,8 +701,16 @@ private:
         template <std::size_t N>
         status_t readDeviceBitMask(unsigned long ioctlCode, BitArray<N>& bitArray);
 
-        void configureFd();
-        void populateAbsoluteAxisStates();
+        /**
+         * Configures the device's FD and caches its current state.
+         *
+         * Returns false if an error is encountered that means the caller should not continue to try
+         * opening the device (e.g. if the device no longer exists).
+         */
+        bool configureFd();
+        bool readDeviceState();
+        bool populateAbsoluteAxisStates();
+
         bool hasKeycodeLocked(int keycode) const;
         bool hasKeycodeInternalLocked(int keycode) const;
         bool loadVirtualKeyMapLocked();
@@ -715,7 +723,6 @@ private:
 
         bool currentFrameDropped;
         void trackInputEvent(const struct input_event& event);
-        void readDeviceState();
     };
 
     /**

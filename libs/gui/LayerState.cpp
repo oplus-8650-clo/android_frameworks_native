@@ -87,8 +87,8 @@ layer_state_t::layer_state_t()
         flags(0),
         mask(0),
         reserved(0),
-        cornerRadius(0.0f),
-        clientDrawnCornerRadius(0.0f),
+        cornerRadii(gui::CornerRadii(0.0f)),
+        clientDrawnCornerRadii(gui::CornerRadii(0.0f)),
         backgroundBlurRadius(0),
         backgroundBlurScale{1.0f},
         color(0),
@@ -164,8 +164,8 @@ status_t layer_state_t::write(Parcel& output) const
     }
 
     SAFE_PARCEL(output.write, colorTransform.asArray(), 16 * sizeof(float));
-    SAFE_PARCEL(output.writeFloat, cornerRadius);
-    SAFE_PARCEL(output.writeFloat, clientDrawnCornerRadius);
+    SAFE_PARCEL(cornerRadii.writeToParcel, &output);
+    SAFE_PARCEL(clientDrawnCornerRadii.writeToParcel, &output);
     SAFE_PARCEL(output.writeUint32, backgroundBlurRadius);
     SAFE_PARCEL(output.writeFloat, backgroundBlurScale);
     SAFE_PARCEL(output.writeParcelable, metadata);
@@ -180,6 +180,7 @@ status_t layer_state_t::write(Parcel& output) const
     for (auto listener : listeners) {
         SAFE_PARCEL(output.writeStrongBinder, listener.transactionCompletedListener);
         SAFE_PARCEL(output.writeParcelableVector, listener.callbackIds);
+        SAFE_PARCEL(output.writeStrongBinderVector, listener.transactionHandles);
     }
     SAFE_PARCEL(output.writeFloat, shadowRadius);
     SAFE_PARCEL(output.writeParcelable, borderSettings);
@@ -304,8 +305,8 @@ status_t layer_state_t::read(const Parcel& input)
     }
 
     SAFE_PARCEL(input.read, &colorTransform, 16 * sizeof(float));
-    SAFE_PARCEL(input.readFloat, &cornerRadius);
-    SAFE_PARCEL(input.readFloat, &clientDrawnCornerRadius);
+    SAFE_PARCEL(cornerRadii.readFromParcel, &input);
+    SAFE_PARCEL(clientDrawnCornerRadii.readFromParcel, &input);
     SAFE_PARCEL(input.readUint32, &backgroundBlurRadius);
     SAFE_PARCEL(input.readFloat, &backgroundBlurScale);
     SAFE_PARCEL(input.readParcelable, &metadata);
@@ -328,9 +329,12 @@ status_t layer_state_t::read(const Parcel& input)
     for (int i = 0; i < numListeners; i++) {
         sp<IBinder> listener;
         std::vector<CallbackId> callbackIds;
+        std::vector<sp<IBinder>> transactionHandles;
         SAFE_PARCEL(input.readNullableStrongBinder, &listener);
         SAFE_PARCEL(input.readParcelableVector, &callbackIds);
-        listeners.emplace_back(listener, callbackIds);
+        SAFE_PARCEL(input.readStrongBinderVector, &transactionHandles);
+        listeners.emplace_back(std::move(listener), std::move(callbackIds),
+                               std::move(transactionHandles));
     }
     SAFE_PARCEL(input.readFloat, &shadowRadius);
     SAFE_PARCEL(input.readParcelable, &borderSettings);
@@ -630,11 +634,11 @@ void layer_state_t::merge(const layer_state_t& other) {
     }
     if (other.what & eCornerRadiusChanged) {
         what |= eCornerRadiusChanged;
-        cornerRadius = other.cornerRadius;
+        cornerRadii = other.cornerRadii;
     }
     if (other.what & eClientDrawnCornerRadiusChanged) {
         what |= eClientDrawnCornerRadiusChanged;
-        clientDrawnCornerRadius = other.clientDrawnCornerRadius;
+        clientDrawnCornerRadii = other.clientDrawnCornerRadii;
     }
     if (other.what & eBackgroundBlurRadiusChanged) {
         what |= eBackgroundBlurRadiusChanged;
@@ -864,8 +868,8 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
         if (changedFlags) diff |= eFlagsChanged;
     }
     CHECK_DIFF(diff, eLayerStackChanged, other, layerStack);
-    CHECK_DIFF(diff, eCornerRadiusChanged, other, cornerRadius);
-    CHECK_DIFF(diff, eClientDrawnCornerRadiusChanged, other, clientDrawnCornerRadius);
+    CHECK_DIFF(diff, eCornerRadiusChanged, other, cornerRadii);
+    CHECK_DIFF(diff, eClientDrawnCornerRadiusChanged, other, clientDrawnCornerRadii);
     CHECK_DIFF(diff, eBackgroundBlurRadiusChanged, other, backgroundBlurRadius);
     CHECK_DIFF(diff, eBackgroundBlurScaleChanged, other, backgroundBlurScale);
     if (other.what & eBlurRegionsChanged) diff |= eBlurRegionsChanged;

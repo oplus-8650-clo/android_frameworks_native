@@ -120,6 +120,9 @@ private:
     static void resetRelativeState(LayerSnapshot& snapshot);
     static void updateRoundedCorner(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                                     const LayerSnapshot& parentSnapshot, const Args& args);
+    static void scaleRadii(gui::CornerRadii& radii, float scaleX, float scaleY);
+    static gui::CornerRadii getClippedClientRadii(gui::CornerRadii requestedRadii,
+                                                  FloatRect layerCropRect, FloatRect layerBounds);
     static void updateBoundsForEdgeExtension(LayerSnapshot& snapshot);
     void updateLayerBounds(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                            const LayerSnapshot& parentSnapshot, uint32_t displayRotationFlags);

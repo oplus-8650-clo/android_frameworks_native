@@ -95,6 +95,7 @@ protected:
     virtual Contexts createContexts() = 0;
     virtual bool supportsProtectedContentImpl() const = 0;
     virtual bool supportsForwardPixelKill() const { return false; }
+    virtual bool supportsFastRotatedClipRRectAA() const { return true; }
     virtual bool useProtectedContextImpl(GrProtected isProtected) = 0;
     virtual void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) = 0;
     virtual base::unique_fd flushAndSubmit(SkiaGpuContext* context,

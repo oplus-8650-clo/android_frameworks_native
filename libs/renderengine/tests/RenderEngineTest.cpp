@@ -383,19 +383,47 @@ public:
                            const ubyte4& backgroundColor) {
         const Rect casterRect(castingLayer.geometry.boundaries);
         Region casterRegion = Region(casterRect);
-        const float casterCornerRadius = (castingLayer.geometry.roundedCornersRadius.x +
-                                          castingLayer.geometry.roundedCornersRadius.y) /
+        // Calculate the average radius for each corner
+        const float casterCornerRadiusTL = (castingLayer.geometry.roundedCornersRadii.topLeft.x +
+                                            castingLayer.geometry.roundedCornersRadii.topLeft.y) /
                 2.0;
-        if (casterCornerRadius > 0.0f) {
-            // ignore the corners if a corner radius is set
-            Rect cornerRect(casterCornerRadius, casterCornerRadius);
+        const float casterCornerRadiusTR = (castingLayer.geometry.roundedCornersRadii.topRight.x +
+                                            castingLayer.geometry.roundedCornersRadii.topRight.y) /
+                2.0;
+        const float casterCornerRadiusBL =
+                (castingLayer.geometry.roundedCornersRadii.bottomLeft.x +
+                 castingLayer.geometry.roundedCornersRadii.bottomLeft.y) /
+                2.0;
+        const float casterCornerRadiusBR =
+                (castingLayer.geometry.roundedCornersRadii.bottomRight.x +
+                 castingLayer.geometry.roundedCornersRadii.bottomRight.y) /
+                2.0;
+
+        // Correctly subtract each corner's bounding box from the caster region
+        // so we only test the flat edges, not the rounded corners.
+
+        if (casterCornerRadiusTL > 0.0f) {
+            Rect cornerRect(casterCornerRadiusTL, casterCornerRadiusTL);
             casterRegion.subtractSelf(cornerRect.offsetTo(casterRect.left, casterRect.top));
+        }
+
+        if (casterCornerRadiusTR > 0.0f) {
+            Rect cornerRect(casterCornerRadiusTR, casterCornerRadiusTR);
             casterRegion.subtractSelf(
-                    cornerRect.offsetTo(casterRect.right - casterCornerRadius, casterRect.top));
+                    cornerRect.offsetTo(casterRect.right - casterCornerRadiusTR, casterRect.top));
+        }
+
+        if (casterCornerRadiusBL > 0.0f) {
+            Rect cornerRect(casterCornerRadiusBL, casterCornerRadiusBL);
             casterRegion.subtractSelf(
-                    cornerRect.offsetTo(casterRect.left, casterRect.bottom - casterCornerRadius));
-            casterRegion.subtractSelf(cornerRect.offsetTo(casterRect.right - casterCornerRadius,
-                                                          casterRect.bottom - casterCornerRadius));
+                    cornerRect.offsetTo(casterRect.left, casterRect.bottom - casterCornerRadiusBL));
+        }
+
+        if (casterCornerRadiusBR > 0.0f) {
+            Rect cornerRect(casterCornerRadiusBR, casterCornerRadiusBR);
+            casterRegion.subtractSelf(
+                    cornerRect.offsetTo(casterRect.right - casterCornerRadiusBR,
+                                        casterRect.bottom - casterCornerRadiusBR));
         }
 
         const float shadowInset = shadow.length * -1.0f;
@@ -1037,7 +1065,7 @@ void RenderEngineTest::fillRedBufferWithRoundedCorners() {
     renderengine::LayerSettings layer;
     layer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     layer.geometry.boundaries = fullscreenRect().toFloatRect();
-    layer.geometry.roundedCornersRadius = {5.0f, 5.0f};
+    layer.geometry.roundedCornersRadii = gui::CornerRadii(5.0f);
     layer.geometry.roundedCornersCrop = fullscreenRect().toFloatRect();
     SourceVariant::fillColor(layer, 1.0f, 0.0f, 0.0f, this);
     layer.alpha = 1.0f;
@@ -2056,7 +2084,7 @@ TEST_P(RenderEngineTest, drawLayers_fillShadow_casterWithRoundedCorner) {
     casterBounds.offsetBy(shadowLength + 1, shadowLength + 1);
     renderengine::LayerSettings castingLayer;
     castingLayer.geometry.boundaries = casterBounds.toFloatRect();
-    castingLayer.geometry.roundedCornersRadius = {3.0f, 3.0f};
+    castingLayer.geometry.roundedCornersRadii = gui::CornerRadii(3.0f);
     castingLayer.geometry.roundedCornersCrop = casterBounds.toFloatRect();
     castingLayer.alpha = 1.0f;
     ShadowSettings settings = getShadowSettings(vec2(casterBounds.left, casterBounds.top),
@@ -2156,7 +2184,7 @@ TEST_P(RenderEngineTest, testRoundedCornersCrop) {
     renderengine::LayerSettings redLayer;
     redLayer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     redLayer.geometry.boundaries = fullscreenRect().toFloatRect();
-    redLayer.geometry.roundedCornersRadius = {5.0f, 5.0f};
+    redLayer.geometry.roundedCornersRadii = gui::CornerRadii(5.0f);
 
     redLayer.geometry.roundedCornersCrop = fullscreenRect().toFloatRect();
     // Red background.
@@ -2169,7 +2197,7 @@ TEST_P(RenderEngineTest, testRoundedCornersCrop) {
     renderengine::LayerSettings greenLayer;
     greenLayer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     greenLayer.geometry.boundaries = fullscreenRect().toFloatRect();
-    greenLayer.geometry.roundedCornersRadius = {5.0f, 5.0f};
+    greenLayer.geometry.roundedCornersRadii = gui::CornerRadii(5.0f);
     // Bottom right corner is not going to be rounded.
     greenLayer.geometry.roundedCornersCrop =
             Rect(DEFAULT_DISPLAY_WIDTH / 3, DEFAULT_DISPLAY_HEIGHT / 3, DEFAULT_DISPLAY_HEIGHT,
@@ -2209,7 +2237,7 @@ TEST_P(RenderEngineTest, testRoundedCornersParentCrop) {
     renderengine::LayerSettings redLayer;
     redLayer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     redLayer.geometry.boundaries = fullscreenRect().toFloatRect();
-    redLayer.geometry.roundedCornersRadius = {5.0f, 5.0f};
+    redLayer.geometry.roundedCornersRadii = gui::CornerRadii(5.0f);
     redLayer.geometry.roundedCornersCrop = fullscreenRect().toFloatRect();
     // Red background.
     redLayer.source.solidColor = half3(1.0f, 0.0f, 0.0f);
@@ -2257,7 +2285,7 @@ TEST_P(RenderEngineTest, testRoundedCornersParentCropSmallBounds) {
     renderengine::LayerSettings redLayer;
     redLayer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     redLayer.geometry.boundaries = FloatRect(0, 0, DEFAULT_DISPLAY_WIDTH, 32);
-    redLayer.geometry.roundedCornersRadius = {64.0f, 64.0f};
+    redLayer.geometry.roundedCornersRadii = gui::CornerRadii(64.0f);
     redLayer.geometry.roundedCornersCrop = FloatRect(0, 0, DEFAULT_DISPLAY_WIDTH, 128);
     // Red background.
     redLayer.source.solidColor = half3(1.0f, 0.0f, 0.0f);
@@ -2295,7 +2323,16 @@ TEST_P(RenderEngineTest, testRoundedCornersXY) {
     renderengine::LayerSettings redLayer;
     redLayer.sourceDataspace = ui::Dataspace::V0_SRGB_LINEAR;
     redLayer.geometry.boundaries = fullscreenRect().toFloatRect();
-    redLayer.geometry.roundedCornersRadius = {5.0f, 20.0f};
+    gui::CornerRadii radius;
+    radius.topLeft.x = 5.0f;
+    radius.topLeft.y = 20.0f;
+    radius.topRight.x = 5.0f;
+    radius.topRight.y = 20.0f;
+    radius.bottomLeft.x = 5.0f;
+    radius.bottomLeft.y = 20.0f;
+    radius.bottomRight.x = 5.0f;
+    radius.bottomRight.y = 20.0f;
+    redLayer.geometry.roundedCornersRadii = radius;
     redLayer.geometry.roundedCornersCrop = fullscreenRect().toFloatRect();
     // Red background.
     redLayer.source.solidColor = half3(1.0f, 0.0f, 0.0f);

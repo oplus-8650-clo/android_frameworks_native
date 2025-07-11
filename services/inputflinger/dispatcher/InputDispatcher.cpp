@@ -467,11 +467,10 @@ std::unique_ptr<DispatchEntry> createDispatchEntry(const IdGenerator& idGenerato
                                           motionEntry.policyFlags, motionEntry.action,
                                           motionEntry.actionButton, motionEntry.flags,
                                           motionEntry.metaState, motionEntry.buttonState,
-                                          motionEntry.classification, motionEntry.edgeFlags,
-                                          motionEntry.xPrecision, motionEntry.yPrecision,
-                                          motionEntry.xCursorPosition, motionEntry.yCursorPosition,
-                                          motionEntry.downTime, motionEntry.pointerProperties,
-                                          pointerCoords);
+                                          motionEntry.classification, motionEntry.xPrecision,
+                                          motionEntry.yPrecision, motionEntry.xCursorPosition,
+                                          motionEntry.yCursorPosition, motionEntry.downTime,
+                                          motionEntry.pointerProperties, pointerCoords);
     if (tracer) {
         combinedMotionEntry->traceTracker =
                 tracer->traceDerivedEvent(*combinedMotionEntry, *motionEntry.traceTracker);
@@ -3507,9 +3506,8 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                                              motionEntry.policyFlags, resolvedAction,
                                              motionEntry.actionButton, resolvedFlags,
                                              motionEntry.metaState, motionEntry.buttonState,
-                                             motionEntry.classification, motionEntry.edgeFlags,
-                                             motionEntry.xPrecision, motionEntry.yPrecision,
-                                             motionEntry.xCursorPosition,
+                                             motionEntry.classification, motionEntry.xPrecision,
+                                             motionEntry.yPrecision, motionEntry.xCursorPosition,
                                              motionEntry.yCursorPosition, motionEntry.downTime,
                                              usingProperties.value_or(
                                                      motionEntry.pointerProperties),
@@ -3741,14 +3739,14 @@ status_t InputDispatcher::publishMotionEvent(Connection& connection,
             .publishMotionEvent(dispatchEntry.seq, motionEntry.id, motionEntry.deviceId,
                                 motionEntry.source, motionEntry.displayId, std::move(hmac),
                                 motionEntry.action, motionEntry.actionButton,
-                                dispatchEntry.resolvedMotionFlags.get(), motionEntry.edgeFlags,
-                                motionEntry.metaState, motionEntry.buttonState,
-                                motionEntry.classification, dispatchEntry.transform,
-                                motionEntry.xPrecision, motionEntry.yPrecision,
-                                motionEntry.xCursorPosition, motionEntry.yCursorPosition,
-                                dispatchEntry.rawTransform, motionEntry.downTime,
-                                motionEntry.eventTime, motionEntry.getPointerCount(),
-                                motionEntry.pointerProperties.data(), usingCoords);
+                                dispatchEntry.resolvedMotionFlags.get(), motionEntry.metaState,
+                                motionEntry.buttonState, motionEntry.classification,
+                                dispatchEntry.transform, motionEntry.xPrecision,
+                                motionEntry.yPrecision, motionEntry.xCursorPosition,
+                                motionEntry.yCursorPosition, dispatchEntry.rawTransform,
+                                motionEntry.downTime, motionEntry.eventTime,
+                                motionEntry.getPointerCount(), motionEntry.pointerProperties.data(),
+                                usingCoords);
 }
 
 void InputDispatcher::startDispatchCycleLocked(nsecs_t currentTime,
@@ -4395,7 +4393,6 @@ std::unique_ptr<MotionEntry> InputDispatcher::splitMotionEvent(
                                           originalMotionEntry.flags, originalMotionEntry.metaState,
                                           originalMotionEntry.buttonState,
                                           originalMotionEntry.classification,
-                                          originalMotionEntry.edgeFlags,
                                           originalMotionEntry.xPrecision,
                                           originalMotionEntry.yPrecision,
                                           originalMotionEntry.xCursorPosition,
@@ -4591,11 +4588,12 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
             MotionEvent event;
             event.initialize(args.id, args.deviceId, args.source, args.displayId, INVALID_HMAC,
                              args.action, args.actionButton, ftl::Flags<MotionFlag>(args.flags),
-                             args.edgeFlags, args.metaState, args.buttonState, args.classification,
-                             displayTransform, args.xPrecision, args.yPrecision,
-                             args.xCursorPosition, args.yCursorPosition, displayTransform,
-                             args.downTime, args.eventTime, args.getPointerCount(),
-                             args.pointerProperties.data(), args.pointerCoords.data());
+                             AMOTION_EVENT_EDGE_FLAG_NONE, args.metaState, args.buttonState,
+                             args.classification, displayTransform, args.xPrecision,
+                             args.yPrecision, args.xCursorPosition, args.yCursorPosition,
+                             displayTransform, args.downTime, args.eventTime,
+                             args.getPointerCount(), args.pointerProperties.data(),
+                             args.pointerCoords.data());
 
             policyFlags |= POLICY_FLAG_FILTERED;
             if (!mPolicy.filterInputEvent(event, policyFlags)) {
@@ -4611,7 +4609,7 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
                                               args.deviceId, args.source, args.displayId,
                                               policyFlags, args.action, args.actionButton,
                                               ftl::Flags<MotionFlag>(args.flags), args.metaState,
-                                              args.buttonState, args.classification, args.edgeFlags,
+                                              args.buttonState, args.classification,
                                               args.xPrecision, args.yPrecision,
                                               args.xCursorPosition, args.yCursorPosition,
                                               args.downTime, args.pointerProperties,
@@ -4900,7 +4898,6 @@ InputEventInjectionResult InputDispatcher::injectInputEvent(const InputEvent* ev
                                                   motionEvent.getMetaState(),
                                                   motionEvent.getButtonState(),
                                                   motionEvent.getClassification(),
-                                                  motionEvent.getEdgeFlags(),
                                                   motionEvent.getXPrecision(),
                                                   motionEvent.getYPrecision(),
                                                   motionEvent.getRawXCursorPosition(),
@@ -4923,8 +4920,8 @@ InputEventInjectionResult InputDispatcher::injectInputEvent(const InputEvent* ev
                                      policyFlags, motionEvent.getAction(),
                                      motionEvent.getActionButton(), flags,
                                      motionEvent.getMetaState(), motionEvent.getButtonState(),
-                                     motionEvent.getClassification(), motionEvent.getEdgeFlags(),
-                                     motionEvent.getXPrecision(), motionEvent.getYPrecision(),
+                                     motionEvent.getClassification(), motionEvent.getXPrecision(),
+                                     motionEvent.getYPrecision(),
                                      motionEvent.getRawXCursorPosition(),
                                      motionEvent.getRawYCursorPosition(), motionEvent.getDownTime(),
                                      pointerProperties,

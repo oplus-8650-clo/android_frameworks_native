@@ -87,7 +87,6 @@ struct NotifyMotionArgs {
      * Classification of the current touch gesture
      */
     MotionClassification classification;
-    int32_t edgeFlags;
 
     // Vectors 'pointerProperties' and 'pointerCoords' must always have the same number of elements
     std::vector<PointerProperties> pointerProperties;

@@ -355,7 +355,7 @@ void RegionSamplingThread::captureSample() {
                            .disableBlur = true,
                            .isGrayscale = false,
                            .isSecure = true,
-                           .seamlessTransition = false,
+                           .preserveDisplayColors = false,
                            .debugName = "RegionSampling"};
 
     std::vector<std::pair<Layer*, sp<LayerFE>>> layers;

@@ -77,7 +77,6 @@ NotifyMotionArgs::NotifyMotionArgs(
         metaState(metaState),
         buttonState(buttonState),
         classification(classification),
-        edgeFlags(AMOTION_EVENT_EDGE_FLAG_NONE),
         xPrecision(xPrecision),
         yPrecision(yPrecision),
         xCursorPosition(xCursorPosition),
@@ -101,9 +100,8 @@ bool NotifyMotionArgs::operator==(const NotifyMotionArgs& rhs) const {
             policyFlags == rhs.policyFlags && action == rhs.action &&
             actionButton == rhs.actionButton && flags == rhs.flags && metaState == rhs.metaState &&
             buttonState == rhs.buttonState && classification == rhs.classification &&
-            edgeFlags == rhs.edgeFlags && pointerProperties == rhs.pointerProperties &&
-            pointerCoords == rhs.pointerCoords && xPrecision == rhs.xPrecision &&
-            yPrecision == rhs.yPrecision &&
+            pointerProperties == rhs.pointerProperties && pointerCoords == rhs.pointerCoords &&
+            xPrecision == rhs.xPrecision && yPrecision == rhs.yPrecision &&
             isCursorPositionEqual(xCursorPosition, rhs.xCursorPosition) &&
             isCursorPositionEqual(yCursorPosition, rhs.yCursorPosition) &&
             downTime == rhs.downTime && videoFrames == rhs.videoFrames;

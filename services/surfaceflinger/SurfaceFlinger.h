@@ -812,8 +812,8 @@ private:
                                           const std::vector<std::pair<Layer*, LayerFE*>>& layers)
             REQUIRES(kMainThreadContext);
     // Return true if we must composite this frame
-    bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, bool transactionsFlushed,
-                              bool& out) REQUIRES(kMainThreadContext);
+    bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, nsecs_t expecedPresentTimeNs,
+                              bool transactionsFlushed, bool& out) REQUIRES(kMainThreadContext);
     void updateLayerHistory(nsecs_t now) REQUIRES(kMainThreadContext);
 
     void updateInputFlinger(VsyncId vsyncId, TimePoint frameTime) REQUIRES(kMainThreadContext);
@@ -912,6 +912,9 @@ private:
     // Checks if a protected layer exists in a list of layers.
     bool layersHasProtectedLayer(const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) const;
 
+    // Checks if a secure layer exists in a list of layers.
+    bool layersHasSecureLayer(const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) const;
+
     using OutputCompositionState = compositionengine::impl::OutputCompositionState;
 
     struct SnapshotRequestArgs {
@@ -954,6 +957,9 @@ private:
         // List of all layer snapshots that are included in the screenshot
         std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
 
+        // If true, the layers in ScreenshotArgs.layers contains a protected layer.
+        bool hasProtectedLayer{false};
+
         // Source crop of the render area
         Rect sourceCrop;
 
@@ -989,7 +995,7 @@ private:
 
         // If true, the render result may be used for system animations
         // that must preserve the exact colors of the display
-        bool seamlessTransition{false};
+        bool preserveDisplayColors{false};
 
         // Current display brightness of the output composition state
         float displayBrightnessNits{-1.f};
@@ -1005,6 +1011,9 @@ private:
 
         // Current listener for the screenshot result
         sp<IScreenCaptureListener> captureListener{nullptr};
+
+        // If true, will force using DPU readback optimization for the screenshot.
+        bool requireDpuReadback{false};
 
         std::string debugName;
     };
@@ -1449,7 +1458,7 @@ private:
         PhysicalDisplayId id;
         sp<GraphicBuffer> buffer;
         sp<IScreenCaptureListener> captureListener;
-        bool seamlessTransition;
+        bool preserveDisplayColors;
         bool isSecure;
     };
     std::vector<ReadbackRequest> mReadbackRequests;

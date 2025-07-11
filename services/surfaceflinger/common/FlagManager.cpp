@@ -115,10 +115,12 @@ void FlagManager::dump(std::string& result) const {
     DUMP_LEGACY_SERVER_FLAG(use_skia_tracing);
 
     /// Trunk stable server (R/W) flags ///
+    DUMP_ACONFIG_FLAG(add_first_vsync_to_tracker);
     DUMP_ACONFIG_FLAG(adpf_cpu_effects_loadup);
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(adpf_native_session_manager);
     DUMP_ACONFIG_FLAG(adpf_use_fmq_channel);
+    DUMP_ACONFIG_FLAG(buffer_stuffing_fix);
     DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
@@ -284,12 +286,15 @@ FLAG_MANAGER_ACONFIG_FLAG(begone_bright_hlg, "debug.sf.begone_bright_hlg");
 FLAG_MANAGER_ACONFIG_FLAG(wb_virtualdisplay2, "");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
+FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
 
 /// Trunk stable server (R/W) flags ///
+FLAG_MANAGER_ACONFIG_FLAG(add_first_vsync_to_tracker, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(adpf_cpu_effects_loadup, "");
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(adpf_native_session_manager, "");
+FLAG_MANAGER_ACONFIG_FLAG(buffer_stuffing_fix, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");

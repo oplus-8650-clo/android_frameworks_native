@@ -480,7 +480,7 @@ public:
                           ui::Dataspace dataspace,
                           std::vector<std::pair<Layer*, sp<LayerFE>>>& layers,
                           const std::shared_ptr<renderengine::ExternalTexture>& buffer,
-                          bool disableBlur, bool isSecure, bool seamlessTransition) {
+                          bool disableBlur, bool isSecure, bool preserveDisplayColors) {
         Mutex::Autolock lock(mFlinger->mStateLock);
         ftl::FakeGuard guard(kMainThreadContext);
 
@@ -495,7 +495,8 @@ public:
                                                       .disableBlur = disableBlur,
                                                       .isGrayscale = false,
                                                       .isSecure = isSecure,
-                                                      .seamlessTransition = seamlessTransition,
+                                                      .preserveDisplayColors =
+                                                              preserveDisplayColors,
                                                       .displayBrightnessNits =
                                                               state.displayBrightnessNits,
                                                       .sdrWhitePointNits = state.sdrWhitePointNits,
@@ -675,10 +676,11 @@ public:
         mFlinger->mDaltonizer.setType(type);
         return mFlinger->updateColorMatrixLocked();
     }
-    auto updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, bool transactionsFlushed,
-                              bool& out) {
+    auto updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, nsecs_t expectedPresentTimeNs,
+                              bool transactionsFlushed, bool& out) {
         ftl::FakeGuard guard(kMainThreadContext);
-        return mFlinger->updateLayerSnapshots(vsyncId, frameTimeNs, transactionsFlushed, out);
+        return mFlinger->updateLayerSnapshots(vsyncId, frameTimeNs, expectedPresentTimeNs,
+                                              transactionsFlushed, out);
     }
     /* ------------------------------------------------------------------------
      * Read-write access to private data to set up preconditions and assert

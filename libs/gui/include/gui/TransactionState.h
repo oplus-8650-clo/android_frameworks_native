@@ -17,6 +17,7 @@
 #pragma once
 
 #include <android/gui/FrameTimelineInfo.h>
+#include <android/gui/TransactionBarrier.h>
 #include <binder/Parcelable.h>
 #include <gui/LayerState.h>
 
@@ -93,8 +94,12 @@ public:
     std::vector<gui::EarlyWakeupInfo> mEarlyWakeupInfos = {};
     std::vector<ComposerState> mComposerStates = {};
     std::vector<DisplayState> mDisplayStates = {};
+    std::vector<gui::TransactionBarrier> mBarriers = {};
 
-private:
+    // Keep track of the last MAX_BARRIERS_LENGTH transaction barriers.
+    // Ordered most recently merged to least recently merged.
+    static constexpr size_t MAX_BARRIERS_LENGTH = 10u;
+
     // We keep track of the last MAX_MERGE_HISTORY_LENGTH merged transaction ids.
     // Ordered most recently merged to least recently merged.
     static constexpr size_t MAX_MERGE_HISTORY_LENGTH = 10u;

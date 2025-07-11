@@ -20,6 +20,7 @@
 #include <gui/TransactionState.h>
 #include <private/gui/ParcelUtils.h>
 #include <algorithm>
+#include <numeric>
 
 namespace android {
 
@@ -30,9 +31,10 @@ void TransactionListenerCallbacks::clear() {
 status_t TransactionListenerCallbacks::writeToParcel(Parcel* parcel) const {
     SAFE_PARCEL(parcel->writeBool, mHasListenerCallbacks);
     SAFE_PARCEL(parcel->writeUint32, static_cast<uint32_t>(mFlattenedListenerCallbacks.size()));
-    for (const auto& [listener, callbackIds] : mFlattenedListenerCallbacks) {
+    for (const auto& [listener, callbackIds, transactionHandles] : mFlattenedListenerCallbacks) {
         SAFE_PARCEL(parcel->writeStrongBinder, listener);
         SAFE_PARCEL(parcel->writeParcelableVector, callbackIds);
+        SAFE_PARCEL(parcel->writeStrongBinderVector, transactionHandles);
     }
 
     return NO_ERROR;
@@ -49,7 +51,10 @@ status_t TransactionListenerCallbacks::readFromParcel(const Parcel* parcel) {
         SAFE_PARCEL(parcel->readStrongBinder, &tmpBinder);
         std::vector<CallbackId> callbackIds;
         SAFE_PARCEL(parcel->readParcelableVector, &callbackIds);
-        mFlattenedListenerCallbacks.emplace_back(tmpBinder, callbackIds);
+        std::vector<sp<IBinder>> transactionHandles;
+        SAFE_PARCEL(parcel->readStrongBinderVector, &transactionHandles);
+        mFlattenedListenerCallbacks.emplace_back(std::move(tmpBinder), std::move(callbackIds),
+                                                 std::move(transactionHandles));
     }
 
     return NO_ERROR;
@@ -85,6 +90,8 @@ status_t TransactionState::writeToParcel(Parcel* parcel) const {
     for (const auto& d : mDisplayStates) {
         SAFE_PARCEL(d.write, *parcel);
     }
+
+    SAFE_PARCEL(parcel->writeParcelableVector, mBarriers);
 
     return NO_ERROR;
 }
@@ -142,6 +149,8 @@ status_t TransactionState::readFromParcel(const Parcel* parcel) {
         mDisplayStates.emplace_back(std::move(d));
     }
 
+    mBarriers.clear();
+    SAFE_PARCEL(parcel->readParcelableVector, &mBarriers);
     return NO_ERROR;
 }
 
@@ -206,6 +215,21 @@ void TransactionState::merge(TransactionState&& other,
 
     mMergedTransactionIds.insert(mMergedTransactionIds.begin(), other.mId);
 
+    mBarriers.insert(mBarriers.end(), std::make_move_iterator(other.mBarriers.begin()),
+                     std::make_move_iterator(other.mBarriers.end()));
+    if (mBarriers.size() > MAX_BARRIERS_LENGTH) {
+        int numToRemove = mBarriers.size() - MAX_BARRIERS_LENGTH;
+        std::string droppedBarriers =
+                std::accumulate(mBarriers.begin(), mBarriers.begin() + numToRemove, std::string(),
+                                [](std::string&& s,
+                                   const gui::TransactionBarrier& barrier) -> std::string {
+                                    s += barrier.toString() + ",";
+                                    return s;
+                                });
+        ALOGE("Dropping %d transaction barriers: %s", numToRemove, droppedBarriers.c_str());
+        mBarriers.erase(mBarriers.begin(), mBarriers.begin() + numToRemove);
+    }
+
     other.clear();
 }
 
@@ -235,6 +259,7 @@ void TransactionState::clear() {
     mEarlyWakeupInfos.clear();
     mComposerStates.clear();
     mDisplayStates.clear();
+    mBarriers.clear();
 }
 
 layer_state_t* TransactionState::getLayerState(const sp<SurfaceControl>& sc) {

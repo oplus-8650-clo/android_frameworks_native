@@ -438,7 +438,8 @@ TEST_F(PreferStylusOverTouchTest, MixedStylusAndTouchDeviceIsCanceledAtFirst) {
     InputDeviceInfo stylusDevice;
     stylusDevice.initialize(STYLUS_DEVICE_ID, /*generation=*/1, /*controllerNumber=*/1,
                             /*identifier=*/{}, "stylus device", /*external=*/false,
-                            /*hasMic=*/false, ui::LogicalDisplayId::INVALID);
+                            /*isVirtualDevice=*/false, /*hasMic=*/false,
+                            ui::LogicalDisplayId::INVALID);
     notifyInputDevicesChanged({stylusDevice});
     // The touchscreen device was removed, so we no longer remember anything about it. We should
     // again start blocking touch events from it.
