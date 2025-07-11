@@ -22,6 +22,13 @@
 
 namespace android {
 
+// How long to wait when we are expecting an event to occur.
+// This should be long, so that tests are not flaky when the device is slow.
+static constexpr std::chrono::nanoseconds EVENT_SHOULD_OCCUR_TIMEOUT = 5s;
+// How long to wait when we are expecting an event to not occur.
+// This should be short, so that the tests are fast.
+static constexpr std::chrono::nanoseconds EVENT_SHOULD_NOT_OCCUR_TIMEOUT = 10ms;
+
 // --- FakeInputDispatcherPolicy ---
 
 void FakeInputDispatcherPolicy::assertFilterInputEventWasCalled(const NotifyKeyArgs& args) {
@@ -150,14 +157,15 @@ PointerCaptureRequest FakeInputDispatcherPolicy::assertSetPointerCaptureCalled(
     base::ScopedLockAssertion assumeLocked(mLock);
 
     if (!mPointerCaptureChangedCondition
-                 .wait_for(lock, 100ms, [this, enabled, window]() REQUIRES(mLock) {
-                     if (enabled) {
-                         return mPointerCaptureRequest->isEnable() &&
-                                 mPointerCaptureRequest->window == window->getToken();
-                     } else {
-                         return !mPointerCaptureRequest->isEnable();
-                     }
-                 })) {
+                 .wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
+                           [this, enabled, window]() REQUIRES(mLock) {
+                               if (enabled) {
+                                   return mPointerCaptureRequest->isEnable() &&
+                                           mPointerCaptureRequest->window == window->getToken();
+                               } else {
+                                   return !mPointerCaptureRequest->isEnable();
+                               }
+                           })) {
         ADD_FAILURE() << "Timed out waiting for setPointerCapture(" << window->getName() << ", "
                       << enabled << ") to be called.";
         return {};
@@ -171,7 +179,8 @@ void FakeInputDispatcherPolicy::assertSetPointerCaptureNotCalled() {
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
 
-    if (mPointerCaptureChangedCondition.wait_for(lock, 100ms) != std::cv_status::timeout) {
+    if (mPointerCaptureChangedCondition.wait_for(lock, EVENT_SHOULD_NOT_OCCUR_TIMEOUT) !=
+        std::cv_status::timeout) {
         FAIL() << "Expected setPointerCapture(request) to not be called, but was called. "
                   "enabled = "
                << std::to_string(mPointerCaptureRequest->isEnable());
@@ -192,8 +201,8 @@ void FakeInputDispatcherPolicy::assertNotifyInputChannelBrokenWasCalled(const sp
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
     std::optional<sp<IBinder>> receivedToken =
-            getItemFromStorageLockedInterruptible(100ms, mBrokenInputChannels, lock,
-                                                  mNotifyInputChannelBroken);
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_OCCUR_TIMEOUT, mBrokenInputChannels,
+                                                  lock, mNotifyInputChannelBroken);
     ASSERT_TRUE(receivedToken.has_value()) << "Did not receive the broken channel token";
     ASSERT_EQ(token, *receivedToken);
 }
@@ -215,7 +224,7 @@ void FakeInputDispatcherPolicy::assertFocusedDisplayNotified(ui::LogicalDisplayI
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
 
-    if (!mFocusedDisplayNotifiedCondition.wait_for(lock, 100ms,
+    if (!mFocusedDisplayNotifiedCondition.wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
                                                    [this, expectedDisplay]() REQUIRES(mLock) {
                                                        if (!mNotifiedFocusedDisplay.has_value() ||
                                                            mNotifiedFocusedDisplay.value() !=
@@ -234,7 +243,8 @@ void FakeInputDispatcherPolicy::assertUserActivityNotPoked() {
     base::ScopedLockAssertion assumeLocked(mLock);
 
     std::optional<UserActivityPokeEvent> pokeEvent =
-            getItemFromStorageLockedInterruptible(500ms, mUserActivityPokeEvents, lock,
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_NOT_OCCUR_TIMEOUT,
+                                                  mUserActivityPokeEvents, lock,
                                                   mNotifyUserActivity);
 
     ASSERT_FALSE(pokeEvent) << "Expected user activity not to have been poked";
@@ -246,7 +256,8 @@ void FakeInputDispatcherPolicy::assertUserActivityPoked(
     base::ScopedLockAssertion assumeLocked(mLock);
 
     std::optional<UserActivityPokeEvent> pokeEvent =
-            getItemFromStorageLockedInterruptible(500ms, mUserActivityPokeEvents, lock,
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_OCCUR_TIMEOUT,
+                                                  mUserActivityPokeEvents, lock,
                                                   mNotifyUserActivity);
     ASSERT_TRUE(pokeEvent) << "Expected a user poke event";
 
@@ -257,11 +268,12 @@ void FakeInputDispatcherPolicy::assertUserActivityPoked(
 
 void FakeInputDispatcherPolicy::assertNotifyDeviceInteractionWasCalled(int32_t deviceId,
                                                                        std::set<gui::Uid> uids) {
-    ASSERT_EQ(std::make_pair(deviceId, uids), mNotifiedInteractions.popWithTimeout(100ms));
+    ASSERT_EQ(std::make_pair(deviceId, uids),
+              mNotifiedInteractions.popWithTimeout(EVENT_SHOULD_OCCUR_TIMEOUT));
 }
 
 void FakeInputDispatcherPolicy::assertNotifyDeviceInteractionWasNotCalled() {
-    ASSERT_FALSE(mNotifiedInteractions.popWithTimeout(10ms));
+    ASSERT_FALSE(mNotifiedInteractions.popWithTimeout(EVENT_SHOULD_NOT_OCCUR_TIMEOUT));
 }
 
 void FakeInputDispatcherPolicy::setUnhandledKeyHandler(
@@ -274,7 +286,8 @@ void FakeInputDispatcherPolicy::assertUnhandledKeyReported(int32_t keycode) {
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
     std::optional<int32_t> unhandledKeycode =
-            getItemFromStorageLockedInterruptible(100ms, mReportedUnhandledKeycodes, lock,
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_OCCUR_TIMEOUT,
+                                                  mReportedUnhandledKeycodes, lock,
                                                   mNotifyUnhandledKey);
     ASSERT_TRUE(unhandledKeycode) << "Expected unhandled key to be reported";
     ASSERT_EQ(unhandledKeycode, keycode);
@@ -284,7 +297,8 @@ void FakeInputDispatcherPolicy::assertUnhandledKeyNotReported() {
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
     std::optional<int32_t> unhandledKeycode =
-            getItemFromStorageLockedInterruptible(10ms, mReportedUnhandledKeycodes, lock,
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_NOT_OCCUR_TIMEOUT,
+                                                  mReportedUnhandledKeycodes, lock,
                                                   mNotifyUnhandledKey);
     ASSERT_FALSE(unhandledKeycode) << "Expected unhandled key NOT to be reported";
 }
@@ -436,7 +450,7 @@ FakeInputDispatcherPolicy::interceptKeyBeforeDispatching(const sp<IBinder>&, con
 
 void FakeInputDispatcherPolicy::assertKeyConsumedByPolicy(
         const ::testing::Matcher<KeyEvent>& matcher) {
-    ASSERT_THAT(*mKeysConsumedByPolicy.popWithTimeout(100ms), matcher);
+    ASSERT_THAT(*mKeysConsumedByPolicy.popWithTimeout(EVENT_SHOULD_OCCUR_TIMEOUT), matcher);
 }
 
 void FakeInputDispatcherPolicy::assertNoKeysConsumedByPolicy() {

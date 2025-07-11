@@ -17,12 +17,19 @@
 #undef LOG_TAG
 #define LOG_TAG "LibSurfaceFlingerUnittests"
 
+#include <common/test/FlagUtils.h>
 #include <ui/ScreenPartStatus.h>
 
 #include "DisplayTransactionTestHelpers.h"
 
 namespace android {
 namespace {
+
+template <typename Id>
+class MockDisplayIdGenerator : public DisplayIdGenerator<Id> {
+public:
+    MOCK_METHOD(std::optional<Id>, generateId, (), (override));
+};
 
 struct DisplayTransactionCommitTest : DisplayTransactionTest {
     template <typename Case>
@@ -563,6 +570,255 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayRemoval) {
 
     // The existing token should have been removed
     verifyDisplayIsNotConnected(existing.token());
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireHalVirtualDisplayId) {
+    using Case = SimplePrimaryDisplayCase;
+
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Set up a primary physical display.
+    processesHotplugConnectCommon<Case>();
+    const uint64_t primaryDisplayId = asDisplayId(Case::Display::DISPLAY_ID::get()).value;
+
+    // The HWC supports at least one virtual display
+    injectMockComposer(1);
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+    static constexpr ui::Size kResolution{1920U, 1080U};
+    static ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    EXPECT_CALL(*mComposer,
+                createVirtualDisplay(static_cast<uint32_t>(kResolution.width),
+                                     static_cast<uint32_t>(kResolution.height),
+                                     testing::Pointee(format), _))
+            .Times(1)
+            .WillOnce(Return(Error::NONE));
+
+    // --------------------------------------------------------------------
+    // Invocation
+    const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_TRUE(virtualDisplayIdVariantOpt);
+    ASSERT_TRUE(std::holds_alternative<HalVirtualDisplayId>(*virtualDisplayIdVariantOpt));
+    ASSERT_NE(primaryDisplayId, asVirtualDisplayId(*virtualDisplayIdVariantOpt)->value);
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireGpuVirtualDisplayId) {
+    using Case = SimplePrimaryDisplayCase;
+
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Set up a primary physical display.
+    processesHotplugConnectCommon<Case>();
+    const uint64_t primaryDisplayId = asDisplayId(Case::Display::DISPLAY_ID::get()).value;
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+
+    // The HAL should not be involved in the creation of GPU virtual displays.
+    EXPECT_CALL(*mComposer, createVirtualDisplay(_, _, _, _)).Times(0);
+
+    // --------------------------------------------------------------------
+    // Invocation
+    constexpr ui::Size kResolution{1920U, 1080U};
+    ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_TRUE(virtualDisplayIdVariantOpt);
+    ASSERT_TRUE(std::holds_alternative<GpuVirtualDisplayId>(*virtualDisplayIdVariantOpt));
+    ASSERT_NE(primaryDisplayId, asVirtualDisplayId(*virtualDisplayIdVariantOpt)->value);
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireGpuVirtualDisplayIdFailure) {
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Setting the HAL generator to nullptr disables HWC composition for virtual displays.
+    auto gpuDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<GpuVirtualDisplayId>>();
+    auto* mockGpuDisplayIdGeneratorPtr = gpuDisplayIdGenerator.get();
+    mFlinger.injectDisplayIdGenerators(std::move(gpuDisplayIdGenerator), nullptr);
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+
+    // The GPU display ID generator will fail to provide a valid virtual display ID.
+    EXPECT_CALL(*mockGpuDisplayIdGeneratorPtr, generateId())
+            .WillOnce(testing::Return(std::nullopt));
+    // The HAL should not be involved in the creation of GPU virtual displays.
+    EXPECT_CALL(*mComposer, createVirtualDisplay(_, _, _, _)).Times(0);
+
+    // --------------------------------------------------------------------
+    // Invocation
+    constexpr ui::Size kResolution{1920U, 1080U};
+    const ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_FALSE(virtualDisplayIdVariantOpt);
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireHalVirtualDisplayIdWithConflictResolutionSuccess) {
+    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::stable_edid_ids, true);
+    using Case = SimplePrimaryDisplayCase;
+
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Set up a primary physical display.
+    processesHotplugConnectCommon<Case>();
+    const uint64_t primaryDisplayId = asDisplayId(Case::Display::DISPLAY_ID::get()).value;
+
+    // Injecting a mock Hal generator enables Hal composition.
+    auto halDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<HalVirtualDisplayId>>();
+    auto* mockHalDisplayIdGeneratorPtr = halDisplayIdGenerator.get();
+    auto gpuDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<GpuVirtualDisplayId>>();
+    auto* mockGpuDisplayIdGeneratorPtr = gpuDisplayIdGenerator.get();
+    mFlinger.injectDisplayIdGenerators(std::move(gpuDisplayIdGenerator),
+                                       std::move(halDisplayIdGenerator));
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+
+    // The HAL display ID generator will return the primary physical display's ID once
+    // to produce conflict in the virtual display acquisition logic, then return a non-conflicting
+    // ID.
+    const uint64_t nonConflictingVirtualId =
+            asDisplayId(HwcVirtualDisplayCase::Display::DISPLAY_ID::get()).value;
+    EXPECT_CALL(*mockHalDisplayIdGeneratorPtr, generateId())
+            .WillOnce(testing::Return(HalVirtualDisplayId::fromValue(primaryDisplayId)))
+            .WillOnce(testing::Return(HalVirtualDisplayId::fromValue(nonConflictingVirtualId)));
+
+    // There should be no effort to generate GPU display IDs.
+    EXPECT_CALL(*mockGpuDisplayIdGeneratorPtr, generateId()).Times(0);
+
+    static constexpr ui::Size kResolution{1920U, 1080U};
+    static ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    EXPECT_CALL(*mComposer,
+                createVirtualDisplay(static_cast<uint32_t>(kResolution.width),
+                                     static_cast<uint32_t>(kResolution.height),
+                                     testing::Pointee(format), _))
+            .Times(1)
+            .WillOnce(Return(Error::NONE));
+    EXPECT_CALL(*mComposer, setClientTargetSlotCount(_)).WillOnce(Return(hal::Error::NONE));
+
+    // --------------------------------------------------------------------
+    // Invocation
+    const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_TRUE(virtualDisplayIdVariantOpt);
+    ASSERT_TRUE(std::holds_alternative<HalVirtualDisplayId>(*virtualDisplayIdVariantOpt));
+
+    const uint64_t halVirtualDisplayIdValue =
+            asVirtualDisplayId(*virtualDisplayIdVariantOpt)->value;
+    ASSERT_EQ(nonConflictingVirtualId, halVirtualDisplayIdValue);
+    ASSERT_NE(primaryDisplayId, halVirtualDisplayIdValue);
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireGpuVirtualDisplayIdWithConflictResolutionSuccess) {
+    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::stable_edid_ids, true);
+    using Case = SimplePrimaryDisplayCase;
+
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Set up a primary physical display.
+    processesHotplugConnectCommon<Case>();
+    const uint64_t primaryDisplayId = asDisplayId(Case::Display::DISPLAY_ID::get()).value;
+
+    // Setting the HAL generator to nullptr disables HWC composition for virtual displays.
+    auto gpuDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<GpuVirtualDisplayId>>();
+    auto* mockGpuDisplayIdGeneratorPtr = gpuDisplayIdGenerator.get();
+    mFlinger.injectDisplayIdGenerators(std::move(gpuDisplayIdGenerator), nullptr);
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+
+    // The GPU display ID generator will return the primary physical display's ID once
+    // to produce conflict in the virtual display acquisition logic, then return a non-conflicting
+    // ID.
+    const uint64_t nonConflictingVirtualId =
+            asDisplayId(NonHwcVirtualDisplayCase::Display::DISPLAY_ID::get()).value;
+    EXPECT_CALL(*mockGpuDisplayIdGeneratorPtr, generateId())
+            .WillOnce(testing::Return(GpuVirtualDisplayId::fromValue(primaryDisplayId)))
+            .WillOnce(testing::Return(GpuVirtualDisplayId::fromValue(nonConflictingVirtualId)));
+
+    // The HAL should not be involved in the creation of GPU virtual displays.
+    EXPECT_CALL(*mComposer, createVirtualDisplay(_, _, _, _)).Times(0);
+
+    // --------------------------------------------------------------------
+    // Invocation
+    constexpr ui::Size kResolution{1920U, 1080U};
+    const ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_TRUE(virtualDisplayIdVariantOpt);
+    ASSERT_TRUE(std::holds_alternative<GpuVirtualDisplayId>(*virtualDisplayIdVariantOpt));
+
+    const uint64_t gpuVirtualDisplayIdValue =
+            asVirtualDisplayId(*virtualDisplayIdVariantOpt)->value;
+    ASSERT_EQ(nonConflictingVirtualId, gpuVirtualDisplayIdValue);
+    ASSERT_NE(primaryDisplayId, gpuVirtualDisplayIdValue);
+}
+
+TEST_F(DisplayTransactionCommitTest, acquireVirtualDisplayIdWithConflictResolutionCompleteFailure) {
+    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::stable_edid_ids, true);
+    using Case = SimplePrimaryDisplayCase;
+
+    // --------------------------------------------------------------------
+    // Preconditions
+
+    // Set up a primary physical display.
+    processesHotplugConnectCommon<Case>();
+    const uint64_t primaryDisplayId = asDisplayId(Case::Display::DISPLAY_ID::get()).value;
+
+    // Injecting a mock Hal generator enables Hal composition.
+    auto halDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<HalVirtualDisplayId>>();
+    auto* mockHalDisplayIdGeneratorPtr = halDisplayIdGenerator.get();
+    auto gpuDisplayIdGenerator = std::make_unique<MockDisplayIdGenerator<GpuVirtualDisplayId>>();
+    auto* mockGpuDisplayIdGeneratorPtr = gpuDisplayIdGenerator.get();
+    mFlinger.injectDisplayIdGenerators(std::move(gpuDisplayIdGenerator),
+                                       std::move(halDisplayIdGenerator));
+
+    // --------------------------------------------------------------------
+    // Call Expectations
+
+    // The generators will repeatedly return the primary physical display's ID
+    // to produce conflict in the virtual display acquisition logic.
+    EXPECT_CALL(*mockHalDisplayIdGeneratorPtr, generateId())
+            .Times(10)
+            .WillRepeatedly(testing::Return(HalVirtualDisplayId::fromValue(primaryDisplayId)));
+    EXPECT_CALL(*mockGpuDisplayIdGeneratorPtr, generateId())
+            .Times(10)
+            .WillRepeatedly(testing::Return(GpuVirtualDisplayId::fromValue(primaryDisplayId)));
+    EXPECT_CALL(*mComposer, createVirtualDisplay(_, _, _, _)).Times(0);
+
+    // --------------------------------------------------------------------
+    // Invocation
+    static constexpr ui::Size kResolution{1920U, 1080U};
+    static const ui::PixelFormat format = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
+    static const std::string name("virtual.test");
+    auto builder = compositionengine::DisplayCreationArgsBuilder();
+    auto virtualDisplayIdVariantOpt =
+            mFlinger.acquireVirtualDisplay(kResolution, format, name, builder);
+
+    ASSERT_FALSE(virtualDisplayIdVariantOpt);
 }
 
 TEST_F(DisplayTransactionCommitTest, processesDisplayLayerStackChanges) {

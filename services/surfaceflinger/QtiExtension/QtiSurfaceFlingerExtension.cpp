@@ -1061,7 +1061,7 @@ std::optional<android::VirtualDisplayIdVariant> QtiSurfaceFlingerExtension::qtiA
         ALOGW("%s: Falling back to GPU virtual display", __func__);
     }
 
-    const auto id = mQtiFlinger->mVirtualDisplayIdGenerators.gpu.generateId();
+    const auto id = mQtiFlinger->mVirtualDisplayIdGenerators.gpu->generateId();
     if (!id) {
         ALOGE("Failed to generate ID for GPU virtual display");
         return std::nullopt;

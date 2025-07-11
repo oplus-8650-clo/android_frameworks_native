@@ -25,6 +25,7 @@
 
 #include "../FdTrigger.h"
 #include "../RpcState.h"
+#include "../RpcTransportUtils.h"
 #include "TrustyStatus.h"
 
 namespace android {
@@ -113,45 +114,77 @@ public:
     }
 
     status_t interruptableWriteFully(
-            FdTrigger* /*fdTrigger*/, iovec* iovs, int niovs,
-            const std::optional<SmallFunction<status_t()>>& /*altPoll*/,
+            FdTrigger* fdTrigger, iovec* iovs, int niovs,
+            const std::optional<SmallFunction<status_t()>>& /* altPoll */,
             const std::vector<std::variant<unique_fd, borrowed_fd>>* ancillaryFds) override {
         if (niovs < 0) {
             return BAD_VALUE;
         }
 
-        size_t size = 0;
-        for (int i = 0; i < niovs; i++) {
-            size += iovs[i].iov_len;
-        }
+        auto writeFn = [&](iovec* iovs, size_t niovs) -> ssize_t {
+            // Collect the ancillary FDs.
+            handle_t msgHandles[IPC_MAX_MSG_HANDLES];
+            ipc_msg_t msg{
+                    .num_iov = 0,
+                    .iov = iovs,
+                    .num_handles = 0,
+                    .handles = nullptr,
+            };
 
-        handle_t msgHandles[IPC_MAX_MSG_HANDLES];
-        ipc_msg_t msg{
-                .num_iov = static_cast<uint32_t>(niovs),
-                .iov = iovs,
-                .num_handles = 0,
-                .handles = nullptr,
+            if (ancillaryFds != nullptr && !ancillaryFds->empty()) {
+                if (ancillaryFds->size() > IPC_MAX_MSG_HANDLES) {
+                    // This shouldn't happen because we check the FD count in RpcState.
+                    ALOGE("Saw too many file descriptors in RpcTransportCtxTipcTrusty: "
+                          "%zu (max is %u). Aborting session.",
+                          ancillaryFds->size(), IPC_MAX_MSG_HANDLES);
+                    return BAD_VALUE;
+                }
+
+                for (size_t i = 0; i < ancillaryFds->size(); i++) {
+                    msgHandles[i] = std::visit([](const auto& fd) { return fd.get(); },
+                                               ancillaryFds->at(i));
+                }
+
+                msg.num_handles = ancillaryFds->size();
+                msg.handles = msgHandles;
+            }
+
+            // Trusty currently has a message size limit, which will go away once we
+            // switch to vsock. The message is reassembled on the receiving side.
+            static const size_t maxMsgSize = VIRTIO_VSOCK_MSG_SIZE_LIMIT;
+            size_t niovsMsg;
+            size_t currSize = 0;
+            size_t cutSize = 0;
+            for (niovsMsg = 0; niovsMsg < (size_t)niovs; niovsMsg++) {
+                if (__builtin_add_overflow(currSize, iovs[niovsMsg].iov_len, &currSize)) {
+                    ALOGE("%s: iov_len add_overflow", __FUNCTION__);
+                    return NO_MEMORY;
+                }
+                if (currSize >= maxMsgSize) {
+                    // Truncate the last iov but restore it at the end
+                    // so the caller can continue where we left off.
+                    cutSize = currSize - maxMsgSize;
+                    iovs[niovsMsg].iov_len -= cutSize;
+                    niovsMsg++;
+                    break;
+                }
+            }
+            msg.num_iov = static_cast<uint32_t>(niovsMsg);
+
+            auto rc = sendTrustyMsg(&msg, currSize - cutSize);
+            if (niovsMsg > 0) {
+                iovs[niovsMsg - 1].iov_len += cutSize;
+            }
+            if (rc == NO_ERROR) {
+                return currSize - cutSize;
+            } else {
+                return 0;
+            }
         };
 
-        if (ancillaryFds != nullptr && !ancillaryFds->empty()) {
-            if (ancillaryFds->size() > IPC_MAX_MSG_HANDLES) {
-                // This shouldn't happen because we check the FD count in RpcState.
-                ALOGE("Saw too many file descriptors in RpcTransportCtxTipcTrusty: "
-                      "%zu (max is %u). Aborting session.",
-                      ancillaryFds->size(), IPC_MAX_MSG_HANDLES);
-                return BAD_VALUE;
-            }
-
-            for (size_t i = 0; i < ancillaryFds->size(); i++) {
-                msgHandles[i] =
-                        std::visit([](const auto& fd) { return fd.get(); }, ancillaryFds->at(i));
-            }
-
-            msg.num_handles = ancillaryFds->size();
-            msg.handles = msgHandles;
-        }
-
-        return sendTrustyMsg(&msg, size);
+        auto altPoll = []() -> status_t { return NO_ERROR; };
+        return interruptableReadOrWrite(mSocket, fdTrigger, iovs, niovs, writeFn, "tipc_send",
+                                        0 /* poll event, should never be used */, altPoll);
     }
 
     status_t interruptableReadFully(

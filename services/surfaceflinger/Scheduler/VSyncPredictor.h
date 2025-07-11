@@ -160,7 +160,6 @@ private:
     size_t const kMinimumSamplesForPrediction;
     static constexpr size_t kAbsoluteMinSamplesForPrediction = 3;
     size_t const kOutlierTolerancePercent;
-    nsecs_t const kPredictorThreshold;
     std::mutex mutable mMutex;
 
     std::optional<nsecs_t> mKnownTimestamp GUARDED_BY(mMutex);

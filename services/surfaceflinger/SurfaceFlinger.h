@@ -1108,6 +1108,13 @@ private:
         return getFrontInternalDisplayLocked();
     }
 
+    std::optional<PhysicalDisplayId> getDefaultPacesetterDisplay() const {
+        if (FlagManager::getInstance().pacesetter_selection()) {
+            return std::nullopt;
+        }
+        return mFrontInternalDisplayId;
+    }
+
     using DisplayDeviceAndSnapshot = std::pair<sp<DisplayDevice>, display::DisplaySnapshotRef>;
 
     // Combinator for ftl::Optional<PhysicalDisplay>::and_then.
@@ -1250,13 +1257,40 @@ private:
             compositionengine::DisplayCreationArgsBuilder&) REQUIRES(mStateLock);
 
     template <typename ID>
-    void acquireVirtualDisplaySnapshot(ID displayId, const std::string& uniqueId) {
+    bool acquireVirtualDisplaySnapshot(ID displayId, const std::string& uniqueId) {
         std::lock_guard lock(mVirtualDisplaysMutex);
-        const bool emplace_success =
-                mVirtualDisplays.try_emplace(displayId, displayId, uniqueId).second;
-        if (!emplace_success) {
-            ALOGW("%s: Virtual display snapshot with the same ID already exists", __func__);
+        if (!mVirtualDisplays.try_emplace(displayId, displayId, uniqueId).second) {
+            ALOGE("%s: Virtual display snapshot with the same ID already exists", __func__);
+            return false;
         }
+
+        return true;
+    }
+
+    template <typename ID>
+    std::optional<ID> generateVirtualDisplayId(DisplayIdGenerator<ID>& generator)
+            REQUIRES(mStateLock) {
+        std::optional<ID> id;
+        if (FlagManager::getInstance().stable_edid_ids()) {
+            int attempts = 10;
+            do {
+                id = generator.generateId();
+            } while (id.has_value() && hasDisplayWithId(*id) && --attempts > 0);
+        } else {
+            id = generator.generateId();
+        }
+
+        if (!id.has_value()) {
+            ALOGW("%s: Exhausted virtual displays", __func__);
+            return std::nullopt;
+        }
+
+        if (FlagManager::getInstance().stable_edid_ids() && hasDisplayWithId(*id)) {
+            ALOGW("%s: Could not resolve virtual display ID conflicts", __func__);
+            return std::nullopt;
+        }
+
+        return *id;
     }
 
     void releaseVirtualDisplay(VirtualDisplayIdVariant displayId);
@@ -1483,8 +1517,9 @@ private:
     display::DisplayModeController mDisplayModeController;
 
     struct {
-        DisplayIdGenerator<GpuVirtualDisplayId> gpu;
-        std::optional<DisplayIdGenerator<HalVirtualDisplayId>> hal;
+        std::unique_ptr<DisplayIdGenerator<GpuVirtualDisplayId>> gpu =
+                std::make_unique<DisplayIdGenerator<GpuVirtualDisplayId>>();
+        std::unique_ptr<DisplayIdGenerator<HalVirtualDisplayId>> hal;
     } mVirtualDisplayIdGenerators;
 
     std::atomic_uint mDebugFlashDelay = 0;
@@ -1690,6 +1725,8 @@ private:
     void sfdo_scheduleComposite();
     void sfdo_scheduleCommit();
     void sfdo_forceClientComposition(bool enabled);
+    status_t sfdo_forcePacesetter(PhysicalDisplayId displayId);
+    void sfdo_resetForcedPacesetter();
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1832,6 +1869,8 @@ public:
                                       int64_t afterVsync) override;
     binder::Status addActivePictureListener(const sp<gui::IActivePictureListener>& listener);
     binder::Status removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
+    binder::Status forcePacesetter(int64_t displayId) override;
+    binder::Status resetForcedPacesetter() override;
 
 private:
     static const constexpr bool kUsePermissionCache = true;

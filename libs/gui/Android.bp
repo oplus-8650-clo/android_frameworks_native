@@ -49,6 +49,7 @@ cc_aconfig_library {
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
+        "com.android.media",
         "com.android.media.swcodec",
     ],
     aconfig_declarations: "libgui_flags",

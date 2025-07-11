@@ -61,6 +61,7 @@ public:
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
     bool readback_screenshot() const;
+    bool reset_model_flushes_fence() const;
     bool resync_on_tx() const;
     bool refresh_rate_overlay_on_external_display() const;
     bool vsync_predictor_rate_change_with_aligned_sequence() const;
@@ -100,6 +101,7 @@ public:
     bool protected_if_client() const;
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
+    bool parse_edid_version_and_input_type() const;
     bool skip_invisible_windows_in_input() const;
     bool stable_edid_ids() const;
     bool stop_layer() const;

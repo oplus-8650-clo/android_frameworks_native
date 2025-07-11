@@ -1061,6 +1061,10 @@ public:
         return binder::Status::ok();
     }
 
+    binder::Status forcePacesetter(int64_t) { return binder::Status::ok(); }
+
+    binder::Status resetForcedPacesetter() { return binder::Status::ok(); }
+
 protected:
     IBinder* onAsBinder() override { return nullptr; }
 

@@ -16,6 +16,11 @@
 
 use alloc::boxed::Box;
 use binder::{unstable_api::AsNative, SpIBinder};
+use binder_rpc_server_bindgen::{
+    AIBinder, ARpcServerTrusty, ARpcServerTrusty_delete, ARpcServerTrusty_handleChannelCleanup,
+    ARpcServerTrusty_handleConnect, ARpcServerTrusty_handleDisconnect,
+    ARpcServerTrusty_handleMessage, ARpcServerTrusty_newPerSession,
+};
 use libc::size_t;
 use log::error;
 use std::ffi::{c_char, c_void};
@@ -38,7 +43,7 @@ impl<T> PerSessionCallback for T where
 }
 
 pub struct RpcServer {
-    inner: *mut binder_rpc_server_bindgen::ARpcServerTrusty,
+    inner: *mut ARpcServerTrusty,
 }
 
 /// SAFETY: The opaque handle points to a heap allocation
@@ -52,7 +57,7 @@ impl Drop for RpcServer {
         // SAFETY: `ARpcServerTrusty_delete` is the correct destructor to call
         // on pointers returned by `ARpcServerTrusty_new`.
         unsafe {
-            binder_rpc_server_bindgen::ARpcServerTrusty_delete(self.inner);
+            ARpcServerTrusty_delete(self.inner);
         }
     }
 }
@@ -71,7 +76,7 @@ impl RpcServer {
     pub fn new_per_session<F: PerSessionCallback>(f: F) -> RpcServer {
         // SAFETY: Takes ownership of the returned handle, which has correct refcount.
         let inner = unsafe {
-            binder_rpc_server_bindgen::ARpcServerTrusty_newPerSession(
+            ARpcServerTrusty_newPerSession(
                 Some(per_session_callback_wrapper::<F>),
                 Box::into_raw(Box::new(f)).cast(),
                 Some(per_session_callback_deleter::<F>),
@@ -85,7 +90,7 @@ unsafe extern "C" fn per_session_callback_wrapper<F: PerSessionCallback>(
     client_id_ptr: *const c_void,
     len: size_t,
     cb_ptr: *mut c_char,
-) -> *mut binder_rpc_server_bindgen::AIBinder {
+) -> *mut AIBinder {
     // SAFETY: This callback should only get called while the RpcServer is alive.
     let cb = unsafe { &mut *cb_ptr.cast::<F>() };
 
@@ -138,7 +143,7 @@ impl Drop for RpcServerConnection {
     fn drop(&mut self) {
         // We do not need to close handle_fd since we do not own it.
         unsafe {
-            binder_rpc_server_bindgen::ARpcServerTrusty_handleChannelCleanup(self.ctx);
+            ARpcServerTrusty_handleChannelCleanup(self.ctx);
         }
     }
 }
@@ -163,7 +168,7 @@ impl UnbufferedService for RpcServer {
         // no concurrent access to `sef.inner`` and other inputs are not freed/deallocated until the
         // function returns. Correct length of the data pointed to by the pointer is passed in.
         let rc = unsafe {
-            binder_rpc_server_bindgen::ARpcServerTrusty_handleConnect(
+            ARpcServerTrusty_handleConnect(
                 self.inner,
                 handle.as_raw_fd(),
                 data.as_mut_ptr() as *const c_void,
@@ -184,7 +189,7 @@ impl UnbufferedService for RpcServer {
         _handle: &Handle,
         _buffer: &mut [u8],
     ) -> tipc::Result<MessageResult> {
-        let rc = unsafe { binder_rpc_server_bindgen::ARpcServerTrusty_handleMessage(conn.ctx) };
+        let rc = unsafe { ARpcServerTrusty_handleMessage(conn.ctx) };
         if rc < 0 {
             Err(TipcError::from_uapi(rc.into()))
         } else {
@@ -193,7 +198,7 @@ impl UnbufferedService for RpcServer {
     }
 
     fn on_disconnect(&self, conn: &Self::Connection) {
-        unsafe { binder_rpc_server_bindgen::ARpcServerTrusty_handleDisconnect(conn.ctx) };
+        unsafe { ARpcServerTrusty_handleDisconnect(conn.ctx) };
     }
 
     fn on_new_connection(

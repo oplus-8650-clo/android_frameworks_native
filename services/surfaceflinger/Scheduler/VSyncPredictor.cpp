@@ -66,7 +66,6 @@ VSyncPredictor::VSyncPredictor(std::unique_ptr<Clock> clock, ftl::NonNull<Displa
         kHistorySize(historySize),
         kMinimumSamplesForPrediction(minimumSamplesForPrediction),
         kOutlierTolerancePercent(std::min(outlierTolerancePercent, kMaxPercent)),
-        kPredictorThreshold(ms2ns(200)),
         mDisplayModePtr(modePtr),
         mNumVsyncsForFrame(numVsyncsPerFrame(mDisplayModePtr)) {
     resetModel();
@@ -114,19 +113,19 @@ bool VSyncPredictor::validate(nsecs_t timestamp) const {
     const auto isThresholdEnabled =
             FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
             mDisplayModePtr->getVrrConfig();
-    const auto iter = std::min_element(mTimestamps.begin(), mTimestamps.end(),
-                                       [=, this](nsecs_t a, nsecs_t b) {
-                                           nsecs_t diffA = std::abs(timestamp - a);
-                                           nsecs_t diffB = std::abs(timestamp - b);
-                                           if (isThresholdEnabled) {
-                                               bool withinThresholdA = diffA <= kPredictorThreshold;
-                                               bool withinThresholdB = diffB <= kPredictorThreshold;
-                                               if (withinThresholdA != withinThresholdB) {
-                                                   return withinThresholdA;
-                                               }
-                                           }
-                                           return diffA < diffB;
-                                       });
+    const auto iter =
+            std::min_element(mTimestamps.begin(), mTimestamps.end(), [=](nsecs_t a, nsecs_t b) {
+                nsecs_t diffA = std::abs(timestamp - a);
+                nsecs_t diffB = std::abs(timestamp - b);
+                if (isThresholdEnabled) {
+                    bool withinThresholdA = diffA <= kPredictorThreshold.ns();
+                    bool withinThresholdB = diffB <= kPredictorThreshold.ns();
+                    if (withinThresholdA != withinThresholdB) {
+                        return withinThresholdA;
+                    }
+                }
+                return diffA < diffB;
+            });
     const auto distancePercent = std::abs(*iter - timestamp) * kMaxPercent / idealPeriod();
     if (distancePercent < kOutlierTolerancePercent) {
         // duplicate timestamp
@@ -340,7 +339,7 @@ bool VSyncPredictor::isVsyncWithinThreshold(nsecs_t currentTimestamp,
                                             nsecs_t previousTimestamp) const {
     if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
         mDisplayModePtr->getVrrConfig()) {
-        return currentTimestamp - previousTimestamp <= kPredictorThreshold;
+        return currentTimestamp - previousTimestamp <= kPredictorThreshold.ns();
     }
     return true;
 }
@@ -369,7 +368,7 @@ size_t VSyncPredictor::getMinSamplesRequiredForPrediction() const {
         mDisplayModePtr->getVrrConfig() && mRenderRateOpt) {
         const size_t minimumSamplesForPrediction =
                 std::max(static_cast<size_t>(kAbsoluteMinSamplesForPrediction),
-                         static_cast<size_t>(kPredictorThreshold /
+                         static_cast<size_t>(kPredictorThreshold.ns() /
                                              mRenderRateOpt->getPeriodNsecs()));
         return std::min(kMinimumSamplesForPrediction, minimumSamplesForPrediction);
     }

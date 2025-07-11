@@ -83,16 +83,20 @@ public:
 
     void registerDisplay(
             PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
-            std::optional<PhysicalDisplayId> activeDisplayIdOpt = {},
+            std::optional<PhysicalDisplayId> defaultPacesetterId = {},
             std::shared_ptr<VSyncTracker> vsyncTracker = std::make_shared<mock::VSyncTracker>()) {
+        if (!FlagManager::getInstance().pacesetter_selection() && !defaultPacesetterId) {
+            defaultPacesetterId = displayId;
+        }
         registerDisplay(displayId, std::move(selectorPtr),
                         std::make_unique<mock::VsyncController>(), vsyncTracker,
-                        activeDisplayIdOpt.value_or(displayId));
+                        defaultPacesetterId);
     }
 
     void registerDisplay(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
                          std::unique_ptr<VsyncController> controller,
-                         std::shared_ptr<VSyncTracker> tracker, PhysicalDisplayId activeDisplayId) {
+                         std::shared_ptr<VSyncTracker> tracker,
+                         std::optional<PhysicalDisplayId> defaultPacesetterId) {
         ftl::FakeGuard guard(kMainThreadContext);
         Scheduler::registerDisplayInternal(displayId, std::move(selectorPtr),
                                            std::shared_ptr<VsyncSchedule>(
@@ -102,7 +106,7 @@ public:
                                                                      std::move(controller),
                                                                      mockRequestHardwareVsync
                                                                              .AsStdFunction())),
-                                           activeDisplayId);
+                                           defaultPacesetterId);
     }
 
     testing::MockFunction<void(PhysicalDisplayId, bool)> mockRequestHardwareVsync;
@@ -116,14 +120,9 @@ public:
         return mPacesetterDisplayId;
     }
 
-    void designatePacesetterDisplay(PhysicalDisplayId displayId) {
+    bool designatePacesetterDisplay(std::optional<PhysicalDisplayId> displayId = std::nullopt) {
         ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::designatePacesetterDisplay(displayId);
-    }
-
-    void designatePacesetterDisplay() {
-        ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::designatePacesetterDisplay();
+        return Scheduler::designatePacesetterDisplay(displayId);
     }
 
     std::optional<hal::PowerMode> getDisplayPowerMode(PhysicalDisplayId id) {

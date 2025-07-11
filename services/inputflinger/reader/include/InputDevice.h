@@ -21,9 +21,17 @@
 #include <input/InputDevice.h>
 #include <input/PropertyMap.h>
 
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <list>
+#include <map>
+#include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "EventHub.h"

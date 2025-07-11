@@ -1008,6 +1008,7 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Tr
 
 void SurfaceComposerClient::Transaction::clear() {
     mState.clear();
+    mState.mId = generateId();
     mListenerCallbacks.clear();
     mMayContainBuffer = false;
     mApplyToken = nullptr;
@@ -1207,8 +1208,6 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
 
     TransactionState state = std::move(mState);
-    mState = TransactionState();
-    mState.mId = generateId();
     status_t binderStatus = sf->setTransactionState(std::move(state), applyToken);
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinQueueBuffer) {
@@ -1216,16 +1215,16 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     }
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
 
+    if (mLogCallPoints) {
+        ALOG(LOG_DEBUG, LOG_SURFACE_CONTROL_REGISTRY, "Transaction %" PRIu64 " applied",
+             mState.mId);
+    }
+
     // Clear the current states and flags
     clear();
 
     if (synchronous && binderStatus == OK) {
         syncCallback->wait();
-    }
-
-    if (mLogCallPoints) {
-        ALOG(LOG_DEBUG, LOG_SURFACE_CONTROL_REGISTRY, "Transaction %" PRIu64 " applied",
-             mState.mId);
     }
 
     mStatus = NO_ERROR;

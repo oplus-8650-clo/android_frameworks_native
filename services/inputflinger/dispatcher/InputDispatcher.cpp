@@ -3249,17 +3249,16 @@ void InputDispatcher::pokeUserActivityLocked(const EventEntry& eventEntry) {
     }
 
     const int32_t eventType = getUserActivityEventType(eventEntry);
-    if (input_flags::rate_limit_user_activity_poke_in_dispatcher()) {
-        // Note that we're directly getting the time diff between the current event and the previous
-        // event. This is assuming that the first user event always happens at a timestamp that is
-        // greater than `mMinTimeBetweenUserActivityPokes` (otherwise, the first user event will
-        // wrongly be dropped). In real life, `mMinTimeBetweenUserActivityPokes` is a much smaller
-        // value than the potential first user activity event time, so this is ok.
-        std::chrono::nanoseconds timeSinceLastEvent =
-                std::chrono::nanoseconds(eventEntry.eventTime - mLastUserActivityTimes[eventType]);
-        if (timeSinceLastEvent < mMinTimeBetweenUserActivityPokes) {
-            return;
-        }
+
+    // Note that we're directly getting the time diff between the current event and the previous
+    // event. This is assuming that the first user event always happens at a timestamp that is
+    // greater than `mMinTimeBetweenUserActivityPokes` (otherwise, the first user event will
+    // wrongly be dropped). In real life, `mMinTimeBetweenUserActivityPokes` is a much smaller
+    // value than the potential first user activity event time, so this is ok.
+    std::chrono::nanoseconds timeSinceLastEvent =
+            std::chrono::nanoseconds(eventEntry.eventTime - mLastUserActivityTimes[eventType]);
+    if (timeSinceLastEvent < mMinTimeBetweenUserActivityPokes) {
+        return;
     }
 
     ui::LogicalDisplayId displayId = getTargetDisplayId(eventEntry);

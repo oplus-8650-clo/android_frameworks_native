@@ -636,6 +636,62 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
     }
 }
 
+TEST_F(SchedulerTest, forcePacesetterDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
+    constexpr PhysicalDisplayId kFrontInternalDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode120->getId()),
+                                kFrontInternalDisplayId);
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()),
+                                kFrontInternalDisplayId);
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    // The front internal display (display 1) should be the pacesetter.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // Force set display 2 as pacesetter.
+    EXPECT_TRUE(mScheduler->forcePacesetterDisplay(kDisplayId2));
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+
+    // Try to set display 1 as pacesetter without forcing, check that it failed.
+    EXPECT_FALSE(mScheduler->designatePacesetterDisplay(kDisplayId1));
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+}
+
+TEST_F(SchedulerTest, resetForcedPacesetterDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
+    constexpr PhysicalDisplayId kFrontInternalDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode120->getId()),
+                                kFrontInternalDisplayId);
+    mScheduler->registerDisplay(kDisplayId2,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()),
+                                kFrontInternalDisplayId);
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    // The front internal display (display 1) should be the pacesetter.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // Since no display was forced a pacesetter, resetForcedPacesetterDisplay() should be a no-op.
+    EXPECT_FALSE(mScheduler->resetForcedPacesetterDisplay(kDisplayId2));
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // Force set display 2 as pacesetter.
+    EXPECT_TRUE(mScheduler->forcePacesetterDisplay(kDisplayId2));
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+
+    // The forced pacesetter display should be reset to display 1.
+    EXPECT_TRUE(mScheduler->resetForcedPacesetterDisplay(kDisplayId1));
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+}
+
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
     constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
     mScheduler->registerDisplay(kDisplayId1,
@@ -872,6 +928,9 @@ TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
     EXPECT_CALL(mSchedulerCallback, enableLayerCachingTexturePool(kDisplayId2, false));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    // Flush EXPECT_CALLs here so that additional mock calls in the dtor does not trigger a failure.
+    testing::Mock::VerifyAndClearExpectations(&mSchedulerCallback);
 }
 
 TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
@@ -889,7 +948,6 @@ TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
 }
 
 TEST_F(SchedulerTest, pendingModeChangeMultiDisplay) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
     SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
 
     mScheduler->registerDisplay(kDisplayId2,

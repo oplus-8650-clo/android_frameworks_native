@@ -156,7 +156,13 @@ struct IEventThreadCallback {
 
     virtual bool throttleVsync(TimePoint, uid_t) = 0;
     virtual Period getVsyncPeriod(uid_t) = 0;
-    virtual void resync() = 0;
+
+    enum class ResyncCaller {
+        RequestNextVsync,
+        Transaction,
+    };
+    virtual void resync(ResyncCaller) = 0;
+
     virtual void onExpectedPresentTimePosted(TimePoint) = 0;
 };
 

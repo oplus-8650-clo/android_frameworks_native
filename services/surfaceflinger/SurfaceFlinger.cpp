@@ -675,7 +675,8 @@ void SurfaceFlinger::enableHalVirtualDisplays(bool enable) {
     auto& generator = mVirtualDisplayIdGenerators.hal;
     if (!generator && enable) {
         ALOGI("Enabling HAL virtual displays");
-        generator.emplace(getHwComposer().getMaxVirtualDisplayCount());
+        generator = std::make_unique<DisplayIdGenerator<HalVirtualDisplayId>>(
+                getHwComposer().getMaxVirtualDisplayCount());
     } else if (generator && !enable) {
         ALOGW_IF(generator->inUse(), "Disabling HAL virtual displays while in use");
         generator.reset();
@@ -686,26 +687,28 @@ std::optional<VirtualDisplayIdVariant> SurfaceFlinger::acquireVirtualDisplay(
         ui::Size resolution, ui::PixelFormat format, const std::string& uniqueId,
         compositionengine::DisplayCreationArgsBuilder& builder) {
     if (auto& generator = mVirtualDisplayIdGenerators.hal) {
-        if (const auto id = generator->generateId()) {
-            if (getHwComposer().allocateVirtualDisplay(*id, resolution, &format)) {
-                acquireVirtualDisplaySnapshot(*id, uniqueId);
-                builder.setId(*id);
-                return *id;
+        if (const auto halIdOpt = generateVirtualDisplayId(*generator)) {
+            if (getHwComposer().allocateVirtualDisplay(*halIdOpt, resolution, &format) &&
+                acquireVirtualDisplaySnapshot(*halIdOpt, uniqueId)) {
+                builder.setId(*halIdOpt);
+                return *halIdOpt;
             }
 
-            generator->releaseId(*id);
-        } else {
-            ALOGW("%s: Exhausted HAL virtual displays", __func__);
+            generator->releaseId(*halIdOpt);
         }
-
         ALOGW("%s: Falling back to GPU virtual display", __func__);
     }
 
-    const auto id = mVirtualDisplayIdGenerators.gpu.generateId();
-    LOG_ALWAYS_FATAL_IF(!id, "Failed to generate ID for GPU virtual display");
-    acquireVirtualDisplaySnapshot(*id, uniqueId);
-    builder.setId(*id);
-    return *id;
+    auto& generator = mVirtualDisplayIdGenerators.gpu;
+    if (const auto gpuIdOpt = generateVirtualDisplayId(*generator)) {
+        if (acquireVirtualDisplaySnapshot(*gpuIdOpt, uniqueId)) {
+            builder.setId(*gpuIdOpt);
+            return *gpuIdOpt;
+        }
+    }
+
+    ALOGE("Failed to generate ID for virtual display %s", uniqueId.c_str());
+    return std::nullopt;
 }
 
 void SurfaceFlinger::releaseVirtualDisplay(VirtualDisplayIdVariant displayId) {
@@ -718,7 +721,7 @@ void SurfaceFlinger::releaseVirtualDisplay(VirtualDisplayIdVariant displayId) {
                 }
             },
             [this](GpuVirtualDisplayId gpuVirtualDisplayId) {
-                mVirtualDisplayIdGenerators.gpu.releaseId(gpuVirtualDisplayId);
+                mVirtualDisplayIdGenerators.gpu->releaseId(gpuVirtualDisplayId);
                 releaseVirtualDisplaySnapshot(gpuVirtualDisplayId);
             });
 }
@@ -4258,6 +4261,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         }
         virtualDisplayIdVariantOpt = *qtiVirtualDisplayId;
         /* QTI_END */
+        LOG_ALWAYS_FATAL_IF(!virtualDisplayIdVariantOpt);
     }
 
     builder.setPixels(resolution);
@@ -4281,7 +4285,6 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     /* QTI_END */
 
     if (state.isVirtual()) {
-        LOG_FATAL_IF(!virtualDisplayIdVariantOpt);
         if (FlagManager::getInstance().wb_virtualdisplay2()) {
             auto surface =
                     sp<VirtualDisplaySurface2>::make(getHwComposer(), *virtualDisplayIdVariantOpt,
@@ -4334,10 +4337,9 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         /* QTI_END */
 
         if (mScheduler) {
-            // For hotplug reconnect, renew the registration since display modes have been
-            // reloaded.
+            // For hotplug reconnect, renew the registration since display modes have been reloaded.
             mScheduler->registerDisplay(display->getPhysicalId(), display->holdRefreshRateSelector(),
-                                        mFrontInternalDisplayId);
+                                        getDefaultPacesetterDisplay());
         }
     }
 
@@ -4393,7 +4395,7 @@ void SurfaceFlinger::processDisplayRemoved(const wp<IBinder>& displayToken) {
         if (const auto virtualDisplayIdVariant = display->getVirtualDisplayIdVariant()) {
             releaseVirtualDisplay(*virtualDisplayIdVariant);
         } else {
-            mScheduler->unregisterDisplay(display->getPhysicalId(), mFrontInternalDisplayId);
+            mScheduler->unregisterDisplay(display->getPhysicalId(), getDefaultPacesetterDisplay());
         }
 
         if (display->isRefreshable()) {
@@ -5028,7 +5030,7 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
 
     // The pacesetter must be registered before EventThread creation below.
     mScheduler->registerDisplay(display->getPhysicalId(), display->holdRefreshRateSelector(),
-                                mFrontInternalDisplayId);
+                                getDefaultPacesetterDisplay());
     if (FlagManager::getInstance().vrr_config()) {
         mScheduler->setRenderRate(display->getPhysicalId(), activeMode.fps,
                                   /*applyImmediately*/ true);
@@ -5134,7 +5136,7 @@ void SurfaceFlinger::setTransactionFlags(uint32_t mask, TransactionSchedule sche
     if (const bool scheduled = transactionFlags & mask; !scheduled) {
         if (FlagManager::getInstance().resync_on_tx() &&
                 FlagManager::getInstance().vsync_predictor_predicts_within_threshold()) {
-            mScheduler->resync();
+            mScheduler->resync(IEventThreadCallback::ResyncCaller::Transaction);
         }
         scheduleCommit(frameHint);
     } else if (frameHint == FrameHint::kActive) {
@@ -9466,6 +9468,31 @@ void SurfaceFlinger::sfdo_forceClientComposition(bool enabled) {
     scheduleRepaint();
 }
 
+status_t SurfaceFlinger::sfdo_forcePacesetter(PhysicalDisplayId displayId) {
+    return mScheduler
+            ->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext)
+                               FTL_FAKE_GUARD(mStateLock) -> status_t {
+                                   if (!mPhysicalDisplays.contains(displayId)) {
+                                       return NAME_NOT_FOUND;
+                                   }
+                                   if (mScheduler->forcePacesetterDisplay(displayId)) {
+                                       onNewPacesetterDisplay();
+                                   }
+                                   return OK;
+                               })
+            .get();
+}
+
+void SurfaceFlinger::sfdo_resetForcedPacesetter() {
+    mScheduler
+            ->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) FTL_FAKE_GUARD(mStateLock) {
+                if (mScheduler->resetForcedPacesetterDisplay(getDefaultPacesetterDisplay())) {
+                    onNewPacesetterDisplay();
+                }
+            })
+            .wait();
+}
+
 // gui::ISurfaceComposer
 
 binder::Status SurfaceComposerAIDL::bootFinished() {
@@ -10406,6 +10433,26 @@ binder::Status SurfaceComposerAIDL::removeJankListener(int32_t layerId,
                                                        const sp<gui::IJankListener>& listener,
                                                        int64_t afterVsync) {
     JankTracker::removeJankListener(layerId, IInterface::asBinder(listener), afterVsync);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::forcePacesetter(int64_t displayId) {
+    status_t status = checkAccessPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+
+    const PhysicalDisplayId id = PhysicalDisplayId::fromValue(static_cast<uint64_t>(displayId));
+    return binderStatusFromStatusT(mFlinger->sfdo_forcePacesetter(id));
+}
+
+binder::Status SurfaceComposerAIDL::resetForcedPacesetter() {
+    status_t status = checkAccessPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+
+    mFlinger->sfdo_resetForcedPacesetter();
     return binder::Status::ok();
 }
 
