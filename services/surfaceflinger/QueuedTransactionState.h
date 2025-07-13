@@ -25,6 +25,7 @@
 #include <common/FlagManager.h>
 #include <ftl/flags.h>
 #include <gui/LayerState.h>
+#include <gui/TransactionState.h>
 #include <system/window.h>
 
 namespace android {
@@ -62,7 +63,8 @@ struct QueuedTransactionState {
                            std::vector<ListenerCallbacks> listenerCallbacks, int originPid,
                            int originUid, uint64_t transactionId,
                            std::vector<uint64_t> mergedTransactionIds,
-                           std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos)
+                           std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos,
+                           std::vector<gui::TransactionBarrier> transactionBarriers)
           : frameTimelineInfo(frameTimelineInfo),
             states(std::move(composerStates)),
             displays(std::move(displayStates)),
@@ -79,7 +81,8 @@ struct QueuedTransactionState {
             originUid(originUid),
             id(transactionId),
             mergedTransactionIds(std::move(mergedTransactionIds)),
-            earlyWakeupInfos(std::move(earlyWakeupInfos)) {}
+            earlyWakeupInfos(std::move(earlyWakeupInfos)),
+            transactionBarriers(std::move(transactionBarriers)) {}
 
     // Invokes `void(const layer_state_t&)` visitor for matching layers.
     template <typename Visitor>
@@ -147,6 +150,7 @@ struct QueuedTransactionState {
     bool sentFenceTimeoutWarning = false;
     std::vector<uint64_t> mergedTransactionIds;
     std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos;
+    std::vector<gui::TransactionBarrier> transactionBarriers;
     ftl::Flags<adpf::Workload> workloadHint;
 };
 

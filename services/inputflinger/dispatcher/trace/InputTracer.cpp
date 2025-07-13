@@ -44,7 +44,6 @@ TracedEvent createTracedEvent(const MotionEntry& e, EventType type) {
                              e.metaState,
                              e.buttonState,
                              e.classification,
-                             e.edgeFlags,
                              e.xPrecision,
                              e.yPrecision,
                              e.xCursorPosition,

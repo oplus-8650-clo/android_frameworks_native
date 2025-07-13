@@ -135,7 +135,7 @@ static void FdTagClose(int fd, const void* addr) {
         close(fd);
     }
 }
-#else
+#elif defined(BINDER_WITH_KERNEL_IPC)
 static void FdTag(int fd, const void* old_addr, const void* new_addr) {
     (void)fd;
     (void)old_addr;
@@ -2794,6 +2794,7 @@ static void do_nothing_release_func(const uint8_t* data, size_t dataSize,
     (void)objects;
     (void)objectsCount;
 }
+#ifdef BINDER_WITH_KERNEL_IPC
 static void delete_data_release_func(const uint8_t* data, size_t dataSize,
                                      const binder_size_t* objects, size_t objectsCount) {
     delete[] data;
@@ -2801,6 +2802,7 @@ static void delete_data_release_func(const uint8_t* data, size_t dataSize,
     (void)objects;
     (void)objectsCount;
 }
+#endif // BINDER_WITH_KERNEL_IPC
 
 void Parcel::makeDangerousViewOf(Parcel* p) {
     if (p->isForRpc()) {

@@ -60,8 +60,10 @@ public:
     void addDeviceTypeAssociation(const std::string& inputPort, const std::string& type);
     void addInputUniqueIdAssociation(const std::string& inputUniqueId,
                                      const std::string& displayUniqueId);
-    void addKeyboardLayoutAssociation(const std::string& inputUniqueId,
+    void addKeyboardLayoutAssociation(const std::string& inputPort,
                                       const KeyboardLayoutInfo& layoutInfo);
+    void addVirtualDevice(const std::string& inputPort);
+    void removeVirtualDevice(const std::string& inputPort);
     void addDisabledDevice(int32_t deviceId);
     void removeDisabledDevice(int32_t deviceId);
     const InputReaderConfiguration& getReaderConfiguration() const;

@@ -939,10 +939,4 @@ MATCHER_P(WithPolicyFlags, policyFlags, "InputEvent with specified policy flags"
     return arg.policyFlags == static_cast<uint32_t>(policyFlags);
 }
 
-MATCHER_P(WithEdgeFlags, edgeFlags, "InputEvent with specified edge flags") {
-    *result_listener << "expected edge flags 0x" << std::hex << edgeFlags << ", but got 0x"
-                     << arg.edgeFlags;
-    return arg.edgeFlags == edgeFlags;
-}
-
 } // namespace android

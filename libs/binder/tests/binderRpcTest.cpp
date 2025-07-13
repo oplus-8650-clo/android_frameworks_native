@@ -1728,6 +1728,9 @@ TEST_F(BinderARpcNdk, ARpcDelegateNonAccessor) {
 #ifndef __BIONIC__
     GTEST_SKIP() << "Can only get AIDL services on device.";
 #endif
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
 
     auto service = defaultServiceManager()->checkService(String16(kKnownAidlService));
     ASSERT_NE(nullptr, service);

@@ -180,10 +180,9 @@ MotionEntry::MotionEntry(int32_t id, std::shared_ptr<InjectionState> injectionSt
                          nsecs_t eventTime, int32_t deviceId, uint32_t source,
                          ui::LogicalDisplayId displayId, uint32_t policyFlags, int32_t action,
                          int32_t actionButton, ftl::Flags<MotionFlag> flags, int32_t metaState,
-                         int32_t buttonState, MotionClassification classification,
-                         int32_t edgeFlags, float xPrecision, float yPrecision,
-                         float xCursorPosition, float yCursorPosition, nsecs_t downTime,
-                         const std::vector<PointerProperties>& pointerProperties,
+                         int32_t buttonState, MotionClassification classification, float xPrecision,
+                         float yPrecision, float xCursorPosition, float yCursorPosition,
+                         nsecs_t downTime, const std::vector<PointerProperties>& pointerProperties,
                          const std::vector<PointerCoords>& pointerCoords)
       : EventEntry(id, Type::MOTION, eventTime, policyFlags),
         deviceId(deviceId),
@@ -195,7 +194,6 @@ MotionEntry::MotionEntry(int32_t id, std::shared_ptr<InjectionState> injectionSt
         metaState(metaState),
         buttonState(buttonState),
         classification(classification),
-        edgeFlags(edgeFlags),
         xPrecision(xPrecision),
         yPrecision(yPrecision),
         xCursorPosition(xCursorPosition),
@@ -214,13 +212,13 @@ std::string MotionEntry::getDescription() const {
     msg += StringPrintf("MotionEvent(deviceId=%d, eventTime=%" PRIu64 "ns, source=%s, displayId=%s,"
                         "action=%s, actionButton=0x%08x, flags=%s, metaState=0x%08x, "
                         "buttonState=0x%08x, "
-                        "classification=%s, edgeFlags=0x%08x, xPrecision=%.1f, yPrecision=%.1f, "
+                        "classification=%s, xPrecision=%.1f, yPrecision=%.1f, "
                         "xCursorPosition=%0.1f, yCursorPosition=%0.1f, pointers=[",
                         deviceId, eventTime, inputEventSourceToString(source).c_str(),
                         displayId.toString().c_str(), MotionEvent::actionToString(action).c_str(),
                         actionButton, flags.string().c_str(), metaState, buttonState,
-                        motionClassificationToString(classification), edgeFlags, xPrecision,
-                        yPrecision, xCursorPosition, yCursorPosition);
+                        motionClassificationToString(classification), xPrecision, yPrecision,
+                        xCursorPosition, yCursorPosition);
 
     for (uint32_t i = 0; i < getPointerCount(); i++) {
         if (i) {

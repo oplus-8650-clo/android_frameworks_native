@@ -34,14 +34,14 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
-#include <android_companion_virtualdevice_flags.h>
-
 #define LOG_TAG "EventHub"
 
 // #define LOG_NDEBUG 0
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android_companion_virtualdevice_flags.h>
+#include <com_android_input_flags.h>
 #include <cutils/properties.h>
 #include <ftl/enum.h>
 #include <input/InputEventLabels.h>
@@ -72,6 +72,7 @@ using android::base::StringPrintf;
 
 namespace android {
 
+namespace input_flags = com::android::input::flags;
 namespace vd_flags = android::companion::virtualdevice::flags;
 
 using namespace ftl::flag_operators;
@@ -632,7 +633,7 @@ status_t EventHub::Device::readDeviceBitMask(unsigned long ioctlCode, BitArray<N
     return ret;
 }
 
-void EventHub::Device::configureFd() {
+bool EventHub::Device::configureFd() {
     // Set fd parameters with ioctl, such as key repeat, suspend block, and clock type
     if (classes.test(InputDeviceClass::KEYBOARD)) {
         // Disable kernel key repeat since we handle it ourselves
@@ -656,10 +657,10 @@ void EventHub::Device::configureFd() {
     ALOGI("usingClockIoctl=%s", toString(usingClockIoctl));
 
     // Query the initial state of keys and switches, which is tracked by EventHub.
-    readDeviceState();
+    return readDeviceState();
 }
 
-void EventHub::Device::readDeviceState() {
+bool EventHub::Device::readDeviceState() {
     if (readDeviceBitMask(EVIOCGKEY(0), keyState) < 0) {
         ALOGD("Unable to query the global key state for %s: %s", path.c_str(), strerror(errno));
     }
@@ -668,10 +669,10 @@ void EventHub::Device::readDeviceState() {
     }
 
     // Read absolute axis info and values for all available axes for the device.
-    populateAbsoluteAxisStates();
+    return populateAbsoluteAxisStates();
 }
 
-void EventHub::Device::populateAbsoluteAxisStates() {
+bool EventHub::Device::populateAbsoluteAxisStates() {
     absState.clear();
 
     for (int axis = 0; axis <= ABS_MAX; axis++) {
@@ -684,6 +685,10 @@ void EventHub::Device::populateAbsoluteAxisStates() {
                   identifier.name.c_str(),
                   InputEventLookup::getLinuxEvdevLabel(EV_ABS, axis, 0).code.c_str(), fd,
                   strerror(errno));
+            if (input_flags::abort_device_opening_on_enodev() && errno == ENODEV) {
+                // The device no longer exists. There's no point trying to query any more axes.
+                return false;
+            }
             continue;
         }
         auto& [axisInfo, value] = absState[axis];
@@ -694,6 +699,7 @@ void EventHub::Device::populateAbsoluteAxisStates() {
         axisInfo.resolution = info.resolution;
         value = info.value;
     }
+    return true;
 }
 
 bool EventHub::Device::hasKeycodeLocked(int keycode) const {
@@ -2631,7 +2637,17 @@ void EventHub::openDeviceLocked(const std::string& devicePath) {
         return;
     }
 
-    device->configureFd();
+    if (!device->configureFd()) {
+        // The device may have been removed since we queried its bitmasks earlier in this method. In
+        // that case, the absolute axis info may not have been cached correctly, leading to us
+        // trying to create mappers that depend on axis information we don't have. For example, we
+        // may have decided on InputDeviceClass::TOUCH because ABS_MT_POSITION_X and _Y are in
+        // device->absBitmask, but when we then query them in an input mapper they'll be missing,
+        // causing a crash. To prevent this, return early without adding the device.
+        ALOGE("Device '%s' (%s) was removed while opening. Dropping it.",
+              device->identifier.name.c_str(), devicePath.c_str());
+        return;
+    }
 
     ALOGI("New device: id=%d, fd=%d, path='%s', name='%s', classes=%s, "
           "configuration='%s', keyLayout='%s', keyCharacterMap='%s', builtinKeyboard=%s, ",

@@ -167,6 +167,49 @@ TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleV2ToScaleFactorIgnoresLev
     EXPECT_FLOATS_NEARLY_EQ(expectedVeryLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
 }
 
+TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleConfigWithScaleFactorAppliesFactor,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_NS,
+                                                      vibration_scale_device_config_enabled))) {
+    constexpr float adaptiveScaleNone = 1.0f;
+
+    float expectedVeryHigh[TEST_BUFFER_LENGTH] = {1, -1, 1, -0.55f};
+    scaleBuffer(HapticScale(HapticLevel::LOW, 3.0f /* scaleFactor */, adaptiveScaleNone));
+    EXPECT_FLOATS_NEARLY_EQ(expectedVeryHigh, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedHigh[TEST_BUFFER_LENGTH] = {1, -1, 0.66f, -0.29f};
+    scaleBuffer(HapticScale(HapticLevel::LOW, 1.5f /* scaleFactor */, adaptiveScaleNone));
+    EXPECT_FLOATS_NEARLY_EQ(expectedHigh, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedLow[TEST_BUFFER_LENGTH] = {0.8f, -0.8f, 0.4f, -0.16f};
+    scaleBuffer(HapticScale(HapticLevel::HIGH, 0.8f /* scaleFactor */, adaptiveScaleNone));
+    EXPECT_FLOATS_NEARLY_EQ(expectedLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedVeryLow[TEST_BUFFER_LENGTH] = {0.4f, -0.4f, 0.2f, -0.08f};
+    scaleBuffer(HapticScale(HapticLevel::HIGH, 0.4f /* scaleFactor */, adaptiveScaleNone));
+    EXPECT_FLOATS_NEARLY_EQ(expectedVeryLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+}
+
+TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleConfigWithoutScaleFactorAppliesScaleLevel,
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled)),
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_NS,
+                                                      vibration_scale_device_config_enabled))) {
+    float expectedVeryHigh[TEST_BUFFER_LENGTH] = {1, -1, 0.79f, -0.39f};
+    scaleBuffer(HapticLevel::VERY_HIGH);
+    EXPECT_FLOATS_NEARLY_EQ(expectedVeryHigh, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedHigh[TEST_BUFFER_LENGTH] = {1, -1, 0.62f, -0.27f};
+    scaleBuffer(HapticLevel::HIGH);
+    EXPECT_FLOATS_NEARLY_EQ(expectedHigh, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedLow[TEST_BUFFER_LENGTH] = {0.70f, -0.70f, 0.35f, -0.14f};
+    scaleBuffer(HapticLevel::LOW);
+    EXPECT_FLOATS_NEARLY_EQ(expectedLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+
+    float expectedVeryLow[TEST_BUFFER_LENGTH] = {0.45f, -0.45f, 0.22f, -0.09f};
+    scaleBuffer(HapticLevel::VERY_LOW);
+    EXPECT_FLOATS_NEARLY_EQ(expectedVeryLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
+}
+
 TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestAdaptiveScaleFactorUndefinedIgnoredScale,
                   REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled))) {
     float expectedVeryHigh[TEST_BUFFER_LENGTH] = {1, -1, 0.79f, -0.39f};

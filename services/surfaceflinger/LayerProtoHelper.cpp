@@ -406,9 +406,10 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
     layerInfo->set_is_protected(snapshot.hasProtectedContent);
     layerInfo->set_dataspace(dataspaceDetails(static_cast<android_dataspace>(snapshot.dataspace)));
     layerInfo->set_curr_frame(requestedState.bufferData->frameNumber);
-    layerInfo->set_requested_corner_radius(requestedState.cornerRadius);
+    layerInfo->set_requested_corner_radius(requestedState.cornerRadii.topLeft.x);
     layerInfo->set_corner_radius(
-            (snapshot.roundedCorner.radius.x + snapshot.roundedCorner.radius.y) / 2.0);
+            (snapshot.roundedCorner.radii.topLeft.x + snapshot.roundedCorner.radii.topLeft.y) /
+            2.0);
     layerInfo->set_background_blur_radius(snapshot.backgroundBlurRadius);
     layerInfo->set_is_trusted_overlay(snapshot.trustedOverlay == gui::TrustedOverlay::ENABLED);
     // TODO(b/339701674) update protos

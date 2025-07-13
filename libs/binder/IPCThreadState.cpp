@@ -1505,6 +1505,10 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
                     reinterpret_cast<BBinder*>(tr.cookie)->decStrong(this);
                 } else {
                     error = UNKNOWN_TRANSACTION;
+#ifdef BINDER_WITH_OBSERVERS
+                    [[clang::no_destroy]] static StaticString16 kDeletedBinder(u"<deleted_binder>");
+                    interfaceDescriptor = kDeletedBinder;
+#endif
                 }
 
             } else {
@@ -1515,6 +1519,15 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
             }
 #ifdef BINDER_WITH_OBSERVERS
             int64_t endTimeNanos = uptimeNanos();
+            BinderCallData observerData = {
+                    .interfaceDescriptor = interfaceDescriptor,
+                    .transactionCode = tr.code,
+                    .startTimeNanos = startTimeNanos,
+                    .endTimeNanos = endTimeNanos,
+                    .senderUid = tr.sender_euid,
+            };
+            ProcessState::self()->mBinderObserver->addStatMaybeFlush(mBinderStatsQueue,
+                                                                     observerData);
 #endif
             //ALOGI("<<<< TRANSACT from pid %d restore pid %d sid %s uid %d\n",
             //     mCallingPid, origPid, (origSid ? origSid : "<N/A>"), origUid);
@@ -1559,17 +1572,6 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
                 }
                 LOG_ONEWAY("NOT sending reply to %d!", mCallingPid);
             }
-#ifdef BINDER_WITH_OBSERVERS
-            BinderCallData observerData = {
-                    .interfaceDescriptor = interfaceDescriptor,
-                    .transactionCode = tr.code,
-                    .startTimeNanos = startTimeNanos,
-                    .endTimeNanos = endTimeNanos,
-                    .senderUid = tr.sender_euid,
-            };
-            ProcessState::self()->mBinderObserver->addStatMaybeFlush(mBinderStatsQueue,
-                                                                     observerData);
-#endif
             mServingStackPointer = origServingStackPointer;
             mCallingPid = origPid;
             mCallingSid = origSid;
@@ -1626,6 +1628,7 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
    case BR_CLEAR_FREEZE_NOTIFICATION_DONE:
         {
             BpBinder* proxy = (BpBinder*)mIn.readPointer();
+            proxy->getPrivateAccessor().onFrozenStateChangeListenerRemoved();
             proxy->getWeakRefs()->decWeak(proxy);
         }
         break;

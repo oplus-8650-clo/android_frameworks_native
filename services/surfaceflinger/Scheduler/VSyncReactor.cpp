@@ -170,7 +170,7 @@ bool VSyncReactor::periodConfirmed(nsecs_t vsync_timestamp, std::optional<nsecs_
         return true;
     }
 
-    if (!mLastHwVsync && !HwcVsyncPeriod) {
+    if (!mLastHwVsync.get() && !HwcVsyncPeriod) {
         return false;
     }
 
@@ -191,7 +191,7 @@ bool VSyncReactor::periodConfirmed(nsecs_t vsync_timestamp, std::optional<nsecs_
         return std::abs(*HwcVsyncPeriod - period) < allowance;
     }
 
-    auto const distance = vsync_timestamp - *mLastHwVsync;
+    auto const distance = vsync_timestamp - *mLastHwVsync.get();
     return std::abs(distance - period) < allowance;
 }
 
@@ -207,8 +207,9 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
             *periodFlushed = true;
         }
 
-        if (mLastHwVsync) {
-            mTracker.addVsyncTimestamp(*mLastHwVsync);
+        if (mLastHwVsync.get() &&
+            (!FlagManager::getInstance().add_first_vsync_to_tracker() || !mLastHwVsync.isFirst())) {
+            mTracker.addVsyncTimestamp(*mLastHwVsync.get());
         }
         mTracker.addVsyncTimestamp(timestamp);
 
@@ -216,7 +217,11 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
         mMoreSamplesNeeded = mTracker.needsMoreSamples();
     } else if (mPeriodConfirmationInProgress) {
         SFTRACE_FORMAT("VSR %" PRIu64 ": still confirming period", mId.value);
-        mLastHwVsync = timestamp;
+        mLastHwVsync.set(timestamp);
+        // Add the first vsync callback to the tracker to be based on a fresh vsync
+        if (FlagManager::getInstance().add_first_vsync_to_tracker() && mLastHwVsync.isFirst()) {
+            mTracker.addVsyncTimestamp(*mLastHwVsync.get());
+        }
         mMoreSamplesNeeded = true;
         *periodFlushed = false;
     } else {
@@ -263,9 +268,9 @@ void VSyncReactor::dump(std::string& result) const {
         StringAppendF(&result, "mModePtrTransitioningTo=nullptr\n");
     }
 
-    if (mLastHwVsync) {
+    if (mLastHwVsync.get()) {
         StringAppendF(&result, "Last HW vsync was %.2fms ago\n",
-                      (mClock->now() - *mLastHwVsync) / 1e6f);
+                      (mClock->now() - *mLastHwVsync.get()) / 1e6f);
     } else {
         StringAppendF(&result, "No Last HW vsync\n");
     }

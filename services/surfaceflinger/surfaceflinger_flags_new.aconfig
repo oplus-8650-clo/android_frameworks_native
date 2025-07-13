@@ -4,6 +4,16 @@ package: "com.android.graphics.surfaceflinger.flags"
 container: "system"
 
 flag {
+  name: "add_first_vsync_to_tracker"
+  namespace: "core_graphics"
+  description: "Add the first vsync timestamp to vsync tracker when priod confirmation is still in progress"
+  bug: "422343157"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+    }
+} # add_first_vsync_to_tracker
+
+flag {
   name: "adpf_cpu_effects_loadup"
   namespace: "window_surfaces"
   description: "Enables CPU loadup hints for effects using client composition"
@@ -68,6 +78,16 @@ flag {
   bug: "362510107"
   is_fixed_read_only: true
 } # begone_bright_hlg
+
+flag {
+  name: "buffer_stuffing_fix"
+  namespace: "core_graphics"
+  description: "bug fix for buffer stuffing classification"
+  bug: "417070677"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # buffer_stuffing_fix
 
 flag {
   name: "connected_display_hdr"
@@ -236,6 +256,7 @@ flag {
   namespace: "core_graphics"
   description: "Allows devices to use DPU readback for fullscreen screenshots"
   bug: "384816457"
+  is_exported: true
 } # readback_screenshot
 
 flag {
@@ -257,6 +278,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
  } # resync_on_tx
+
+flag {
+  name: "set_distinct_corner_radii"
+  namespace: "window_surfaces"
+  description: "Add support for API to set distinct radii for each corner"
+  bug: "406554726"
+ } # set_distinct_corner_radii
 
 flag {
   name: "skip_invisible_windows_in_input"
@@ -364,5 +392,15 @@ flag {
   description: "Flag for using Kawase2 algorithm for window blur"
   bug: "353826438"
 } # window_blur_kawase2
+
+flag {
+  name: "window_blur_kawase2_fix_aliasing"
+  namespace: "core_graphics"
+  description: "Flag for mitigating aliasing in Kawase2 window blur"
+  bug: "33968507"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # window_blur_kawase2_fix_aliasing
 
 # IMPORTANT - please keep alphabetize to reduce merge conflicts

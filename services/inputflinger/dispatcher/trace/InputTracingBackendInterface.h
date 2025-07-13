@@ -78,7 +78,6 @@ struct TracedMotionEvent {
     int32_t metaState;
     int32_t buttonState;
     MotionClassification classification;
-    int32_t edgeFlags;
     float xPrecision;
     float yPrecision;
     float xCursorPosition;

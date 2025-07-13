@@ -126,7 +126,7 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     layerSettings.geometry.originalBounds = mSnapshot->geomLayerBounds;
 
     if (mSnapshot->parentRoundedCorner.hasRequestedRadius()) {
-        layerSettings.geometry.otherRoundedCornersRadius = mSnapshot->parentRoundedCorner.radius;
+        layerSettings.geometry.otherRoundedCornersRadii = mSnapshot->parentRoundedCorner.radii;
         layerSettings.geometry.otherCrop = mSnapshot->parentRoundedCorner.cropRect;
     } else {
         layerSettings.geometry.otherCrop = mSnapshot->parentGeomLayerCrop;
@@ -145,7 +145,7 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     }
 
     const auto& roundedCornerState = mSnapshot->roundedCorner;
-    layerSettings.geometry.roundedCornersRadius = roundedCornerState.radius;
+    layerSettings.geometry.roundedCornersRadii = roundedCornerState.radii;
     layerSettings.geometry.roundedCornersCrop = roundedCornerState.cropRect;
 
     layerSettings.alpha = mSnapshot->alpha;

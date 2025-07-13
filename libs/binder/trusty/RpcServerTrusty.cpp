@@ -65,7 +65,7 @@ RpcServerTrusty::RpcServerTrusty(std::unique_ptr<RpcTransportCtx> ctx, std::stri
         mPortAcl(std::move(portAcl)) {
     mTipcPort.name = mPortName.c_str();
     mTipcPort.msg_max_size = msgMaxSize;
-    mTipcPort.msg_queue_len = 6; // Three each way
+    mTipcPort.msg_queue_len = 16;
     mTipcPort.priv = this;
 
     if (mPortAcl) {

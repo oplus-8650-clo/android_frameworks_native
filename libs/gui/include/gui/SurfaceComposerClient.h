@@ -49,6 +49,7 @@
 #include <android/gui/ISurfaceComposerClient.h>
 #include <android/gui/RegionSamplingDescriptor.h>
 
+#include <com_android_graphics_libgui_flags.h>
 #include <gui/BufferReleaseChannel.h>
 #include <gui/CpuConsumer.h>
 #include <gui/ISurfaceComposer.h>
@@ -62,6 +63,8 @@
 #include <aidl/android/hardware/graphics/common/DisplayDecorationSupport.h>
 
 namespace android {
+
+namespace libgui_flags = com::android::graphics::libgui::flags;
 
 class HdrCapabilities;
 class IGraphicBufferProducer;
@@ -122,7 +125,7 @@ using TrustedPresentationCallback = std::function<void(void*, bool)>;
 
 class ReleaseCallbackThread {
 public:
-    void addReleaseCallback(const ReleaseCallbackId, sp<Fence>);
+    void addReleaseCallback(const ReleaseCallbackId, sp<Fence>, bool removeFromCache);
     void threadMain();
 
 private:
@@ -130,7 +133,7 @@ private:
     std::mutex mMutex;
     bool mStarted GUARDED_BY(mMutex) = false;
     std::condition_variable mReleaseCallbackPending;
-    std::queue<std::tuple<const ReleaseCallbackId, const sp<Fence>>> mCallbackInfos
+    std::queue<std::tuple<const ReleaseCallbackId, const sp<Fence>, bool>> mCallbackInfos
             GUARDED_BY(mMutex);
 };
 
@@ -449,6 +452,9 @@ public:
         // All the SurfaceControls that have been modified in this TransactionCompletedListener's
         // process that require a callback if there is one or more callbackIds set.
         std::unordered_set<sp<SurfaceControl>, SCHash> surfaceControls;
+        // TransactionHandles used to track the lifetimes of callbacks in
+        // TransactionCompletedListener.
+        std::unordered_set<sp<IBinder>, SpHash<IBinder>> transactionHandles;
     };
 
     struct PresentationCallbackRAII : public RefBase {
@@ -456,6 +462,16 @@ public:
         int mId;
         PresentationCallbackRAII(TransactionCompletedListener* tcl, int id);
         virtual ~PresentationCallbackRAII();
+    };
+
+    // TransactionHandle is used to track the lifetime of transactions when they are parceled
+    // and/or sent to another process. TransactionHandles should be kept alive as long as it's
+    // possible for the transaction's callbacks to be called. Once the last strong reference to a
+    // TransactionHandle is dropped, the handle's destructor deletes uncalled callbacks, ensuring
+    // unapplied transactions don't leak resources.
+    class TransactionHandle : public BBinder {
+    public:
+        ~TransactionHandle() override;
     };
 
     class Transaction : public Parcelable {
@@ -474,6 +490,15 @@ public:
         TransactionState mState;
         std::unordered_map<sp<ITransactionCompletedListener>, CallbackInfo, TCLHash>
                 mListenerCallbacks;
+
+        sp<IBinder> mTransactionHandle;
+
+        const sp<IBinder>& getTransactionHandle() {
+            if (libgui_flags::unapplied_transaction_cleanup() && !mTransactionHandle) {
+                mTransactionHandle = sp<TransactionHandle>::make();
+            }
+            return mTransactionHandle;
+        }
 
         // Indicates that the Transaction may contain buffers that should be cached. The reason this
         // is only a guess is that buffers can be removed before cache is called. This is only a
@@ -551,6 +576,9 @@ public:
         Transaction& setCrop(const sp<SurfaceControl>& sc, const Rect& crop);
         Transaction& setCrop(const sp<SurfaceControl>& sc, const FloatRect& crop);
         Transaction& setCornerRadius(const sp<SurfaceControl>& sc, float cornerRadius);
+        Transaction& setCornerRadius(const sp<SurfaceControl>& sc, const gui::CornerRadii& radii);
+        Transaction& setClientDrawnCornerRadius(const sp<SurfaceControl>& sc,
+                                                const gui::CornerRadii& radii);
         // Sets the client drawn corner radius for the layer. If both a corner radius and a client
         // radius are sent to SF, the client radius will be used. This indicates that the corner
         // radius is drawn by the client and not SurfaceFlinger.
@@ -888,6 +916,8 @@ public:
 
     static void notifyShutdown();
 
+    void removeBufferFromLocalCache(uint64_t bufferId);
+
 protected:
     ReleaseCallbackThread mReleaseCallbackThread;
 
@@ -1016,8 +1046,13 @@ protected:
     int64_t mCallbackIdCounter GUARDED_BY(mMutex) = 1;
     struct CallbackTranslation {
         TransactionCompletedCallback callbackFunction;
+        wp<IBinder> transactionHandle;
         std::unordered_map<sp<IBinder>, sp<SurfaceControl>, SurfaceComposerClient::IBinderHash>
                 surfaceControls;
+    };
+    struct ReleaseCallbackTranslation {
+        ReleaseBufferCallback callbackFunction;
+        wp<IBinder> transactionHandle;
     };
 
     struct SurfaceStatsCallbackEntry {
@@ -1033,7 +1068,7 @@ protected:
 
     std::unordered_map<CallbackId, CallbackTranslation, CallbackIdHash> mCallbacks
             GUARDED_BY(mMutex);
-    std::unordered_map<ReleaseCallbackId, ReleaseBufferCallback, ReleaseBufferCallbackIdHash>
+    std::unordered_map<ReleaseCallbackId, ReleaseCallbackTranslation, ReleaseBufferCallbackIdHash>
             mReleaseBufferCallbacks GUARDED_BY(mMutex);
 
     // This is protected by mSurfaceStatsListenerMutex, but GUARDED_BY isn't supported for
@@ -1054,7 +1089,7 @@ public:
             const TransactionCompletedCallback& callbackFunction,
             const std::unordered_set<sp<SurfaceControl>, SurfaceComposerClient::SCHash>&
                     surfaceControls,
-            CallbackId::Type callbackType);
+            CallbackId::Type callbackType, const wp<IBinder>& transactionToken);
 
     void addSurfaceControlToCallbacks(
             const sp<SurfaceControl>& surfaceControl,
@@ -1071,12 +1106,13 @@ public:
                 SurfaceStatsCallback listener);
     void removeSurfaceStatsListener(void* context, void* cookie);
 
-    void setReleaseBufferCallback(const ReleaseCallbackId&, ReleaseBufferCallback);
+    void setReleaseBufferCallback(const ReleaseCallbackId&, ReleaseBufferCallback,
+                                  const wp<IBinder>& transactionHandle);
 
     // BnTransactionCompletedListener overrides
     void onTransactionCompleted(ListenerStats stats) override;
     void onReleaseBuffer(ReleaseCallbackId, sp<Fence> releaseFence,
-                         uint32_t currentMaxAcquiredBufferCount) override;
+                         uint32_t currentMaxAcquiredBufferCount, bool removeFromCache) override;
 
     void removeReleaseBufferCallback(const ReleaseCallbackId& callbackId);
 
@@ -1086,6 +1122,8 @@ public:
     void onTransactionQueueStalled(const String8& reason) override;
 
     void onTrustedPresentationChanged(int id, bool presentedWithinThresholds) override;
+
+    void onTransactionDestroyed(const wp<IBinder>& transactionHandle);
 
 private:
     ReleaseBufferCallback popReleaseBufferCallbackLocked(const ReleaseCallbackId&) REQUIRES(mMutex);

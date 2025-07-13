@@ -40,14 +40,6 @@ sp<os::IStatsBootstrapAtomService> BinderStatsPusher::getBootstrapAtomServiceLoc
     if (!mLastServiceCheckSucceeded && (mServiceCheckTimeSec + kCheckServiceTimeoutSec > nowSec)) {
         return nullptr;
     };
-    if (!mBootComplete) {
-        // TODO(b/299356196): use gSystemBootCompleted instead
-        if (android::base::GetIntProperty("sys.boot_completed", 0) == 0) {
-            return nullptr;
-        }
-    }
-    // store a boolean to reduce GetProperty calls
-    mBootComplete = true;
     auto sm = defaultServiceManager();
     if (!sm) {
         LOG_ALWAYS_FATAL("defaultServiceManager() returned nullptr.");

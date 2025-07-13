@@ -164,7 +164,6 @@ struct MotionEntry : EventEntry {
     int32_t metaState;
     int32_t buttonState;
     MotionClassification classification;
-    int32_t edgeFlags;
     float xPrecision;
     float yPrecision;
     float xCursorPosition;
@@ -180,8 +179,8 @@ struct MotionEntry : EventEntry {
                 int32_t deviceId, uint32_t source, ui::LogicalDisplayId displayId,
                 uint32_t policyFlags, int32_t action, int32_t actionButton,
                 ftl::Flags<MotionFlag> flags, int32_t metaState, int32_t buttonState,
-                MotionClassification classification, int32_t edgeFlags, float xPrecision,
-                float yPrecision, float xCursorPosition, float yCursorPosition, nsecs_t downTime,
+                MotionClassification classification, float xPrecision, float yPrecision,
+                float xCursorPosition, float yCursorPosition, nsecs_t downTime,
                 const std::vector<PointerProperties>& pointerProperties,
                 const std::vector<PointerCoords>& pointerCoords);
     std::string getDescription() const override;

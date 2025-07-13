@@ -70,7 +70,8 @@ static InputDeviceInfo generateTestDeviceInfo(int32_t deviceId, uint32_t source,
 
     auto info = InputDeviceInfo();
     info.initialize(deviceId, /*generation=*/1, /*controllerNumber=*/1, identifier, "alias",
-                    /*isExternal=*/false, /*hasMic=*/false, associatedDisplayId);
+                    /*isExternal=*/false, /*isVirtualDevice=*/false, /*hasMic=*/false,
+                    associatedDisplayId);
     info.addSource(source);
     return info;
 }

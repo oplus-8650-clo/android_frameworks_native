@@ -110,8 +110,8 @@ RequestedLayerState::RequestedLayerState(const LayerCreationArgs& args)
     dataspaceRequested = false;
     hdrMetadata.validTypes = 0;
     mNotDefCmpState.surfaceDamageRegion = Region::INVALID_REGION;
-    cornerRadius = 0.0f;
-    clientDrawnCornerRadius = 0.0f;
+    cornerRadii = {};
+    clientDrawnCornerRadii = {};
     backgroundBlurRadius = 0;
     api = -1;
     hasColorTransform = false;
@@ -354,7 +354,7 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
     }
 
     if (clientState.what & layer_state_t::eClientDrawnCornerRadiusChanged) {
-        clientDrawnCornerRadius = clientState.clientDrawnCornerRadius;
+        clientDrawnCornerRadii = clientState.clientDrawnCornerRadii;
         changes |= RequestedLayerState::Changes::Geometry;
     }
 

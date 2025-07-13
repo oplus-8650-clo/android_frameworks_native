@@ -1,0 +1,17 @@
+--- a/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/frameworks/native/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -8286,8 +8286,9 @@
+     // yet allocating a protected buffer (via GPU) is undefined, and rendering
+     // to it would be broken.
+     const bool supportsProtected = getRenderEngine().supportsProtectedContent();
+     /* QTI_BEGIN */
+-        mQtiSFExtnIntf->qtiHasProtectedLayer(&hasProtectedLayer);
++        bool hasProtectedLayer = args.hasProtectedLayer;
++        mQtiSFExtnIntf->qtiHasProtectedLayer(&hasProtectedLayer);
+     /* QTI_END */
+ 
+-    const bool isProtected = args.hasProtectedLayer && args.includeProtected && supportsProtected;
++    const bool isProtected = hasProtectedLayer && args.includeProtected && supportsProtected;
+     const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_RENDER |
+             GRALLOC_USAGE_HW_TEXTURE |
+             (isProtected ? GRALLOC_USAGE_PROTECTED

@@ -34,10 +34,11 @@ namespace android {
 class CallbackHandle : public RefBase {
 public:
     CallbackHandle(const sp<IBinder>& transactionListener, const std::vector<CallbackId>& ids,
-                   const sp<IBinder>& sc);
+                   const std::vector<sp<IBinder>>& transactionHandles, const sp<IBinder>& sc);
 
     sp<IBinder> listener;
     std::vector<CallbackId> callbackIds;
+    std::vector<sp<IBinder>> transactionHandles;
     wp<IBinder> surfaceControl;
 
     bool releasePreviousBuffer = false;
@@ -79,6 +80,7 @@ public:
 private:
     status_t findOrCreateTransactionStats(const sp<IBinder>& listener,
                                           const std::vector<CallbackId>& callbackIds,
+                                          const std::vector<sp<IBinder>>& transactionHandles,
                                           TransactionStats** outTransactionStats);
 
     std::unordered_map<sp<IBinder>, std::deque<TransactionStats>, IListenerHash>

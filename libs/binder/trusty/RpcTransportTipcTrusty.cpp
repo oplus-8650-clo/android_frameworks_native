@@ -178,7 +178,7 @@ public:
             if (rc == NO_ERROR) {
                 return currSize - cutSize;
             } else {
-                return 0;
+                return rc;
             }
         };
 

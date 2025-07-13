@@ -1374,12 +1374,13 @@ TEST_F(LayerSnapshotTest, frameRateSelectionStrategyWithOverrideChildrenAndSelf)
 TEST_F(LayerSnapshotTest, skipRoundCornersWhenProtected) {
     setRoundedCorners(1, 42.f);
     setRoundedCorners(2, 42.f);
+    static gui::CornerRadii RADII = gui::CornerRadii(42.f);
     setCrop(1, Rect{1000, 1000});
     setCrop(2, Rect{1000, 1000});
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasRoundedCorners());
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radius.x, 42.f);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, RADII);
     EXPECT_TRUE(getSnapshot({.id = 2})->roundedCorner.hasRoundedCorners());
 
     // add a buffer with the protected bit, check rounded corners are not set when
@@ -1414,7 +1415,7 @@ TEST_F(LayerSnapshotTest, skipRoundCornersWhenProtected) {
                                                                         0 /*usage*/));
     update(mSnapshotBuilder, args);
     EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasRoundedCorners());
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radius.x, 42.f);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, RADII);
 }
 
 TEST_F(LayerSnapshotTest, setRefreshRateIndicatorCompositionType) {
@@ -1465,17 +1466,47 @@ TEST_F(LayerSnapshotTest, setCornerRadius) {
     setRoundedCorners(1, RADIUS);
     setCrop(1, Rect{1000, 1000});
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radius.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.topLeft.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.topLeft.y, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.topRight.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.topRight.y, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.bottomLeft.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.bottomLeft.y, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.bottomRight.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii.bottomRight.y, RADIUS);
 }
 
-TEST_F(LayerSnapshotTest, ignoreCornerRadius) {
+TEST_F(LayerSnapshotTest, setCornerRadiusFourDistinctRadii) {
+    static gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
+    setRoundedCorners(1, 111.f, 222.f, 333.f, 444.f);
+    setCrop(1, Rect{1000, 1000});
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, setClientDrawnCornerRadius) {
     static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii EXPECTED_CLIENT_DRAWN_RADIUS = gui::CornerRadii(RADIUS);
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
     setClientDrawnCornerRadius(1, RADIUS);
     setRoundedCorners(1, RADIUS);
     setCrop(1, Rect{1000, 1000});
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radius.x, 0.f);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, EXPECTED_CLIENT_DRAWN_RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, setClientDrawnCornerRadiusFourCorners) {
+    static gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
+    static gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+    setClientDrawnCornerRadius(1, 111.f, 222.f, 333.f, 444.f);
+    setRoundedCorners(1, 111.f, 222.f, 333.f, 444.f);
+    setCrop(1, Rect{1000, 1000});
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, RADIUS);
 }
 
 TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
@@ -1484,9 +1515,24 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
     // │   ├── 11
     static constexpr float RADIUS = 123.f;
 
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(11,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        2ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+
     setRoundedCorners(1, RADIUS);
-    FloatRect parentCropRect(1, 1, 999, 999);
+
+    FloatRect parentCropRect(10, 10, 990, 990);
     setCrop(1, parentCropRect);
+
     // Rotate surface by 90
     setMatrix(11, 0.f, -1.f, 1.f, 0.f);
 
@@ -1494,12 +1540,55 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
 
     ui::Transform t = getSnapshot({.id = 11})->localTransform.inverse();
 
-    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.cropRect, t.transform(parentCropRect));
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radius.x, RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radius.y, RADIUS * t.getScaleY());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadius.x, RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadius.y, RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.topLeft.x, RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.topLeft.y, RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.topRight.x, RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.topRight.y, RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomLeft.x, RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomLeft.y, RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomRight.x, RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomRight.y, RADIUS * t.getScaleY());
+
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topLeft.x,
+              RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topLeft.y,
+              RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topRight.x,
+              RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topRight.y,
+              RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomLeft.x,
+              RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomLeft.y,
+              RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomRight.x,
+              RADIUS * t.getScaleX());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomRight.y,
+              RADIUS * t.getScaleY());
+}
+
+TEST_F(LayerSnapshotTest, setClientDrawnClippedRadii) {
+    static const gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+    static const gui::CornerRadii CLIPPED_RADIUS = gui::CornerRadii(111.f, 222.f, 0.f, 0.f);
+
+    auto buffer =
+            std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                      1000 /*height*/,
+                                                                      1ULL /* bufferId */,
+                                                                      HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                      0 /*usage*/);
+    setBuffer(1, buffer);
+
+    setClientDrawnCornerRadius(1, 111.f, 222.f, 0.f, 0.f);
+    setRoundedCorners(1, 111.f, 222.f, 333.f, 444.f);
+    setCrop(1, Rect{1000, 500});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, CLIPPED_RADIUS);
 }
 
 TEST_F(LayerSnapshotTest, childInheritsParentClientDrawnCornerRadius) {
@@ -1509,15 +1598,28 @@ TEST_F(LayerSnapshotTest, childInheritsParentClientDrawnCornerRadius) {
     // │   │   └── 111
 
     static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii RADII = gui::CornerRadii(RADIUS);
 
-    setClientDrawnCornerRadius(1, RADIUS);
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(11,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        2ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+
     setRoundedCorners(1, RADIUS);
-    setCrop(1, Rect(1, 1, 999, 999));
+    setClientDrawnCornerRadius(1, RADIUS);
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
     EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.hasRoundedCorners());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radius.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii, RADII);
 }
 
 TEST_F(LayerSnapshotTest, childIgnoreCornerRadiusOverridesParent) {
@@ -1527,16 +1629,37 @@ TEST_F(LayerSnapshotTest, childIgnoreCornerRadiusOverridesParent) {
     // │   │   └── 111
 
     static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii RADII = gui::CornerRadii(RADIUS);
+
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(11,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        2ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(111,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        3ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
 
     setRoundedCorners(1, RADIUS);
-    setCrop(1, Rect(1, 1, 999, 999));
 
+    setRoundedCorners(11, RADIUS);
     setClientDrawnCornerRadius(11, RADIUS);
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radius.x, RADIUS);
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radius.x, 0.f);
-    EXPECT_EQ(getSnapshot({.id = 111})->roundedCorner.radius.x, RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, RADII);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii, gui::CornerRadii(0.f));
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.clientDrawnRadii, RADII);
+    EXPECT_EQ(getSnapshot({.id = 111})->roundedCorner.radii, RADII);
 }
 
 TEST_F(LayerSnapshotTest, setShadowRadius) {
