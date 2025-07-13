@@ -268,6 +268,8 @@ private:
     static status_t recvmsgSocketConnection(const RpcServer& server, RpcTransportFd* out);
 
     [[nodiscard]] status_t setupSocketServer(const RpcSocketAddress& address);
+    [[nodiscard]] status_t acceptConnection(
+            std::function<void(sp<RpcSession>&&, RpcSession::PreJoinSetupResult&&)>&& joinFn);
 
     const std::unique_ptr<RpcTransportCtx> mCtx;
     size_t mMaxThreads = 1;

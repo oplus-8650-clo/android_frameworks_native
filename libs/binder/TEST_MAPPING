@@ -112,6 +112,9 @@
     },
     {
       "name": "binderRpcTestSingleThreadedNoKernel"
+    },
+    {
+      "name": "binderRpcTestNoLegacy"
     }
   ],
   "hwasan-presubmit": [

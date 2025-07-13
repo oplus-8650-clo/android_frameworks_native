@@ -273,43 +273,9 @@ void RpcServer::join() {
 
     status_t status;
     while ((status = mShutdownTrigger->triggerablePoll(mServer, POLLIN)) == OK) {
-        std::array<uint8_t, kRpcAddressSize> addr;
-        static_assert(addr.size() >= sizeof(sockaddr_storage), "kRpcAddressSize is too small");
-        socklen_t addrLen = addr.size();
-
-        RpcTransportFd clientSocket;
-        if ((status = mAcceptFn(*this, &clientSocket)) != OK) {
-            if (status == DEAD_OBJECT) {
-                break;
-            } else {
-                ALOGE("Accept returned error %s", statusToString(status).c_str());
-                continue;
-            }
-        }
-
-        LOG_RPC_DETAIL("accept on fd %d yields fd %d", mServer.fd.get(), clientSocket.fd.get());
-
-        if (getpeername(clientSocket.fd.get(), reinterpret_cast<sockaddr*>(addr.data()),
-                        &addrLen)) {
-            ALOGE("Could not getpeername socket: %s", strerror(errno));
-            continue;
-        }
-
-        if (mConnectionFilter != nullptr && !mConnectionFilter(addr.data(), addrLen)) {
-            ALOGE("Dropped client connection fd %d", clientSocket.fd.get());
-            continue;
-        }
-
-        {
-            RpcMutexLockGuard _l(mLock);
-            RpcMaybeThread thread =
-                    RpcMaybeThread(&RpcServer::establishConnection,
-                                   sp<RpcServer>::fromExisting(this), std::move(clientSocket), addr,
-                                   addrLen, RpcSession::join);
-
-            auto& threadRef = mConnectingThreads[thread.get_id()];
-            threadRef = std::move(thread);
-            rpcJoinIfSingleThreaded(threadRef);
+        status = acceptConnection(RpcSession::join);
+        if (status == DEAD_OBJECT) {
+            break;
         }
     }
     LOG_RPC_DETAIL("RpcServer::join exiting with %s", statusToString(status).c_str());
@@ -323,6 +289,46 @@ void RpcServer::join() {
         mShutdownTrigger = nullptr;
     }
     mShutdownCv.notify_all();
+}
+
+status_t RpcServer::acceptConnection(
+        std::function<void(sp<RpcSession>&&, RpcSession::PreJoinSetupResult&&)>&& joinFn) {
+    RpcTransportFd clientFd;
+    std::array<uint8_t, kRpcAddressSize> addr;
+    static_assert(addr.size() >= sizeof(sockaddr_storage), "kRpcAddressSize is too small");
+    socklen_t addrLen = addr.size();
+
+    status_t status;
+    if ((status = mAcceptFn(*this, &clientFd)) != OK) {
+        if (status != DEAD_OBJECT) {
+            ALOGE("Accept returned error %s", statusToString(status).c_str());
+        }
+        return status;
+    }
+
+    LOG_RPC_DETAIL("accept on fd %d yields fd %d", mServer.fd.get(), clientFd.fd.get());
+
+    if (getpeername(clientFd.fd.get(), reinterpret_cast<sockaddr*>(addr.data()), &addrLen)) {
+        ALOGE("Could not getpeername socket: %s", strerror(errno));
+        return EINVAL;
+    }
+
+    if (mConnectionFilter != nullptr && !mConnectionFilter(addr.data(), addrLen)) {
+        ALOGE("Dropped client connection fd %d", clientFd.fd.get());
+        return EINVAL;
+    }
+
+    {
+        RpcMutexLockGuard _l(mLock);
+        RpcMaybeThread thread =
+                RpcMaybeThread(&RpcServer::establishConnection, sp<RpcServer>::fromExisting(this),
+                               std::move(clientFd), addr, addrLen, std::move(joinFn));
+        auto& threadRef = mConnectingThreads[thread.get_id()];
+        threadRef = std::move(thread);
+        rpcJoinIfSingleThreaded(threadRef);
+    }
+
+    return OK;
 }
 
 bool RpcServer::shutdown() {
