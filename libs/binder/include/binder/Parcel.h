@@ -1399,6 +1399,7 @@ private:
 
     size_t mReserved;
 
+#ifndef BINDER_DISABLE_BLOB
     class Blob {
     public:
         LIBBINDER_EXPORTED Blob();
@@ -1418,11 +1419,12 @@ private:
         size_t mSize;
         bool mMutable;
     };
+#endif // BINDER_DISABLE_BLOB
 
-    #if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wweak-vtables"
-    #endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wweak-vtables"
+#endif
 
     // FlattenableHelperInterface and FlattenableHelper avoid generating a vtable entry in objects
     // following Flattenable template/protocol.
@@ -1469,6 +1471,7 @@ private:
     LIBBINDER_EXPORTED status_t read(FlattenableHelperInterface& val) const;
 
 public:
+#ifndef BINDER_DISABLE_BLOB
     class ReadableBlob : public Blob {
         friend class Parcel;
     public:
@@ -1481,6 +1484,7 @@ public:
     public:
         LIBBINDER_EXPORTED inline void* data() { return mData; }
     };
+#endif // BINDER_DISABLE_BLOB
 
     /**
      * Returns the total amount of ashmem memory owned by this object.
