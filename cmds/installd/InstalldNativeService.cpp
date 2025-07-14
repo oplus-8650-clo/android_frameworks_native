@@ -68,7 +68,6 @@
 #include "dexopt.h"
 #include "globals.h"
 #include "installd_deps.h"
-#include "otapreopt_utils.h"
 #include "utils.h"
 
 #include "CacheTracker.h"

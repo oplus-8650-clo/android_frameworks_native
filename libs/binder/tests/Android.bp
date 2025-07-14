@@ -548,6 +548,17 @@ cc_test {
 }
 
 cc_test {
+    name: "binderRpcTestNoLegacy",
+    defaults: [
+        "binderRpcTest_defaults",
+        "binderRpcTest_static_defaults",
+    ],
+    static_libs: [
+        "libbinder_rpc_no_legacy",
+    ],
+}
+
+cc_test {
     name: "binderRpcTestNoKernelAtAll",
     defaults: [
         "binderRpcTest_defaults",
