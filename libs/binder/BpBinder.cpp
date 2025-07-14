@@ -586,6 +586,9 @@ void BpBinder::sendObituary()
 }
 
 void BpBinder::onFrozenStateChangeListenerRemoved() {
+    LOG_ALWAYS_FATAL_IF(isRpcBinder(),
+                        "onFrozenStateChangeListenerRemoved() is not supported for RPC Binder.");
+    LOG_ALWAYS_FATAL_IF(!kEnableKernelIpc, "Binder kernel driver disabled at build time");
     if (!waitForFrozenListenerRemovalCompletion()) {
         return;
     }

@@ -82,17 +82,11 @@ namespace android::inputdispatcher {
 
 namespace {
 
-// Input tracing is only available on debuggable builds when the feature flag is enabled. When the
-// flag is changed, tracing will only be available after reboot.
-bool isInputTracingEnabled() {
-    static const bool isDebuggable = base::GetBoolProperty("ro.debuggable", false);
-    return input_flags::enable_input_event_tracing() && isDebuggable;
-}
-
 // Create the input tracing backend that writes to perfetto from a single thread.
 std::unique_ptr<trace::InputTracingBackendInterface> createInputTracingBackendIfEnabled(
         JNIEnv* env) {
-    if (!isInputTracingEnabled()) {
+    static const bool isDebuggable = base::GetBoolProperty("ro.debuggable", false);
+    if (!isDebuggable) {
         return nullptr;
     }
     return std::make_unique<trace::impl::ThreadedBackend<

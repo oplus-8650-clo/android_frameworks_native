@@ -16,6 +16,7 @@ aconfig_declarations {
         "surfaceflinger_flags.aconfig",
         "surfaceflinger_flags_new.aconfig",
     ],
+    exportable: true,
 }
 
 cc_aconfig_library {

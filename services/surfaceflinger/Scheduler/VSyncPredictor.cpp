@@ -194,7 +194,7 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
     traceInt64If("VSP-ts", timestamp);
 
     const auto [numSamples, oldestTs] = getSampleSizeAndOldestVsync(timestamp);
-    traceInt64If("VSP-numSamples", static_cast<int64_t>(numSamples));
+    traceInt64("VSP-numSamples", static_cast<int64_t>(numSamples));
     mOldestVsync = oldestTs;
     const auto minNumSamples = getMinSamplesRequiredForPrediction();
     if (numSamples < minNumSamples) {
@@ -287,8 +287,8 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
         return false;
     }
 
-    traceInt64If("VSP-period", anticipatedPeriod);
-    traceInt64If("VSP-intercept", intercept);
+    traceInt64("VSP-period", anticipatedPeriod);
+    traceInt64("VSP-intercept", intercept);
 
     it->second = {anticipatedPeriod, intercept};
 

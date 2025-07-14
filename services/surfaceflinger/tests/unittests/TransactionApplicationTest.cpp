@@ -77,7 +77,7 @@ public:
         std::vector<gui::EarlyWakeupInfo> earlyWakeupInfos;
     };
 
-    void checkEqual(const TransactionState& info, QueuedTransactionState state) {
+    void checkEqual(const TransactionState& info, const QueuedTransactionState& state) {
         EXPECT_EQ(0u, info.mComposerStates.size());
         EXPECT_EQ(0u, state.states.size());
 
@@ -189,7 +189,7 @@ public:
         mFlinger.flushTransactionQueues();
 
         // check that the transaction was applied.
-        auto transactionQueue = mFlinger.getPendingTransactionQueue();
+        const auto& transactionQueue = mFlinger.getPendingTransactionQueue();
         EXPECT_EQ(0u, transactionQueue.size());
     }
 
@@ -322,12 +322,12 @@ TEST_F(TransactionApplicationTest, ApplyTokensUseDifferentQueues) {
     mFlinger.setTransactionStateInternal(transaction1);
     mFlinger.setTransactionStateInternal(transaction2);
     mFlinger.flushTransactionQueues();
-    auto transactionQueues = mFlinger.getPendingTransactionQueue();
+    const auto& transactionQueues = mFlinger.getPendingTransactionQueue();
 
     // Transaction 1 is still in its queue.
-    EXPECT_EQ(transactionQueues[applyToken1].size(), 1u);
+    EXPECT_EQ(transactionQueues.at(applyToken1).size(), 1u);
     // Transaction 2 has been dequeued.
-    EXPECT_EQ(transactionQueues[applyToken2].size(), 0u);
+    EXPECT_FALSE(transactionQueues.contains(applyToken2));
 }
 
 class LatchUnsignaledTest : public TransactionApplicationTest {

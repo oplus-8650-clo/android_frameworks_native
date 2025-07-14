@@ -182,9 +182,8 @@ private:
                                  const DisplayTopologyPosition sourceBoundary,
                                  int32_t sourceCursorOffsetPx) const REQUIRES(getLock());
 
-    vec2 filterPointerMotionForAccessibilityLocked(const vec2& current, const vec2& delta,
-                                                   const ui::LogicalDisplayId& displayId)
-            REQUIRES(getLock());
+    vec2 filterPointerMotionForAccessibilityLocked(const PointerControllerInterface& pc,
+                                                   const vec2& delta) REQUIRES(getLock());
 
     /* Topology is initialized with default-constructed value, which is an empty topology. Till we
      * receive setDisplayTopology call.

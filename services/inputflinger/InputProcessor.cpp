@@ -249,8 +249,7 @@ void MotionClassifier::processEvents() {
 void MotionClassifier::enqueueEvent(ClassifierEvent&& event) {
     bool eventAdded = mEvents.push(std::move(event));
     if (!eventAdded) {
-        // If the queue is full, suspect the HAL is slow in processing the events.
-        ALOGE("Could not add the event to the queue. Resetting");
+        ALOGW("Event queue full; the HAL is probably being slow. Resetting");
         reset();
     }
 }

@@ -29,6 +29,16 @@ using gui::WindowInfo;
 
 namespace surfaceflinger {
 
+void LayerProtoHelper::writeCornerRadiiToProto(
+        float tl, float tr, float bl, float br,
+        const std::function<perfetto::protos::CornerRadiiProto*()>& getCornerRadiiProto) {
+    perfetto::protos::CornerRadiiProto* radii_proto = getCornerRadiiProto();
+    radii_proto->set_tl(tl);
+    radii_proto->set_tr(tr);
+    radii_proto->set_bl(bl);
+    radii_proto->set_br(br);
+}
+
 void LayerProtoHelper::writePositionToProto(
         const float x, const float y,
         std::function<perfetto::protos::PositionProto*()> getPositionProto) {
@@ -411,6 +421,21 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
             (snapshot.roundedCorner.radii.topLeft.x + snapshot.roundedCorner.radii.topLeft.y) /
             2.0);
     layerInfo->set_background_blur_radius(snapshot.backgroundBlurRadius);
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.radii.topLeft.x,
+                                              snapshot.roundedCorner.radii.topRight.x,
+                                              snapshot.roundedCorner.radii.bottomLeft.x,
+                                              snapshot.roundedCorner.radii.bottomRight.x,
+                                              [&]() { return layerInfo->mutable_corner_radii(); });
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.requestedRadii.topLeft.x,
+                                              snapshot.roundedCorner.requestedRadii.topRight.x,
+                                              snapshot.roundedCorner.requestedRadii.bottomLeft.x,
+                                              snapshot.roundedCorner.requestedRadii.bottomRight.x,
+                                              [&]() { return layerInfo->mutable_corner_radii(); });
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.clientDrawnRadii.topLeft.x,
+                                              snapshot.roundedCorner.clientDrawnRadii.topRight.x,
+                                              snapshot.roundedCorner.clientDrawnRadii.bottomLeft.x,
+                                              snapshot.roundedCorner.clientDrawnRadii.bottomRight.x,
+                                              [&]() { return layerInfo->mutable_corner_radii(); });
     layerInfo->set_is_trusted_overlay(snapshot.trustedOverlay == gui::TrustedOverlay::ENABLED);
     // TODO(b/339701674) update protos
     LayerProtoHelper::writeToProtoDeprecated(transform, layerInfo->mutable_transform());
@@ -420,7 +445,6 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
                                    [&]() { return layerInfo->mutable_bounds(); });
     LayerProtoHelper::writeToProto(snapshot.surfaceDamage,
                                    [&]() { return layerInfo->mutable_damage_region(); });
-
     if (requestedState.hasColorTransform) {
         LayerProtoHelper::writeToProto(snapshot.colorTransform,
                                        layerInfo->mutable_color_transform());

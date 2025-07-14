@@ -180,7 +180,6 @@ status_t layer_state_t::write(Parcel& output) const
     for (auto listener : listeners) {
         SAFE_PARCEL(output.writeStrongBinder, listener.transactionCompletedListener);
         SAFE_PARCEL(output.writeParcelableVector, listener.callbackIds);
-        SAFE_PARCEL(output.writeStrongBinderVector, listener.transactionHandles);
     }
     SAFE_PARCEL(output.writeFloat, shadowRadius);
     SAFE_PARCEL(output.writeParcelable, borderSettings);
@@ -329,12 +328,9 @@ status_t layer_state_t::read(const Parcel& input)
     for (int i = 0; i < numListeners; i++) {
         sp<IBinder> listener;
         std::vector<CallbackId> callbackIds;
-        std::vector<sp<IBinder>> transactionHandles;
         SAFE_PARCEL(input.readNullableStrongBinder, &listener);
         SAFE_PARCEL(input.readParcelableVector, &callbackIds);
-        SAFE_PARCEL(input.readStrongBinderVector, &transactionHandles);
-        listeners.emplace_back(std::move(listener), std::move(callbackIds),
-                               std::move(transactionHandles));
+        listeners.emplace_back(listener, callbackIds);
     }
     SAFE_PARCEL(input.readFloat, &shadowRadius);
     SAFE_PARCEL(input.readParcelable, &borderSettings);
