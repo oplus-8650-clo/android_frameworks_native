@@ -74,8 +74,10 @@ void BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& 
     // to the VM then skip pushing. This is required since StatsBootstrap is
     // a Java service and needs a JNI interface to be called from native code.
     bool isProcessSystemServer = IInterface::asBinder(service)->localBinder() != nullptr;
-    if (isProcessSystemServer && getJavaVM() == nullptr) {
-        return;
+    if (isProcessSystemServer) {
+        if (!isThreadAttachedToJVM()) {
+            return;
+        }
     }
     // Clear calling identity if this is called from system server. This
     // will allow libStatsBootstrap to verify calling uid correctly.

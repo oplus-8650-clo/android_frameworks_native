@@ -26,6 +26,8 @@ namespace skia {
 namespace {
 
 // Please refer to https://developer.android.com/media/platform/hdr-image-format#gain_map-generation
+// This shader assumes that it will be used in a linear gamma colorspace context, e.g. all values
+// sampled from `sdr` and `hdr` are linear and it is outputting an encoded ratio of luminances.
 static const SkString kGainmapShaderString = SkString(R"(
     uniform shader sdr;
     uniform shader hdr;
@@ -41,8 +43,8 @@ static const SkString kGainmapShaderString = SkString(R"(
     }
 
     vec4 main(vec2 xy) {
-        float sdrY = luminance(toLinearSrgb(sdr.eval(xy).rgb));
-        float hdrY = luminance(toLinearSrgb(hdr.eval(xy).rgb));
+        float sdrY = luminance(sdr.eval(xy).rgb);
+        float hdrY = luminance(hdr.eval(xy).rgb);
         float pixelGain = (hdrY + offsetHdr) / (sdrY + offsetSdr);
         float logRecovery = (log2(pixelGain) - mapMinLog2) / (mapMaxLog2 - mapMinLog2);
         return vec4(pow(clamp(logRecovery, 0.0, 1.0), mapGamma));

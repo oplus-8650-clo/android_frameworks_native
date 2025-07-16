@@ -158,15 +158,16 @@ TEST_F(VSyncReactorTest, addingPendingFenceAddsSignalled) {
 }
 
 TEST_F(VSyncReactorTest, limitsPendingFences) {
-    std::array<std::shared_ptr<android::FenceTime>, kPendingLimit * 2> fences;
+    FenceToFenceTimeMap fenceMap;
+    std::array<FenceToFenceTimeMap::FencePair, kPendingLimit * 2> fences;
     std::array<nsecs_t, fences.size()> fakeTimes;
-    std::generate(fences.begin(), fences.end(), [] { return generatePendingFence(); });
+    std::generate(fences.begin(), fences.end(), [&] { return fenceMap.makePendingFenceForTest(); });
     std::generate(fakeTimes.begin(), fakeTimes.end(), [i = 10]() mutable {
         i++;
         return i * i;
     });
 
-    for (auto const& fence : fences) {
+    for (auto const& [_, fence] : fences) {
         mReactor.addPresentFence(fence);
     }
 
@@ -175,7 +176,7 @@ TEST_F(VSyncReactorTest, limitsPendingFences) {
     }
 
     for (auto i = 0u; i < fences.size(); i++) {
-        signalFenceWithTime(fences[i], fakeTimes[i]);
+        fenceMap.signalAllForTest(fences[i].first, fakeTimes[i]);
     }
     mReactor.addPresentFence(generatePendingFence());
 }

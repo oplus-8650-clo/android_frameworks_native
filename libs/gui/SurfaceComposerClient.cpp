@@ -429,28 +429,25 @@ CallbackId TransactionCompletedListener::addCallbackFunction(
         const TransactionCompletedCallback& callbackFunction,
         const std::unordered_set<sp<SurfaceControl>, SurfaceComposerClient::SCHash>&
                 surfaceControls,
-        CallbackId::Type callbackType, const wp<IBinder>& transactionHandle) {
+        CallbackId::Type callbackType) {
     std::lock_guard<std::mutex> lock(mMutex);
     startListeningLocked();
 
     CallbackId callbackId(getNextIdLocked(), callbackType);
-    CallbackTranslation& callbackTranslation = mCallbacks[callbackId];
-    callbackTranslation.callbackFunction = callbackFunction;
-    callbackTranslation.transactionHandle = transactionHandle;
+    mCallbacks[callbackId].callbackFunction = callbackFunction;
+    auto& callbackSurfaceControls = mCallbacks[callbackId].surfaceControls;
+
     for (const auto& surfaceControl : surfaceControls) {
-        callbackTranslation.surfaceControls.emplace(surfaceControl->getHandle(), surfaceControl);
+        callbackSurfaceControls[surfaceControl->getHandle()] = surfaceControl;
     }
 
     return callbackId;
 }
 
 void TransactionCompletedListener::setReleaseBufferCallback(const ReleaseCallbackId& callbackId,
-                                                            ReleaseBufferCallback listener,
-                                                            const wp<IBinder>& transactionHandle) {
+                                                            ReleaseBufferCallback listener) {
     std::scoped_lock<std::mutex> lock(mMutex);
-    ReleaseCallbackTranslation& callbackTranslation = mReleaseBufferCallbacks[callbackId];
-    callbackTranslation.callbackFunction = std::move(listener);
-    callbackTranslation.transactionHandle = transactionHandle;
+    mReleaseBufferCallbacks[callbackId] = listener;
 }
 
 void TransactionCompletedListener::addSurfaceStatsListener(void* context, void* cookie,
@@ -515,7 +512,7 @@ void TransactionCompletedListener::onTransactionCompleted(ListenerStats listener
             if (callbackId.type != CallbackId::Type::ON_COMMIT) {
                 continue;
             }
-            auto& [callbackFunction, _, callbackSurfaceControls] = callbacksMap[callbackId];
+            auto& [callbackFunction, callbackSurfaceControls] = callbacksMap[callbackId];
             if (!callbackFunction) {
                 continue;
             }
@@ -545,7 +542,7 @@ void TransactionCompletedListener::onTransactionCompleted(ListenerStats listener
             if (callbackId.type != CallbackId::Type::ON_COMPLETE) {
                 continue;
             }
-            auto& [callbackFunction, _, callbackSurfaceControls] = callbacksMap[callbackId];
+            auto& [callbackFunction, callbackSurfaceControls] = callbacksMap[callbackId];
             if (!callbackFunction) {
                 ALOGE("cannot call null callback function, skipping");
                 continue;
@@ -680,7 +677,7 @@ ReleaseBufferCallback TransactionCompletedListener::popReleaseBufferCallbackLock
     if (itr == mReleaseBufferCallbacks.end()) {
         return nullptr;
     }
-    callback = std::move(itr->second.callbackFunction);
+    callback = itr->second;
     mReleaseBufferCallbacks.erase(itr);
     return callback;
 }
@@ -730,26 +727,6 @@ void TransactionCompletedListener::onTrustedPresentationChanged(int id,
         std::tie(tpc, context) = it->second;
     }
     tpc(context, presentedWithinThresholds);
-}
-
-void TransactionCompletedListener::onTransactionDestroyed(const wp<IBinder>& transactionHandle) {
-    std::lock_guard lock{mMutex};
-
-    for (auto it = mCallbacks.begin(); it != mCallbacks.end();) {
-        if (it->second.transactionHandle == transactionHandle) {
-            it = mCallbacks.erase(it);
-        } else {
-            it++;
-        }
-    }
-
-    for (auto it = mReleaseBufferCallbacks.begin(); it != mReleaseBufferCallbacks.end();) {
-        if (it->second.transactionHandle == transactionHandle) {
-            it = mReleaseBufferCallbacks.erase(it);
-        } else {
-            it++;
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -867,12 +844,12 @@ SurfaceComposerClient::Transaction::Transaction() {
 }
 
 SurfaceComposerClient::Transaction::Transaction(const Transaction& other)
-      : mTransactionCompletedListener(TransactionCompletedListener::getInstance()),
-        mState(other.mState),
-        mListenerCallbacks(other.mListenerCallbacks),
-        mTransactionHandle(other.mTransactionHandle),
+      : mState(other.mState),
         mMayContainBuffer(other.mMayContainBuffer),
-        mApplyToken(other.mApplyToken) {}
+        mApplyToken(other.mApplyToken) {
+    mListenerCallbacks = other.mListenerCallbacks;
+    mTransactionCompletedListener = TransactionCompletedListener::getInstance();
+}
 
 void SurfaceComposerClient::Transaction::sanitize(int pid, int uid) {
     // TODO(b/356936695) move to TransactionState.
@@ -912,7 +889,6 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
     for (size_t i = 0; i < count; i++) {
         sp<ITransactionCompletedListener> listener =
                 interface_cast<ITransactionCompletedListener>(parcel->readStrongBinder());
-        CallbackInfo& callbackInfo = listenerCallbacks[listener];
         size_t numCallbackIds = parcel->readUint32();
         if (numCallbackIds > parcel->dataSize()) {
             return BAD_VALUE;
@@ -920,7 +896,7 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
         for (size_t j = 0; j < numCallbackIds; j++) {
             CallbackId id;
             parcel->readParcelable(&id);
-            callbackInfo.callbackIds.insert(id);
+            listenerCallbacks[listener].callbackIds.insert(id);
         }
         size_t numSurfaces = parcel->readUint32();
         if (numSurfaces > parcel->dataSize()) {
@@ -929,22 +905,13 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
         for (size_t j = 0; j < numSurfaces; j++) {
             sp<SurfaceControl> surface;
             SAFE_PARCEL(SurfaceControl::readFromParcel, *parcel, &surface);
-            callbackInfo.surfaceControls.insert(surface);
-        }
-        size_t numHandles = parcel->readUint32();
-        if (numHandles > parcel->dataSize()) {
-            return BAD_VALUE;
-        }
-        for (size_t j = 0; j < numHandles; j++) {
-            sp<IBinder> transactionHandle;
-            SAFE_PARCEL(parcel->readStrongBinder, &transactionHandle);
-            callbackInfo.transactionHandles.insert(std::move(transactionHandle));
+            listenerCallbacks[listener].surfaceControls.insert(surface);
         }
     }
 
     // Parsing was successful. Update the object.
     mState = std::move(state);
-    mListenerCallbacks = std::move(listenerCallbacks);
+    mListenerCallbacks = listenerCallbacks;
     mApplyToken = applyToken;
     return NO_ERROR;
 }
@@ -977,10 +944,6 @@ status_t SurfaceComposerClient::Transaction::writeToParcel(Parcel* parcel) const
         parcel->writeUint32(static_cast<uint32_t>(callbackInfo.surfaceControls.size()));
         for (auto surfaceControl : callbackInfo.surfaceControls) {
             SAFE_PARCEL(surfaceControl->writeToParcel, *parcel);
-        }
-        parcel->writeUint32(static_cast<uint32_t>(callbackInfo.transactionHandles.size()));
-        for (auto& transactionHandle : callbackInfo.transactionHandles) {
-            SAFE_PARCEL(parcel->writeStrongBinder, transactionHandle);
         }
     }
 
@@ -1018,14 +981,13 @@ void SurfaceComposerClient::Transaction::releaseBufferIfOverwriting(const layer_
 
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::merge(Transaction&& other) {
     for (const auto& [listener, callbackInfo] : other.mListenerCallbacks) {
-        auto& [callbackIds, surfaceControls, transactionHandles] = callbackInfo;
+        auto& [callbackIds, surfaceControls] = callbackInfo;
+        mListenerCallbacks[listener].callbackIds.insert(std::make_move_iterator(
+                                                                callbackIds.begin()),
+                                                        std::make_move_iterator(callbackIds.end()));
 
-        auto& mergedCallbackInfo = mListenerCallbacks[listener];
-        mergedCallbackInfo.callbackIds.insert(callbackIds.begin(), callbackIds.end());
-        mergedCallbackInfo.surfaceControls.insert(surfaceControls.begin(), surfaceControls.end());
-        mergedCallbackInfo.transactionHandles
-                .insert(std::make_move_iterator(transactionHandles.begin()),
-                        std::make_move_iterator(transactionHandles.end()));
+        mListenerCallbacks[listener].surfaceControls.insert(surfaceControls.begin(),
+                                                            surfaceControls.end());
 
         auto& currentProcessCallbackInfo =
                 mListenerCallbacks[TransactionCompletedListener::getIInstance()];
@@ -1062,7 +1024,6 @@ void SurfaceComposerClient::Transaction::clear() {
     mState.clear();
     mState.mId = generateId();
     mListenerCallbacks.clear();
-    mTransactionHandle.clear();
     mMayContainBuffer = false;
     mApplyToken = nullptr;
     mLogCallPoints = false;
@@ -1200,14 +1161,15 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     listenerCallbacks.mHasListenerCallbacks = !mListenerCallbacks.empty();
     // For every listener with registered callbacks
     for (const auto& [listener, callbackInfo] : mListenerCallbacks) {
-        auto& [callbackIds, surfaceControls, transactionHandles] = callbackInfo;
+        auto& [callbackIds, surfaceControls] = callbackInfo;
         if (callbackIds.empty()) {
             continue;
         }
 
         if (surfaceControls.empty()) {
-            listenerCallbacks.mFlattenedListenerCallbacks
-                    .emplace_back(IInterface::asBinder(listener), callbackIds, transactionHandles);
+            listenerCallbacks.mFlattenedListenerCallbacks.emplace_back(IInterface::asBinder(
+                                                                               listener),
+                                                                       std::move(callbackIds));
         } else {
             // If the listener has any SurfaceControls set on this Transaction update the surface
             // state
@@ -1218,11 +1180,8 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
                     continue;
                 }
                 std::vector<CallbackId> callbacks(callbackIds.begin(), callbackIds.end());
-                std::vector<sp<IBinder>> handles(transactionHandles.begin(),
-                                                 transactionHandles.end());
                 s->what |= layer_state_t::eHasListenerCallbacksChanged;
-                s->listeners.emplace_back(IInterface::asBinder(listener), std::move(callbacks),
-                                          std::move(handles));
+                s->listeners.emplace_back(IInterface::asBinder(listener), callbacks);
             }
         }
     }
@@ -1789,8 +1748,14 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setBuffe
     s->bufferData = std::move(bufferData);
     registerSurfaceControlForCallback(sc);
 
-    // Ensure there's a transaction completed callback registered so that buffers can be released
-    // via ITransactionCompletedListener::onTransactionCompleted.
+    // With the current infrastructure, a release callback will not be invoked if there's no
+    // transaction callback in the case when a buffer is latched and not released early. This is
+    // because the legacy implementation didn't have a release callback and sent releases in the
+    // transaction callback. Because of this, we need to make sure to have a transaction callback
+    // set up when a buffer is sent in a transaction to ensure the caller gets the release
+    // callback, regardless if they set up a transaction callback.
+    //
+    // TODO (b/230380821): Remove when release callbacks are separated from transaction callbacks
     addTransactionCompletedCallback([](void*, nsecs_t, const sp<Fence>&,
                                        const std::vector<SurfaceControlStats>&) {},
                                     nullptr);
@@ -1833,7 +1798,7 @@ void SurfaceComposerClient::Transaction::setReleaseBufferCallback(BufferData* bu
     bufferData->releaseBufferListener =
             static_cast<sp<ITransactionCompletedListener>>(mTransactionCompletedListener);
     mTransactionCompletedListener->setReleaseBufferCallback(bufferData->generateReleaseCallbackId(),
-                                                            callback, getTransactionHandle());
+                                                            callback);
 }
 
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setDataspace(
@@ -2006,11 +1971,6 @@ SurfaceComposerClient::Transaction::setFrameRateSelectionPriority(const sp<Surfa
     return *this;
 }
 
-SurfaceComposerClient::TransactionHandle::~TransactionHandle() {
-    TransactionCompletedListener::getInstance()->onTransactionDestroyed(
-            wp<TransactionHandle>::fromExisting(this));
-}
-
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::addTransactionCallback(
         TransactionCompletedCallbackTakesContext callback, void* callbackContext,
         CallbackId::Type callbackType) {
@@ -2021,14 +1981,9 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::addTrans
 
     CallbackId callbackId =
             mTransactionCompletedListener->addCallbackFunction(callbackWithContext, surfaceControls,
-                                                               callbackType,
-                                                               getTransactionHandle());
+                                                               callbackType);
 
     mListenerCallbacks[mTransactionCompletedListener].callbackIds.emplace(callbackId);
-    if (libgui_flags::unapplied_transaction_cleanup()) {
-        mListenerCallbacks[mTransactionCompletedListener].transactionHandles.emplace(
-                getTransactionHandle());
-    }
     return *this;
 }
 

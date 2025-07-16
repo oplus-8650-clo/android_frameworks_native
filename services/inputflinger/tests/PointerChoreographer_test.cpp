@@ -76,14 +76,21 @@ static InputDeviceInfo generateTestDeviceInfo(int32_t deviceId, uint32_t source,
     return info;
 }
 
+DisplayViewport createViewport(ui::LogicalDisplayId displayId, int32_t width = DISPLAY_WIDTH,
+                               int32_t height = DISPLAY_HEIGHT,
+                               ui::Rotation orientation = ui::ROTATION_0) {
+    DisplayViewport viewport;
+    viewport.displayId = displayId;
+    viewport.logicalRight = width;
+    viewport.logicalBottom = height;
+    viewport.orientation = orientation;
+    return viewport;
+}
+
 static std::vector<DisplayViewport> createViewports(std::vector<ui::LogicalDisplayId> displayIds) {
     std::vector<DisplayViewport> viewports;
     for (auto displayId : displayIds) {
-        DisplayViewport viewport;
-        viewport.displayId = displayId;
-        viewport.logicalRight = DISPLAY_WIDTH;
-        viewport.logicalBottom = DISPLAY_HEIGHT;
-        viewports.push_back(viewport);
+        viewports.push_back(createViewport(displayId));
     }
     return viewports;
 }
@@ -1907,6 +1914,44 @@ TEST_F(PointerChoreographerTest, A11yPointerMotionFilterTouchpad) {
                                                     WithRelativeMotion(10, 20)));
 }
 
+TEST_F(PointerChoreographerTest, A11yPointerMotionFilterApplyTransform) {
+    mChoreographer.setDisplayViewports(
+            {createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_90)});
+    setDefaultMouseDisplayId(DISPLAY_ID);
+    mChoreographer.notifyInputDevicesChanged(
+            {/*id=*/0,
+             {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
+                                     ui::LogicalDisplayId::INVALID)}});
+    auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
+    ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
+
+    pc->setTransform(ui::Transform(ui::Transform::toRotationFlags(ui::ROTATION_90), DISPLAY_HEIGHT,
+                                   DISPLAY_WIDTH));
+    pc->setPosition(200, 700); // (100, 200) in the logical display space.
+    mChoreographer.setAccessibilityPointerMotionFilterEnabled(true);
+
+    // Pointer moves (10, 20) in the physical space, which is (-20, 10) in the logical space.
+    EXPECT_CALL(mMockPolicy,
+                filterPointerMotionForAccessibility(testing::Eq(vec2{100, 200}),
+                                                    testing::Eq(vec2{-20.f, 10.f}),
+                                                    testing::Eq(DISPLAY_ID)))
+            .Times(1)
+            .WillOnce(testing::Return(vec2{-12, 6}));
+
+    mChoreographer.notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_HOVER_MOVE, AINPUT_SOURCE_MOUSE)
+                    .pointer(MOUSE_POINTER)
+                    .deviceId(DEVICE_ID)
+                    .displayId(ui::LogicalDisplayId::INVALID)
+                    .build());
+
+    // Cursor position is decided by filtered delta, but pointer coord's relative values are kept.
+    pc->assertPosition(206, 712);
+    mTestListener.assertNotifyMotionWasCalled(AllOf(WithCoords(206, 712), WithDisplayId(DISPLAY_ID),
+                                                    WithCursorPosition(206, 712),
+                                                    WithRelativeMotion(10, 20)));
+}
+
 TEST_F(PointerChoreographerTest, A11yPointerMotionFilterNotFilterTouch) {
     mChoreographer.notifyInputDevicesChanged(
             {/*id=*/0, {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_TOUCHSCREEN, DISPLAY_ID)}});
@@ -2744,18 +2789,7 @@ TEST_P(PointerVisibilityAndTouchpadTapStateOnKeyPressTestFixture, TestMetaKeyCom
     metaKeyCombinationDoesNotHidePointer(*pc, AKEYCODE_A, AKEYCODE_META_RIGHT);
 }
 
-class PointerChoreographerDisplayTopologyTests : public PointerChoreographerTest {
-protected:
-    DisplayViewport createViewport(ui::LogicalDisplayId displayId, int32_t width, int32_t height,
-                                   ui::Rotation orientation) {
-        DisplayViewport viewport;
-        viewport.displayId = displayId;
-        viewport.logicalRight = width;
-        viewport.logicalBottom = height;
-        viewport.orientation = orientation;
-        return viewport;
-    }
-};
+using PointerChoreographerDisplayTopologyTests = PointerChoreographerTest;
 
 using PointerChoreographerDisplayTopologyCursorTestFixtureParam =
         std::tuple<std::string_view /*name*/, int32_t /*source device*/,
@@ -2976,9 +3010,7 @@ protected:
     static constexpr int32_t DISPLAY_HEIGHT = 100;
 
     DisplayViewport createViewport(ui::LogicalDisplayId displayId) {
-        return PointerChoreographerDisplayTopologyTests::createViewport(displayId, DISPLAY_WIDTH,
-                                                                        DISPLAY_HEIGHT,
-                                                                        ui::ROTATION_0);
+        return ::android::createViewport(displayId, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0);
     }
 
     void setDisplayTopologyWithDisplays(

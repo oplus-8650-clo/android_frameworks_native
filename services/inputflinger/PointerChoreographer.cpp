@@ -298,9 +298,7 @@ void PointerChoreographer::processPointerDeviceMotionEventLocked(NotifyMotionArg
                                                                  PointerControllerInterface& pc) {
     const float deltaX = newArgs.pointerCoords[0].getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X);
     const float deltaY = newArgs.pointerCoords[0].getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y);
-    vec2 filteredDelta =
-            filterPointerMotionForAccessibilityLocked(pc.getPosition(), vec2{deltaX, deltaY},
-                                                      newArgs.displayId);
+    const vec2 filteredDelta = filterPointerMotionForAccessibilityLocked(pc, vec2{deltaX, deltaY});
     vec2 unconsumedDelta = pc.move(filteredDelta.x, filteredDelta.y);
     if (InputFlags::connectedDisplaysCursorEnabled() &&
         (std::abs(unconsumedDelta.x) > 0 || std::abs(unconsumedDelta.y) > 0)) {
@@ -1067,18 +1065,25 @@ PointerChoreographer::findDestinationDisplayLocked(const ui::LogicalDisplayId so
 }
 
 vec2 PointerChoreographer::filterPointerMotionForAccessibilityLocked(
-        const vec2& current, const vec2& delta, const ui::LogicalDisplayId& displayId) {
+        const PointerControllerInterface& pc, const vec2& delta) {
     if (!mPointerMotionFilterEnabled) {
         return delta;
     }
-    std::optional<vec2> filterResult =
-            mPolicy.filterPointerMotionForAccessibility(current, delta, displayId);
+
+    // PointerController.getPosition and mouse delta are both in physical display coordinates.
+    // PointerMotionFilter in Java expects coordinates in logical display coordinates.
+    const auto& displayTransform = pc.getDisplayTransform();
+    const vec2 current = displayTransform.transform(pc.getPosition());
+    const vec2 deltaInDisplay = transformWithoutTranslation(displayTransform, delta);
+    const ui::LogicalDisplayId displayId = pc.getDisplayId();
+    const std::optional<vec2> filterResult =
+            mPolicy.filterPointerMotionForAccessibility(current, deltaInDisplay, displayId);
     if (!filterResult.has_value()) {
         // Disable filter when there's any error.
         mPointerMotionFilterEnabled = false;
         return delta;
     }
-    return *filterResult;
+    return transformWithoutTranslation(displayTransform.inverse(), *filterResult);
 }
 
 // --- PointerChoreographer::PointerChoreographerDisplayInfoListener ---

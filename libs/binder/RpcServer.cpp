@@ -130,6 +130,9 @@ status_t RpcServer::setupInetServer(const char* address, unsigned int port,
 }
 
 void RpcServer::setMaxThreads(size_t threads) {
+#ifdef BINDER_RPC_SINGLE_THREADED
+    LOG_ALWAYS_FATAL_IF(threads > 1, "Cannot set max threads > 1 in single-threaded mode");
+#endif // BINDER_RPC_SINGLE_THREADED
     LOG_ALWAYS_FATAL_IF(threads <= 0, "RpcServer is useless without threads");
     LOG_ALWAYS_FATAL_IF(mJoinThreadRunning, "Cannot set max threads while running");
     mMaxThreads = threads;
@@ -260,7 +263,6 @@ status_t RpcServer::recvmsgSocketConnection(const RpcServer& server, RpcTranspor
 }
 
 void RpcServer::join() {
-
     {
         RpcMutexLockGuard _l(mLock);
         LOG_ALWAYS_FATAL_IF(!mServer.fd.ok(), "RpcServer must be setup to join.");

@@ -22,7 +22,6 @@
 #include <binder/SafeInterface.h>
 
 #include <gui/FrameTimestamps.h>
-#include <gui/SpHash.h>
 #include <ui/Fence.h>
 #include <utils/Timers.h>
 
@@ -32,8 +31,6 @@
 #include <variant>
 
 namespace android {
-
-using gui::SpHash;
 
 class ITransactionCompletedListener;
 class ListenerCallbacks;
@@ -142,19 +139,14 @@ public:
     status_t readFromParcel(const Parcel* input) override;
 
     TransactionStats() = default;
-    TransactionStats(const std::vector<CallbackId>& ids,
-                     const std::vector<sp<IBinder>>& transactionHandles)
-          : callbackIds(ids), transactionHandles(transactionHandles) {}
-    TransactionStats(const std::unordered_set<CallbackId, CallbackIdHash>& ids,
-                     const std::unordered_set<sp<IBinder>, SpHash<IBinder>>& transactionHandles)
-          : callbackIds(ids.begin(), ids.end()),
-            transactionHandles(transactionHandles.begin(), transactionHandles.end()) {}
+    TransactionStats(const std::vector<CallbackId>& ids) : callbackIds(ids) {}
+    TransactionStats(const std::unordered_set<CallbackId, CallbackIdHash>& ids)
+          : callbackIds(ids.begin(), ids.end()) {}
     TransactionStats(const std::vector<CallbackId>& ids, nsecs_t latch, const sp<Fence>& present,
                      const std::vector<SurfaceStats>& surfaces)
           : callbackIds(ids), latchTime(latch), presentFence(present), surfaceStats(surfaces) {}
 
     std::vector<CallbackId> callbackIds;
-    std::vector<sp<IBinder>> transactionHandles;
     nsecs_t latchTime = -1;
     sp<Fence> presentFence = nullptr;
     std::vector<SurfaceStats> surfaceStats;
@@ -164,6 +156,10 @@ class ListenerStats : public Parcelable {
 public:
     status_t writeToParcel(Parcel* output) const override;
     status_t readFromParcel(const Parcel* input) override;
+
+    static ListenerStats createEmpty(
+            const sp<IBinder>& listener,
+            const std::unordered_set<CallbackId, CallbackIdHash>& callbackIds);
 
     sp<IBinder> listener;
     std::vector<TransactionStats> transactionStats;
@@ -195,17 +191,12 @@ public:
 class ListenerCallbacks {
 public:
     ListenerCallbacks(const sp<IBinder>& listener,
-                      const std::unordered_set<CallbackId, CallbackIdHash>& callbacks,
-                      const std::unordered_set<sp<IBinder>, SpHash<IBinder>>& transactionHandles)
+                      const std::unordered_set<CallbackId, CallbackIdHash>& callbacks)
           : transactionCompletedListener(listener),
-            callbackIds(callbacks.begin(), callbacks.end()),
-            transactionHandles(transactionHandles.begin(), transactionHandles.end()) {}
+            callbackIds(callbacks.begin(), callbacks.end()) {}
 
-    ListenerCallbacks(sp<IBinder> listener, std::vector<CallbackId> ids,
-                      std::vector<sp<IBinder>> transactionHandles)
-          : transactionCompletedListener(std::move(listener)),
-            callbackIds(std::move(ids)),
-            transactionHandles(std::move(transactionHandles)) {}
+    ListenerCallbacks(const sp<IBinder>& listener, const std::vector<CallbackId>& ids)
+          : transactionCompletedListener(listener), callbackIds(ids) {}
 
     bool operator==(const ListenerCallbacks& rhs) const {
         if (transactionCompletedListener != rhs.transactionCompletedListener) {
@@ -222,7 +213,6 @@ public:
 
     sp<IBinder> transactionCompletedListener;
     std::vector<CallbackId> callbackIds;
-    std::vector<sp<IBinder>> transactionHandles;
 };
 
 struct IListenerHash {

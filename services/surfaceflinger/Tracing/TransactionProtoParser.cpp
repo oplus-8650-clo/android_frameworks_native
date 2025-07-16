@@ -123,7 +123,19 @@ perfetto::protos::LayerState TransactionProtoParser::toProto(
         matrixProto->set_dtdy(layer.matrix.dtdy);
     }
     if (layer.what & layer_state_t::eCornerRadiusChanged) {
+        perfetto::protos::LayerState_CornerRadii* radiiProto = proto.mutable_corner_radii();
+        radiiProto->set_tl(layer.cornerRadii.topLeft.x);
+        radiiProto->set_tr(layer.cornerRadii.topRight.x);
+        radiiProto->set_bl(layer.cornerRadii.bottomLeft.x);
+        radiiProto->set_br(layer.cornerRadii.bottomRight.x);
+        // TODO(b/430109627): Remove usage of deprecated corner_radius field
         proto.set_corner_radius(layer.cornerRadii.topLeft.x);
+    }
+    if (layer.what & layer_state_t::eClientDrawnCornerRadiusChanged) {
+        perfetto::protos::LayerState_CornerRadii* radiiProto = proto.mutable_corner_radii();
+        radiiProto->set_tl(layer.clientDrawnCornerRadii.topLeft.x);
+        radiiProto->set_tr(layer.clientDrawnCornerRadii.topRight.x);
+        radiiProto->set_bl(layer.clientDrawnCornerRadii.bottomLeft.x);
     }
     if (layer.what & layer_state_t::eBackgroundBlurRadiusChanged) {
         proto.set_background_blur_radius(layer.backgroundBlurRadius);
@@ -395,7 +407,21 @@ void TransactionProtoParser::fromProto(const perfetto::protos::LayerState& proto
         layer.matrix.dtdy = matrixProto.dtdy();
     }
     if (proto.what() & layer_state_t::eCornerRadiusChanged) {
+        const perfetto::protos::LayerState_CornerRadii& radiiProto = proto.corner_radii();
+        layer.cornerRadii.topLeft.x = radiiProto.tl();
+        layer.cornerRadii.topRight.x = radiiProto.tr();
+        layer.cornerRadii.bottomLeft.x = radiiProto.bl();
+        layer.cornerRadii.bottomRight.y = radiiProto.br();
+        // TODO(b/430109627): Remove usage of deprecated corner_radius field
         layer.cornerRadii.topLeft.x = proto.corner_radius();
+    }
+    if (proto.what() & layer_state_t::eClientDrawnCornerRadiusChanged) {
+        const perfetto::protos::LayerState_CornerRadii& radiiProto =
+                proto.client_drawn_corner_radii();
+        layer.clientDrawnCornerRadii.topLeft.x = radiiProto.tl();
+        layer.clientDrawnCornerRadii.topRight.x = radiiProto.tr();
+        layer.clientDrawnCornerRadii.bottomLeft.x = radiiProto.bl();
+        layer.clientDrawnCornerRadii.bottomRight.y = radiiProto.br();
     }
     if (proto.what() & layer_state_t::eBackgroundBlurRadiusChanged) {
         layer.backgroundBlurRadius = proto.background_blur_radius();

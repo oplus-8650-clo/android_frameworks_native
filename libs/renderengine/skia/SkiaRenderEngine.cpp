@@ -1374,6 +1374,12 @@ void SkiaRenderEngine::tonemapAndDrawGainmapInternal(
     std::lock_guard<std::mutex> lock(mRenderingMutex);
     auto context = getActiveContext();
     auto gainmapTextureRef = getOrCreateBackendTexture(gainmap->getBuffer(), true);
+
+    // The Dataspace used to create the SkSurface must be a linear colorspace in order to meet the
+    // requirements for the gainmap shader. Since this is done via the dst colorspace and the shader
+    // is painted into the surface directly, there is no need to wrap the gainmap shader with
+    // `SkShader::makeWithWorkingColorSpace`. `hdrShader` and `sdrShader` will both output
+    // values in the dst colorspace, which meets the linear gamma requirement.
     sk_sp<SkSurface> gainmapSurface =
             gainmapTextureRef->getOrCreateSurface(ui::Dataspace::V0_SRGB_LINEAR);
 

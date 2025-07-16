@@ -40,8 +40,8 @@ void TransactionHandler::collectTransactions() {
         if (!maybeTransaction.has_value()) {
             break;
         }
-        auto transaction = maybeTransaction.value();
-        mPendingTransactionQueues[transaction.applyToken].emplace(std::move(transaction));
+        const auto& token = maybeTransaction->applyToken;
+        mPendingTransactionQueues[token].emplace(std::move(*maybeTransaction));
     }
 }
 

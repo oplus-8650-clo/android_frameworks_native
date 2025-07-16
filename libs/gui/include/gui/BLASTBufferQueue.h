@@ -274,6 +274,14 @@ private:
     ui::Size mSize GUARDED_BY(mMutex);
     ui::Size mRequestedSize GUARDED_BY(mMutex);
     int32_t mFormat GUARDED_BY(mMutex);
+
+    // Buffers may reach SurfaceFlinger out of order. Buffer barriers are used to ensure that
+    // a buffer with a given frame number is only applied in SurfaceFlinger once a previous buffer
+    // with a lower frame number is applied. Transactions that are not applied by BLASTBufferQueue
+    // always wait on the last buffer applied by BLASTBufferQueue using these barriers.
+    // Barriers are set on a layer, and are not shared across layers. This means if the layer
+    // backing this BLASTBufferQueue changes, the barrier will be invalid. This flag is used to
+    // track when the layer is changed so the barrier can be skipped.
     bool mSetBufferBarrier GUARDED_BY(mMutex) = false;
 
     // Keep a copy of the current picture profile handle, so it can be moved to a new

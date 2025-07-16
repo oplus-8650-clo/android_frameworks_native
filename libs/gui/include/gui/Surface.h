@@ -154,6 +154,11 @@ public:
     explicit Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controlledByApp = false,
                      const sp<IBinder>& surfaceControlHandle = nullptr);
 
+    /*
+     * Get the underlying Surface from the given ANativeWindow.
+     */
+    static sp<Surface> from(ANativeWindow* anw);
+
     /* getIGraphicBufferProducer() returns the IGraphicBufferProducer this
      * Surface was created with. Usually it's an error to use the
      * IGraphicBufferProducer while the Surface is connected.

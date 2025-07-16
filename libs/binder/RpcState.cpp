@@ -30,7 +30,7 @@
 #include "Utils.h"
 
 #include <random>
-#include <sstream>
+#include <string>
 
 #include <inttypes.h>
 
@@ -341,10 +341,16 @@ std::string RpcState::BinderNode::toString() const {
         desc = "(not promotable)";
     }
 
-    std::stringstream ss;
-    ss << "node{" << intptr_t(this->binder.unsafe_get()) << " times sent: " << this->timesSent
-       << " times recd: " << this->timesRecd << " type: " << desc << "}";
-    return ss.str();
+    std::string out = "node{";
+    out.append(std::to_string(intptr_t(this->binder.unsafe_get())));
+    out.append(" times sent: ");
+    out.append(std::to_string(this->timesSent));
+    out.append(" times recd: ");
+    out.append(std::to_string(this->timesRecd));
+    out.append(" type: ");
+    out.append(desc);
+    out.append("}");
+    return out;
 }
 
 RpcState::CommandData::CommandData(size_t size) : mSize(size) {
@@ -1372,11 +1378,11 @@ status_t RpcState::validateParcel(const sp<RpcSession>& session, const Parcel& p
     uint32_t protocolVersion = session->getProtocolVersion().value();
     if (protocolVersion < RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_FEATURE_EXPLICIT_PARCEL_SIZE &&
         !rpcFields->mObjectPositions.empty()) {
-        std::stringstream ss;
-        ss << "Parcel has attached objects but the session's protocol version (" << protocolVersion
-           << ") is too old, must be at least "
-           << RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_FEATURE_EXPLICIT_PARCEL_SIZE;
-        *errorMsg = ss.str();
+        *errorMsg = "Parcel has attached objects but the session's protocol version ";
+        errorMsg->append(std::to_string(protocolVersion));
+        errorMsg->append(" is too old, must be at least ");
+        errorMsg->append(
+                std::to_string(RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_FEATURE_EXPLICIT_PARCEL_SIZE));
         return BAD_VALUE;
     }
 
@@ -1388,10 +1394,11 @@ status_t RpcState::validateParcel(const sp<RpcSession>& session, const Parcel& p
             return FDS_NOT_ALLOWED;
         }
         if (rpcFields->mFds->size() > maxFdsPerMsg) {
-            std::stringstream ss;
-            ss << "Too many file descriptors in Parcel: " << rpcFields->mFds->size() << " (max is "
-               << maxFdsPerMsg << ")";
-            *errorMsg = ss.str();
+            *errorMsg = "Too many file descriptors in Parcel: ";
+            errorMsg->append(std::to_string(rpcFields->mFds->size()));
+            errorMsg->append(" (max is ");
+            errorMsg->append(std::to_string(maxFdsPerMsg));
+            errorMsg->append(")");
             return BAD_VALUE;
         }
     }

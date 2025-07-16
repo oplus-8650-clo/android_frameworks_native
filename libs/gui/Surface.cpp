@@ -248,6 +248,10 @@ Surface::~Surface() {
 #endif // !defined(NO_BINDER)
 }
 
+sp<Surface> Surface::from(ANativeWindow* anw) {
+    return sp<Surface>::fromExisting(static_cast<Surface*>(anw));
+}
+
 #ifndef NO_BINDER
 sp<ISurfaceComposer> Surface::composerService() const {
     return ComposerService::getComposerService();
