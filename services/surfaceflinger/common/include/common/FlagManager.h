@@ -77,7 +77,7 @@ public:
     bool arr_setframerate_gte_enum() const;
     bool begone_bright_hlg() const;
     bool cache_when_source_crop_layer_only_moved() const;
-    bool connected_display_hdr() const;
+    bool connected_display_hdr_v2() const;
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
     bool deprecate_vsync_sf() const;

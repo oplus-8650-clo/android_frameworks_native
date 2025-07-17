@@ -3892,9 +3892,6 @@ std::pair<DisplayModes, DisplayModePtr> SurfaceFlinger::loadDisplayModes(
     DisplayModes newModes;
     for (const auto& hwcMode : hwcModes) {
         const auto id = nextModeId++;
-        OutputType hdrOutputType = FlagManager::getInstance().connected_display_hdr()
-                ? hwcMode.hdrOutputType
-                : OutputType::INVALID;
         newModes.try_emplace(id,
                              DisplayMode::Builder(hwcMode.hwcId)
                                      .setId(id)
@@ -3905,7 +3902,7 @@ std::pair<DisplayModes, DisplayModePtr> SurfaceFlinger::loadDisplayModes(
                                      .setDpiX(hwcMode.dpiX)
                                      .setDpiY(hwcMode.dpiY)
                                      .setGroup(hwcMode.configGroup)
-                                     .setHdrOutputType(hdrOutputType)
+                                     .setHdrOutputType(hwcMode.hdrOutputType)
                                      .build());
     }
 

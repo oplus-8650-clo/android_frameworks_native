@@ -140,7 +140,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(arr_setframerate_gte_enum);
     DUMP_ACONFIG_FLAG(begone_bright_hlg);
     DUMP_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved);
-    DUMP_ACONFIG_FLAG(connected_display_hdr);
+    DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf);
@@ -276,7 +276,7 @@ FLAG_MANAGER_ACONFIG_FLAG(flush_buffer_slots_to_uncache, "");
 FLAG_MANAGER_ACONFIG_FLAG(force_compile_graphite_renderengine, "");
 FLAG_MANAGER_ACONFIG_FLAG(true_hdr_screenshots, "debug.sf.true_hdr_screenshots");
 FLAG_MANAGER_ACONFIG_FLAG(display_config_error_hal, "");
-FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr, "debug.sf.connected_display_hdr");
+FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_hdr_v2");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
 FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type,
                           "debug.sf.parse_edid_version_and_input_type");
