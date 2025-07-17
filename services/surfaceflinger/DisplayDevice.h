@@ -31,6 +31,7 @@
 #include <android-base/thread_annotations.h>
 #include <android/native_window.h>
 #include <binder/IBinder.h>
+#include <common/LayerFilter.h>
 #include <compositionengine/Display.h>
 #include <compositionengine/DisplaySurface.h>
 #include <gui/LayerState.h>
@@ -125,7 +126,7 @@ public:
     int getHeight() const;
     ui::Size getSize() const { return {getWidth(), getHeight()}; }
 
-    void setLayerFilter(ui::LayerFilter);
+    void setLayerFilter(LayerFilter);
     void setDisplaySize(ui::Size);
     void setProjection(ui::Rotation orientation, Rect viewport, Rect frame);
     void stageBrightness(float brightness) REQUIRES(kMainThreadContext);

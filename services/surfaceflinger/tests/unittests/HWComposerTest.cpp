@@ -385,7 +385,7 @@ TEST_F(HWComposerTest, getModesWithDisplayConfigurations_VRR_ON) {
         const ui::Size size = info->preferredDetailedTimingDescriptor->physicalSizeInMm;
         const float expectedDpiX = (kWidth * kMmPerInch / size.width);
         const float expectedDpiY = (kHeight * kMmPerInch / size.height);
-        const OutputType hdrOutputType = OutputType::SYSTEM;
+        const composer3::OutputType hdrOutputType = composer3::OutputType::SYSTEM;
         const hal::VrrConfig vrrConfig =
                 hal::VrrConfig{.minFrameIntervalNs = static_cast<Fps>(120_Hz).getPeriodNsecs(),
                                .notifyExpectedPresentConfig = hal::VrrConfig::

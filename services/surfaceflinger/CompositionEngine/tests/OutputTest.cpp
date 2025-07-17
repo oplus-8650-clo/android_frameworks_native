@@ -466,7 +466,7 @@ TEST_F(OutputTest, setDisplaySpaceSizeUpdatesOutputStateAndDirtiesEntireOutput) 
  */
 
 TEST_F(OutputTest, setLayerFilterSetsFilterAndDirtiesEntireOutput) {
-    constexpr ui::LayerFilter kFilter{ui::LayerStack{123u}, true};
+    constexpr LayerFilter kFilter{ui::LayerStack{123u}, true};
     mOutput->setLayerFilter(kFilter);
 
     const auto& state = mOutput->getState();

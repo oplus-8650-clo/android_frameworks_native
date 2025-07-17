@@ -63,7 +63,7 @@ void dumpVal(std::string& out, const char* name, const std::string& valueName, i
     dumpVal(out, name, valueName.c_str(), value);
 }
 
-void dumpVal(std::string& out, const char* name, ui::LayerFilter filter) {
+void dumpVal(std::string& out, const char* name, LayerFilter filter) {
     out.append(name);
     out.append("={");
     dumpVal(out, "layerStack", filter.layerStack.id);

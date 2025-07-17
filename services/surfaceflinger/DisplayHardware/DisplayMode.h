@@ -35,7 +35,7 @@
 
 namespace android {
 
-using aidl::android::hardware::graphics::composer3::OutputType;
+namespace composer3 = aidl::android::hardware::graphics::composer3;
 namespace hal = android::hardware::graphics::composer::hal;
 
 class DisplayMode;
@@ -115,7 +115,7 @@ public:
             return *this;
         }
 
-        Builder& setHdrOutputType(OutputType type) {
+        Builder& setHdrOutputType(composer3::OutputType type) {
             mDisplayMode->mHdrOutputType = type;
             return *this;
         }
@@ -172,7 +172,7 @@ public:
     // without visual interruptions such as a black screen.
     int32_t getGroup() const { return mGroup; }
 
-    OutputType getHdrOutputType() const { return mHdrOutputType; }
+    composer3::OutputType getHdrOutputType() const { return mHdrOutputType; }
 
 private:
     explicit DisplayMode(hal::HWConfigId id) : mHwcId(id) {}
@@ -187,7 +187,7 @@ private:
     Dpi mDpi;
     int32_t mGroup = -1;
     std::optional<hal::VrrConfig> mVrrConfig;
-    OutputType mHdrOutputType;
+    composer3::OutputType mHdrOutputType;
 };
 
 inline bool equalsExceptDisplayModeId(const DisplayMode& lhs, const DisplayMode& rhs) {
