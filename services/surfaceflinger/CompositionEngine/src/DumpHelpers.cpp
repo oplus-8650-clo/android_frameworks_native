@@ -68,6 +68,7 @@ void dumpVal(std::string& out, const char* name, LayerFilter filter) {
     out.append("={");
     dumpVal(out, "layerStack", filter.layerStack.id);
     dumpVal(out, "toInternalDisplay", filter.toInternalDisplay);
+    dumpVal(out, "skipScreenshot", filter.skipScreenshot);
     out.push_back('}');
 }
 

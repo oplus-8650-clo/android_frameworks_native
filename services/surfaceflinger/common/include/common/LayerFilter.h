@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <common/FlagManager.h>
 #include <ui/LayerStack.h>
 
 namespace android {
@@ -28,11 +29,20 @@ struct LayerFilter {
     // recordings, and mirroring to virtual or external displays. Used for display cutout overlays.
     bool toInternalDisplay = false;
 
+    // When true for Output LayerFilters, this indicates the Output respects the skipScreenshot
+    // flag (i.e. the Output is used to take a screenshot). When true for Layer LayerFilters, it
+    // means the layer has requested to be skipped in screenshots.
+    bool skipScreenshot = false;
+
     // Returns true if the input filter can be output to this filter.
     bool includes(LayerFilter other) const {
         // The layer stacks must match.
         if (other.layerStack == ui::UNASSIGNED_LAYER_STACK || other.layerStack != layerStack) {
             return false;
+        }
+
+        if (FlagManager::getInstance().connected_displays_cursor()) {
+            return !(skipScreenshot && other.skipScreenshot);
         }
 
         // The output must be to an internal display if the input filter has that constraint.

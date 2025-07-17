@@ -58,6 +58,7 @@ public:
     bool adpf_use_fmq_channel() const;
     bool adpf_use_fmq_channel_fixed() const;
     bool buffer_stuffing_fix() const;
+    bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
     bool graphite_renderengine_preview_rollout() const;
     bool increase_missed_frame_jank_threshold() const;

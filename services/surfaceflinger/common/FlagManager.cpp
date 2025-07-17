@@ -30,6 +30,7 @@
 #include <android_os.h>
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
+#include <com_android_input_flags.h>
 #include <com_android_server_display_feature_flags.h>
 
 namespace android {
@@ -310,6 +311,7 @@ FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_predicts_within_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel, "", android::os)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
                                    android::companion::virtualdevice::flags)
+FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(connected_displays_cursor, "", com::android::input::flags)
 
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel_fixed, "", android::os)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "",

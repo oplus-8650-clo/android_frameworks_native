@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
+#include <cstdint>
+#include <variant>
+
 #include <android-base/stringprintf.h>
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
+#include <com_android_input_flags.h>
+#include <common/FlagManager.h>
+#include <common/test/FlagUtils.h>
 #include <compositionengine/LayerFECompositionState.h>
 #include <compositionengine/impl/Output.h>
 #include <compositionengine/impl/OutputCompositionState.h>
@@ -26,6 +32,7 @@
 #include <compositionengine/mock/LayerFE.h>
 #include <compositionengine/mock/OutputLayer.h>
 #include <compositionengine/mock/RenderSurface.h>
+#include <flag_macros.h>
 #include <ftl/future.h>
 #include <gtest/gtest.h>
 #include <renderengine/ExternalTexture.h>
@@ -35,13 +42,6 @@
 #include <ui/Rect.h>
 #include <ui/Region.h>
 
-#include <cstdint>
-#include <variant>
-
-#include <com_android_graphics_surfaceflinger_flags.h>
-
-#include <common/FlagManager.h>
-#include <common/test/FlagUtils.h>
 #include "CallOrderStateMachineHelper.h"
 #include "RegionMatcher.h"
 #include "mock/DisplayHardware/MockHWC2.h"
@@ -49,6 +49,8 @@
 
 namespace android::compositionengine {
 namespace {
+
+namespace input_flags = com::android::input::flags;
 
 using namespace com::android::graphics::surfaceflinger;
 
@@ -472,6 +474,7 @@ TEST_F(OutputTest, setLayerFilterSetsFilterAndDirtiesEntireOutput) {
     const auto& state = mOutput->getState();
     EXPECT_EQ(kFilter.layerStack, state.layerFilter.layerStack);
     EXPECT_TRUE(state.layerFilter.toInternalDisplay);
+    EXPECT_FALSE(state.layerFilter.skipScreenshot);
 
     EXPECT_THAT(state.dirtyRegion, RegionEq(Region(kDefaultDisplaySize)));
 }
@@ -638,7 +641,8 @@ TEST_F(OutputTest, getDirtyRegion) {
  * Output::includesLayer()
  */
 
-TEST_F(OutputTest, layerFiltering) {
+TEST_F_WITH_FLAGS(OutputTest, layerFiltering,
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
     const ui::LayerStack layerStack1{123u};
     const ui::LayerStack layerStack2{456u};
 
@@ -665,6 +669,36 @@ TEST_F(OutputTest, layerFiltering) {
     EXPECT_FALSE(mOutput->includesLayer({layerStack2, false}));
 }
 
+TEST_F_WITH_FLAGS(OutputTest, layerFiltering_skipScreenshot,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+    const ui::LayerStack layerStack1{123u};
+    const ui::LayerStack layerStack2{456u};
+
+    // If the output is associated to layerStack1 and isn't a screenshot...
+    mOutput->setLayerFilter({.layerStack = layerStack1, .skipScreenshot = false});
+
+    // It excludes layers with no layer stack, skipScreenshot or not.
+    EXPECT_FALSE(mOutput->includesLayer(
+            {.layerStack = ui::UNASSIGNED_LAYER_STACK, .skipScreenshot = false}));
+    EXPECT_FALSE(mOutput->includesLayer(
+            {.layerStack = ui::UNASSIGNED_LAYER_STACK, .skipScreenshot = true}));
+
+    // It includes layers on layerStack1, skipScreenshot or not.
+    EXPECT_TRUE(mOutput->includesLayer({.layerStack = layerStack1, .skipScreenshot = false}));
+    EXPECT_TRUE(mOutput->includesLayer({.layerStack = layerStack1, .skipScreenshot = true}));
+    EXPECT_FALSE(mOutput->includesLayer({.layerStack = layerStack2, .skipScreenshot = true}));
+    EXPECT_FALSE(mOutput->includesLayer({.layerStack = layerStack2, .skipScreenshot = false}));
+
+    // If the output is associated to layerStack1 and is a screenshot...
+    mOutput->setLayerFilter({.layerStack = layerStack1, .skipScreenshot = true});
+
+    // It includes layers on layerStack1, unless they have skipScreenshot set.
+    EXPECT_TRUE(mOutput->includesLayer({.layerStack = layerStack1, .skipScreenshot = false}));
+    EXPECT_FALSE(mOutput->includesLayer({.layerStack = layerStack1, .skipScreenshot = true}));
+    EXPECT_FALSE(mOutput->includesLayer({.layerStack = layerStack2, .skipScreenshot = true}));
+    EXPECT_FALSE(mOutput->includesLayer({.layerStack = layerStack2, .skipScreenshot = false}));
+}
+
 TEST_F(OutputTest, layerFilteringWithoutCompositionState) {
     NonInjectedLayer layer;
     sp<LayerFE> layerFE(layer.layerFE);
@@ -674,7 +708,8 @@ TEST_F(OutputTest, layerFilteringWithoutCompositionState) {
     EXPECT_FALSE(mOutput->includesLayer(layerFE));
 }
 
-TEST_F(OutputTest, layerFilteringWithCompositionState) {
+TEST_F_WITH_FLAGS(OutputTest, layerFilteringWithCompositionState,
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
     NonInjectedLayer layer;
     sp<LayerFE> layerFE(layer.layerFE);
 
@@ -718,6 +753,56 @@ TEST_F(OutputTest, layerFilteringWithCompositionState) {
     EXPECT_FALSE(mOutput->includesLayer(layerFE));
 
     layer.layerFEState.outputFilter = {layerStack2, false};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+}
+
+TEST_F_WITH_FLAGS(OutputTest, layerFilteringWithCompositionState_skipScreenshot,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+    NonInjectedLayer layer;
+    sp<LayerFE> layerFE(layer.layerFE);
+
+    const ui::LayerStack layerStack1{123u};
+    const ui::LayerStack layerStack2{456u};
+
+    // If the output is associated to layerStack1 and isn't a screenshot...
+    mOutput->setLayerFilter({.layerStack = layerStack1, .skipScreenshot = false});
+
+    // It excludes layers with no layer stack, skipScreenshot or not.
+    layer.layerFEState.outputFilter = {.layerStack = ui::UNASSIGNED_LAYER_STACK,
+                                       .skipScreenshot = false};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = ui::UNASSIGNED_LAYER_STACK,
+                                       .skipScreenshot = true};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    // It includes layers on layerStack1, skipScreenshot or not.
+    layer.layerFEState.outputFilter = {.layerStack = layerStack1, .skipScreenshot = false};
+    EXPECT_TRUE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack1, .skipScreenshot = true};
+    EXPECT_TRUE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack2, .skipScreenshot = true};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack2, .skipScreenshot = false};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    // If the output is associated to layerStack1 and is a screenshot...
+    mOutput->setLayerFilter({.layerStack = layerStack1, .skipScreenshot = true});
+
+    // It includes layers on layerStack1, unless they have skipScreenshot set.
+    layer.layerFEState.outputFilter = {.layerStack = layerStack1, .skipScreenshot = false};
+    EXPECT_TRUE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack1, .skipScreenshot = true};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack2, .skipScreenshot = true};
+    EXPECT_FALSE(mOutput->includesLayer(layerFE));
+
+    layer.layerFEState.outputFilter = {.layerStack = layerStack2, .skipScreenshot = false};
     EXPECT_FALSE(mOutput->includesLayer(layerFE));
 }
 

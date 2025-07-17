@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+#include <cmath>
+
+#include <com_android_graphics_libgui_flags.h>
+#include <com_android_input_flags.h>
+#include <common/test/FlagUtils.h>
+#include <flag_macros.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-#include <common/test/FlagUtils.h>
 #include <renderengine/mock/FakeExternalTexture.h>
 
 #include "FrontEnd/LayerHierarchy.h"
@@ -26,9 +30,6 @@
 #include "Layer.h"
 #include "LayerHierarchyTest.h"
 #include "ui/GraphicTypes.h"
-
-#include <com_android_graphics_libgui_flags.h>
-#include <cmath>
 
 #define UPDATE_AND_VERIFY(BUILDER, ...)                                    \
     ({                                                                     \
@@ -43,6 +44,8 @@
     })
 
 namespace android::surfaceflinger::frontend {
+
+namespace input_flags = com::android::input::flags;
 
 using ftl::Flags;
 using namespace ftl::flag_operators;
@@ -595,6 +598,16 @@ TEST_F(LayerSnapshotTest, displayMirrorRespectsLayerSkipScreenshotFlag) {
     setLayerStack(3, 1);
 
     std::vector<uint32_t> expected = {1, 11, 111, 12, 121, 122, 1221, 13, 2, 3, 1, 11, 111, 13, 2};
+    UPDATE_AND_VERIFY(mSnapshotBuilder, expected);
+}
+
+TEST_F_WITH_FLAGS(LayerSnapshotTest, layerMirrorRespectsLayerSkipScreenshotFlag,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+    setFlags(12, layer_state_t::eLayerSkipScreenshot, layer_state_t::eLayerSkipScreenshot);
+    createLayerMirrorLayer(3, 1);
+    setLayerStack(3, 1);
+
+    std::vector<uint32_t> expected = {1, 11, 111, 12, 121, 122, 1221, 13, 2, 3, 1, 11, 111, 13};
     UPDATE_AND_VERIFY(mSnapshotBuilder, expected);
 }
 

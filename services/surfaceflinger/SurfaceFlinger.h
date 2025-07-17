@@ -1162,11 +1162,13 @@ private:
 
     LayerFilter makeLayerFilterForDisplay(DisplayIdVariant displayId, ui::LayerStack layerStack)
             REQUIRES(mStateLock) {
-        return {layerStack,
-                asPhysicalDisplayId(displayId)
-                        .and_then(display::getPhysicalDisplay(mPhysicalDisplays))
-                        .transform(&display::PhysicalDisplay::isInternal)
-                        .value_or(false)};
+        return {.layerStack = layerStack,
+                .toInternalDisplay =
+                        asPhysicalDisplayId(displayId)
+                                .and_then(display::getPhysicalDisplay(mPhysicalDisplays))
+                                .transform(&display::PhysicalDisplay::isInternal)
+                                .value_or(false),
+                .skipScreenshot = false};
     }
 
     ui::Size findLargestFramebufferSizeLocked() const REQUIRES(mStateLock);

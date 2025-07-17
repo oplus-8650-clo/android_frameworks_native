@@ -8239,12 +8239,18 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args) {
                                                                          attributes.format),
                                                                  1 /* layerCount */, usage,
                                                                  "screenshot");
-                            mReadbackRequests.emplace_back(*asPhysicalDisplayId(displayId),
-                                                           readbackBuffer, args.captureListener,
-                                                           args.preserveDisplayColors,
-                                                           args.isSecure);
-                            scheduleComposite(FrameHint::kNone);
-                            return ScreenshotStrategy::Readback;
+
+                            if (const auto status = readbackBuffer->initCheck(); status != OK) {
+                                ALOGE("Failed to allocate readback buffer :(: %d", status);
+                                return base::unexpected<status_t>(INVALID_OPERATION);
+                            } else {
+                                mReadbackRequests.emplace_back(*asPhysicalDisplayId(displayId),
+                                                               readbackBuffer, args.captureListener,
+                                                               args.preserveDisplayColors,
+                                                               args.isSecure);
+                                scheduleComposite(FrameHint::kNone);
+                                return ScreenshotStrategy::Readback;
+                            }
                         }
                     }
                 }
