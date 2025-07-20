@@ -59,8 +59,8 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displa
                                        const ui::Size& size, const ui::Size& maxSize)
       : ConsumerBase(producer, consumer),
         mDisplayId(displayId),
-        mLimitedSize(limitSize(size)),
         mMaxSize(maxSize),
+        mLimitedSize(limitSize(size)),
         mCurrentBufferSlot(-1),
         mCurrentBuffer(),
         mCurrentFence(Fence::NO_FENCE),

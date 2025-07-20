@@ -343,6 +343,7 @@ LayerSnapshot LayerSnapshotBuilder::getRootSnapshot() {
     snapshot.edgeExtensionEffect = {};
     snapshot.outputFilter.layerStack = ui::DEFAULT_LAYER_STACK;
     snapshot.outputFilter.toInternalDisplay = false;
+    snapshot.outputFilter.skipScreenshot = false;
     snapshot.isSecure = false;
     snapshot.color.a = 1.0_hf;
     snapshot.colorTransformIsIdentity = true;
@@ -781,10 +782,12 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     }
 
     if (forceUpdate || snapshot.changes.any(RequestedLayerState::Changes::Mirror)) {
-        // Display mirrors are always placed in a VirtualDisplay so we never want to capture layers
-        // marked as skip capture
+        // We don't want to capture layers with eLayerSkipScreenshot in mirrored hierarchies. This
+        // field is used to hide mirrored layers with the flag set.
         snapshot.handleSkipScreenshotFlag = parentSnapshot.handleSkipScreenshotFlag ||
-                (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK);
+                (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK) ||
+                (FlagManager::getInstance().connected_displays_cursor() &&
+                 requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eAlphaChanged) {
@@ -796,8 +799,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eFlagsChanged) {
         snapshot.isSecure =
                 parentSnapshot.isSecure || (requested.flags & layer_state_t::eLayerSecure);
-        snapshot.outputFilter.toInternalDisplay = parentSnapshot.outputFilter.toInternalDisplay ||
-                (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        if (FlagManager::getInstance().connected_displays_cursor()) {
+            snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
+                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
+            // This may cause a layer to become invisible, removing it from the hierarchy
+            mResortSnapshots = true;
+        } else {
+            snapshot.outputFilter.toInternalDisplay =
+                    parentSnapshot.outputFilter.toInternalDisplay ||
+                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        }
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eStretchChanged) {

@@ -90,12 +90,11 @@ flag {
 } # buffer_stuffing_fix
 
 flag {
-  name: "connected_display_hdr"
-  namespace: "core_graphics"
-  description: "enable connected display hdr capability"
+  name: "connected_display_hdr_v2"
+  namespace: "desktop_display"
+  description: "enable connected display hdr selection"
   bug: "374182788"
-  is_fixed_read_only: true
-} # connected_display_hdr
+} # connected_display_hdr_v2
 
 flag {
   name: "correct_dpi_with_display_size"

@@ -72,6 +72,16 @@ namespace android {
 
 using namespace std::chrono_literals;
 
+namespace {
+    bool waitForFrozenListenerRemovalCompletion() {
+#if defined(LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION)
+        return true;
+#else
+        return false;
+#endif
+    }
+}
+
 // Static const and functions will be optimized out if not used,
 // when LOG_NDEBUG and references in IF_LOG_COMMANDS() are optimized out.
 static const char* kReturnStrings[] = {
@@ -1628,7 +1638,9 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
    case BR_CLEAR_FREEZE_NOTIFICATION_DONE:
         {
             BpBinder* proxy = (BpBinder*)mIn.readPointer();
-            proxy->getPrivateAccessor().onFrozenStateChangeListenerRemoved();
+            if (waitForFrozenListenerRemovalCompletion()) {
+                proxy->getPrivateAccessor().onFrozenStateChangeListenerRemoved();
+            }
             proxy->getWeakRefs()->decWeak(proxy);
         }
         break;

@@ -524,8 +524,8 @@ sp<IBinder> RpcState::getRootObject(const sp<RpcSession::RpcConnection>& connect
     data.markForRpc(session);
     Parcel reply;
 
-    status_t status =
-            transactAddress(connection, 0, RPC_SPECIAL_TRANSACT_GET_ROOT, data, session, &reply, 0);
+    status_t status = transactInternal(connection, nullptr, RPC_SPECIAL_TRANSACT_GET_ROOT, data,
+                                       session, &reply, 0);
     if (status != OK) {
         ALOGE("Error getting root object: %s", statusToString(status).c_str());
         return nullptr;
@@ -540,8 +540,8 @@ status_t RpcState::getMaxThreads(const sp<RpcSession::RpcConnection>& connection
     data.markForRpc(session);
     Parcel reply;
 
-    status_t status = transactAddress(connection, 0, RPC_SPECIAL_TRANSACT_GET_MAX_THREADS, data,
-                                      session, &reply, 0);
+    status_t status = transactInternal(connection, nullptr, RPC_SPECIAL_TRANSACT_GET_MAX_THREADS,
+                                       data, session, &reply, 0);
     if (status != OK) {
         ALOGE("Error getting max threads: %s", statusToString(status).c_str());
         return status;
@@ -565,8 +565,8 @@ status_t RpcState::getSessionId(const sp<RpcSession::RpcConnection>& connection,
     data.markForRpc(session);
     Parcel reply;
 
-    status_t status = transactAddress(connection, 0, RPC_SPECIAL_TRANSACT_GET_SESSION_ID, data,
-                                      session, &reply, 0);
+    status_t status = transactInternal(connection, nullptr, RPC_SPECIAL_TRANSACT_GET_SESSION_ID,
+                                       data, session, &reply, 0);
     if (status != OK) {
         ALOGE("Error getting session ID: %s", statusToString(status).c_str());
         return status;
@@ -578,16 +578,10 @@ status_t RpcState::getSessionId(const sp<RpcSession::RpcConnection>& connection,
 status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
                             const sp<IBinder>& binder, uint32_t code, const Parcel& data,
                             const sp<RpcSession>& session, Parcel* reply, uint32_t flags) {
-    std::string errorMsg;
-    if (status_t status = validateParcel(session, data, &errorMsg); status != OK) {
-        ALOGE("Refusing to send RPC on binder %p code %" PRIu32 ": Parcel %p failed validation: %s",
-              binder.get(), code, &data, errorMsg.c_str());
-        return status;
-    }
-    uint64_t address;
-    if (status_t status = onBinderLeaving(session, binder, &address); status != OK) return status;
+    // only internal callers of transactInternal can use special transactions
+    LOG_ALWAYS_FATAL_IF(binder == nullptr, "Binder should not be null");
 
-    if (status_t status = transactAddress(connection, address, code, data, session, reply, flags);
+    if (status_t status = transactInternal(connection, binder, code, data, session, reply, flags);
         status != OK) {
         // TODO(b/414720799): this log is added to debug this bug, but it could be a bit noisy, and
         // we may only want to log it from some cases moving forward.
@@ -599,11 +593,25 @@ status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
     return OK;
 }
 
-status_t RpcState::transactAddress(const sp<RpcSession::RpcConnection>& connection,
-                                   uint64_t address, uint32_t code, const Parcel& data,
-                                   const sp<RpcSession>& session, Parcel* reply, uint32_t flags) {
-    LOG_ALWAYS_FATAL_IF(!data.isForRpc());
-    LOG_ALWAYS_FATAL_IF(data.objectsCount() != 0);
+status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connection,
+                                    const sp<IBinder>& maybeBinder, uint32_t code,
+                                    const Parcel& data, const sp<RpcSession>& session,
+                                    Parcel* reply, uint32_t flags) {
+    std::string errorMsg;
+    if (status_t status = validateParcel(session, data, &errorMsg); status != OK) {
+        ALOGE("Refusing to send RPC on binder %p code %" PRIu32 ": Parcel %p failed validation: %s",
+              maybeBinder.get(), code, &data, errorMsg.c_str());
+        return status;
+    }
+
+    uint64_t address;
+    if (maybeBinder) {
+        if (status_t status = onBinderLeaving(session, maybeBinder, &address); status != OK) {
+            return status;
+        }
+    } else {
+        address = RPC_SPECIAL_TRANSACTION_ADDRESS;
+    }
 
     if (!(flags & IBinder::FLAG_ONEWAY)) {
         LOG_ALWAYS_FATAL_IF(reply == nullptr,
@@ -612,7 +620,7 @@ status_t RpcState::transactAddress(const sp<RpcSession::RpcConnection>& connecti
 
     uint64_t asyncNumber = 0;
 
-    if (address != 0) {
+    if (address != RPC_SPECIAL_TRANSACTION_ADDRESS) {
         RpcMutexUniqueLock _l(mNodeMutex);
         if (mTerminated) return DEAD_OBJECT; // avoid fatal only, otherwise races
         auto it = mNodeForAddress.find(address);
@@ -1005,7 +1013,7 @@ processTransactInternalTailCall:
     bool oneway = transaction->flags & IBinder::FLAG_ONEWAY;
 
     status_t replyStatus = OK;
-    if (addr != 0) {
+    if (addr != RPC_SPECIAL_TRANSACTION_ADDRESS) {
         if (!target) {
             replyStatus = onBinderEntering(session, addr, &target);
         }
@@ -1128,8 +1136,8 @@ processTransactInternalTailCall:
                 connection->allowNested = origAllowNested;
             } else {
                 LOG_RPC_DETAIL("Got special transaction %u", transaction->code);
-                LOG_ALWAYS_FATAL_IF(addr != 0,
-                                    "!target && replyStatus == OK should imply addr == 0");
+                LOG_ALWAYS_FATAL_IF(addr != RPC_SPECIAL_TRANSACTION_ADDRESS,
+                                    "!target && replyStatus == OK should imply special address");
 
                 switch (transaction->code) {
                     case RPC_SPECIAL_TRANSACT_GET_MAX_THREADS: {
@@ -1219,7 +1227,7 @@ processTransactInternalTailCall:
 
         // done processing all the async commands on this binder that we can, so
         // write decstrongs on the binder
-        if (addr != 0 && target != nullptr) {
+        if (addr != RPC_SPECIAL_TRANSACTION_ADDRESS && target != nullptr) {
             return flushExcessBinderRefs(session, addr, target);
         }
 
@@ -1231,7 +1239,7 @@ processTransactInternalTailCall:
     // be a leak, but the more fundamental problem is the error.
     // Binder refs are flushed for oneway calls only after all calls which are
     // built up are executed. Otherwise, they fill up the binder buffer.
-    if (addr != 0 && target != nullptr) {
+    if (addr != RPC_SPECIAL_TRANSACTION_ADDRESS && target != nullptr) {
         // if this fails, we are broken out of the protocol, so just shutdown. There
         // is no chance we could write the status to the other side.
         if (status_t status = flushExcessBinderRefs(session, addr, target); status != OK) {

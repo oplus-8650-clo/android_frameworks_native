@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "hardware/gralloc.h"
 #undef LOG_TAG
 #define LOG_TAG "LibSurfaceFlingerUnittests"
 
@@ -25,6 +24,7 @@
 #include <gui/BufferItem.h>
 #include <gui/BufferItemConsumer.h>
 #include <gui/Surface.h>
+#include <hardware/gralloc.h>
 #include <log/log_main.h>
 #include <nativebase/nativebase.h>
 #include <system/window.h>
@@ -33,6 +33,7 @@
 #include <utils/Errors.h>
 
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <variant>
 
@@ -56,7 +57,7 @@ public:
 
         BufferItem& item = mItems.emplace_back();
         mConsumer->acquireBuffer(&item, 0);
-        mConsumer->detachBuffer(item.mGraphicBuffer);
+        mConsumer->releaseBuffer(item.mGraphicBuffer, item.mFence);
         mCondVar.notify_all();
     }
 
@@ -110,7 +111,7 @@ public:
         ASSERT_EQ(NO_ERROR, mRenderSurface->connect(NATIVE_WINDOW_API_CPU, mRenderSurfaceListener));
     }
 
-    void DoFakeGpuRender() {
+    void DoFakeGpuRender(uint64_t* outBufferId = nullptr) {
         // This should mimic, roughly, what's done in RenderSurface::dequeueBuffer and
         // RenderSurface::queueBuffer.
         ANativeWindow* anw = mRenderSurface.get();
@@ -118,6 +119,9 @@ public:
         ANativeWindowBuffer* buffer;
         int fence;
         ASSERT_EQ(NO_ERROR, anw->dequeueBuffer(anw, &buffer, &fence));
+        if (outBufferId != nullptr) {
+            *outBufferId = GraphicBuffer::from(buffer)->getId();
+        }
         ASSERT_EQ(NO_ERROR, anw->queueBuffer(anw, buffer, fence));
     }
 
@@ -133,7 +137,7 @@ protected:
     sp<SurfaceListener> mRenderSurfaceListener;
 };
 
-TEST_F(VirtualDisplaySurface2Test, GpuComposition) {
+TEST_F(VirtualDisplaySurface2Test, Gpu_Composition) {
     SetUpForGpu();
 
     sp<HoldingFrameAvailableListener> sinkListener =
@@ -154,7 +158,7 @@ TEST_F(VirtualDisplaySurface2Test, GpuComposition) {
     }
 }
 
-TEST_F(VirtualDisplaySurface2Test, HwcComposition) {
+TEST_F(VirtualDisplaySurface2Test, Hwc_Composition) {
     SetUpForHwc();
 
     HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
@@ -175,8 +179,6 @@ TEST_F(VirtualDisplaySurface2Test, HwcComposition) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
         EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Hwc));
 
-        DoFakeGpuRender();
-
         EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
         mVirtualDisplay->onFrameCommitted();
 
@@ -185,7 +187,7 @@ TEST_F(VirtualDisplaySurface2Test, HwcComposition) {
     }
 }
 
-TEST_F(VirtualDisplaySurface2Test, MixedComposition) {
+TEST_F(VirtualDisplaySurface2Test, Mixed_Composition) {
     SetUpForHwc();
 
     HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
@@ -247,6 +249,138 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_BufferDetails) {
     sp<GraphicBuffer>& buffer = frames[0].mGraphicBuffer;
 
     EXPECT_TRUE(buffer->usage & (GRALLOC_USAGE_HW_COMPOSER));
+}
+
+TEST_F(VirtualDisplaySurface2Test, Gpu_BufferReuse) {
+    SetUpForGpu();
+
+    sp<HoldingFrameAvailableListener> sinkListener =
+            sp<HoldingFrameAvailableListener>::make(mSinkConsumer);
+    mSinkConsumer->setFrameAvailableListener(sinkListener);
+
+    std::set<uint64_t> sinkBufferIds;
+    std::set<uint64_t> renderBufferIds;
+
+    for (size_t i = 0; i < kNumFramesForTest; ++i) {
+        EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Gpu));
+
+        uint64_t renderBufferId;
+        DoFakeGpuRender(&renderBufferId);
+        renderBufferIds.insert(renderBufferId);
+
+        EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
+        mVirtualDisplay->onFrameCommitted();
+
+        std::vector<BufferItem> frames = sinkListener->stealFrames();
+        ASSERT_EQ(1u, frames.size());
+        sinkBufferIds.insert(frames[0].mGraphicBuffer->getId());
+    }
+
+    // We can't strictly guarantee a number here since we are dependent on the scheduling of the
+    // helper thread to guarantee a buffer will be available.
+    EXPECT_LE(sinkBufferIds.size(), 5u);
+    EXPECT_LE(renderBufferIds.size(), 5u);
+
+    EXPECT_EQ(sinkBufferIds, renderBufferIds);
+}
+
+TEST_F(VirtualDisplaySurface2Test, Hwc_BufferReuse) {
+    SetUpForHwc();
+
+    sp<HoldingFrameAvailableListener> sinkListener =
+            sp<HoldingFrameAvailableListener>::make(mSinkConsumer);
+    mSinkConsumer->setFrameAvailableListener(sinkListener);
+
+    HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
+    HalDisplayId halDisplayId = virtualDisplayId;
+    EXPECT_CALL(mHwc, getPresentFence(halDisplayId))
+            .Times(kNumFramesForTest)
+            .WillRepeatedly(Return(Fence::NO_FENCE));
+
+    std::set<uint64_t> setOutputBuffers;
+    EXPECT_CALL(mHwc, setOutputBuffer(virtualDisplayId, _, _))
+            .Times(kNumFramesForTest)
+            .WillRepeatedly([&setOutputBuffers](auto, auto, auto buffer) {
+                setOutputBuffers.insert(buffer->getId());
+                return OK;
+            });
+
+    std::set<uint64_t> sinkBufferIds;
+
+    for (size_t i = 0; i < kNumFramesForTest; ++i) {
+        EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Hwc));
+
+        EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
+        mVirtualDisplay->onFrameCommitted();
+
+        std::vector<BufferItem> frames = sinkListener->stealFrames();
+        ASSERT_EQ(1u, frames.size());
+        sinkBufferIds.insert(frames[0].mGraphicBuffer->getId());
+    }
+
+    // We can't strictly guarantee a number here since we are dependent on the scheduling of the
+    // helper thread to guarantee a buffer will be available.
+    EXPECT_LE(sinkBufferIds.size(), 5u);
+    EXPECT_LE(setOutputBuffers.size(), 5u);
+
+    EXPECT_EQ(sinkBufferIds, setOutputBuffers);
+}
+
+TEST_F(VirtualDisplaySurface2Test, Mixed_BufferReuse) {
+    SetUpForHwc();
+
+    sp<HoldingFrameAvailableListener> sinkListener =
+            sp<HoldingFrameAvailableListener>::make(mSinkConsumer);
+    mSinkConsumer->setFrameAvailableListener(sinkListener);
+
+    HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
+    HalDisplayId halDisplayId = virtualDisplayId;
+    EXPECT_CALL(mHwc, getPresentFence(halDisplayId))
+            .Times(kNumFramesForTest)
+            .WillRepeatedly(Return(Fence::NO_FENCE));
+    EXPECT_CALL(mHwc, setClientTarget(halDisplayId, _, _, _, _, _))
+            .Times(kNumFramesForTest)
+            .WillRepeatedly(Return(OK));
+
+    std::set<uint64_t> setOutputBuffers;
+    EXPECT_CALL(mHwc, setOutputBuffer(virtualDisplayId, _, _))
+            .Times(kNumFramesForTest)
+            .WillRepeatedly([&setOutputBuffers](auto, auto, auto buffer) {
+                setOutputBuffers.insert(buffer->getId());
+                return OK;
+            });
+
+    std::set<uint64_t> sinkBufferIds;
+    std::set<uint64_t> renderBufferIds;
+
+    for (size_t i = 0; i < kNumFramesForTest; ++i) {
+        EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
+        EXPECT_EQ(OK,
+                  mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Mixed));
+
+        uint64_t renderBufferId;
+        DoFakeGpuRender(&renderBufferId);
+        renderBufferIds.insert(renderBufferId);
+
+        EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
+        mVirtualDisplay->onFrameCommitted();
+
+        std::vector<BufferItem> frames = sinkListener->stealFrames();
+        ASSERT_EQ(1u, frames.size());
+        sinkBufferIds.insert(frames[0].mGraphicBuffer->getId());
+    }
+
+    // We can't strictly guarantee a number here since we are dependent on the scheduling of the
+    // helper thread to guarantee a buffer will be available.
+    EXPECT_LE(sinkBufferIds.size(), 5u);
+    EXPECT_LE(setOutputBuffers.size(), 5u);
+
+    // The render buffer has nothing to do with the helper thread, so there should only be one.
+    EXPECT_EQ(1u, renderBufferIds.size());
+
+    EXPECT_EQ(sinkBufferIds, setOutputBuffers);
 }
 
 } // namespace android

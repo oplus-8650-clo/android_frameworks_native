@@ -55,6 +55,14 @@ public:
         return args;
     }
 
+    static LayerCreationArgs createLayerMirrorArgs(uint32_t id, uint32_t layerIdToMirror) {
+        LayerCreationArgs args(std::make_optional(id));
+        args.name = "testlayer";
+        args.addToRoot = true;
+        args.layerIdToMirror = layerIdToMirror;
+        return args;
+    }
+
     static std::unique_ptr<RequestedLayerState> rootLayer(uint32_t id) {
         return std::make_unique<RequestedLayerState>(createArgs(/*id=*/id, /*canBeRoot=*/true,
                                                                 /*parent=*/UNASSIGNED_LAYER_ID,
@@ -100,6 +108,13 @@ public:
         std::vector<std::unique_ptr<RequestedLayerState>> layers;
         layers.emplace_back(std::make_unique<RequestedLayerState>(
                 createDisplayMirrorArgs(/*id=*/id, layerStack, stopLayerId)));
+        mLifecycleManager.addLayers(std::move(layers));
+    }
+
+    void createLayerMirrorLayer(uint32_t id, uint32_t idToMirror) {
+        std::vector<std::unique_ptr<RequestedLayerState>> layers;
+        layers.emplace_back(
+                std::make_unique<RequestedLayerState>(createLayerMirrorArgs(id, idToMirror)));
         mLifecycleManager.addLayers(std::move(layers));
     }
 

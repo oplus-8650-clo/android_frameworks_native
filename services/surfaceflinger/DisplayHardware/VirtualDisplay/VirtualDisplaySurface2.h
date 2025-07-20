@@ -31,6 +31,8 @@
 #include <string>
 #include <variant>
 
+#include "SinkSurfaceHelper.h"
+
 namespace android {
 
 class BufferItemConsumer;
@@ -66,6 +68,20 @@ class Surface;
  * layers are composed on the GPU and provided to us by the composition surface. We set that in a
  * special field in HWC during advanceFrame. The output buffer and present fence are sent to the app
  * after the frame's committed to HWC.
+ *
+ * To manage buffers, we do a certain amount of "buffer juggling" to promote recycling and reuse.
+ * There are three main BQs at play:
+ *   - Sink BQ: A surface that is provided by the application at creation time. The purpose of a
+ *   virtual display is do compositing and send buffers to the sink.
+ *   - Render BQ: A surface that is provided to composition engine for GPU rendering.
+ *   VirtualDisplaySurface2 owns the consumer. In Gpu, buffers are taken out of this queue and sent
+ *   to the application.
+ *   - Output BQ: A surface that is used to provide buffers for HWC outputs. VirtualDisplaySurface2
+ *   owns both the surface and consumer. In Mixed and Hwc modes, buffers are taken out of this
+ *   queue and sent to the application.
+ *
+ * We try to reuse buffers dequeued from the Sink BQ as often as possible to avoid having to send
+ * new buffers over IPC to the application too frequently.
  */
 class VirtualDisplaySurface2 : public compositionengine::DisplaySurface {
 public:
@@ -111,7 +127,6 @@ private:
         CompositionType compositionType = CompositionType::Unknown;
         // Whether we must recompose no matter what, set by beginFrame.
         bool mustRecompose = false;
-        bool usingSinkFrame = false;
         BufferItem clientComposedBufferItem = {};
         sp<GraphicBuffer> outputBuffer = nullptr;
         sp<Fence> outputFence = nullptr;
@@ -129,9 +144,7 @@ private:
     const VirtualDisplayIdVariant mDisplayId;
     const std::string mName;
 
-    sp<Surface> mSinkSurface;
-    sp<SurfaceListener> mSinkSurfaceListener;
-    std::string mSinkName;
+    sp<SinkSurfaceHelper> mSinkHelper;
     uint64_t mSinkUsage;
     PixelFormat mSinkFormat;
     ADataSpace mSinkDataSpace;

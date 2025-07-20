@@ -92,11 +92,6 @@ public:
     [[nodiscard]] status_t transact(const sp<RpcSession::RpcConnection>& connection,
                                     const sp<IBinder>& address, uint32_t code, const Parcel& data,
                                     const sp<RpcSession>& session, Parcel* reply, uint32_t flags);
-    [[nodiscard]] status_t transactAddress(const sp<RpcSession::RpcConnection>& connection,
-                                           uint64_t address, uint32_t code, const Parcel& data,
-                                           const sp<RpcSession>& session, Parcel* reply,
-                                           uint32_t flags);
-
     /**
      * The ownership model here carries an implicit strong refcount whenever a
      * binder is sent across processes. Since we have a local strong count in
@@ -228,6 +223,14 @@ private:
     // Whether `parcel` is compatible with `session`.
     [[nodiscard]] static status_t validateParcel(const sp<RpcSession>& session,
                                                  const Parcel& parcel, std::string* errorMsg);
+
+    // Exactly the same as transact, but you can do a special transaction which we
+    // don't want to export outside of RpcState. A special transaction is on address
+    // '0', such as getting the root object.
+    [[nodiscard]] status_t transactInternal(const sp<RpcSession::RpcConnection>& connection,
+                                            const sp<IBinder>& maybeBinder, uint32_t code,
+                                            const Parcel& data, const sp<RpcSession>& session,
+                                            Parcel* reply, uint32_t flags);
 
     struct BinderNode {
         // Two cases:

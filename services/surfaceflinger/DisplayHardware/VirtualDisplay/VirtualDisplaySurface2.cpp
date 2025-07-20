@@ -20,6 +20,7 @@
 #include <android/data_space.h>
 #include <android/hardware_buffer.h>
 #include <android/native_window.h>
+#include <ftl/enum.h>
 #include <gui/BufferItemConsumer.h>
 #include <gui/Surface.h>
 #include <hardware/gralloc.h>
@@ -34,12 +35,13 @@
 #include <cstdint>
 #include <mutex>
 #include <optional>
-#include <thread>
+#include <string>
 #include <utility>
 
 #include "DisplayHardware/HWComposer.h"
 #include "compositionengine/DisplaySurface.h"
 
+#include "SinkSurfaceHelper.h"
 #include "VirtualDisplaySurface2.h"
 
 namespace android {
@@ -66,10 +68,13 @@ VirtualDisplaySurface2::VirtualDisplaySurface2(HWComposer& hwComposer,
                                                VirtualDisplayIdVariant displayId,
                                                const std::string& name,
                                                const sp<Surface>& sinkSurface)
-      : mHWC(hwComposer), mDisplayId(displayId), mName(name), mSinkSurface(sinkSurface) {}
+      : mHWC(hwComposer),
+        mDisplayId(displayId),
+        mName(name),
+        mSinkHelper(sp<SinkSurfaceHelper>::make(sinkSurface)) {}
 
 VirtualDisplaySurface2::~VirtualDisplaySurface2() {
-    mSinkSurface->disconnect(NATIVE_WINDOW_API_CPU);
+    mSinkHelper->abandon();
     mRendererConsumer->abandon();
     if (mOutputConsumer) {
         mOutputConsumer->abandon();
@@ -80,49 +85,14 @@ VirtualDisplaySurface2::~VirtualDisplaySurface2() {
 }
 
 void VirtualDisplaySurface2::onFirstRef() {
-    mSinkSurfaceListener = sp<StubSurfaceListener>::make();
-    mSinkSurface->connect(NATIVE_WINDOW_API_CPU, mSinkSurfaceListener);
-    mSinkName = mSinkSurface->getConsumerName();
-
-    status_t ret = mSinkSurface->getConsumerUsage(&mSinkUsage);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to get consumer usage from the sink surface. Status: %d", __func__, ret);
-        mSinkUsage = 0;
-    }
-
-    mSinkFormat = ANativeWindow_getFormat(mSinkSurface.get());
-    if (mSinkFormat < 0) {
-        ALOGE("%s: Bad format returned from %s. Status: %d", __func__, mSinkName.c_str(),
-              mSinkFormat);
-        mSinkFormat = 0;
-    }
-
-    int32_t dataSpace = ANativeWindow_getBuffersDefaultDataSpace(mSinkSurface.get());
-    if (dataSpace < 0) {
-        ALOGE("%s: Bad dataSpace returned from %s. Status: %d", __func__, mSinkName.c_str(),
-              dataSpace);
-        dataSpace = 0;
-    }
-    mSinkDataSpace = static_cast<ADataSpace>(dataSpace);
-
-    int32_t width = ANativeWindow_getWidth(mSinkSurface.get());
-    if (width < 0) {
-        ALOGE("%s: Bad width returned from %s. Status: %d", __func__, mSinkName.c_str(), width);
-        width = 0;
-    }
-    mSinkWidth = (uint32_t)width;
-
-    int32_t height = ANativeWindow_getHeight(mSinkSurface.get());
-    if (height < 0) {
-        ALOGE("%s: Bad height returned from %s. Status: %d", __func__, mSinkName.c_str(), height);
-        height = 0;
-    }
-    mSinkHeight = (uint32_t)height;
-
-    ret = mSinkSurface->setAsyncMode(true);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to set async mode for %s. Status: %d", __func__, mSinkName.c_str(), ret);
-    }
+    // TODO(b/340933138): if the surface can't even be connected to, we should invalidate the whole
+    // VD.
+    SinkSurfaceHelper::SinkSurfaceData data = mSinkHelper->connectSinkSurface();
+    mSinkWidth = data.width;
+    mSinkHeight = data.height;
+    mSinkFormat = data.format;
+    mSinkUsage = data.usage;
+    mSinkDataSpace = data.dataSpace;
 
     // If we might be rendering to the HAL, this buffer could be used in HWComposer::setClientTarget
     // in Mixed mode.
@@ -148,7 +118,7 @@ void VirtualDisplaySurface2::onFirstRef() {
         mOutputConsumer->setName(String8(mName + "-OutputBQ"));
 
         mOutputSurfaceListener = sp<StubSurfaceListener>::make();
-        ret = mOutputSurface->connect(NATIVE_WINDOW_API_CPU, mOutputSurfaceListener);
+        status_t ret = mOutputSurface->connect(NATIVE_WINDOW_API_CPU, mOutputSurfaceListener);
         if (ret != NO_ERROR) {
             ALOGE("%s: Unable to set up output surface listener. Status: %d", __func__, ret);
         }
@@ -196,6 +166,26 @@ status_t VirtualDisplaySurface2::prepareFrame(CompositionType compositionType) {
     FrameInfo& frameInfo = *mCurrentFrame;
     frameInfo.compositionType = compositionType;
 
+    if (compositionType != CompositionType::Gpu) {
+        return OK;
+    }
+
+    // For the GPU case, we'll be sending the rendered buffer directly back to the sink with no
+    // output in the middle, so we'll attach it to the back of that bufferqueue.
+    auto maybeBufferFence =
+            mSinkHelper->getDequeuedBuffer(mSinkWidth, mSinkHeight, GRALLOC_USAGE_HW_RENDER);
+    if (maybeBufferFence) {
+        auto& [buffer, fence] = *maybeBufferFence;
+        ALOGI("%s: (%s) Reusing buffer %" PRIu64 " from sink.", __func__,
+              ftl::enum_string(compositionType).c_str(), buffer->getId());
+
+        mRendererConsumer->attachBuffer(buffer);
+        mRendererConsumer->releaseBuffer(buffer, fence);
+    } else {
+        ALOGI("%s: (%s) No buffer available from sink.", ftl::enum_string(compositionType).c_str(),
+              __func__);
+    }
+
     return OK;
 }
 
@@ -215,25 +205,45 @@ status_t VirtualDisplaySurface2::advanceFrame(float hdrSdrRatio) {
         return OK;
     }
 
-    auto halDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
+    auto maybeBufferFence =
+            mSinkHelper->getDequeuedBuffer(mSinkWidth, mSinkHeight, GRALLOC_USAGE_HW_COMPOSER);
+    if (maybeBufferFence) {
+        std::tie(frameInfo.outputBuffer, frameInfo.outputFence) = *maybeBufferFence;
 
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    mOutputSurface->dequeueBuffer(&buffer, &fence);
-    status_t status = mHWC.setOutputBuffer(halDisplayId, fence, buffer);
+        ALOGI("%s: (%s) Reusing output buffer id=%" PRIu64 " from sink.", __func__,
+              ftl::enum_string(frameInfo.compositionType).c_str(), frameInfo.outputBuffer->getId());
+    } else {
+        status_t status =
+                mOutputSurface->dequeueBuffer(&frameInfo.outputBuffer, &frameInfo.outputFence);
+        if (status != NO_ERROR) {
+            ALOGE("%s: Failed to dequeue output buffer. Status: %d", __func__, status);
+            return status;
+        }
+        status = mOutputSurface->detachBuffer(frameInfo.outputBuffer);
+        if (status != NO_ERROR) {
+            ALOGE("%s: Failed to detach output buffer. Status: %d", __func__, status);
+            return status;
+        }
+
+        ALOGI("%s: (%s) Dequeuing a fresh buffer from output surface id=%" PRIu64 " from sink.",
+              __func__, ftl::enum_string(frameInfo.compositionType).c_str(),
+              frameInfo.outputBuffer->getId());
+    }
+
+    auto halDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
+    status_t status =
+            mHWC.setOutputBuffer(halDisplayId, frameInfo.outputFence, frameInfo.outputBuffer);
     if (status != NO_ERROR) {
         ALOGE("%s: Failed to set output buffer. Status: %d", __func__, status);
         return status;
     }
-    frameInfo.outputBuffer = buffer;
-    frameInfo.outputFence = fence;
 
     if (frameInfo.compositionType == CompositionType::Mixed) {
         ui::Dataspace dataspace = ui::Dataspace::SRGB; // TODO
         sp<GraphicBuffer>& buffer = frameInfo.clientComposedBufferItem.mGraphicBuffer;
         sp<Fence>& fence = frameInfo.clientComposedBufferItem.mFence;
 
-        // TODO: use an LRU to track slots instead of constantly overwriting them.
+        // TODO(b/340933138): use an LRU to track slots instead of constantly overwriting them.
         uint32_t slot = 0;
         bool shouldSendBuffer = true;
         status =
@@ -269,37 +279,45 @@ void VirtualDisplaySurface2::onFrameCommitted() {
     auto halDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
     sp<Fence> presentFence = mHWC.getPresentFence(halDisplayId);
 
-    status_t ret = mOutputSurface->queueBuffer(frameInfo.outputBuffer,
-                                               Fence::merge("VD Acquire/Present",
-                                                            frameInfo.outputFence, presentFence));
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to queue output buffer. Status: %d", __func__, ret);
+    // Replace the render buffer so that we can use it in the next frame.
+    if (frameInfo.compositionType == CompositionType::Mixed) {
+        sp<GraphicBuffer>& renderBuffer = frameInfo.clientComposedBufferItem.mGraphicBuffer;
+        sp<Fence>& renderAcquireFence = frameInfo.clientComposedBufferItem.mFence;
+        sp<Fence> renderFence =
+                Fence::merge("VD Render Acquire/Present", renderAcquireFence, presentFence);
+
+        status_t ret = mRendererConsumer->attachBuffer(renderBuffer);
+        if (ret != NO_ERROR) {
+            ALOGE("%s: Failed to reattach buffer to render consumer. Status: %d", __func__, ret);
+        } else {
+            ret = mRendererConsumer->releaseBuffer(renderBuffer, renderFence);
+            ALOGE_IF(ret != NO_ERROR,
+                     "`%s: Failed to release buffer to render consumer. Status: %d", __func__, ret);
+        }
+    }
+
+    sp<Fence> outputFence =
+            Fence::merge("VD Output Acquire/Present", frameInfo.outputFence, presentFence);
+
+    if (mSinkHelper->isFrozen()) {
+        ALOGE("%s: mWorkerThread is frozen! Skipping frame.", __func__);
+        if (!mSinkHelper->returnDequeuedBuffer(frameInfo.outputBuffer, outputFence)) {
+            status_t ret = mOutputConsumer->attachBuffer(frameInfo.outputBuffer);
+            if (ret != NO_ERROR) {
+                ALOGE("%s: Failed to reattach buffer to output consumer. Status: %d", __func__,
+                      ret);
+                return;
+            }
+            ret = mOutputConsumer->releaseBuffer(frameInfo.outputBuffer, outputFence);
+            if (ret != NO_ERROR) {
+                ALOGE("%s: Failed to release buffer to output consumer. Status: %d", __func__, ret);
+            }
+        }
+
         return;
     }
 
-    BufferItem item;
-    ret = mOutputConsumer->acquireBuffer(&item, /*presentWhen*/ -1);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to acquire output buffer. Status: %d", __func__, ret);
-        return;
-    }
-
-    ret = mOutputConsumer->detachBuffer(item.mGraphicBuffer);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to detach output buffer. Status: %d", __func__, ret);
-        return;
-    }
-
-    ret = mSinkSurface->attachBuffer(item.mGraphicBuffer->getNativeBuffer());
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to attach buffer to sink. Status: %d", __func__, ret);
-        return;
-    }
-
-    ret = mSinkSurface->queueBuffer(item.mGraphicBuffer, item.mFence);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to queue buffer to sink. Status: %d", __func__, ret);
-    }
+    mSinkHelper->sendBuffer(frameInfo.outputBuffer, frameInfo.outputFence);
 }
 
 void VirtualDisplaySurface2::dumpAsString(String8& result) const {
@@ -312,7 +330,7 @@ void VirtualDisplaySurface2::dumpAsString(String8& result) const {
     result.appendFormat("        type=%s\n", type.c_str());
     result.appendFormat("        mName=%s\n", mName.c_str());
     result.appendFormat("        mDisplayId=%s\n", displayIdStr.c_str());
-    result.appendFormat("        mSinkName=%s\n", mSinkName.c_str());
+    result.appendFormat("        mSinkName=%s\n", mSinkHelper->getName().c_str());
     result.appendFormat("        mSinkFormat=%d\n", mSinkFormat);
     result.appendFormat("        mSinkUsage=%" PRIu64 "\n", mSinkUsage);
     result.appendFormat("        mSinkDataSpace=%d\n", mSinkDataSpace);
@@ -343,13 +361,9 @@ void VirtualDisplaySurface2::applyResizeLocked(const ui::Size& newSize) {
     mSinkWidth = (uint32_t)newSize.width;
     mSinkHeight = (uint32_t)newSize.height;
 
-    status_t ret = mSinkSurface->setBuffersDimensions(mSinkWidth, mSinkHeight);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to set sink buffer size %dx%d", __func__, mSinkWidth, mSinkHeight);
-    }
+    mSinkHelper->setBufferSize(mSinkWidth, mSinkHeight);
 
-    // TODO: should these fail harder? Brick the Virtual Display?
-    ret = mOutputConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);
+    status_t ret = mOutputConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);
     if (ret != NO_ERROR) {
         ALOGE("%s: Unable to set output consumer default buffer size %dx%d", __func__, mSinkWidth,
               mSinkHeight);
@@ -418,16 +432,27 @@ void VirtualDisplaySurface2::onRenderFrameAvailable() {
     sp<GraphicBuffer> buffer = item.mGraphicBuffer;
     sp<Fence> fence = item.mFence;
 
-    ret = mSinkSurface->attachBuffer(buffer->getNativeBuffer());
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Failed to attach buffer to sink. Status: %d", __func__, ret);
+    if (mSinkHelper->isFrozen()) {
+        ALOGE("%s: mWorkerThread is frozen! Skipping frame.", __func__);
+        if (!mSinkHelper->returnDequeuedBuffer(buffer, fence)) {
+            ret = mRendererConsumer->attachBuffer(buffer);
+            if (ret != NO_ERROR) {
+                ALOGE("%s: Failed to reattach buffer to render consumer. Status: %d", __func__,
+                      ret);
+                return;
+            }
+            ret = mRendererConsumer->releaseBuffer(buffer, fence);
+            if (ret != NO_ERROR) {
+                ALOGE("%s: Failed to release buffer to render consumer. Status: %d", __func__, ret);
+            }
+        }
         return;
     }
 
-    ret = mSinkSurface->queueBuffer(buffer, fence);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Failed to queue buffer to sink. Status: %d", __func__, ret);
-    }
+    ALOGI("%s: Preparing to submit frame to %s. BufferId=%" PRIu64, __func__,
+          mSinkHelper->getName().c_str(), buffer->getId());
+
+    mSinkHelper->sendBuffer(buffer, fence);
 }
 
 } // namespace android
