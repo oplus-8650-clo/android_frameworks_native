@@ -607,7 +607,11 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
     if (graphicBuffer) {
         if (parameters.layer.luts) {
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
-                                          parameters.layer.sourceDataspace);
+                                          parameters.layer.sourceDataspace
+/* QTI_BEGIN */
+                                          , parameters.layer.lutSourceIsHwc
+/* QTI_END */
+                                         );
         } else {
             std::optional<std::vector<uint8_t>> smpte2094_50;
             status_t err = graphicBuffer->getSmpte2094_50(&smpte2094_50);
@@ -1246,13 +1250,36 @@ void SkiaRenderEngine::drawLayersInternal(
 
             sk_sp<SkShader> shader;
 
+/* QTI_BEGIN */
+            bool useRawShader = layer.source.buffer.buffer && layer.luts && layer.lutSourceIsHwc;
+/* QTI_END */
+
             if (layer.source.buffer.useTextureFiltering) {
+/* QTI_BEGIN */
+              if (useRawShader) {
+                shader = image->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                              SkSamplingOptions({SkFilterMode::kLinear,
+                                                                 SkMipmapMode::kNone}),
+                                              &matrix);
+              } else {
+/* QTI_END */
                 shader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
                                            SkSamplingOptions(
                                                    {SkFilterMode::kLinear, SkMipmapMode::kNone}),
                                            &matrix);
+/* QTI_BEGIN */
+              }
+/* QTI_END */
             } else {
+/* QTI_BEGIN */
+              if (useRawShader) {
+                shader = image->makeRawShader(SkSamplingOptions(), matrix);
+              } else {
+/* QTI_END */
                 shader = image->makeShader(SkSamplingOptions(), matrix);
+/* QTI_BEGIN */
+              }
+/* QTI_END */
             }
 
             if (useIsOpaqueWorkaround) {

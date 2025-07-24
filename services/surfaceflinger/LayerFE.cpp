@@ -190,6 +190,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     // Record the name of the layer for debugging further down the stack.
     layerSettings.name = mSnapshot->name;
     layerSettings.luts = mSnapshot->luts ? mSnapshot->luts : targetSettings.luts;
+/* QTI_BEGIN */
+    layerSettings.lutSourceIsHwc = mSnapshot->luts == nullptr;
+/* QTI_END */
 
     layerSettings.renderCommandBufferConsumer = mSnapshot->renderCommandBufferConsumer;
     layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
