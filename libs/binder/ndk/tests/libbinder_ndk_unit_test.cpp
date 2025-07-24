@@ -1120,6 +1120,19 @@ TEST(NdkBinder, InvalidCheckServiceAccessArgs) {
                  "nullptr");
 }
 
+TEST(NdkBinder, SetMinThreads) {
+    ndk::SpAIBinder binder = ndk::SharedRefBase::make<MyBinderNdkUnitTest>()->asBinder();
+    EXPECT_EQ(STATUS_OK, AIBinder_setMinRpcThreads(binder.get(), 10));
+}
+
+TEST(NdkBinder, SetMinThreadsNull) {
+    EXPECT_EQ(STATUS_UNEXPECTED_NULL, AIBinder_setMinRpcThreads(nullptr, 10));
+}
+
+TEST(NdkBinder, SetMinThreadsZero) {
+    EXPECT_EQ(STATUS_BAD_VALUE, AIBinder_setMinRpcThreads(nullptr, 0));
+}
+
 static void addOne(int* to) {
     if (!to) return;
     ++(*to);

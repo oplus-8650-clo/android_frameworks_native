@@ -188,6 +188,7 @@ cc_library_headers {
     export_include_dirs: [
         ".",
         "include",
+        "trace",
     ],
     header_libs: [
         "libchrome-gestures_headers",
@@ -206,6 +207,8 @@ filegroup {
         "InputThread.cpp",
         "NotifyArgs.cpp",
         "VibrationElement.cpp",
+        "trace/InputTracingPerfettoBackend.cpp",
+        "trace/InputTracingThreadedBackend.cpp",
     ],
 }
 
@@ -223,6 +226,11 @@ cc_defaults {
         "libstatspull",
         "libstatssocket",
         "libutils",
+        "packagemanager_aidl-cpp",
+    ],
+    static_libs: [
+        "libperfetto_client_experimental",
+        "perfetto_winscope_extensions_zero",
     ],
     header_libs: [
         "libinputflinger_headers",
@@ -238,6 +246,12 @@ cc_library_shared {
     ],
     export_header_lib_headers: [
         "libinputflinger_headers",
+    ],
+    export_shared_lib_headers: [
+        "packagemanager_aidl-cpp",
+    ],
+    export_static_lib_headers: [
+        "libperfetto_client_experimental",
     ],
 }
 

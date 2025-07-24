@@ -133,7 +133,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     }
 
     layerSettings.geometry.boundaries =
-            reduce(mSnapshot->geomLayerBounds, mSnapshot->transparentRegionHint);
+            (FlagManager::getInstance().disable_transparent_region_hint())
+            ? mSnapshot->geomLayerBounds
+            : reduce(mSnapshot->geomLayerBounds, mSnapshot->transparentRegionHint);
     layerSettings.geometry.positionTransform = mSnapshot->geomLayerTransform.asMatrix4();
 
     // skip drawing content if the targetSettings indicate the content will be occluded

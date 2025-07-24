@@ -110,6 +110,7 @@ filegroup {
         "android/gui/EarlyWakeupInfo.aidl",
         "android/gui/StalledTransactionInfo.aidl",
         "android/**/TouchOcclusionMode.aidl",
+        "android/gui/TransactionBarrier.aidl",
         "android/gui/TrustedOverlay.aidl",
         "android/gui/Vec2.aidl",
     ],

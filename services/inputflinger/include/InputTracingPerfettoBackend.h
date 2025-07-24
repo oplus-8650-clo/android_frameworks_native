@@ -26,7 +26,7 @@
 #include <mutex>
 #include <set>
 
-namespace android::inputdispatcher::trace::impl {
+namespace android::input_trace::impl {
 
 /**
  * The tracing backend that writes events into ongoing Perfetto traces.
@@ -90,4 +90,4 @@ private:
     static std::atomic<int32_t> sNextInstanceId;
 };
 
-} // namespace android::inputdispatcher::trace::impl
+} // namespace android::input_trace::impl

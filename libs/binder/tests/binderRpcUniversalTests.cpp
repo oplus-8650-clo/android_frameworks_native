@@ -75,7 +75,7 @@ TEST_P(BinderRpc, MultipleSessions) {
         GTEST_SKIP() << "This test requires a multi-threaded service";
     }
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = 1, .numSessions = 5});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = 1, .numSessions = 5});
     for (auto session : proc.proc->sessions) {
         ASSERT_NE(nullptr, session.root);
         EXPECT_EQ(OK, session.root->pingBinder());
@@ -138,6 +138,41 @@ TEST_P(BinderRpc, AppendSeparateFormats) {
 
     EXPECT_EQ(BAD_TYPE, p1.appendFrom(&p2, 0, p2.dataSize()));
     EXPECT_EQ(BAD_TYPE, p2.appendFrom(&p1, 0, p1.dataSize()));
+}
+
+TEST_P(BinderRpc, ObjectCountRight) {
+    auto proc = createRpcTestSocketServerProcess({});
+    Parcel data;
+    data.markForBinder(proc.rootBinder);
+
+    EXPECT_EQ(OK, data.writeStrongBinder(nullptr)); // not considered an object
+    EXPECT_EQ(0u, data.objectsCount());
+    EXPECT_EQ(OK, data.writeStrongBinder(sp<BBinder>::make()));
+
+    const bool binderInObjects = proc.proc->sessions.at(0).session->getProtocolVersion() >=
+            RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+
+    if (binderInObjects) {
+        EXPECT_EQ(1u, data.objectsCount());
+    } else {
+        EXPECT_EQ(0u, data.objectsCount());
+    }
+
+    Parcel data2;
+    data2.markForBinder(proc.rootBinder);
+    EXPECT_EQ(OK, data2.writeStrongBinder(sp<BBinder>::make()));
+    EXPECT_EQ(OK, data.appendFrom(&data2, 0, data2.dataSize()));
+
+    if (binderInObjects) {
+        EXPECT_EQ(2u, data.objectsCount());
+        EXPECT_EQ(1u, data2.objectsCount());
+    } else {
+        EXPECT_EQ(0u, data.objectsCount());
+        EXPECT_EQ(0u, data2.objectsCount());
+
+        // the old protocol will leak the binder object in this case
+        proc.forceShutdown();
+    }
 }
 
 TEST_P(BinderRpc, UnknownTransaction) {
@@ -298,7 +333,7 @@ TEST_P(BinderRpc, CannotMixBindersBetweenTwoSessionsToTheSameServer) {
         GTEST_SKIP() << "This test requires a multi-threaded service";
     }
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = 1, .numSessions = 2});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = 1, .numSessions = 2});
 
     sp<IBinder> outBinder;
     EXPECT_EQ(INVALID_OPERATION,
@@ -494,7 +529,7 @@ TEST_P(BinderRpc, Callbacks) {
 
                 size_t numIncomingConnections = clientOrServerSingleThreaded() ? 0 : 1;
                 auto proc = createRpcTestSocketServerProcess(
-                        {.numThreads = 1,
+                        {.numMaxThreads = 1,
                          .numSessions = 1,
                          .numIncomingConnectionsBySession = {numIncomingConnections}});
                 auto cb = sp<MyBinderRpcCallback>::make();

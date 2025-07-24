@@ -310,7 +310,7 @@ std::optional<Edid> parseEdid(const DisplayIdentificationData& edid) {
                             : ftl::stable_hash(descriptorBlockSerialNumber);
                     break;
             }
-        } else if (isDetailedTimingDescriptor(view)) {
+        } else if (isDetailedTimingDescriptor(view) && !preferredDTDPhysicalSize.isValid()) {
             static constexpr size_t kHorizontalPhysicalLsbOffset = 12;
             static constexpr size_t kHorizontalPhysicalMsbOffset = 14;
             static constexpr size_t kVerticalPhysicalLsbOffset = 13;

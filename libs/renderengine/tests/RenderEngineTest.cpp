@@ -88,9 +88,9 @@ public:
                         .setImageCacheSize(1)
                         .setEnableProtectedContext(false)
                         .setPrecacheToneMapperShaderOnly(false)
-                        .setBlurAlgorithm(renderengine::RenderEngine::BlurAlgorithm::KAWASE)
-                        .setContextPriority(renderengine::RenderEngine::ContextPriority::MEDIUM)
-                        .setThreaded(renderengine::RenderEngine::Threaded::NO)
+                        .setBlurAlgorithm(renderengine::RenderEngine::BlurAlgorithm::Kawase)
+                        .setContextPriority(renderengine::RenderEngine::ContextPriority::Medium)
+                        .setThreaded(renderengine::RenderEngine::Threaded::No)
                         .setGraphicsApi(graphicsApi())
                         .setSkiaBackend(skiaBackend())
                         .build();
@@ -107,7 +107,7 @@ public:
     }
 
     renderengine::RenderEngine::SkiaBackend skiaBackend() override {
-        return renderengine::RenderEngine::SkiaBackend::GANESH;
+        return renderengine::RenderEngine::SkiaBackend::Ganesh;
     }
 };
 
@@ -116,11 +116,11 @@ public:
     std::string name() override { return "GaneshVkRenderEngineFactory"; }
 
     renderengine::RenderEngine::GraphicsApi graphicsApi() override {
-        return renderengine::RenderEngine::GraphicsApi::VK;
+        return renderengine::RenderEngine::GraphicsApi::Vk;
     }
 
     renderengine::RenderEngine::SkiaBackend skiaBackend() override {
-        return renderengine::RenderEngine::SkiaBackend::GANESH;
+        return renderengine::RenderEngine::SkiaBackend::Ganesh;
     }
 };
 
@@ -131,11 +131,11 @@ public:
     std::string name() override { return "GraphiteVkRenderEngineFactory"; }
 
     renderengine::RenderEngine::GraphicsApi graphicsApi() override {
-        return renderengine::RenderEngine::GraphicsApi::VK;
+        return renderengine::RenderEngine::GraphicsApi::Vk;
     }
 
     renderengine::RenderEngine::SkiaBackend skiaBackend() override {
-        return renderengine::RenderEngine::SkiaBackend::GRAPHITE;
+        return renderengine::RenderEngine::SkiaBackend::Graphite;
     }
 };
 #endif
@@ -2161,7 +2161,7 @@ TEST_P(RenderEngineTest, cleanupPostRender_cleansUpOnce) {
     if (mRE->canSkipPostRenderCleanup()) {
         // Skia's Vk backend may keep the texture alive beyond drawLayersInternal, so
         // it never gets added to the cleanup list. In those cases, we can skip.
-        EXPECT_TRUE(GetParam()->graphicsApi() == renderengine::RenderEngine::GraphicsApi::VK);
+        EXPECT_TRUE(GetParam()->graphicsApi() == renderengine::RenderEngine::GraphicsApi::Vk);
     } else {
         mRE->cleanupPostRender();
         EXPECT_TRUE(mRE->canSkipPostRenderCleanup());
@@ -3228,7 +3228,7 @@ TEST_P(RenderEngineTest, localTonemap_tonemapsNearbySdrRegions) {
 
 TEST_P(RenderEngineTest, primeShaderCache) {
     // TODO: b/331447071 - Fix in Graphite and re-enable.
-    if (GetParam()->skiaBackend() == renderengine::RenderEngine::SkiaBackend::GRAPHITE) {
+    if (GetParam()->skiaBackend() == renderengine::RenderEngine::SkiaBackend::Graphite) {
         GTEST_SKIP();
     }
 

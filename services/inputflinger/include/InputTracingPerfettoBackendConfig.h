@@ -21,7 +21,7 @@
 #include <perfetto/config/android/android_input_event_config.pbzero.h>
 #include <vector>
 
-namespace android::inputdispatcher::trace::impl {
+namespace android::input_trace::impl {
 
 /** Flags representing the configurations that are enabled in the trace. */
 enum class TraceFlag : uint32_t {
@@ -57,4 +57,4 @@ struct TraceConfig {
     std::vector<TraceRule> rules;
 };
 
-} // namespace android::inputdispatcher::trace::impl
+} // namespace android::input_trace::impl

@@ -111,6 +111,34 @@ cc_test {
     require_root: true,
 }
 
+cc_test {
+    name: "binderObserverConfigUnitTest",
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+    srcs: [
+        "binderObserverConfigUnitTest.cpp",
+        ":libbinder_observer_sources",
+    ],
+    shared_libs: [
+        "liblog",
+        "libbinder",
+        "libcutils",
+        "libutils",
+    ],
+    static_libs: [
+        "libgmock",
+    ],
+    header_libs: [
+        "jni_headers",
+    ],
+    test_suites: ["general-tests"],
+    host_supported: false,
+    require_root: false,
+}
+
 // unit test only, which can run on host and doesn't use /dev/binder
 cc_test {
     name: "binderUnitTest",

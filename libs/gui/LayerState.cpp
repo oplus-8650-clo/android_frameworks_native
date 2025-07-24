@@ -56,17 +56,6 @@ using gui::FocusRequest;
 using gui::WindowInfoHandle;
 
 namespace {
-bool isSameWindowHandle(const sp<WindowInfoHandle>& lhs, const sp<WindowInfoHandle>& rhs) {
-    if (lhs == rhs) {
-        return true;
-    }
-
-    if (!lhs || !rhs) {
-        return false;
-    }
-
-    return *lhs->getInfo() == *rhs->getInfo();
-};
 
 bool isSameSurfaceControl(const sp<SurfaceControl>& lhs, const sp<SurfaceControl>& rhs) {
     if (lhs == rhs) {
@@ -147,7 +136,7 @@ status_t layer_state_t::write(Parcel& output) const
     SAFE_PARCEL(output.writeFloat, color.g);
     SAFE_PARCEL(output.writeFloat, color.b);
     SAFE_PARCEL(output.writeFloat, color.a);
-    SAFE_PARCEL(mNotDefCmpState.windowInfoHandle->writeToParcel, &output);
+    SAFE_PARCEL(mNotDefCmpState.windowInfo.writeToParcel, &output);
     SAFE_PARCEL(output.write, mNotDefCmpState.transparentRegion);
     SAFE_PARCEL(output.writeUint32, bufferTransform);
     SAFE_PARCEL(output.writeBool, transformToDisplayInverse);
@@ -283,7 +272,7 @@ status_t layer_state_t::read(const Parcel& input)
     SAFE_PARCEL(input.readFloat, &tmpFloat);
     color.a = tmpFloat;
 
-    SAFE_PARCEL(mNotDefCmpState.windowInfoHandle->readFromParcel, &input);
+    SAFE_PARCEL(mNotDefCmpState.windowInfo.readFromParcel, &input);
 
     SAFE_PARCEL(input.read, mNotDefCmpState.transparentRegion);
     SAFE_PARCEL(input.readUint32, &bufferTransform);
@@ -723,8 +712,7 @@ void layer_state_t::merge(const layer_state_t& other) {
     }
     if (other.what & eInputInfoChanged) {
         what |= eInputInfoChanged;
-        mNotDefCmpState.windowInfoHandle =
-                sp<WindowInfoHandle>::make(*other.mNotDefCmpState.windowInfoHandle);
+        mNotDefCmpState.windowInfo = other.mNotDefCmpState.windowInfo;
     }
     if (other.what & eBackgroundColorChanged) {
         what |= eBackgroundColorChanged;
@@ -974,16 +962,16 @@ void layer_state_t::updateParentLayer(const sp<SurfaceControl>& newParent) {
     mNotDefCmpState.parentSurfaceControlForChild =
             newParent ? newParent->getParentingLayer() : nullptr;
 }
-void layer_state_t::updateInputWindowInfo(sp<gui::WindowInfoHandle>&& info) {
+void layer_state_t::updateInputWindowInfo(const gui::WindowInfo& info) {
     what |= eInputInfoChanged;
-    mNotDefCmpState.windowInfoHandle = std::move(info);
+    mNotDefCmpState.windowInfo = info;
 }
 
 bool layer_state_t::NotDefaultComparableState::operator==(
         const NotDefaultComparableState& rhs) const {
     return transparentRegion.hasSameRects(rhs.transparentRegion) &&
             surfaceDamageRegion.hasSameRects(rhs.surfaceDamageRegion) &&
-            isSameWindowHandle(windowInfoHandle, rhs.windowInfoHandle) &&
+            (windowInfo == rhs.windowInfo) &&
             isSameSurfaceControl(relativeLayerSurfaceControl, rhs.relativeLayerSurfaceControl) &&
             isSameSurfaceControl(parentSurfaceControlForChild, rhs.parentSurfaceControlForChild);
 }

@@ -17,6 +17,7 @@
 #undef LOG_TAG
 #define LOG_TAG "TransactionApplicationTest"
 
+#include <android/gui/TransactionBarrier.h>
 #include <binder/Binder.h>
 #include <common/test/FlagUtils.h>
 #include <compositionengine/Display.h>
@@ -202,6 +203,39 @@ public:
     std::vector<ListenerCallbacks> mCallbacks;
     int mTransactionNumber = 0;
 };
+
+TEST_F(TransactionApplicationTest, WaitForTransactionBarrierSignal) {
+    ASSERT_TRUE(mFlinger.getTransactionQueue().isEmpty());
+    EXPECT_CALL(*mFlinger.scheduler(), scheduleFrame(_)).Times(1);
+
+    auto applyToken1 = sp<BBinder>::make();
+    auto applyToken2 = sp<BBinder>::make();
+
+    TransactionInfo waitTransaction;
+    setupSingle(waitTransaction, /*flags*/ 0, /*desiredPresentTime*/ s2ns(1), false,
+                FrameTimelineInfo{});
+    gui::TransactionBarrier waitBarrier;
+    waitBarrier.barrierToken = String16("tok");
+    waitBarrier.kind = gui::TransactionBarrier::BarrierKind::KIND_WAIT;
+    waitTransaction.transactionState.mBarriers.emplace_back(std::move(waitBarrier));
+    mFlinger.setTransactionState(std::move(waitTransaction.transactionState), applyToken1);
+
+    mFlinger.flushTransactionQueues();
+    const auto& transactionQueue = mFlinger.getPendingTransactionQueue();
+    EXPECT_EQ(1u, transactionQueue.size());
+
+    TransactionInfo sigTransaction;
+    setupSingle(sigTransaction, /*flags*/ 0, /*desiredPresentTime*/ s2ns(1), false,
+                FrameTimelineInfo{});
+    gui::TransactionBarrier sigBarrier;
+    sigBarrier.barrierToken = String16("tok");
+    sigBarrier.kind = gui::TransactionBarrier::BarrierKind::KIND_SIGNAL;
+    sigTransaction.transactionState.mBarriers.emplace_back(std::move(sigBarrier));
+    mFlinger.setTransactionState(std::move(sigTransaction.transactionState), applyToken2);
+
+    mFlinger.flushTransactionQueues();
+    EXPECT_TRUE(mFlinger.getPendingTransactionQueue().empty());
+}
 
 TEST_F(TransactionApplicationTest, AddToPendingQueue) {
     ASSERT_TRUE(mFlinger.getTransactionQueue().isEmpty());
@@ -923,6 +957,192 @@ TEST(TransactionHandlerTest, QueueTransaction) {
 
     EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
     EXPECT_EQ(transactionsReadyToBeApplied.front().id, 42u);
+}
+
+QueuedTransactionState createBarrierTransaction(uint64_t id,
+                                                gui::TransactionBarrier::BarrierKind kind) {
+    QueuedTransactionState transaction;
+    transaction.applyToken = sp<BBinder>::make();
+    transaction.id = id;
+    transaction.postTime = systemTime();
+    gui::TransactionBarrier b;
+    b.barrierToken = String16("tok");
+    b.kind = kind;
+    transaction.transactionBarriers.emplace_back(std::move(b));
+    return transaction;
+}
+
+TEST(TransactionHandlerTest, WaitBarrierExpiration) {
+    TransactionHandler handler;
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+
+    QueuedTransactionState transaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(transaction));
+    handler.collectTransactions();
+    std::vector<QueuedTransactionState> transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Barrier not signalled or expired.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+
+    handler.setTransactionBarrierTtl(std::chrono::milliseconds(0));
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Barrier expired.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
+    EXPECT_EQ(transactionsReadyToBeApplied.front().id, 42u);
+}
+
+TEST(TransactionHandlerTest, WaitBarrierSignalled) {
+    TransactionHandler handler;
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+    QueuedTransactionState waitTransaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(waitTransaction));
+    handler.collectTransactions();
+    std::vector<QueuedTransactionState> transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Barrier not signalled or expired.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+
+    QueuedTransactionState sigTransaction =
+            createBarrierTransaction(43, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+    handler.queueTransaction(std::move(sigTransaction));
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Signal and wait transactions applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 2u);
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // No more transactions left.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+}
+
+TEST(TransactionHandlerTest, WaitEnqueuedAfterBarrierSignalled) {
+    TransactionHandler handler;
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+    QueuedTransactionState sigTransaction =
+            createBarrierTransaction(43, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+    handler.queueTransaction(std::move(sigTransaction));
+
+    handler.collectTransactions();
+    std::vector<QueuedTransactionState> transactionsReadyToBeApplied = handler.flushTransactions();
+    // Signal transaction ready to be applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
+    EXPECT_EQ(transactionsReadyToBeApplied.front().id, 43u);
+
+    QueuedTransactionState waitTransaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(waitTransaction));
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Wait transactions applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
+    EXPECT_EQ(transactionsReadyToBeApplied.front().id, 42u);
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // No more transactions left.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+}
+
+TEST(TransactionHandlerTest, SignalAndWaitEnqueuedTogether) {
+    TransactionHandler handler;
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+    QueuedTransactionState sigTransaction =
+            createBarrierTransaction(43, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+    handler.queueTransaction(std::move(sigTransaction));
+
+    QueuedTransactionState waitTransaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(waitTransaction));
+
+    handler.collectTransactions();
+    auto transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Both transactions applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 2u);
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // No more transactions left.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+}
+
+TEST(TransactionHandlerTest, WaitAndSignalEnqueuedTogether) {
+    TransactionHandler handler;
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+    QueuedTransactionState waitTransaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(waitTransaction));
+
+    QueuedTransactionState sigTransaction =
+            createBarrierTransaction(43, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+    handler.queueTransaction(std::move(sigTransaction));
+
+    handler.collectTransactions();
+    auto transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Both transactions applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 2u);
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // No more transactions left.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+}
+
+TEST(TransactionHandlerTest, SignalBarrierExpiration) {
+    TransactionHandler handler;
+    handler.setTransactionBarrierTtl(std::chrono::milliseconds(0));
+    QueuedTransactionState sigTransaction =
+            createBarrierTransaction(42, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+    handler.addTransactionReadyFilter(std::bind(&TransactionHandler::isBarrierSignalledOrExpired,
+                                                &handler, std::placeholders::_1));
+    handler.queueTransaction(std::move(sigTransaction));
+    handler.collectTransactions();
+    std::vector<QueuedTransactionState> transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Signal transaction ready to be applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
+    EXPECT_EQ(transactionsReadyToBeApplied.front().id, 42u);
+
+    // Expire the signal.
+    handler.flushTransactions();
+
+    handler.setTransactionBarrierTtl(std::chrono::seconds(5));
+
+    QueuedTransactionState waitTransaction =
+            createBarrierTransaction(43, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
+    handler.queueTransaction(std::move(waitTransaction));
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Signal expired, wait transaction still queued.
+    EXPECT_TRUE(transactionsReadyToBeApplied.empty());
+
+    handler.setTransactionBarrierTtl(std::chrono::seconds(0));
+
+    handler.collectTransactions();
+    transactionsReadyToBeApplied = handler.flushTransactions();
+
+    // Wait transaction expired and can be applied.
+    EXPECT_EQ(transactionsReadyToBeApplied.size(), 1u);
+    EXPECT_EQ(transactionsReadyToBeApplied.front().id, 43u);
 }
 
 TEST(TransactionHandlerTest, TransactionsKeepTrackOfDirectMerges) {

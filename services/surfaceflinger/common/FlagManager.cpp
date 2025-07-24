@@ -116,24 +116,25 @@ void FlagManager::dump(std::string& result) const {
     DUMP_LEGACY_SERVER_FLAG(use_skia_tracing);
 
     /// Trunk stable server (R/W) flags ///
+    /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(add_first_vsync_to_tracker);
-    DUMP_ACONFIG_FLAG(adpf_cpu_effects_loadup);
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(adpf_native_session_manager);
     DUMP_ACONFIG_FLAG(adpf_use_fmq_channel);
     DUMP_ACONFIG_FLAG(buffer_stuffing_fix);
     DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
+    DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
     DUMP_ACONFIG_FLAG(monitor_buffer_fences);
+    DUMP_ACONFIG_FLAG(offload_gpu_composition);
     DUMP_ACONFIG_FLAG(readback_screenshot);
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(reset_model_flushes_fence);
     DUMP_ACONFIG_FLAG(resync_on_tx);
-    DUMP_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence);
     DUMP_ACONFIG_FLAG(unify_refresh_rate_callbacks);
-    DUMP_ACONFIG_FLAG(vsync_predictor_recovery);
     DUMP_ACONFIG_FLAG(vsync_predictor_predicts_within_threshold);
+    DUMP_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence);
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
@@ -290,22 +291,24 @@ FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
 
 /// Trunk stable server (R/W) flags ///
+/// IMPORTANT - please keep alphabetize to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(add_first_vsync_to_tracker, "")
-FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
-FLAG_MANAGER_ACONFIG_FLAG(adpf_cpu_effects_loadup, "");
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(adpf_native_session_manager, "");
 FLAG_MANAGER_ACONFIG_FLAG(buffer_stuffing_fix, "");
+FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
+                          "debug.sf.disable_transparent_region_hint");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
+FLAG_MANAGER_ACONFIG_FLAG(offload_gpu_composition, "");
 FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
-FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx, "");
+FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(reset_model_flushes_fence, "");
-FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence, "")
+FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx, "");
 FLAG_MANAGER_ACONFIG_FLAG(unify_refresh_rate_callbacks, "");
-FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_recovery, "");
 FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_predicts_within_threshold, "");
+FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_rate_change_with_aligned_sequence, "")
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel, "", android::os)

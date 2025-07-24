@@ -42,6 +42,7 @@ public:
 
     void setPosition(float x, float y) override;
     vec2 getPosition() const override;
+    vec2 getPositionInLogicalDisplay() const override;
     ui::LogicalDisplayId getDisplayId() const override;
     void setDisplayViewport(const DisplayViewport& viewport) override;
     void updatePointerIcon(PointerIconStyle iconId) override;

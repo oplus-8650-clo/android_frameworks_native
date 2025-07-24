@@ -819,8 +819,7 @@ void PowerAdvisor::setCommittedWorkload(ftl::Flags<Workload> workload) {
 
         // Provides a load up hint only for effects that require client
         // composition, such as blur or shadows.
-        if (FlagManager::getInstance().adpf_cpu_effects_loadup() &&
-            mCommittedWorkload.any(adpf::Workload::EFFECTS)) {
+        if (mCommittedWorkload.any(adpf::Workload::EFFECTS)) {
             notifyCpuLoadUp();
         }
     }

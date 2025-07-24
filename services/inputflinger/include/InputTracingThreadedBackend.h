@@ -24,7 +24,7 @@
 #include <variant>
 #include <vector>
 
-namespace android::inputdispatcher::trace::impl {
+namespace android::input_trace::impl {
 
 /**
  * A wrapper around an InputTracingBackend implementation that writes to the inner tracing backend
@@ -72,4 +72,4 @@ private:
     void setIdleStatus(bool isIdle) REQUIRES(mLock);
 };
 
-} // namespace android::inputdispatcher::trace::impl
+} // namespace android::input_trace::impl

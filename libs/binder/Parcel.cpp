@@ -254,17 +254,25 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
     if (binder) local = binder->localBinder();
     if (local) local->setParceled();
 
-    if (const auto* rpcFields = maybeRpcFields()) {
+    if (auto* rpcFields = maybeRpcFields()) {
         if (binder) {
+            size_t dataPos = mDataPos;
             status_t status = writeInt32(RpcFields::TYPE_BINDER); // non-null
             if (status != OK) return status;
             uint64_t address;
-            // TODO(b/167966510): need to undo this if the Parcel is not sent
             status = rpcFields->mSession->state()->onBinderLeaving(rpcFields->mSession, binder,
                                                                    &address);
             if (status != OK) return status;
             status = writeUint64(address);
             if (status != OK) return status;
+
+            if (rpcFields->mSession->getProtocolVersion() >=
+                RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS) {
+                rpcFields->mObjectPositions
+                        .insert(std::upper_bound(rpcFields->mObjectPositions.begin(),
+                                                 rpcFields->mObjectPositions.end(), dataPos),
+                                dataPos);
+            }
         } else {
             status_t status = writeInt32(RpcFields::TYPE_BINDER_NULL); // null
             if (status != OK) return status;
@@ -343,24 +351,51 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
 status_t Parcel::unflattenBinder(sp<IBinder>* out) const
 {
     if (const auto* rpcFields = maybeRpcFields()) {
+        const size_t objectPos = mDataPos;
+
+        // see TYPE_BINDER/TYPE_BINDER_NULL
         int32_t isPresent;
         if (status_t status = readInt32(&isPresent); status != OK) return status;
 
         sp<IBinder> binder;
 
         if (isPresent & 1) {
+            const bool bindersInObjectPositions = rpcFields->mSession->getProtocolVersion() >=
+                    RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+            if (bindersInObjectPositions &&
+                !std::binary_search(rpcFields->mObjectPositions.begin(),
+                                    rpcFields->mObjectPositions.end(), objectPos)) {
+                ALOGE("Cannot read object from position where there is not an object: %zu",
+                      objectPos);
+                return BAD_VALUE;
+            }
+
+            auto& acquiredEnteringBinders = rpcFields->maybeMakeImpl().mAcquiredEnteringBinders;
+            auto it = acquiredEnteringBinders.find(objectPos);
+            if (it != acquiredEnteringBinders.end()) {
+                binder = it->second;
+                LOG_ALWAYS_FATAL_IF(binder == nullptr);
+            }
+
             uint64_t addr;
             if (status_t status = readUint64(&addr); status != OK) return status;
-            if (status_t status =
-                        rpcFields->mSession->state()->onBinderEntering(rpcFields->mSession, addr,
-                                                                       &binder);
-                status != OK)
-                return status;
-            if (status_t status =
-                        rpcFields->mSession->state()->flushExcessBinderRefs(rpcFields->mSession,
-                                                                            addr, binder);
-                status != OK)
-                return status;
+
+            if (binder == nullptr) {
+                if (status_t status =
+                            rpcFields->mSession->state()->onBinderEntering(rpcFields->mSession,
+                                                                           addr, &binder);
+                    status != OK)
+                    return status;
+
+                acquiredEnteringBinders[objectPos] = binder;
+
+                if (status_t status =
+                            rpcFields->mSession->state()->flushExcessBinderRefs(rpcFields->mSession,
+                                                                                addr, binder);
+                    status != OK) {
+                    return status;
+                }
+            }
         }
 
         return finishUnflattenBinder(binder, out);
@@ -509,14 +544,24 @@ status_t Parcel::setData(const uint8_t* buffer, size_t len)
 }
 
 status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
+    // TODO: this method duplicates a lot of functionality from writeFileDescriptor and
+    // writeStrongBinder. Consider re-implementing this in terms of copying data, except
+    // at object offsets, where we write the object again.
+
     if (isForRpc() != parcel->isForRpc()) {
         ALOGE("Cannot append Parcel from one context to another. They may be different formats, "
               "and objects are specific to a context.");
         return BAD_TYPE;
     }
-    if (isForRpc() && maybeRpcFields()->mSession != parcel->maybeRpcFields()->mSession) {
-        ALOGE("Cannot append Parcels from different sessions");
-        return BAD_TYPE;
+    if (isForRpc()) {
+        if (maybeRpcFields()->mSession != parcel->maybeRpcFields()->mSession) {
+            ALOGE("Cannot append Parcels from different sessions");
+            return BAD_TYPE;
+        }
+        if (maybeRpcFields()->mSendState != RpcFields::RpcSendState::NOT_SENT) {
+            ALOGE("Can only build a Parcel when preparing to send it.");
+            return BAD_TYPE;
+        }
     }
 
     status_t err;
@@ -659,12 +704,12 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
         const size_t savedDataPos = mDataPos;
         auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
 
-        rpcFields->mObjectPositions.reserve(otherRpcFields->mObjectPositions.size());
-        if (otherRpcFields->mFds != nullptr) {
-            if (rpcFields->mFds == nullptr) {
-                rpcFields->mFds = std::make_unique<decltype(rpcFields->mFds)::element_type>();
-            }
-            rpcFields->mFds->reserve(otherRpcFields->mFds->size());
+        rpcFields->mObjectPositions.reserve(rpcFields->mObjectPositions.size() +
+                                            otherRpcFields->mObjectPositions.size());
+        if (otherRpcFields->mImpl != nullptr) {
+            rpcFields->maybeMakeImpl();
+            rpcFields->mImpl->mFds.reserve(rpcFields->mImpl->mFds.size() +
+                                           otherRpcFields->mImpl->mFds.size());
         }
         for (size_t i = 0; i < otherRpcFields->mObjectPositions.size(); i++) {
             const binder_size_t objPos = otherRpcFields->mObjectPositions[i];
@@ -680,8 +725,42 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                 if (status_t status = readInt32(&objectType); status != OK) {
                     return status;
                 }
-                if (objectType != RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR) {
+
+                if (objectType == RpcFields::TYPE_BINDER) {
+                    uint64_t addr;
+                    if (status_t status = readUint64(&addr); status != OK) return status;
+
+                    sp<IBinder> binder = rpcFields->mSession->state()->lookupAddress(addr);
+                    if (binder == nullptr) {
+                        ALOGE("Invalid state could not find address: %" PRIu64
+                              ". Terminating!" PRIu64,
+                              addr);
+                        (void)rpcFields->mSession->shutdownAndWait(false);
+                        return BAD_VALUE;
+                    }
+
+                    uint64_t leavingAddress;
+                    if (status_t status =
+                                rpcFields->mSession->state()->onBinderLeaving(rpcFields->mSession,
+                                                                              binder,
+                                                                              &leavingAddress);
+                        status != OK) {
+                        return status;
+                    }
+
+                    if (addr != leavingAddress) {
+                        ALOGE("Inconsistent addresses: %" PRIu64 " vs %" PRIu64 ". Terminating!",
+                              addr, leavingAddress);
+                        (void)rpcFields->mSession->shutdownAndWait(false);
+                        return BAD_VALUE;
+                    }
+
                     continue;
+                }
+
+                if (objectType != RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR) {
+                    ALOGE("RPC Binder does not support appending parcels with binders inside");
+                    return INVALID_OPERATION;
                 }
 
                 if (!mAllowFds) {
@@ -693,7 +772,7 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                 if (status_t status = readInt32(&fdIndex); status != OK) {
                     return status;
                 }
-                int oldFd = toRawFd(otherRpcFields->mFds->at(fdIndex));
+                int oldFd = toRawFd(otherRpcFields->mImpl->mFds.at(fdIndex));
                 // To match kernel binder behavior, we always dup, even if the
                 // FD was unowned in the source parcel.
                 int newFd = -1;
@@ -701,10 +780,10 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                     ALOGW("Failed to duplicate file descriptor %d: %s", oldFd,
                           statusToString(status).c_str());
                 }
-                rpcFields->mFds->emplace_back(unique_fd(newFd));
+                rpcFields->mImpl->mFds.emplace_back(unique_fd(newFd));
                 // Fixup the index in the data.
                 mDataPos = newDataPos + 4;
-                if (status_t status = writeInt32(rpcFields->mFds->size() - 1); status != OK) {
+                if (status_t status = writeInt32(rpcFields->mImpl->mFds.size() - 1); status != OK) {
                     return status;
                 }
             }
@@ -763,7 +842,7 @@ void Parcel::restoreAllowFds(bool lastValue)
 bool Parcel::hasFileDescriptors() const
 {
     if (const auto* rpcFields = maybeRpcFields()) {
-        return rpcFields->mFds != nullptr && !rpcFields->mFds->empty();
+        return rpcFields->mImpl != nullptr && !rpcFields->mImpl->mFds.empty();
     }
     auto* kernelFields = maybeKernelFields();
     if (!kernelFields->mFdsKnown) {
@@ -829,8 +908,8 @@ std::vector<int> Parcel::debugReadAllFileDescriptors() const {
         LOG_ALWAYS_FATAL("Binder kernel driver disabled at build time");
         (void)kernelFields;
 #endif
-    } else if (const auto* rpcFields = maybeRpcFields(); rpcFields && rpcFields->mFds) {
-        for (const auto& fd : *rpcFields->mFds) {
+    } else if (const auto* rpcFields = maybeRpcFields(); rpcFields && rpcFields->mImpl) {
+        for (const auto& fd : rpcFields->mImpl->mFds) {
             ret.push_back(toRawFd(fd));
         }
     }
@@ -1153,8 +1232,10 @@ size_t Parcel::objectsCount() const
 {
     if (const auto* kernelFields = maybeKernelFields()) {
         return kernelFields->mObjectsSize;
+    } else if (auto* rpcFields = maybeRpcFields()) {
+        return rpcFields->mObjectPositions.size();
     }
-    return 0;
+    LOG_ALWAYS_FATAL("Must be for kernel or for RPC");
 }
 
 status_t Parcel::errorCheck() const
@@ -1606,9 +1687,6 @@ status_t Parcel::writeFileDescriptor(int fd, bool takeOwnership) {
             }
             case RpcSession::FileDescriptorTransportMode::UNIX:
             case RpcSession::FileDescriptorTransportMode::TRUSTY: {
-                if (rpcFields->mFds == nullptr) {
-                    rpcFields->mFds = std::make_unique<decltype(rpcFields->mFds)::element_type>();
-                }
                 size_t dataPos = mDataPos;
                 if (dataPos > UINT32_MAX) {
                     ALOGE("%s: dataPos %zu larger than MAX %u", __FUNCTION__, dataPos, UINT32_MAX);
@@ -1617,14 +1695,14 @@ status_t Parcel::writeFileDescriptor(int fd, bool takeOwnership) {
                 if (status_t err = writeInt32(RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR); err != OK) {
                     return err;
                 }
-                if (status_t err = writeInt32(rpcFields->mFds->size()); err != OK) {
+                if (status_t err = writeInt32(rpcFields->maybeMakeImpl().mFds.size()); err != OK) {
                     return err;
                 }
                 rpcFields->mObjectPositions
                         .insert(std::upper_bound(rpcFields->mObjectPositions.begin(),
                                                  rpcFields->mObjectPositions.end(), dataPos),
                                 dataPos);
-                rpcFields->mFds->push_back(std::move(fdVariant));
+                rpcFields->mImpl->mFds.push_back(std::move(fdVariant));
                 return OK;
             }
         }
@@ -2469,13 +2547,13 @@ int Parcel::readFileDescriptor() const {
         }
 
         int32_t fdIndex = readInt32();
-        if (rpcFields->mFds == nullptr || fdIndex < 0 ||
-            static_cast<size_t>(fdIndex) >= rpcFields->mFds->size()) {
+        if (rpcFields->mImpl == nullptr || fdIndex < 0 ||
+            static_cast<size_t>(fdIndex) >= rpcFields->mImpl->mFds.size()) {
             ALOGE("RPC Parcel contains invalid file descriptor index. index=%d fd_count=%zu",
-                  fdIndex, rpcFields->mFds ? rpcFields->mFds->size() : 0);
+                  fdIndex, rpcFields->mImpl ? rpcFields->mImpl->mFds.size() : 0);
             return BAD_VALUE;
         }
-        return toRawFd(rpcFields->mFds->at(fdIndex));
+        return toRawFd(rpcFields->mImpl->mFds.at(fdIndex));
     }
 
 #ifdef BINDER_WITH_KERNEL_IPC
@@ -2757,7 +2835,9 @@ void Parcel::closeFileDescriptors(size_t newObjectsSize) {
         (void)kernelFields;
 #endif // BINDER_WITH_KERNEL_IPC
     } else if (auto* rpcFields = maybeRpcFields()) {
-        rpcFields->mFds.reset();
+        if (rpcFields->mImpl) {
+            rpcFields->mImpl->mFds.clear();
+        }
     }
 }
 
@@ -2810,9 +2890,9 @@ void Parcel::makeDangerousViewOf(Parcel* p) {
         auto* rf = p->maybeRpcFields();
         LOG_ALWAYS_FATAL_IF(rf == nullptr);
         std::vector<std::variant<binder::unique_fd, binder::borrowed_fd>> fds;
-        if (rf->mFds) {
-            fds.reserve(rf->mFds->size());
-            for (const auto& fd : *rf->mFds) {
+        if (rf->mImpl && !rf->mImpl->mFds.empty()) {
+            fds.reserve(rf->mImpl->mFds.size());
+            for (const auto& fd : rf->mImpl->mFds) {
                 fds.push_back(binder::borrowed_fd(toRawFd(fd)));
             }
         }
@@ -2906,6 +2986,17 @@ void Parcel::ipcSetDataReference(const uint8_t* data, size_t dataSize, const bin
 #endif // BINDER_WITH_KERNEL_IPC
 }
 
+void Parcel::rpcSend() const {
+    auto* rpcFields = maybeRpcFields();
+    // To support this, onBinderEntering needs to be re-run each time the Parcel is sent.
+    // Without this, objects would be freed too early, and it would cause the transaction to
+    // terminate. We are confident this is not needed though because hand-written interfaces
+    // won't typically work with RPC binder, and AIDL will never do this.
+    LOG_ALWAYS_FATAL_IF(rpcFields->mSendState != RpcFields::RpcSendState::NOT_SENT,
+                        "RPC Binder transactions can't be sent twice.");
+    rpcFields->mSendState = RpcFields::RpcSendState::SENT;
+}
+
 status_t Parcel::rpcSetDataReference(
         const sp<RpcSession>& session, const uint8_t* data, size_t dataSize,
         const uint32_t* objectTable, size_t objectTableSize,
@@ -2915,18 +3006,28 @@ status_t Parcel::rpcSetDataReference(
 
     LOG_ALWAYS_FATAL_IF(session == nullptr);
 
-    if (objectTableSize != ancillaryFds.size()) {
+    bool sameSize = objectTableSize == ancillaryFds.size();
+    bool fitsIn = objectTableSize >= ancillaryFds.size(); // other positions are binders
+    bool bindersInObjectPositions = session->getProtocolVersion() >=
+            RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+
+    if (!(bindersInObjectPositions ? fitsIn : sameSize)) {
         ALOGE("objectTableSize=%zu ancillaryFds.size=%zu", objectTableSize, ancillaryFds.size());
         relFunc(data, dataSize, nullptr, 0);
         return BAD_VALUE;
     }
     for (size_t i = 0; i < objectTableSize; i++) {
         uint32_t minObjectEnd;
+        // Only check type field, as different types have different lengths. If they are read off
+        // the end of the Parcel, that will cause an error there, though this may be able to be
+        // improved. For longer types (binder), they are checked below.
         if (__builtin_add_overflow(objectTable[i], sizeof(RpcFields::ObjectType), &minObjectEnd) ||
             minObjectEnd >= dataSize) {
-            ALOGE("received out of range object position: %" PRIu32 " (parcel size is %zu)",
+            ALOGE("received out of range object position: %" PRIu32
+                  " (parcel size is %zu). Terminating.",
                   objectTable[i], dataSize);
             relFunc(data, dataSize, nullptr, 0);
+            (void)session->shutdownAndWait(false);
             return BAD_VALUE;
         }
     }
@@ -2942,15 +3043,39 @@ status_t Parcel::rpcSetDataReference(
     mDataSize = mDataCapacity = dataSize;
     mOwner = relFunc;
 
+    LOG_ALWAYS_FATAL_IF(rpcFields->mSendState != RpcFields::RpcSendState::NOT_SENT,
+                        "RPC Binder transactions must be not sent to receive.");
+    rpcFields->mSendState = RpcFields::RpcSendState::RECEIVED;
+
     rpcFields->mObjectPositions.reserve(objectTableSize);
     for (size_t i = 0; i < objectTableSize; i++) {
         rpcFields->mObjectPositions.push_back(objectTable[i]);
     }
     if (!ancillaryFds.empty()) {
-        rpcFields->mFds = std::make_unique<decltype(rpcFields->mFds)::element_type>();
-        *rpcFields->mFds = std::move(ancillaryFds);
+        rpcFields->maybeMakeImpl();
+        rpcFields->mImpl->mFds = std::move(ancillaryFds);
     }
 
+    if (bindersInObjectPositions) {
+        // acquire all binder objects, so if there is an error, we still know
+        // to decref
+        for (uint32_t pos : rpcFields->mObjectPositions) {
+            mDataPos = pos;
+            int32_t objectType;
+            if (status_t status = readInt32(&objectType); status != OK) return status;
+            if (objectType != RpcFields::TYPE_BINDER) continue;
+
+            mDataPos = pos;
+            sp<IBinder> binder; // also held by mAcquiredEnteringBinders
+            if (status_t status = readStrongBinder(&binder); status != OK) {
+                ALOGE("Failed to acquire binder: %s. Terminating.", statusToString(status).c_str());
+                (void)session->shutdownAndWait(false);
+                return status;
+            }
+        }
+    }
+
+    mDataPos = 0;
     return OK;
 }
 
@@ -2986,6 +3111,7 @@ void Parcel::releaseObjects()
 {
     auto* kernelFields = maybeKernelFields();
     if (kernelFields == nullptr) {
+        truncateRpcObjects(0);
         return;
     }
 
@@ -3168,8 +3294,7 @@ status_t Parcel::restartWrite(size_t desired)
         kernelFields->mHasFds = false;
         kernelFields->mFdsKnown = true;
     } else if (auto* rpcFields = maybeRpcFields()) {
-        rpcFields->mObjectPositions.clear();
-        rpcFields->mFds.reset();
+        *rpcFields = RpcFields(rpcFields->mSession);
     }
     mAllowFds = true;
 
@@ -3407,10 +3532,41 @@ status_t Parcel::continueWrite(size_t desired)
 
 status_t Parcel::truncateRpcObjects(size_t newObjectsSize) {
     auto* rpcFields = maybeRpcFields();
+
+    switch (rpcFields->mSendState) {
+        case RpcFields::RpcSendState::NOT_SENT: {
+            for (size_t i = newObjectsSize; i < rpcFields->mObjectPositions.size(); i++) {
+                // this is only called during shutdown, position will be cleared
+                mDataPos = rpcFields->mObjectPositions[i];
+
+                int32_t objectType;
+                LOG_ALWAYS_FATAL_IF(OK != readInt32(&objectType),
+                                    "Inconsistent acquisition state.");
+                if (objectType != RpcFields::TYPE_BINDER) continue;
+                uint64_t addr;
+                LOG_ALWAYS_FATAL_IF(OK != readUint64(&addr), "Inconsistent acquisition state.");
+                if (status_t status =
+                            rpcFields->mSession->state()->cancelBinderLeaving(rpcFields->mSession,
+                                                                              addr);
+                    status != OK) {
+                    ALOGE("Unexpected failure releasing resources: %s",
+                          statusToString(status).c_str());
+                    (void)rpcFields->mSession->shutdownAndWait(false);
+                    return DEAD_OBJECT;
+                }
+            }
+        } break;
+        case RpcFields::RpcSendState::SENT:
+            break; // other side should handle it
+        case RpcFields::RpcSendState::RECEIVED:
+            // TODO(b/424526253): need to make sure all 'onBinderEntering' calls were made
+            break;
+    }
+
     if (newObjectsSize == 0) {
         rpcFields->mObjectPositions.clear();
-        if (rpcFields->mFds) {
-            rpcFields->mFds->clear();
+        if (rpcFields->mImpl) {
+            rpcFields->mImpl->mFds.clear();
         }
         return OK;
     }
@@ -3429,14 +3585,14 @@ status_t Parcel::truncateRpcObjects(size_t newObjectsSize) {
                 return BAD_VALUE;
             }
             const auto fdIndex = *reinterpret_cast<const int32_t*>(mData + minObjectEnd);
-            if (rpcFields->mFds == nullptr || fdIndex < 0 ||
-                static_cast<size_t>(fdIndex) >= rpcFields->mFds->size()) {
+            if (rpcFields->mImpl == nullptr || fdIndex < 0 ||
+                static_cast<size_t>(fdIndex) >= rpcFields->mImpl->mFds.size()) {
                 ALOGE("RPC Parcel contains invalid file descriptor index. index=%d fd_count=%zu",
-                      fdIndex, rpcFields->mFds ? rpcFields->mFds->size() : 0);
+                      fdIndex, rpcFields->mImpl ? rpcFields->mImpl->mFds.size() : 0);
                 return BAD_VALUE;
             }
             // In practice, this always removes the last element.
-            rpcFields->mFds->erase(rpcFields->mFds->begin() + fdIndex);
+            rpcFields->mImpl->mFds.erase(rpcFields->mImpl->mFds.begin() + fdIndex);
         }
         rpcFields->mObjectPositions.pop_back();
     }

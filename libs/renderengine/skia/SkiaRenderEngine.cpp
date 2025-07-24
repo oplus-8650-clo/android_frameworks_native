@@ -317,17 +317,17 @@ SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
                                    BlurAlgorithm blurAlgorithm)
       : RenderEngine(threaded), mDefaultPixelFormat(pixelFormat) {
     switch (blurAlgorithm) {
-        case BlurAlgorithm::GAUSSIAN: {
+        case BlurAlgorithm::Gaussian: {
             ALOGD("Background Blurs Enabled (Gaussian algorithm)");
             mBlurFilter = new GaussianBlurFilter(mRuntimeEffectManager);
             break;
         }
-        case BlurAlgorithm::KAWASE: {
+        case BlurAlgorithm::Kawase: {
             ALOGD("Background Blurs Enabled (Kawase algorithm)");
             mBlurFilter = new KawaseBlurFilter(mRuntimeEffectManager);
             break;
         }
-        case BlurAlgorithm::KAWASE_DUAL_FILTER: {
+        case BlurAlgorithm::KawaseDualFilter: {
             ALOGD("Background Blurs Enabled (Kawase dual-filtering algorithm)");
             if (FlagManager::getInstance().window_blur_kawase2_fix_aliasing()) {
                 mBlurFilter = new KawaseBlurDualFilterV2(mRuntimeEffectManager);

@@ -308,7 +308,8 @@ std::unique_ptr<ProcessSession> BinderRpc::createRpcTestSocketServerProcessEtc(
             }));
 
     BinderRpcTestServerConfig serverConfig;
-    serverConfig.numThreads = options.numThreads;
+    serverConfig.numMaxThreads = options.numMaxThreads;
+    serverConfig.numMinThreadsPerBinder = options.numMinThreadsPerBinder;
     serverConfig.socketType = static_cast<int32_t>(socketType);
     serverConfig.rpcSecurity = static_cast<int32_t>(rpcSecurity);
     serverConfig.serverVersion = serverVersion;
@@ -466,7 +467,7 @@ TEST_P(BinderRpc, ThreadPoolGreaterThanEqualRequested) {
 
     constexpr size_t kNumThreads = 5;
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
 
     EXPECT_OK(proc.rootIface->lock());
 
@@ -523,7 +524,7 @@ TEST_P(BinderRpc, ThreadPoolOverSaturated) {
 
     constexpr size_t kNumThreads = 10;
     constexpr size_t kNumCalls = kNumThreads + 3;
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
 
     testThreadPoolOverSaturated(proc.rootIface, kNumCalls, 200 /*ms*/);
 }
@@ -537,7 +538,7 @@ TEST_P(BinderRpc, ThreadPoolLimitOutgoing) {
     constexpr size_t kNumOutgoingConnections = 10;
     constexpr size_t kNumCalls = kNumOutgoingConnections + 3;
     auto proc = createRpcTestSocketServerProcess(
-            {.numThreads = kNumThreads, .numOutgoingConnections = kNumOutgoingConnections});
+            {.numMaxThreads = kNumThreads, .numOutgoingConnections = kNumOutgoingConnections});
 
     testThreadPoolOverSaturated(proc.rootIface, kNumCalls, 200 /*ms*/);
 }
@@ -551,7 +552,7 @@ TEST_P(BinderRpc, ThreadingStressTest) {
     constexpr size_t kNumServerThreads = 5;
     constexpr size_t kNumCalls = 50;
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumServerThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumServerThreads});
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < kNumClientThreads; i++) {
@@ -584,7 +585,7 @@ TEST_P(BinderRpc, OnewayStressTest) {
     constexpr size_t kNumServerThreads = 10;
     constexpr size_t kNumCalls = 1000;
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumServerThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumServerThreads});
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < kNumClientThreads; i++) {
@@ -618,7 +619,7 @@ TEST_P(BinderRpc, OnewayCallQueueingWithFds) {
     // https://developer.android.com/reference/android/os/IBinder#FLAG_ONEWAY
 
     auto proc = createRpcTestSocketServerProcess({
-            .numThreads = kNumServerThreads,
+            .numMaxThreads = kNumServerThreads,
             .clientFileDescriptorTransportMode = RpcSession::FileDescriptorTransportMode::UNIX,
             .serverSupportedFileDescriptorTransportModes =
                     {RpcSession::FileDescriptorTransportMode::UNIX},
@@ -652,7 +653,7 @@ TEST_P(BinderRpc, OnewayCallQueueing) {
     constexpr size_t kNumExtraServerThreads = 4;
 
     // make sure calls to the same object happen on the same thread
-    auto proc = createRpcTestSocketServerProcess({.numThreads = 1 + kNumExtraServerThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = 1 + kNumExtraServerThreads});
 
     // all these *Oneway commands should be queued on the server sequentially,
     // even though there are multiple threads.
@@ -676,7 +677,7 @@ TEST_P(BinderRpc, OnewayCallExhaustion) {
     constexpr size_t kNumClients = 2;
     constexpr size_t kTooLongMs = 1000;
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumClients, .numSessions = 2});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumClients, .numSessions = 2});
 
     // Build up oneway calls on the second session to make sure it terminates
     // and shuts down. The first session should be unaffected (proc destructor
@@ -749,7 +750,7 @@ TEST_P(BinderRpc, SessionWithIncomingThreadpoolDoesntLeak) {
     // session 0 - will check for leaks in destrutor of proc
     // session 1 - we want to make sure it gets deleted when we drop all references to it
     auto proc = createRpcTestSocketServerProcess(
-            {.numThreads = 1, .numSessions = 2, .numIncomingConnectionsBySession = {0, 1}});
+            {.numMaxThreads = 1, .numSessions = 2, .numIncomingConnectionsBySession = {0, 1}});
 
     wp<RpcSession> session = proc.proc->sessions.at(1).session;
 
@@ -790,7 +791,7 @@ TEST_P(BinderRpc, SingleDeathRecipient) {
 
     // Death recipient needs to have an incoming connection to be called
     auto proc = createRpcTestSocketServerProcess(
-            {.numThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
+            {.numMaxThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
 
     auto dr = sp<MyDeathRec>::make();
     ASSERT_EQ(OK, proc.rootBinder->linkToDeath(dr, (void*)1, 0));
@@ -828,7 +829,7 @@ TEST_P(BinderRpc, SingleDeathRecipientOnShutdown) {
 
     // Death recipient needs to have an incoming connection to be called
     auto proc = createRpcTestSocketServerProcess(
-            {.numThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
+            {.numMaxThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
 
     auto dr = sp<MyDeathRec>::make();
     EXPECT_EQ(OK, proc.rootBinder->linkToDeath(dr, (void*)1, 0));
@@ -861,7 +862,7 @@ TEST_P(BinderRpc, DeathRecipientFailsWithoutIncoming) {
         void binderDied(const wp<IBinder>& /* who */) override {}
     };
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = 1, .numSessions = 1});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = 1, .numSessions = 1});
 
     auto dr = sp<MyDeathRec>::make();
     EXPECT_EQ(INVALID_OPERATION, proc.rootBinder->linkToDeath(dr, (void*)1, 0));
@@ -880,7 +881,7 @@ TEST_P(BinderRpc, UnlinkDeathRecipient) {
 
     // Death recipient needs to have an incoming connection to be called
     auto proc = createRpcTestSocketServerProcess(
-            {.numThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
+            {.numMaxThreads = 1, .numSessions = 1, .numIncomingConnectionsBySession = {1}});
 
     auto dr = sp<MyDeathRec>::make();
     ASSERT_EQ(OK, proc.rootBinder->linkToDeath(dr, (void*)1, 0));
@@ -1191,7 +1192,7 @@ TEST_P(BinderRpc, Fds) {
     ssize_t beforeFds = countFds();
     ASSERT_GE(beforeFds, 0);
     {
-        auto proc = createRpcTestSocketServerProcess({.numThreads = 10});
+        auto proc = createRpcTestSocketServerProcess({.numMaxThreads = 10});
         ASSERT_EQ(OK, proc.rootBinder->pingBinder());
     }
     ASSERT_EQ(beforeFds, countFds()) << (system("ls -l /proc/self/fd/"), "fd leak?");
@@ -1242,7 +1243,7 @@ TEST_P(BinderRpcAccessor, InjectAndGetServiceHappyPath) {
     constexpr size_t kNumThreads = 10;
     const String16 kInstanceName("super.cool.service/better_than_default");
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 
     auto receipt = addAccessorProvider(
@@ -1335,7 +1336,7 @@ TEST_P(BinderRpcAccessor, InjectNoSockaddrProvided) {
     constexpr size_t kNumThreads = 10;
     const String16 kInstanceName("super.cool.service/better_than_default");
 
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 
     bool isProviderDeleted = false;
@@ -1772,7 +1773,7 @@ inline void getServiceTest(BinderRpcTestProcessSession& proc,
 
 TEST_P(BinderRpcAccessor, ARpcGetService) {
     constexpr size_t kNumThreads = 10;
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 
     getServiceTest(proc, getAccessor);
@@ -1803,7 +1804,7 @@ ABinderRpc_Accessor* getDelegatedAccessor(const char* instance, void* cookie) {
 
 TEST_P(BinderRpcAccessor, ARpcGetServiceWithDelegator) {
     constexpr size_t kNumThreads = 10;
-    auto proc = createRpcTestSocketServerProcess({.numThreads = kNumThreads});
+    auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 
     getServiceTest(proc, getDelegatedAccessor);
@@ -1959,6 +1960,8 @@ static std::vector<SocketType> testSocketTypes(bool hasPreconnected = true) {
 static std::vector<BinderRpc::ParamType> getBinderRpcParams() {
     std::vector<BinderRpc::ParamType> ret;
 
+    // IF YOU ARE MAKING MAJOR CHANGES TO RPC BINDER, SET THIS TO 'true' TO RUN ALL COMBINATIONS OF
+    // TESTS
     constexpr bool full = false;
 
     for (const auto& type : testSocketTypes()) {
@@ -1968,6 +1971,14 @@ static std::vector<BinderRpc::ParamType> getBinderRpcParams() {
                     for (const auto& serverVersion : testVersions()) {
                         for (bool singleThreaded : {false, true}) {
                             for (bool noKernel : noKernelValues()) {
+                                // SKIP combinatorial testing of old versions, since otherwise this
+                                // test takes way too long
+                                if (!full &&
+                                    (clientVersion != RPC_WIRE_PROTOCOL_VERSION &&
+                                     serverVersion != RPC_WIRE_PROTOCOL_VERSION) &&
+                                    security != RpcSecurity::RAW)
+                                    continue;
+
                                 ret.push_back(BinderRpc::ParamType{
                                         .type = type,
                                         .security = security,
@@ -2108,6 +2119,48 @@ TEST(BinderRpc, Java) {
     ASSERT_EQ(descriptor, rpcBinder->getInterfaceDescriptor())
             << "getInterfaceDescriptor should not crash system_server";
     ASSERT_EQ(OK, rpcBinder->pingBinder());
+}
+
+TEST(BinderRpcNoSetup, OverrideServerMaxThreadsRootObj) {
+    sp<RpcServer> server = RpcServer::make();
+    ASSERT_EQ(server->getMaxThreads(), 1u);
+
+    sp<BBinder> binder = sp<BBinder>::make();
+
+    binder->setMinRpcThreads(15u);
+    server->setRootObject(binder);
+    EXPECT_EQ(server->getMaxThreads(), 15u);
+}
+
+TEST(BinderRpcNoSetup, OverrideServerMaxThreadsWeakRootObj) {
+    sp<RpcServer> server = RpcServer::make();
+    ASSERT_EQ(server->getMaxThreads(), 1u);
+
+    sp<BBinder> binder = sp<BBinder>::make();
+
+    binder->setMinRpcThreads(15u);
+    server->setRootObjectWeak(binder);
+    EXPECT_EQ(server->getMaxThreads(), 15u);
+}
+
+TEST_P(BinderRpc, MinThreadsPerBinderSaturation) {
+    if (clientOrServerSingleThreaded()) {
+        GTEST_SKIP() << "This test requires multiple threads";
+    }
+    constexpr uint16_t kMinThreadsPerBinder = 7;
+    auto proc = createRpcTestSocketServerProcess(
+            {.numMaxThreads = 1, .numMinThreadsPerBinder = kMinThreadsPerBinder});
+
+    // The thread handling this will block until another
+    // thread handles the blockingRecvInt call. This will only work
+    // with more than one thread
+    EXPECT_OK(proc.rootIface->blockingSendIntOneway(1));
+    int n;
+    EXPECT_OK(proc.rootIface->blockingRecvInt(&n));
+    EXPECT_EQ(n, 1);
+
+    // force the decref
+    saturateThreadPool(kMinThreadsPerBinder, proc.rootIface);
 }
 
 class BinderRpcServerOnly : public ::testing::TestWithParam<std::tuple<RpcSecurity, uint32_t>> {

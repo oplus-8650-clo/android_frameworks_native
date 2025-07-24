@@ -2020,7 +2020,7 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setInput
         mStatus = BAD_INDEX;
         return *this;
     }
-    s->updateInputWindowInfo(std::move(info));
+    s->updateInputWindowInfo(*info->getInfo());
     return *this;
 }
 
@@ -2396,6 +2396,12 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setConte
 
         registerSurfaceControlForCallback(sc);
     }
+    return *this;
+}
+
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::addTransactionBarrier(
+        gui::TransactionBarrier barrier) {
+    mState.mBarriers.emplace_back(std::move(barrier));
     return *this;
 }
 

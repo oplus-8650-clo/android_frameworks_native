@@ -142,7 +142,7 @@ struct QueuedTransactionState {
     int64_t desiredPresentTime;
     bool isAutoTimestamp;
     std::vector<uint64_t> uncacheBufferIds;
-    int64_t postTime;
+    nsecs_t postTime;
     bool hasListenerCallbacks;
     std::vector<ListenerCallbacks> listenerCallbacks;
     int originPid;

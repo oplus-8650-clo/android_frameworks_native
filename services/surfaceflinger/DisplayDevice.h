@@ -111,6 +111,9 @@ public:
 
     bool isVirtual() const;
     bool isPrimary() const { return mIsPrimary; }
+    bool isGpuVirtualDisplay() const {
+        return std::holds_alternative<GpuVirtualDisplayId>(getDisplayIdVariant());
+    }
 
     // isSecure indicates whether this display can be trusted to display
     // secure surfaces.

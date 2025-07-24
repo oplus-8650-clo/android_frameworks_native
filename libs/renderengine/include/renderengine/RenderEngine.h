@@ -18,6 +18,7 @@
 #define SF_RENDERENGINE_H_
 
 #include <android-base/unique_fd.h>
+#include <ftl/enum.h>
 #include <ftl/future.h>
 #include <math/mat4.h>
 #include <renderengine/DisplaySettings.h>
@@ -92,8 +93,10 @@ class ExternalTexture;
 }
 
 enum class Protection {
-    UNPROTECTED = 1,
-    PROTECTED = 2,
+    Unprotected,
+    Protected,
+
+    ftl_last = Protected
 };
 
 // Toggles for skipping or enabling priming of particular shaders.
@@ -115,32 +118,42 @@ struct PrimeCacheConfig {
 class RenderEngine {
 public:
     enum class ContextPriority {
-        LOW = 1,
-        MEDIUM = 2,
-        HIGH = 3,
-        REALTIME = 4,
+        Low,
+        Medium,
+        High,
+        Realtime,
+
+        ftl_last = Realtime
     };
 
     enum class Threaded {
-        NO,
-        YES,
+        No,
+        Yes,
+
+        ftl_last = Yes
     };
 
     enum class GraphicsApi {
         GL,
-        VK,
+        Vk,
+
+        ftl_last = Vk
     };
 
     enum class SkiaBackend {
-        GANESH,
-        GRAPHITE,
+        Ganesh,
+        Graphite,
+
+        ftl_last = Graphite
     };
 
     enum class BlurAlgorithm {
-        NONE,
-        GAUSSIAN,
-        KAWASE,
-        KAWASE_DUAL_FILTER,
+        None,
+        Gaussian,
+        Kawase,
+        KawaseDualFilter,
+
+        ftl_last = KawaseDualFilter
     };
 
     static std::unique_ptr<RenderEngine> create(const RenderEngineCreationArgs& args);
@@ -253,7 +266,7 @@ public:
 
     // TODO(b/180767535): This is only implemented to allow for backend-specific behavior, which
     // we should not allow in general, so remove this.
-    bool isThreaded() const { return mThreaded == Threaded::YES; }
+    bool isThreaded() const { return mThreaded == Threaded::Yes; }
 
     static void validateInputBufferUsage(const sp<GraphicBuffer>&);
     static void validateOutputBufferUsage(const sp<GraphicBuffer>&);
@@ -269,7 +282,7 @@ public:
 
 // QTI_END: 2024-04-09: Display: sf: extensions: Add support for fb scaling
 protected:
-    RenderEngine() : RenderEngine(Threaded::NO) {}
+    RenderEngine() : RenderEngine(Threaded::No) {}
 
     RenderEngine(Threaded threaded) : mThreaded(threaded) {}
 
@@ -412,11 +425,11 @@ private:
     uint32_t imageCacheSize = 0;
     bool enableProtectedContext = false;
     bool precacheToneMapperShaderOnly = false;
-    RenderEngine::BlurAlgorithm blurAlgorithm = RenderEngine::BlurAlgorithm::NONE;
-    RenderEngine::ContextPriority contextPriority = RenderEngine::ContextPriority::MEDIUM;
-    RenderEngine::Threaded threaded = RenderEngine::Threaded::YES;
+    RenderEngine::BlurAlgorithm blurAlgorithm = RenderEngine::BlurAlgorithm::None;
+    RenderEngine::ContextPriority contextPriority = RenderEngine::ContextPriority::Medium;
+    RenderEngine::Threaded threaded = RenderEngine::Threaded::Yes;
     RenderEngine::GraphicsApi graphicsApi = RenderEngine::GraphicsApi::GL;
-    RenderEngine::SkiaBackend skiaBackend = RenderEngine::SkiaBackend::GANESH;
+    RenderEngine::SkiaBackend skiaBackend = RenderEngine::SkiaBackend::Ganesh;
 };
 
 } // namespace renderengine

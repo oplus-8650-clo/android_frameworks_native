@@ -15,10 +15,14 @@
  */
 #pragma once
 
+#include <binder/Binder.h>
 #include <mutex>
+
+#include "BinderObserverConfig.h"
 #include "BinderStatsPusher.h"
 #include "BinderStatsSpscQueue.h"
 #include "BinderStatsUtils.h"
+#include "binder_module.h"
 
 namespace android {
 
@@ -29,34 +33,57 @@ namespace android {
  * with each IPCThreadState. It periodically flushes these queues, aggregates
  * data using BinderStatsCollector, and sends statistics via BinderStatsPusher.
  *
- * How it is used:
+ * How it is works:
  * - An instance is typically owned by ProcessState.
- * - IPCThreadState instances register their BinderStatsSpscQueue with the
- *   BinderObserver.
- * - IPCThreadState pushes BinderCallData to its local queue and calls
- *   addStatMaybeFlush on the BinderObserver.
+ * - IPCThreadState instances register themselves with the BinderObserver.
+ * - IPCThreadState reports binder calls using onBeginTransaction/onEndTransaction
+ * - this pushes BinderCallData to the stats queue of the thread via addStatMaybeFlush.
  * - flushStats (or flushIfRequired) periodically collects data from all
  *   registered queues and passes it to BinderStatsPusher.
  *
  * Threading Requirements:
+ * - onBeginTransaction, onEndTransaction, registerThread, deregisterThread: thread-safe
  * - addStatMaybeFlush: thread-safe
- * - registerQueue, deregisterQueue: thread-safe
  */
 class BinderObserver {
 public:
+    // Initial data for tracking a binder call
+    struct CallInfo {
+        String16 interfaceDescriptor;
+        uint32_t code;
+        uid_t callingUid;
+        BinderObserverConfig::TrackingInfo trackingInfo;
+        int64_t startTimeNanos;
+    };
+
+    std::shared_ptr<BinderStatsSpscQueue> registerThread() {
+        if (!mConfig->isEnabled()) {
+            return nullptr;
+        }
+        std::shared_ptr<BinderStatsSpscQueue> queue = std::make_shared<BinderStatsSpscQueue>();
+        mBinderStatsCollector.registerQueue(queue);
+        return queue;
+    }
+    void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue) {
+        if (!mConfig->isEnabled()) {
+            LOG_ALWAYS_FATAL_IF(queue != nullptr,
+                                "Non-null queue when BinderObserver is disabled.");
+            return;
+        }
+        mBinderStatsCollector.deregisterQueue(queue);
+    }
+    CallInfo onBeginTransaction(BBinder* binder, uint32_t code, uid_t callingUid);
+    void onEndTransaction(const std::shared_ptr<BinderStatsSpscQueue>& queue,
+                          const CallInfo& callInfo);
+
+private:
     // Add stats to the local queue, flush if queue is full.
     void addStatMaybeFlush(const std::shared_ptr<BinderStatsSpscQueue>& queue,
                            const BinderCallData& stat);
-    void registerQueue(std::shared_ptr<BinderStatsSpscQueue>& queue) {
-        mBinderStatsCollector.registerQueue(queue);
-    }
-    void deregisterQueue(std::shared_ptr<BinderStatsSpscQueue>& queue) {
-        mBinderStatsCollector.deregisterQueue(queue);
-    }
-
-private:
     void flushStats(int64_t nowMillis);
     bool isFlushRequired(int64_t nowMillis);
+
+    std::unique_ptr<BinderObserverConfig> mConfig = BinderObserverConfig::createConfig();
     // Time since last flush time. Used to trigger a flush if more than kSendTimeoutSec
     // has elapsed since last flush.
     std::atomic<int64_t> mLastFlushTimeSec;

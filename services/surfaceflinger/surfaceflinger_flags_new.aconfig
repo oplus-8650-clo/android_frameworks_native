@@ -14,16 +14,6 @@ flag {
 } # add_first_vsync_to_tracker
 
 flag {
-  name: "adpf_cpu_effects_loadup"
-  namespace: "window_surfaces"
-  description: "Enables CPU loadup hints for effects using client composition"
-  bug: "409887260"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # adpf_cpu_effects_loadup
-
-flag {
   name: "adpf_fmq_sf"
   namespace: "game"
   description: "Guards use of the ADPF FMQ system specifically for SurfaceFlinger"
@@ -152,6 +142,16 @@ flag {
 } # disable_synthetic_vsync_for_performance
 
 flag {
+  name: "disable_transparent_region_hint"
+  namespace: "window_surfaces"
+  description: "Disable using transparent region hints when cropping layers"
+  bug: "428386342"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # disable_transparent_region_hint
+
+flag {
   name: "display_config_error_hal"
   namespace: "core_graphics"
   description: "Report HAL display configuration errors like modeset failure or link training failure"
@@ -237,6 +237,25 @@ flag {
 } # no_vsyncs_on_screen_off
 
 flag {
+  name: "offload_gpu_composition"
+  namespace: "window_surfaces"
+  description: "Offload virtual display client composition from main thread"
+  bug: "428611036"
+  is_fixed_read_only: true
+} # offload_gpu_composition
+
+flag {
+  name: "override_trusted_overlay"
+  namespace: "window_surfaces"
+  description: "Allow child to disable trusted overlay set by a parent layer"
+  bug: "339701674"
+  is_fixed_read_only: true
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # override_trusted_overlay
+
+flag {
   name: "pacesetter_selection"
   namespace: "desktop_display"
   description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
@@ -279,11 +298,15 @@ flag {
  } # resync_on_tx
 
 flag {
-  name: "set_distinct_corner_radii"
+  name: "set_client_drawn_corner_radii"
   namespace: "window_surfaces"
   description: "Add support for API to set distinct radii for each corner"
   bug: "406554726"
- } # set_distinct_corner_radii
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # set_client_drawn_corner_radii
+
 
 flag {
   name: "skip_invisible_windows_in_input"
@@ -327,17 +350,6 @@ flag {
   is_fixed_read_only: true
 } # true_hdr_screenshots
 
- flag {
-  name: "override_trusted_overlay"
-  namespace: "window_surfaces"
-  description: "Allow child to disable trusted overlay set by a parent layer"
-  bug: "339701674"
-  is_fixed_read_only: true
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # override_trusted_overlay
-
 flag {
     name: "unify_refresh_rate_callbacks"
     namespace: "core_graphics"
@@ -357,16 +369,6 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # vsync_predictor_rate_change_with_aligned_sequence
-
-flag {
-  name: "vsync_predictor_recovery"
-  namespace: "core_graphics"
-  description: "Recover the vsync predictor from bad vsync model"
-  bug: "385059265"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # vsync_predictor_recovery
 
 flag {
   name: "vsync_predictor_predicts_within_threshold"

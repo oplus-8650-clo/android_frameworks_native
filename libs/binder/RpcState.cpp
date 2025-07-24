@@ -79,6 +79,13 @@ static bool enableAncillaryFds(RpcSession::FileDescriptorTransportMode mode) {
 RpcState::RpcState() {}
 RpcState::~RpcState() {}
 
+sp<IBinder> RpcState::lookupAddress(uint64_t address) {
+    for (auto& [addr, node] : mNodeForAddress) {
+        if (addr == address) return node.sentRef;
+    }
+    return nullptr;
+}
+
 status_t RpcState::onBinderLeaving(const sp<RpcSession>& session, const sp<IBinder>& binder,
                                    uint64_t* outAddress) {
     bool isRemote = binder->remoteBinder();
@@ -161,6 +168,10 @@ status_t RpcState::onBinderLeaving(const sp<RpcSession>& session, const sp<IBind
             return OK;
         }
     }
+}
+
+status_t RpcState::cancelBinderLeaving(const sp<RpcSession>& session, uint64_t address) {
+    return doDecStrong(session, address, 1);
 }
 
 status_t RpcState::onBinderEntering(const sp<RpcSession>& session, uint64_t address,
@@ -649,6 +660,12 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
                                 __builtin_add_overflow(objectTableSpan.byteSize(), bodySize,
                                                        &bodySize),
                         "Too much data %zu", data.dataSize());
+
+    // At this point, all errors imply a protocol break and the transaction must be shut
+    // down to avoid leaks. Any errors before this point while constructing this Parcel
+    // can be ignored.
+    data.rpcSend();
+
     RpcWireHeader command{
             .command = RPC_COMMAND_TRANSACT,
             .bodySize = bodySize,
@@ -695,8 +712,9 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
         // executing.
         return drainCommands(connection, session, CommandType::CONTROL_ONLY);
     };
-    if (status_t status = rpcSend(connection, session, "transaction", iovs, countof(iovs),
-                                  std::ref(altPoll), rpcFields->mFds.get());
+    if (status_t status =
+                rpcSend(connection, session, "transaction", iovs, countof(iovs), std::ref(altPoll),
+                        rpcFields->mImpl ? &rpcFields->mImpl->mFds : nullptr);
         status != OK) {
         // rpcSend calls shutdownAndWait, so all refcounts should be reset. If we ever tolerate
         // errors here, then we may need to undo the binder-sent counts for the transaction as
@@ -1283,6 +1301,12 @@ processTransactInternalTailCall:
                                 __builtin_add_overflow(objectTableSpan.byteSize(), bodySize,
                                                        &bodySize),
                         "Too much data for reply %zu", reply.dataSize());
+
+    // Ownership of objects in Parcel is considered to be the receiver at this point. All errors
+    // above should be sent through "replyStatus" anyway. However, for other Parcel which are
+    // constructed elsewhere, this won't get called, so their resources will get cleaned up.
+    reply.rpcSend();
+
     RpcWireHeader cmdReply{
             .command = RPC_COMMAND_REPLY,
             .bodySize = bodySize,
@@ -1302,7 +1326,7 @@ processTransactInternalTailCall:
             objectTableSpan.toIovec(),
     };
     return rpcSend(connection, session, "reply", iovs, countof(iovs), std::nullopt,
-                   rpcFields->mFds.get());
+                   rpcFields->mImpl ? &rpcFields->mImpl->mFds : nullptr);
 }
 
 // THIS FUNCTION MUST SHUTDOWN IF IT ERRORS, ACCORDING TO processCommand.
@@ -1328,8 +1352,10 @@ status_t RpcState::processDecStrong(const sp<RpcSession::RpcConnection>& connect
     // AT THIS POINT, WE HAVE READ THE FULL TRANSACTION, SO WE CAN RETURN WITHOUT MESSING
     // UP THE PROTOCOL
 
-    uint64_t addr = RpcWireAddress::toRaw(body.address);
+    return doDecStrong(session, RpcWireAddress::toRaw(body.address), body.amount);
+}
 
+status_t RpcState::doDecStrong(const sp<RpcSession>& session, uint64_t addr, uint32_t amount) {
     RpcMutexUniqueLock _l(mNodeMutex);
     if (mTerminated) return DEAD_OBJECT;
 
@@ -1350,19 +1376,19 @@ status_t RpcState::processDecStrong(const sp<RpcSession::RpcConnection>& connect
         return BAD_VALUE;
     }
 
-    if (it->second.timesSent < body.amount) {
+    if (it->second.timesSent < amount) {
         ALOGE("Record of sending binder %zu times, but requested decStrong for %" PRIu64 " of %u",
-              it->second.timesSent, addr, body.amount);
+              it->second.timesSent, addr, amount);
         return OK;
     }
 
     LOG_ALWAYS_FATAL_IF(it->second.sentRef == nullptr, "Inconsistent state, lost ref for %" PRIu64,
                         addr);
 
-    LOG_RPC_DETAIL("Processing dec strong of %" PRIu64 " by %u from %zu", addr, body.amount,
+    LOG_RPC_DETAIL("Processing dec strong of %" PRIu64 " by %u from %zu", addr, amount,
                    it->second.timesSent);
 
-    it->second.timesSent -= body.amount;
+    it->second.timesSent -= amount;
     sp<IBinder> tempHold = tryEraseNode(session, std::move(_l), it);
     // LOCK ALREADY RELEASED
     tempHold = nullptr; // destructor may make binder calls on this session
@@ -1394,16 +1420,16 @@ status_t RpcState::validateParcel(const sp<RpcSession>& session, const Parcel& p
         return BAD_VALUE;
     }
 
-    if (rpcFields->mFds && !rpcFields->mFds->empty()) {
+    if (rpcFields->mImpl && !rpcFields->mImpl->mFds.empty()) {
         auto fileDescriptorTransportMode = session->getFileDescriptorTransportMode();
         size_t maxFdsPerMsg = getRpcTransportModeMaxFds(fileDescriptorTransportMode);
         if (RpcSession::FileDescriptorTransportMode::NONE == fileDescriptorTransportMode) {
             *errorMsg = "Parcel has file descriptors, but no file descriptor transport is enabled";
             return FDS_NOT_ALLOWED;
         }
-        if (rpcFields->mFds->size() > maxFdsPerMsg) {
+        if (rpcFields->mImpl->mFds.size() > maxFdsPerMsg) {
             *errorMsg = "Too many file descriptors in Parcel: ";
-            errorMsg->append(std::to_string(rpcFields->mFds->size()));
+            errorMsg->append(std::to_string(rpcFields->mImpl->mFds.size()));
             errorMsg->append(" (max is ");
             errorMsg->append(std::to_string(maxFdsPerMsg));
             errorMsg->append(")");

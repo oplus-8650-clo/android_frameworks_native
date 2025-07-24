@@ -170,19 +170,20 @@ class InputDispatcherTest : public testing::Test {
 protected:
     std::unique_ptr<FakeInputDispatcherPolicy> mFakePolicy;
     std::unique_ptr<InputDispatcher> mDispatcher;
-    std::shared_ptr<VerifyingTrace> mVerifyingTrace;
+    std::shared_ptr<input_trace::VerifyingTrace> mVerifyingTrace;
 
     void SetUp() override {
-        mVerifyingTrace = std::make_shared<VerifyingTrace>();
+        mVerifyingTrace = std::make_shared<input_trace::VerifyingTrace>();
         FakeWindowHandle::sOnEventReceivedCallback = [this](const auto& _1, const auto& _2) {
             handleEventReceivedByWindow(_1, _2);
         };
 
         mFakePolicy = std::make_unique<FakeInputDispatcherPolicy>();
-        mDispatcher = std::make_unique<InputDispatcher>(*mFakePolicy,
-                                                        std::make_unique<FakeInputTracingBackend>(
-                                                                mVerifyingTrace),
-                                                        /*env=*/nullptr);
+        mDispatcher = std::make_unique<
+                InputDispatcher>(*mFakePolicy,
+                                 std::make_unique<input_trace::FakeInputTracingBackend>(
+                                         mVerifyingTrace),
+                                 /*env=*/nullptr);
 
         mDispatcher->setInputDispatchMode(/*enabled=*/true, /*frozen=*/false);
         // Start InputDispatcher thread

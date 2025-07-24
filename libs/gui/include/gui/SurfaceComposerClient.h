@@ -48,6 +48,7 @@
 #include <android/gui/BnJankListener.h>
 #include <android/gui/ISurfaceComposerClient.h>
 #include <android/gui/RegionSamplingDescriptor.h>
+#include <android/gui/TransactionBarrier.h>
 
 #include <gui/BufferReleaseChannel.h>
 #include <gui/CpuConsumer.h>
@@ -802,6 +803,16 @@ public:
          * resources, such as picture processing, over a layer with a higher priority value.
          */
         Transaction& setContentPriority(const sp<SurfaceControl>& sc, int32_t contentPriority);
+
+        /**
+         * Adds a barrier to the transaction.
+         *
+         * Transaction barriers are an interprocess synchronization mechanism.
+         * A transaction with a WAIT barrier will remain queued until a SIGNAL
+         * transaction for this barrier is applied.  In this way, transactions
+         * can be reliably sequenced.
+         */
+        Transaction& addTransactionBarrier(gui::TransactionBarrier barrier);
 
         status_t setDisplaySurface(const sp<IBinder>& token,
                 const sp<IGraphicBufferProducer>& bufferProducer);

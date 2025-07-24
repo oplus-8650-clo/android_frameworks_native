@@ -399,10 +399,11 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
         }
 
         if (!changes.any() || changes.test(InputReaderConfiguration::Change::KEY_REMAPPING)) {
-            const bool isFullKeyboard =
-                    (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD &&
-                    mKeyboardType == KeyboardType::ALPHABETIC;
-            if (isFullKeyboard) {
+            const bool isKeyboard =
+                    (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD;
+            const bool isFullKeyboard = isKeyboard && (mKeyboardType == KeyboardType::ALPHABETIC);
+            const bool isPhysicalKeyboard = isKeyboard && !mIsVirtualDevice;
+            if (isPhysicalKeyboard && isFullKeyboard) {
                 for_each_subdevice([&readerConfig](auto& context) {
                     context.setKeyRemapping(readerConfig.keyRemapping);
                 });

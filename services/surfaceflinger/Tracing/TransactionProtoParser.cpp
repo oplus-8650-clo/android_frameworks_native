@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <android/gui/TransactionBarrier.h>
 #include <gui/SurfaceComposerClient.h>
 #include <ui/Fence.h>
 #include <ui/Rect.h>
@@ -22,7 +23,6 @@
 #include "LayerProtoHelper.h"
 #include "QueuedTransactionState.h"
 #include "TransactionProtoParser.h"
-#include "gui/LayerState.h"
 
 namespace android::surfaceflinger {
 
@@ -77,6 +77,12 @@ perfetto::protos::TransactionState TransactionProtoParser::toProto(
         proto.mutable_merged_transaction_ids()->Add(mergedTransactionId);
     }
     proto.set_apply_token(reinterpret_cast<uint64_t>(t.applyToken.get()));
+
+    proto.mutable_transaction_barriers()->Reserve(
+            static_cast<int32_t>(t.transactionBarriers.size()));
+    for (auto& transactionBarrier : t.transactionBarriers) {
+        proto.mutable_transaction_barriers()->Add(toProto(transactionBarrier));
+    }
 
     return proto;
 }
@@ -278,6 +284,36 @@ perfetto::protos::LayerState TransactionProtoParser::toProto(
     return proto;
 }
 
+perfetto::protos::TransactionBarrier TransactionProtoParser::toProto(
+        const gui::TransactionBarrier& transactionBarrier) {
+    perfetto::protos::TransactionBarrier proto;
+    proto.set_kind(static_cast<uint32_t>(transactionBarrier.kind));
+    android::String8 barrierToken(transactionBarrier.barrierToken);
+    proto.mutable_barrier_token()->assign(barrierToken.c_str(), barrierToken.size());
+    return proto;
+}
+
+gui::TransactionBarrier TransactionProtoParser::fromProto(
+        const perfetto::protos::TransactionBarrier& proto) {
+    gui::TransactionBarrier barrier;
+    auto kind = static_cast<gui::TransactionBarrier::BarrierKind>(proto.kind());
+    switch (kind) {
+        case gui::TransactionBarrier::BarrierKind::KIND_SIGNAL:
+        case gui::TransactionBarrier::BarrierKind::KIND_WAIT:
+            barrier.kind = kind;
+            break;
+        default:
+            barrier.kind = gui::TransactionBarrier::BarrierKind::KIND_INVALID;
+            break;
+    }
+
+    String8 barrierTokenUTF8(proto.barrier_token().data(), proto.barrier_token().size());
+    String16 barrierTokenUTF16(barrierTokenUTF8);
+    barrier.barrierToken = barrierTokenUTF16;
+
+    return barrier;
+}
+
 perfetto::protos::DisplayState TransactionProtoParser::toProto(const DisplayState& display) {
     perfetto::protos::DisplayState proto;
     proto.set_what(display.what);
@@ -339,6 +375,13 @@ QueuedTransactionState TransactionProtoParser::fromProto(
     for (int i = 0; i < displayCount; i++) {
         t.displays.emplace_back(fromProto(proto.display_changes(i)));
     }
+
+    int32_t barrierCount = proto.transaction_barriers_size();
+    t.transactionBarriers.reserve(static_cast<size_t>(barrierCount));
+    for (int i = 0; i < barrierCount; i++) {
+        t.transactionBarriers.emplace_back(fromProto(proto.transaction_barriers(i)));
+    }
+
     return t;
 }
 

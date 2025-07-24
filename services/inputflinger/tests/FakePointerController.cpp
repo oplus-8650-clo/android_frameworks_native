@@ -55,6 +55,14 @@ vec2 FakePointerController::getPosition() const {
     return {mX, mY};
 }
 
+vec2 FakePointerController::getPositionInLogicalDisplay() const {
+    if (!mEnabled) {
+        return {0, 0};
+    }
+
+    return mTransform.transform(mX, mY);
+}
+
 ui::LogicalDisplayId FakePointerController::getDisplayId() const {
     if (!mEnabled || !mDisplayId) {
         return ui::LogicalDisplayId::INVALID;
