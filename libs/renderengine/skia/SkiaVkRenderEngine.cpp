@@ -66,7 +66,7 @@ bool RenderEngine::canSupport(GraphicsApi graphicsApi) {
     switch (graphicsApi) {
         case GraphicsApi::GL:
             return true;
-        case GraphicsApi::VK: {
+        case GraphicsApi::Vk: {
             // Static local variables are initialized once, on first invocation of the function.
             static const bool canSupportVulkan = []() {
                 if (!sVulkanInterface.isInitialized()) {
@@ -89,7 +89,7 @@ void RenderEngine::teardown(GraphicsApi graphicsApi) {
     switch (graphicsApi) {
         case GraphicsApi::GL:
             break;
-        case GraphicsApi::VK: {
+        case GraphicsApi::Vk: {
             if (sVulkanInterface.isInitialized()) {
                 sVulkanInterface.teardown();
                 ALOGD("Tearing down the unprotected VulkanInterface.");
@@ -114,7 +114,7 @@ SkiaVkRenderEngine::SkiaVkRenderEngine(const RenderEngineCreationArgs& args)
 SkiaVkRenderEngine::~SkiaVkRenderEngine() {
     finishRenderingAndAbandonContexts();
     // Teardown VulkanInterfaces after Skia contexts have been abandoned
-    teardown(GraphicsApi::VK);
+    teardown(GraphicsApi::Vk);
 }
 
 SkiaRenderEngine::Contexts SkiaVkRenderEngine::createContexts() {

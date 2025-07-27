@@ -24,7 +24,7 @@
 
 namespace proto = perfetto::protos::pbzero;
 
-namespace android::inputdispatcher::trace {
+namespace android::input_trace {
 
 namespace internal {
 
@@ -236,4 +236,4 @@ public:
     }
 };
 
-} // namespace android::inputdispatcher::trace
+} // namespace android::input_trace

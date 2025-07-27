@@ -18,6 +18,7 @@
 
 #include "trace/EventTrackerInterface.h"
 
+#include <gui/WindowInfo.h>
 #include <input/Input.h>
 #include <bitset>
 #include <optional>
@@ -42,6 +43,9 @@ struct CancelationOptions {
     // Descriptive reason for the cancelation.
     const char* reason;
 
+    // Target window for the cancelation if set.
+    sp<gui::WindowInfoHandle> windowHandle = nullptr;
+
     // The specific keycode of the key event to cancel, or nullopt to cancel any key event.
     std::optional<int32_t> keyCode = std::nullopt;
 
@@ -59,6 +63,31 @@ struct CancelationOptions {
     explicit CancelationOptions(Mode mode, const char* reason,
                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode), reason(reason), traceTracker(traceTracker) {}
+    explicit CancelationOptions(Mode mode, const char* reason,
+                                const sp<gui::WindowInfoHandle>& windowHandle,
+                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+          : mode(mode), reason(reason), windowHandle(windowHandle), traceTracker(traceTracker) {}
+    explicit CancelationOptions(Mode mode, const char* reason,
+                                const sp<gui::WindowInfoHandle>& windowHandle, int32_t deviceId,
+                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+          : mode(mode),
+            reason(reason),
+            windowHandle(windowHandle),
+            deviceId(deviceId),
+            traceTracker(traceTracker) {}
+    explicit CancelationOptions(Mode mode, const char* reason,
+                                const sp<gui::WindowInfoHandle>& windowHandle, int32_t deviceId,
+                                ui::LogicalDisplayId displayId,
+                                std::bitset<MAX_POINTER_ID + 1> pointerIds,
+                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+          : mode(mode),
+            reason(reason),
+            windowHandle(windowHandle),
+            deviceId(deviceId),
+            displayId(displayId),
+            pointerIds(pointerIds),
+            traceTracker(traceTracker) {}
+
     CancelationOptions(const CancelationOptions&) = delete;
     CancelationOptions operator=(const CancelationOptions&) = delete;
 };

@@ -124,12 +124,20 @@ public:
     [[nodiscard]] status_t drainCommands(const sp<RpcSession::RpcConnection>& connection,
                                          const sp<RpcSession>& session, CommandType type);
 
+    [[nodiscard]] sp<IBinder> lookupAddress(uint64_t address);
+
     /**
      * Called by Parcel for outgoing binders. This implies one refcount of
      * ownership to the outgoing binder.
      */
     [[nodiscard]] status_t onBinderLeaving(const sp<RpcSession>& session, const sp<IBinder>& binder,
                                            uint64_t* outAddress);
+
+    /**
+     * If a Parcel is not sent, this is called to cancel the address reservation by
+     * decreasing the refcount by 1.
+     */
+    [[nodiscard]] status_t cancelBinderLeaving(const sp<RpcSession>& session, uint64_t address);
 
     /**
      * Called by Parcel for incoming binders. This either returns the refcount
@@ -219,6 +227,8 @@ private:
     [[nodiscard]] status_t processDecStrong(const sp<RpcSession::RpcConnection>& connection,
                                             const sp<RpcSession>& session,
                                             const RpcWireHeader& command);
+    [[nodiscard]] status_t doDecStrong(const sp<RpcSession>& session, uint64_t address,
+                                       uint32_t amount);
 
     // Whether `parcel` is compatible with `session`.
     [[nodiscard]] static status_t validateParcel(const sp<RpcSession>& session,

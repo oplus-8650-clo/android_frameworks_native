@@ -39,7 +39,7 @@ std::unique_ptr<RenderEngineThreaded> RenderEngineThreaded::create(CreateInstanc
 }
 
 RenderEngineThreaded::RenderEngineThreaded(CreateInstanceFactory factory)
-      : RenderEngine(Threaded::YES) {
+      : RenderEngine(Threaded::Yes) {
     SFTRACE_CALL();
 
     std::lock_guard lockThread(mThreadMutex);
@@ -97,17 +97,18 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
     }
     mInitializedCondition.notify_all();
 
-    while (mRunning) {
-        const auto getNextTask = [this]() -> std::optional<Work> {
-            std::scoped_lock lock(mThreadMutex);
-            if (!mFunctionCalls.empty()) {
-                Work task = mFunctionCalls.front();
-                mFunctionCalls.pop();
-                return std::make_optional<Work>(task);
-            }
-            return std::nullopt;
-        };
+    const auto getNextTask = [this]() -> std::optional<Work> {
+        std::scoped_lock lock(mThreadMutex);
+        if (!mFunctionCalls.empty()) {
+            Work task = mFunctionCalls.front();
+            mFunctionCalls.pop();
+            return std::make_optional<Work>(task);
+        }
+        return std::nullopt;
+    };
 
+    // process any tasks until shutdown
+    while (mRunning) {
         const auto task = getNextTask();
 
         if (task) {
@@ -118,6 +119,14 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
         mCondition.wait(lock, [this]() REQUIRES(mThreadMutex) {
             return !mRunning || !mFunctionCalls.empty();
         });
+    }
+
+    // RenderEngine is only shutdown gracefully during tests / benchmarks, where cleanup tasks (e.g.
+    // unmapExternalTextureBuffer) need to be processed before destroying RE's GPU contexts, but
+    // those tasks may race against the main loop above exiting during shutdown. Processing any
+    // remaining tasks here ensures cleanup tasks are properly handled.
+    while (auto task = getNextTask()) {
+        (*task)(*mRenderEngine);
     }
 
     // we must release the RenderEngine on the thread that created it

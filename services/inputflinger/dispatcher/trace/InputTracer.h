@@ -25,6 +25,8 @@
 
 namespace android::inputdispatcher::trace::impl {
 
+using namespace android::input_trace;
+
 /**
  * The tracer implementation for InputDispatcher.
  *

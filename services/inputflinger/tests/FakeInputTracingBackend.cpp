@@ -20,7 +20,7 @@
 #include <android/input.h>
 #include <utils/Errors.h>
 
-namespace android::inputdispatcher {
+namespace android::input_trace {
 
 namespace {
 
@@ -34,12 +34,11 @@ base::ResultError<> error(const std::ostringstream& ss) {
     return base::ResultError(ss.str(), BAD_VALUE);
 }
 
-inline auto getId(const trace::TracedEvent& v) {
+inline auto getId(const TracedEvent& v) {
     return std::visit([](const auto& event) { return event.id; }, v);
 }
 
-MotionEvent toInputEvent(const trace::TracedMotionEvent& e,
-                         const trace::WindowDispatchArgs& dispatchArgs,
+MotionEvent toInputEvent(const TracedMotionEvent& e, const WindowDispatchArgs& dispatchArgs,
                          const std::array<uint8_t, 32>& hmac) {
     MotionEvent traced;
     traced.initialize(e.id, e.deviceId, e.source, e.displayId, hmac, e.action, e.actionButton,
@@ -51,7 +50,7 @@ MotionEvent toInputEvent(const trace::TracedMotionEvent& e,
     return traced;
 }
 
-KeyEvent toInputEvent(const trace::TracedKeyEvent& e, const trace::WindowDispatchArgs& dispatchArgs,
+KeyEvent toInputEvent(const TracedKeyEvent& e, const WindowDispatchArgs& dispatchArgs,
                       const std::array<uint8_t, 32>& hmac) {
     KeyEvent traced;
     traced.initialize(e.id, e.deviceId, e.source, e.displayId, hmac, e.action, e.flags, e.keyCode,
@@ -119,7 +118,7 @@ base::Result<void> VerifyingTrace::verifyEventTraced(const Event& expectedEvent,
 
     auto tracedDispatchesIt =
             std::find_if(mTracedWindowDispatches.begin(), mTracedWindowDispatches.end(),
-                         [&](const trace::WindowDispatchArgs& args) {
+                         [&](const WindowDispatchArgs& args) {
                              return args.windowId == expectedWindowId &&
                                      getId(args.eventEntry) == expectedEvent.getId();
                          });
@@ -136,11 +135,11 @@ base::Result<void> VerifyingTrace::verifyEventTraced(const Event& expectedEvent,
                 Event tracedEvent;
                 using T = std::decay_t<decltype(traced)>;
                 if constexpr (std::is_same_v<Event, MotionEvent> &&
-                              std::is_same_v<T, trace::TracedMotionEvent>) {
+                              std::is_same_v<T, TracedMotionEvent>) {
                     tracedEvent =
                             toInputEvent(traced, *tracedDispatchesIt, expectedEvent.getHmac());
                 } else if constexpr (std::is_same_v<Event, KeyEvent> &&
-                                     std::is_same_v<T, trace::TracedKeyEvent>) {
+                                     std::is_same_v<T, TracedKeyEvent>) {
                     tracedEvent =
                             toInputEvent(traced, *tracedDispatchesIt, expectedEvent.getHmac());
                 } else {
@@ -162,8 +161,8 @@ base::Result<void> VerifyingTrace::verifyEventTraced(const Event& expectedEvent,
 
 // --- FakeInputTracingBackend ---
 
-void FakeInputTracingBackend::traceKeyEvent(const trace::TracedKeyEvent& event,
-                                            const trace::TracedEventMetadata&) {
+void FakeInputTracingBackend::traceKeyEvent(const TracedKeyEvent& event,
+                                            const TracedEventMetadata&) {
     {
         std::scoped_lock lock(mTrace->mLock);
         mTrace->mTracedEvents.emplace(event.id, event);
@@ -171,8 +170,8 @@ void FakeInputTracingBackend::traceKeyEvent(const trace::TracedKeyEvent& event,
     mTrace->mEventTracedCondition.notify_all();
 }
 
-void FakeInputTracingBackend::traceMotionEvent(const trace::TracedMotionEvent& event,
-                                               const trace::TracedEventMetadata&) {
+void FakeInputTracingBackend::traceMotionEvent(const TracedMotionEvent& event,
+                                               const TracedEventMetadata&) {
     {
         std::scoped_lock lock(mTrace->mLock);
         mTrace->mTracedEvents.emplace(event.id, event);
@@ -180,8 +179,8 @@ void FakeInputTracingBackend::traceMotionEvent(const trace::TracedMotionEvent& e
     mTrace->mEventTracedCondition.notify_all();
 }
 
-void FakeInputTracingBackend::traceWindowDispatch(const trace::WindowDispatchArgs& args,
-                                                  const trace::TracedEventMetadata&) {
+void FakeInputTracingBackend::traceWindowDispatch(const WindowDispatchArgs& args,
+                                                  const TracedEventMetadata&) {
     {
         std::scoped_lock lock(mTrace->mLock);
         mTrace->mTracedWindowDispatches.push_back(args);
@@ -189,4 +188,4 @@ void FakeInputTracingBackend::traceWindowDispatch(const trace::WindowDispatchArg
     mTrace->mEventTracedCondition.notify_all();
 }
 
-} // namespace android::inputdispatcher
+} // namespace android::input_trace

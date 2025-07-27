@@ -89,7 +89,7 @@ public:
     typedef std::function<bool(const LayerSnapshot& snapshot)> ConstPredicate;
     // Visit each snapshot that satisfies the predicate and move the snapshot if needed with visible
     // snapshots in z-order
-    void forEachSnapshot(const Visitor& visitor, const ConstPredicate& predicate);
+    void forEachNonNullSnapshot(const Visitor& visitor, const ConstPredicate& predicate);
 
     // Visit each snapshot
     void forEachSnapshot(const ConstVisitor& visitor) const;

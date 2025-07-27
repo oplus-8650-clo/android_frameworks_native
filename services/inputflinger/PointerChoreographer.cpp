@@ -316,14 +316,13 @@ void PointerChoreographer::processPointerDeviceMotionEventLocked(NotifyMotionArg
 
 void PointerChoreographer::handleUnconsumedDeltaLocked(PointerControllerInterface& pc,
                                                        const vec2& unconsumedDelta) {
-    // Display topology is in rotated coordinate space and Pointer controller returns and expects
+    // Display topology is in rotated coordinate space and PointerController expects
     // values in the un-rotated coordinate space. So we need to transform delta and cursor position
     // back to the rotated coordinate space to lookup adjacent display in the display topology.
     const auto& sourceDisplayTransform = pc.getDisplayTransform();
     const vec2 rotatedUnconsumedDelta =
             transformWithoutTranslation(sourceDisplayTransform, unconsumedDelta);
-    const vec2 cursorPosition = pc.getPosition();
-    const vec2 rotatedCursorPosition = sourceDisplayTransform.transform(cursorPosition);
+    const vec2 rotatedCursorPosition = pc.getPositionInLogicalDisplay();
 
     // To find out the boundary that cursor is crossing we are checking delta in x and y direction
     // respectively. This prioritizes x direction over y.
@@ -875,6 +874,15 @@ std::optional<vec2> PointerChoreographer::getMouseCursorPosition(ui::LogicalDisp
     return std::nullopt;
 }
 
+std::optional<vec2> PointerChoreographer::getMouseCursorPositionInLogicalDisplay(
+        ui::LogicalDisplayId displayId) {
+    std::scoped_lock _l(getLock());
+    if (auto it = mMousePointersByDisplay.find(displayId); it != mMousePointersByDisplay.end()) {
+        return it->second->getPositionInLogicalDisplay();
+    }
+    return std::nullopt;
+}
+
 void PointerChoreographer::setShowTouchesEnabled(bool enabled) {
     PointerDisplayChange pointerDisplayChange;
 
@@ -1070,10 +1078,10 @@ vec2 PointerChoreographer::filterPointerMotionForAccessibilityLocked(
         return delta;
     }
 
-    // PointerController.getPosition and mouse delta are both in physical display coordinates.
+    // PointerController expects coordinates in physical display coordinates.
     // PointerMotionFilter in Java expects coordinates in logical display coordinates.
     const auto& displayTransform = pc.getDisplayTransform();
-    const vec2 current = displayTransform.transform(pc.getPosition());
+    const vec2 current = pc.getPositionInLogicalDisplay();
     const vec2 deltaInDisplay = transformWithoutTranslation(displayTransform, delta);
     const ui::LogicalDisplayId displayId = pc.getDisplayId();
     const std::optional<vec2> filterResult =

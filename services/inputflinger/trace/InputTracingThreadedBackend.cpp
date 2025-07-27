@@ -16,13 +16,13 @@
 
 #define LOG_TAG "InputTracer"
 
-#include "ThreadedBackend.h"
+#include "InputTracingThreadedBackend.h"
 
 #include "InputTracingPerfettoBackend.h"
 
 #include <android-base/logging.h>
 
-namespace android::inputdispatcher::trace::impl {
+namespace android::input_trace::impl {
 
 namespace {
 
@@ -150,4 +150,4 @@ void ThreadedBackend<Backend>::setIdleStatus(bool isIdle) {
 // Explicit template instantiation for the PerfettoBackend.
 template class ThreadedBackend<PerfettoBackend>;
 
-} // namespace android::inputdispatcher::trace::impl
+} // namespace android::input_trace::impl

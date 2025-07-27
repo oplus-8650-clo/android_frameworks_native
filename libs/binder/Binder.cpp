@@ -238,6 +238,22 @@ sp<IBinder> IBinder::lookupOrCreateWeak(const void* objectID, object_make_func m
     return proxy->lookupOrCreateWeak(objectID, make, makeArgs);
 }
 
+void IBinder::setMinRpcThreads(uint16_t min) {
+    if (BBinder* local = this->localBinder(); local != nullptr) {
+        local->setMinRpcThreads(min);
+    } else {
+        LOG_ALWAYS_FATAL("setMinRpcThreads only works for local BBinders.");
+    }
+}
+
+uint16_t IBinder::getMinRpcThreads() {
+    if (BBinder* local = this->localBinder(); local != nullptr) {
+        return local->getMinRpcThreads();
+    } else {
+        LOG_ALWAYS_FATAL("getMinRpcThreads only works for local BBinders.");
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 class BBinder::RpcServerLink : public IBinder::DeathRecipient {
@@ -273,6 +289,8 @@ private:
 };
 BBinder::RpcServerLink::~RpcServerLink() {}
 
+static constexpr uint16_t kDefaultMinThreads = 1;
+
 class BBinder::Extras
 {
 public:
@@ -289,6 +307,7 @@ public:
     RpcMutex mLock;
     std::set<sp<RpcServerLink>> mRpcServerLinks;
     BpBinder::ObjectManager mObjectMgr;
+    uint16_t mMinThreads = kDefaultMinThreads;
 
     unique_fd mRecordingFd;
 };
@@ -366,8 +385,24 @@ status_t BBinder::stopRecordingTransactions() {
 
 const String16& BBinder::getInterfaceDescriptor() const
 {
+    // Throttle logging because getInterfaceDescriptor can be invoked a lot.
+    static std::atomic<std::chrono::steady_clock::time_point> sLastLogTime = {
+            std::chrono::steady_clock::time_point::min()};
+
+    auto lastLogTime = sLastLogTime.load(std::memory_order_acquire);
+    auto currentTime = std::chrono::steady_clock::now();
+    // Don't log more than once per second. The check is not strict, since it may happen that
+    // multiple theads read lastLogTime at the same time  but we don't want it to be strict
+    // for performance reasons.
+    // Note: Do not subtract time_point::min(), that would cause an arithmetic overflow.
+    if (lastLogTime == std::chrono::steady_clock::time_point::min() ||
+        to_ms(currentTime - lastLogTime) >= 1000) {
+        ALOGW("BBinder::getInterfaceDescriptor (this=%p). Override?", this);
+
+        sLastLogTime.store(currentTime, std::memory_order_release);
+    }
+
     [[clang::no_destroy]] static StaticString16 sBBinder(u"BBinder");
-    ALOGW("Reached BBinder::getInterfaceDescriptor (this=%p). Override?", this);
     return sBBinder;
 }
 
@@ -628,6 +663,26 @@ void BBinder::setInheritRt(bool inheritRt) {
     }
 
     e->mInheritRt = inheritRt;
+}
+
+void BBinder::setMinRpcThreads(uint16_t min) {
+    LOG_ALWAYS_FATAL_IF(mParceled,
+                        "setMinRpcThreads() should not be called after a binder object "
+                        "is parceled/sent to another process");
+    Extras* e = mExtras.load(std::memory_order_acquire);
+    if (!e) {
+        e = getOrCreateExtras();
+        if (!e) return; // out of memory
+    }
+    e->mMinThreads = min;
+}
+
+uint16_t BBinder::getMinRpcThreads() const {
+    Extras* e = mExtras.load(std::memory_order_acquire);
+    if (!e) {
+        return kDefaultMinThreads;
+    }
+    return e->mMinThreads;
 }
 
 std::atomic<bool> BBinder::sGlobalInheritRt(false);

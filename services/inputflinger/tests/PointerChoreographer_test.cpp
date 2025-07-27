@@ -2579,6 +2579,30 @@ TEST_F(PointerChoreographerTest, MouseAndDrawingTabletReportMouseEvents) {
     assertPointerControllerRemoved(pc);
 }
 
+TEST_F(PointerChoreographerTest, GetMouseCursorPosition) {
+    mChoreographer.setDisplayViewports(
+            {createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_90)});
+    setDefaultMouseDisplayId(DISPLAY_ID);
+    mChoreographer.notifyInputDevicesChanged(
+            {/*id=*/0,
+             {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
+                                     ui::LogicalDisplayId::INVALID)}});
+    auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
+    pc->setTransform(ui::Transform(ui::Transform::toRotationFlags(ui::ROTATION_90), DISPLAY_HEIGHT,
+                                   DISPLAY_WIDTH));
+    pc->setPosition(150, 350); // (450, 150) in logical coordinates
+
+    auto position = mChoreographer.getMouseCursorPosition(DISPLAY_ID);
+    ASSERT_TRUE(position.has_value());
+    ASSERT_EQ(150, position->x);
+    ASSERT_EQ(350, position->y);
+
+    auto positionInLogical = mChoreographer.getMouseCursorPositionInLogicalDisplay(DISPLAY_ID);
+    ASSERT_TRUE(position.has_value());
+    ASSERT_EQ(450, positionInLogical->x);
+    ASSERT_EQ(150, positionInLogical->y);
+}
+
 using PointerVisibilityAndTouchpadTapStateOnKeyPressTestFixtureParam =
         std::tuple<std::string_view /*name*/, uint32_t /*source*/>;
 

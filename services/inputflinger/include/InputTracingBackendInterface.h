@@ -26,7 +26,7 @@
 #include <variant>
 #include <vector>
 
-namespace android::inputdispatcher::trace {
+namespace android::input_trace {
 
 /**
  * Describes the type of this event being traced, with respect to InputDispatcher.
@@ -134,4 +134,4 @@ public:
     virtual void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) = 0;
 };
 
-} // namespace android::inputdispatcher::trace
+} // namespace android::input_trace

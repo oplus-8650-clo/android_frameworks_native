@@ -273,6 +273,8 @@ private:
 
     const std::unique_ptr<RpcTransportCtx> mCtx;
     size_t mMaxThreads = 1;
+    // overwrite mMaxThreads if the binder has min threads to something larger
+    void maybeOverwriteMaxThreads(const sp<IBinder>& binder);
     std::optional<uint32_t> mProtocolVersion;
     // A mode is supported if the N'th bit is on, where N is the mode enum's value.
     std::bitset<8> mSupportedFileDescriptorTransportModes = std::bitset<8>().set(

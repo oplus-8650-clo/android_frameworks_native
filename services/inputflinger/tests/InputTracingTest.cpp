@@ -16,12 +16,12 @@
 
 #include "../InputCommonConverter.h"
 #include "../dispatcher/InputDispatcher.h"
-#include "../dispatcher/trace/InputTracingPerfettoBackend.h"
-#include "../dispatcher/trace/ThreadedBackend.h"
 #include "FakeApplicationHandle.h"
 #include "FakeInputDispatcherPolicy.h"
 #include "FakeWindows.h"
 #include "InputTraceSession.h"
+#include "InputTracingPerfettoBackend.h"
+#include "InputTracingThreadedBackend.h"
 #include "TestEventMatchers.h"
 
 #include <NotifyArgsBuilders.h>
@@ -40,6 +40,9 @@
 namespace android::inputdispatcher::trace {
 
 using perfetto::protos::pbzero::AndroidInputEventConfig;
+
+using input_trace::impl::PerfettoBackend;
+using input_trace::impl::ThreadedBackend;
 
 namespace {
 
@@ -100,13 +103,12 @@ protected:
     std::unique_ptr<InputDispatcher> mDispatcher;
 
     void SetUp() override {
-        impl::PerfettoBackend::sUseInProcessBackendForTest = true;
-        impl::PerfettoBackend::sPackageManagerProvider = []() { return kPackageManager; };
+        PerfettoBackend::sUseInProcessBackendForTest = true;
+        PerfettoBackend::sPackageManagerProvider = []() { return kPackageManager; };
         mFakePolicy = std::make_unique<FakeInputDispatcherPolicy>();
 
-        auto tracingBackend = std::make_unique<
-                impl::ThreadedBackend<impl::PerfettoBackend>>(impl::PerfettoBackend(),
-                                                              /*env=*/nullptr);
+        auto tracingBackend = std::make_unique<ThreadedBackend<PerfettoBackend>>(PerfettoBackend(),
+                                                                                 /*env=*/nullptr);
         mRequestTracerIdle = tracingBackend->getIdleWaiterForTesting();
         mDispatcher = std::make_unique<InputDispatcher>(*mFakePolicy, std::move(tracingBackend),
                                                         /*env=*/nullptr);

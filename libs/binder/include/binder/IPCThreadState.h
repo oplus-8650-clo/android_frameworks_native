@@ -154,7 +154,7 @@ public:
     // For main functions - dangerous for libraries to use
     LIBBINDER_EXPORTED status_t setupPolling(int* fd);
     LIBBINDER_EXPORTED status_t handlePolledCommands();
-    LIBBINDER_EXPORTED void flushCommands();
+    LIBBINDER_EXPORTED status_t flushCommands();
     LIBBINDER_EXPORTED bool flushIfNeeded();
 
     // Adds the current thread into the binder threadpool.
@@ -223,6 +223,9 @@ private:
                                                 status_t* statusBuffer);
     [[nodiscard]] status_t getAndExecuteCommand();
     [[nodiscard]] status_t executeCommand(int32_t command);
+    [[nodiscard]] status_t doTransactBinder(BBinder* binder, uint32_t code, const Parcel& data,
+                                            Parcel* reply, uint32_t flags);
+
     void processPendingDerefs();
     void processPostWriteDerefs();
 

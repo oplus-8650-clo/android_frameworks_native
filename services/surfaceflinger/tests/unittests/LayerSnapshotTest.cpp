@@ -1869,9 +1869,9 @@ TEST_F(LayerSnapshotTest, NonVisibleLayerWithInputShouldNotBeIncluded) {
     EXPECT_FALSE(foundInputLayer);
 }
 
-TEST_F(LayerSnapshotTest, ForEachSnapshotsWithPredicate) {
+TEST_F(LayerSnapshotTest, ForEachNullableSnapshotsWithPredicate) {
     std::vector<uint32_t> visitedUniqueSequences;
-    mSnapshotBuilder.forEachSnapshot(
+    mSnapshotBuilder.forEachNonNullSnapshot(
             [&](const std::unique_ptr<frontend::LayerSnapshot>& snapshot) {
                 visitedUniqueSequences.push_back(snapshot->uniqueSequence);
             },

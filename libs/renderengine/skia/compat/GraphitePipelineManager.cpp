@@ -31,12 +31,13 @@
 
 #include <type_traits>
 
+#include "PaintOptionsBuilder.h"
 #include "skia/filters/RuntimeEffectManager.h"
 
 namespace android::renderengine::skia {
 
 using namespace skgpu::graphite;
-
+using namespace PaintOptionsUtils;
 using PrecompileShaders::ImageShaderFlags;
 
 using ::skgpu::graphite::DrawTypeFlags;
@@ -150,239 +151,6 @@ skgpu::graphite::PaintOptions LinearEffect(sk_sp<SkRuntimeEffect> linearEffect, 
 // =======================================
 // NOTE: keep in sync with upstream external/skia/tests/graphite/precompile/PrecompileTestUtils.cpp
 // clang-format off
-
-PaintOptions SolidSrcover() {
-    PaintOptions paintOptions;
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions SolidMatrixCFSrcover() {
-    PaintOptions paintOptions;
-
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-
-    return paintOptions;
-}
-
-PaintOptions TransparentPaintImagePremulHWOnlyMatrixCFSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setPaintColorIsOpaque(false);
-    return paintOptions;
-}
-
-PaintOptions TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setPaintColorIsOpaque(false);
-    paintOptions.setDither(true);
-    return paintOptions;
-}
-
-PaintOptions TransparentPaintImageSRGBHWOnlyMatrixCFDitherSrcover() {
-    SkColorInfo ci { kRGBA_8888_SkColorType,
-                     kPremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kAdobeRGB) };
-
-    PaintOptions paintOptions;
-
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setPaintColorIsOpaque(false);
-    paintOptions.setDither(true);
-    return paintOptions;
-}
-
-PaintOptions TransparentPaintImagePremulHWOnlySrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setPaintColorIsOpaque(false);
-    return paintOptions;
-}
-
-PaintOptions TransparentPaintImageSRGBHWOnlySrcover() {
-    SkColorInfo ci { kRGBA_8888_SkColorType,
-                     kPremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kAdobeRGB) };
-
-    PaintOptions paintOptions;
-
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setPaintColorIsOpaque(false);
-    return paintOptions;
-}
-
-PaintOptions SolidSrcSrcover() {
-    PaintOptions paintOptions;
-    paintOptions.setBlendModes({ SkBlendMode::kSrc, SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImagePremulHWOnlySrc() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrc });
-    return paintOptions;
-}
-
-PaintOptions ImagePremulHWOnlySrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImageAlphaPremulHWOnlyMatrixCFSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kAlpha_8_SkColorType, kUnpremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImageAlphaSRGBHWOnlyMatrixCFSrcover() {
-    // Note: this is different from the other SRGB ColorInfos
-    SkColorInfo ci { kAlpha_8_SkColorType,
-                     kUnpremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kAdobeRGB) };
-
-    PaintOptions paintOptions;
-
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImageAlphaClampNoCubicSrc() {
-    SkColorInfo ci { kAlpha_8_SkColorType, kUnpremul_SkAlphaType, nullptr };
-    SkTileMode tm = SkTileMode::kClamp;
-
-    PaintOptions paintOptions;
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       { &tm, 1 }) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrc });
-    return paintOptions;
-}
-
-PaintOptions ImagePremulHWOnlyMatrixCFSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImageSRGBHWOnlyMatrixCFSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType,
-                     kPremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kAdobeRGB) };
-
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-PaintOptions ImagePremulHWOnlyMatrixCFDitherSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setDither(true);
-
-    return paintOptions;
-}
-
-PaintOptions ImageSRGBHWOnlyMatrixCFDitherSrcover() {
-    SkColorInfo ci { kRGBA_8888_SkColorType,
-                     kPremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kAdobeRGB) };
-
-    PaintOptions paintOptions;
-
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-    paintOptions.setColorFilters({ PrecompileColorFilters::Matrix() });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    paintOptions.setDither(true);
-
-    return paintOptions;
-}
-
-PaintOptions ImageHWOnlySRGBSrcover() {
-    PaintOptions paintOptions;
-
-    SkColorInfo ci { kRGBA_8888_SkColorType,
-                     kPremul_SkAlphaType,
-                     SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB,
-                                           SkNamedGamut::kAdobeRGB) };
-    paintOptions.setShaders({ PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                       { &ci, 1 },
-                                                       {}) });
-
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
-    return paintOptions;
-}
 
 // TODO(b/426601394): Update this to take an SkColorInfo for the input image.
 // The other MouriMap* precompile paint options should use a linear SkColorInfo
@@ -805,86 +573,116 @@ void GraphitePipelineManager::PrecompilePipelines(
     // external/skia/tests/graphite/precompile/AndroidPrecompileTest.cpp
     // clang-format off
     const PrecompileSettings precompileCases[] = {
-/*  0 */ { ImagePremulHWOnlySrcover(),         DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D },
-/*  1 */ { ImagePremulHWOnlySrcover(),
+         { Builder().hwImg(kPremul).srcOver(),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA16F_1_D },
+
+         { Builder().hwImg(kPremul).srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D,
            kWithAnalyticClip },
 
-/*  2 */ { ImagePremulHWOnlySrcover(),         kRRectAndNonAARect,              kRGBA_4_DS },
+         { Builder().hwImg(kPremul).srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_4_DS },
 
-/*  3 */ { ImageHWOnlySRGBSrcover(),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_SRGB },
-/*  4 */ { ImageHWOnlySRGBSrcover(),
+         { Builder().hwImg(kSRGB).srcOver(),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA16F_1_D_SRGB },
+
+         { Builder().hwImg(kSRGB).srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D_SRGB,
            kWithAnalyticClip },
 
-/*  5 */ { TransparentPaintImagePremulHWOnlySrcover(),
-           kRRectAndNonAARect,
-           kRGBA_1_D,
-           kWithAnalyticClip },
-/*  6 */ { TransparentPaintImagePremulHWOnlySrcover(), kRRectAndNonAARect,      kRGBA_4_DS },
-
-/*  7 */ { TransparentPaintImageSRGBHWOnlySrcover(), kRRectAndNonAARect,        kRGBA_1_D_SRGB },
-
-/*  8 */ { SolidSrcSrcover(),
+         { Builder().transparent().hwImg(kPremul).srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D,
            kWithAnalyticClip },
 
-/*  9 */ { SolidSrcover(),                     kRRectAndNonAARect,              kRGBA_4_DS },
-
-/* 10 */ { ImagePremulHWOnlyMatrixCFSrcover(),
+         { Builder().transparent().hwImg(kPremul).srcOver(),
            kRRectAndNonAARect,
-           kRGBA_1_D,
-           kWithAnalyticClip },
+           kRGBA_4_DS },
 
-/* 11 */ { TransparentPaintImagePremulHWOnlyMatrixCFSrcover(),
-           kRRectAndNonAARect,
-           kRGBA_1_D,
-           kWithAnalyticClip },
-
-/* 12 */ { TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover(),
-                                               kRRectAndNonAARect,              kRGBA_1_D },
-/* 13 */ { TransparentPaintImagePremulHWOnlyMatrixCFDitherSrcover(),
-                                               DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
-
-/* 14 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(),
-           kRRectAndNonAARect,
-           kRGBA_1_D,
-           kWithAnalyticClip },
-
-/* 15 */ { ImagePremulHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kNonAAFillRect, kRGBA_4_DS },
-
-/* 16 */ { TransparentPaintImageSRGBHWOnlyMatrixCFDitherSrcover(),
+         { Builder().transparent().hwImg(kSRGB).srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D_SRGB },
 
-/* 17 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(),
+         { Builder().src().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
+
+         { Builder().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_4_DS },
+
+         { Builder().hwImg(kPremul).matrixCF().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
+
+         { Builder().transparent().hwImg(kPremul).matrixCF().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
+
+         { Builder().transparent().hwImg(kPremul).matrixCF().dither().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D },
+
+         { Builder().transparent().hwImg(kPremul).matrixCF().dither().srcOver(),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA_4_DS },
+
+         { Builder().hwImg(kPremul).matrixCF().dither().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D,
+           kWithAnalyticClip },
+
+         { Builder().hwImg(kPremul).matrixCF().dither().srcOver(),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA_4_DS },
+
+         { Builder().transparent().hwImg(kSRGB).matrixCF().dither().srcOver(),
+           kRRectAndNonAARect,
+           kRGBA_1_D_SRGB },
+
+         { Builder().hwImg(kSRGB).matrixCF().dither().srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D_SRGB,
            kWithAnalyticClip },
 
-/* 18 */ { ImageSRGBHWOnlyMatrixCFDitherSrcover(), DrawTypeFlags::kAnalyticRRect, kRGBA_4_DS_SRGB },
+         { Builder().hwImg(kSRGB).matrixCF().dither().srcOver(),
+           DrawTypeFlags::kAnalyticRRect,
+           kRGBA_4_DS_SRGB },
 
-/* 19 */ { ImageAlphaSRGBHWOnlyMatrixCFSrcover(),
+         { Builder().hwImg(kAlphaSRGB).matrixCF().srcOver(),
            DrawTypeFlags::kNonAAFillRect,
            kRGBA_1D_4DS_SRGB },
 
-/* 20 */ { ImagePremulHWOnlySrc(),             kRRectAndNonAARect,              kRGBA_1_D },
-/* 21 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kPerEdgeAAQuad,   kRGBA_1_D },
-/* 22 */ { ImagePremulHWOnlySrc(),             DrawTypeFlags::kNonAAFillRect,   kRGBA_4_DS },
+         { Builder().hwImg(kPremul).src(),
+           kRRectAndNonAARect,
+           kRGBA_1_D },
+
+         { Builder().hwImg(kPremul).src(),
+           DrawTypeFlags::kPerEdgeAAQuad,
+           kRGBA_1_D },
+
+         { Builder().hwImg(kPremul).src(),
+           DrawTypeFlags::kNonAAFillRect,
+           kRGBA_4_DS },
 
 // TODO(b/426601394): Group these paint option settings into a function that accepts an input
 // image color space so that the intermediate linear color spaces adapt correctly.
-/* 23 */ { MouriMapBlur(effectManager),                     DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_Linear },
-/* 24 */ { MouriMapToneMap(effectManager),                  DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D_SRGB },
-/* 25 */ { MouriMapCrosstalkAndChunk16x16(effectManager),   DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_Linear },
-/* 26 */ { MouriMapChunk8x8Effect(effectManager),           DrawTypeFlags::kNonAAFillRect,   kRGBA16F_1_D_Linear },
+/* 23 */ { MouriMapBlur(effectManager),                     DrawTypeFlags::kNonAAFillRect, kRGBA16F_1_D_Linear },
+/* 24 */ { MouriMapToneMap(effectManager),                  DrawTypeFlags::kNonAAFillRect, kRGBA_1_D_SRGB },
+/* 25 */ { MouriMapCrosstalkAndChunk16x16(effectManager),   DrawTypeFlags::kNonAAFillRect, kRGBA16F_1_D_Linear },
+/* 26 */ { MouriMapChunk8x8Effect(effectManager),           DrawTypeFlags::kNonAAFillRect, kRGBA16F_1_D_Linear },
 
-/* 27 */ { KawaseBlurLowSrcSrcOver(effectManager),          DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-/* 28 */ { KawaseBlurHighSrc(effectManager),                DrawTypeFlags::kNonAAFillRect,   kRGBA_1_D },
-/* 29 */ { BlurFilterMix(effectManager),                    kRRectAndNonAARect,              kRGBA_1_D },
+/* 27 */ { KawaseBlurLowSrcSrcOver(effectManager),          DrawTypeFlags::kNonAAFillRect, kRGBA_1_D },
+/* 28 */ { KawaseBlurHighSrc(effectManager),                DrawTypeFlags::kNonAAFillRect, kRGBA_1_D },
+/* 29 */ { BlurFilterMix(effectManager),                    kRRectAndNonAARect, kRGBA_1_D },
 
 // These two are solid colors drawn w/ a LinearEffect
 
@@ -944,18 +742,20 @@ void GraphitePipelineManager::PrecompilePipelines(
            DrawTypeFlags::kAnalyticRRect,
            kRGBA_1_D_SRGB },
 
-/* 38 */ { SolidSrcover(), DrawTypeFlags::kNonSimpleShape, kRGBA_4_DS },
+         { Builder().srcOver(),
+           DrawTypeFlags::kNonSimpleShape,
+           kRGBA_4_DS },
 
 // AnalyticClip block - all the PrecompileOptions here are just clones of earlier ones
 // with an additional kAnalyticClip flag
 
 // Note: this didn't get folded into #2 since the RRect draw isn't appearing w/ a clip
-/* 39 */ { ImagePremulHWOnlySrcover(),
+         { Builder().hwImg(kPremul).srcOver(),
            DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
            kRGBA_4_DS },
 
 // Note: this didn't get folded into #9 since the RRect draw isn't appearing w/ a clip
-/* 40 */ { SolidSrcSrcover(),
+         { Builder().src().srcOver(),
            DrawTypeFlags::kNonAAFillRect | DrawTypeFlags::kAnalyticClip,
            kRGBA_4_DS },
 
@@ -986,11 +786,11 @@ void GraphitePipelineManager::PrecompilePipelines(
            kRGBA_1_D,
            kWithAnalyticClip },
 
-/* 47 */ { ImageAlphaClampNoCubicSrc(),
+         { Builder().hwImg(kAlpha, kClamp).src(),
            DrawTypeFlags::kNonAAFillRect,
            kR_1_D },
 
-/* 48 */ { ImageSRGBHWOnlyMatrixCFSrcover(),
+         { Builder().hwImg(kSRGB).matrixCF().srcOver(),
            kRRectAndNonAARect,
            kRGBA_1_D_SRGB },
 
@@ -1005,7 +805,7 @@ void GraphitePipelineManager::PrecompilePipelines(
            kRRectAndNonAARect,
            kRGBA_1D_4DS },
 
-/* 51 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect,              kRGBA_4_DS },
+/* 51 */ { ImagePremulYCbCr238Srcover(),       kRRectAndNonAARect, kRGBA_4_DS },
 
 // Note: this didn't get folded into #51 since the RRect draw isn't appearing w/ a clip
 /* 52 */ { ImagePremulYCbCr238Srcover(),

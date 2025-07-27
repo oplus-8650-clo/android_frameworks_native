@@ -352,11 +352,9 @@ struct layer_state_t {
     }
     void updateRelativeLayer(const sp<SurfaceControl>& relativeTo, int32_t z);
     void updateParentLayer(const sp<SurfaceControl>& newParent);
-    void updateInputWindowInfo(sp<gui::WindowInfoHandle>&& info);
-    const gui::WindowInfo& getWindowInfo() const {
-        return *mNotDefCmpState.windowInfoHandle->getInfo();
-    }
-    gui::WindowInfo* editWindowInfo() { return mNotDefCmpState.windowInfoHandle->editInfo(); }
+    void updateInputWindowInfo(const gui::WindowInfo& info);
+    const gui::WindowInfo& getWindowInfo() const { return mNotDefCmpState.windowInfo; }
+    gui::WindowInfo* editWindowInfo() { return &mNotDefCmpState.windowInfo; }
 
     const sp<SurfaceControl>& getParentSurfaceControlForChild() const {
         return mNotDefCmpState.parentSurfaceControlForChild;
@@ -507,7 +505,7 @@ protected:
     struct NotDefaultComparableState {
         Region transparentRegion;
         Region surfaceDamageRegion;
-        sp<gui::WindowInfoHandle> windowInfoHandle = sp<gui::WindowInfoHandle>::make();
+        gui::WindowInfo windowInfo;
         sp<SurfaceControl> relativeLayerSurfaceControl;
         sp<SurfaceControl> parentSurfaceControlForChild;
 

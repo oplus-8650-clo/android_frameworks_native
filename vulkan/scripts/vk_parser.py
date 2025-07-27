@@ -1117,7 +1117,7 @@ def generate_core_struct_mapping(struct_names: list[str], vk_py_file_handle: IO[
 def extract_list_size_mapping(struct_elements: List[ET.Element]) :
     """Extracts mappings from list members to their corresponding size-indicating members within structs."""
     member_map = {}  # Stores {list_member_name: size_member_name}
-    struct_with_dynamic_size_list_variables = {} # Stores {struct_name: set of list variables}
+    struct_with_dynamic_size_list_variables = {} # Stores {struct_name: list of list variables}
     for type_element in struct_elements:
         struct_name = type_element.get(ATTR_NAME)
         # Skip invalid or non-physical device structs
@@ -1136,7 +1136,7 @@ def extract_list_size_mapping(struct_elements: List[ET.Element]) :
             if name_value and len_attribute_value and len_attribute_value.strip().lower() != "null-terminated":
                 member_map[name_value] = len_attribute_value.strip()
                 if is_pointer:
-                    struct_with_dynamic_size_list_variables.setdefault(struct_name, set()).add(name_value)
+                    struct_with_dynamic_size_list_variables.setdefault(struct_name, []).append(name_value)
     return member_map, struct_with_dynamic_size_list_variables
 
 
@@ -1150,8 +1150,7 @@ def write_list_size_mapping(struct_elements: List[ET.Element], vk_py_file_handle
         sorted_items_by_key = sorted(input_dict.items())
         sorted_dict = {}
         for key, value_set in sorted_items_by_key:
-            sorted_elements = sorted(list(value_set))
-            sorted_dict[key] = set(sorted_elements)
+            sorted_dict[key] = sorted(list(value_set))
 
         return sorted_dict
 

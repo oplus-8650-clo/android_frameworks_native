@@ -1004,3 +1004,10 @@ void AIBinder_setInheritRt(AIBinder* binder, bool inheritRt) {
 
     localBinder->setInheritRt(inheritRt);
 }
+
+binder_status_t AIBinder_setMinRpcThreads(AIBinder* binder, uint16_t min) {
+    if (min == 0) return STATUS_BAD_VALUE;
+    if (binder == nullptr) return STATUS_UNEXPECTED_NULL;
+    binder->getBinder()->setMinRpcThreads(min);
+    return STATUS_OK;
+}

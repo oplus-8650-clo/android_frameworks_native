@@ -3990,9 +3990,9 @@ LIST_TYPE_FIELD_AND_SIZE_MAPPING = {   'memoryHeaps': 'memoryHeapCount',
     'pLayeredApis': 'layeredApiCount',
     'physicalDevices': 'physicalDeviceCount'}
 
-STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING = {   'VkPhysicalDeviceHostImageCopyProperties': {'pCopyDstLayouts', 'pCopySrcLayouts'},
-    'VkPhysicalDeviceLayeredApiPropertiesListKHR': {'pLayeredApis'},
-    'VkPhysicalDeviceVulkan14Properties': {'pCopyDstLayouts', 'pCopySrcLayouts'}}
+STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING = {   'VkPhysicalDeviceHostImageCopyProperties': ['pCopyDstLayouts', 'pCopySrcLayouts'],
+    'VkPhysicalDeviceLayeredApiPropertiesListKHR': ['pLayeredApis'],
+    'VkPhysicalDeviceVulkan14Properties': ['pCopyDstLayouts', 'pCopySrcLayouts']}
 
 # --- STRUCTS USED BY VULKAN_API_1_0 ---
 VULKAN_API_1_0_STRUCTS = [

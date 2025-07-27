@@ -234,6 +234,7 @@ filegroup {
     name: "libbinder_observer_sources",
     srcs: [
         "BinderObserver.cpp",
+        "BinderObserverConfig.cpp",
         "BinderStatsPusher.cpp",
     ],
     visibility: [

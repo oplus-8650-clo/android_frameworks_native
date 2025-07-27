@@ -28,7 +28,7 @@
 #include <private/android_filesystem_config.h>
 #include <utils/String16.h>
 
-namespace android::inputdispatcher::trace::impl {
+namespace android::input_trace::impl {
 
 namespace {
 
@@ -304,4 +304,4 @@ void PerfettoBackend::traceWindowDispatch(const WindowDispatchArgs& dispatchArgs
     });
 }
 
-} // namespace android::inputdispatcher::trace::impl
+} // namespace android::input_trace::impl

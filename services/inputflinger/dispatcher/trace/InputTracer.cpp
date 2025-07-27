@@ -23,6 +23,8 @@
 
 namespace android::inputdispatcher::trace::impl {
 
+using namespace android::input_trace;
+
 namespace {
 
 // Helper to std::visit with lambdas.
@@ -67,7 +69,7 @@ void writeEventToBackend(const TracedEvent& event, const TracedEventMetadata met
                event);
 }
 
-inline auto getId(const trace::TracedEvent& v) {
+inline auto getId(const TracedEvent& v) {
     return std::visit([](const auto& event) { return event.id; }, v);
 }
 

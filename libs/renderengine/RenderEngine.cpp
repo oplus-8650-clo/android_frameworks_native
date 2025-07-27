@@ -25,6 +25,7 @@
 
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <cutils/properties.h>
+#include <ftl/enum.h>
 #include <log/log.h>
 
 // TODO: b/341728634 - Clean up conditional compilation.
@@ -45,28 +46,28 @@ std::unique_ptr<RenderEngine> RenderEngine::create(const RenderEngineCreationArg
 #if COMPILE_GRAPHITE_RENDERENGINE
     const RenderEngine::SkiaBackend actualSkiaBackend = args.skiaBackend;
 #else
-    if (args.skiaBackend == RenderEngine::SkiaBackend::GRAPHITE) {
+    if (args.skiaBackend == RenderEngine::SkiaBackend::Graphite) {
         ALOGE("RenderEngine with Graphite Skia backend was requested, but Graphite was not "
               "included in the build. Falling back to Ganesh (%s)",
-              args.graphicsApi == RenderEngine::GraphicsApi::GL ? "GL" : "Vulkan");
+              ftl::enum_string(args.graphicsApi).c_str());
     }
-    const RenderEngine::SkiaBackend actualSkiaBackend = RenderEngine::SkiaBackend::GANESH;
+    const RenderEngine::SkiaBackend actualSkiaBackend = RenderEngine::SkiaBackend::Ganesh;
 #endif
 
-    ALOGD("%sRenderEngine with %s Backend (%s)", args.threaded == Threaded::YES ? "Threaded " : "",
-          args.graphicsApi == GraphicsApi::GL ? "SkiaGL" : "SkiaVK",
-          actualSkiaBackend == SkiaBackend::GANESH ? "Ganesh" : "Graphite");
+    ALOGD("%sRenderEngine with Skia%s Backend (%s)",
+          args.threaded == Threaded::Yes ? "Threaded " : "",
+          ftl::enum_string(args.graphicsApi).c_str(), ftl::enum_string(actualSkiaBackend).c_str());
 
 // TODO: b/341728634 - Clean up conditional compilation.
 #if COMPILE_GRAPHITE_RENDERENGINE
-    if (actualSkiaBackend == SkiaBackend::GRAPHITE) {
+    if (actualSkiaBackend == SkiaBackend::Graphite) {
         createInstanceFactory = [args]() {
             return android::renderengine::skia::GraphiteVkRenderEngine::create(args);
         };
     } else
 #endif
     { // GANESH
-        if (args.graphicsApi == GraphicsApi::VK) {
+        if (args.graphicsApi == GraphicsApi::Vk) {
             createInstanceFactory = [args]() {
                 return android::renderengine::skia::GaneshVkRenderEngine::create(args);
             };
@@ -77,7 +78,7 @@ std::unique_ptr<RenderEngine> RenderEngine::create(const RenderEngineCreationArg
         }
     }
 
-    if (args.threaded == Threaded::YES) {
+    if (args.threaded == Threaded::Yes) {
         return renderengine::threaded::RenderEngineThreaded::create(createInstanceFactory);
     } else {
         return createInstanceFactory();

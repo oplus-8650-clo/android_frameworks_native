@@ -77,14 +77,11 @@ cc_defaults {
         "libstatspull",
         "libstatssocket",
         "libutils",
-        "packagemanager_aidl-cpp",
         "server_configurable_flags",
     ],
     static_libs: [
         "libattestation",
         "libgui_window_info_static",
-        "libperfetto_client_experimental",
-        "perfetto_winscope_extensions_zero",
     ],
     target: {
         android: {
