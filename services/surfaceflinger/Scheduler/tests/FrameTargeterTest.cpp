@@ -258,8 +258,6 @@ TEST_F(FrameTargeterTest, recallsPastVsyncFiveVsyncsAhead) {
 }
 
 TEST_F(FrameTargeterTest, recallsPastVsyncTwoVsyncsAheadVrr) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     VsyncId vsyncId{222};
     TimePoint frameBeginTime(2000ms);
     constexpr Fps kRefreshRate = 120_Hz;

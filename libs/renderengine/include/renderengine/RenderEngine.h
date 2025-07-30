@@ -152,8 +152,9 @@ public:
         Gaussian,
         Kawase,
         KawaseDualFilter,
+        KawaseDualFilterV2,
 
-        ftl_last = KawaseDualFilter
+        ftl_last = KawaseDualFilterV2
     };
 
     static std::unique_ptr<RenderEngine> create(const RenderEngineCreationArgs& args);

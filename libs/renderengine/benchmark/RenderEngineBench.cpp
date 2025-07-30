@@ -363,8 +363,8 @@ void registerBenchmarks() {
 
             // BM_homescreen_blur
             for (RenderEngine::BlurAlgorithm blurAlgorithm :
-                 {RenderEngine::BlurAlgorithm::Gaussian, RenderEngine::BlurAlgorithm::Kawase,
-                  RenderEngine::BlurAlgorithm::KawaseDualFilter}) {
+                 ftl::enum_range<RenderEngine::BlurAlgorithm>()) {
+                if (blurAlgorithm == RenderEngine::BlurAlgorithm::None) continue;
                 argBuilder.setBlurAlgorithm(blurAlgorithm);
                 REGISTER_BM_IF_VALID(BM_homescreen_blur, argBuilder.build());
             }

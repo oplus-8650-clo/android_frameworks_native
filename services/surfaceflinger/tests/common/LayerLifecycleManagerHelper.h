@@ -642,6 +642,19 @@ public:
         mLifecycleManager.applyTransactions(transactions);
     }
 
+    void setSystemContentPriority(uint32_t id, int32_t priority) {
+        std::vector<QueuedTransactionState> transactions;
+        transactions.emplace_back();
+        transactions.back().states.push_back({});
+
+        transactions.back().states.front().state.what =
+                layer_state_t::eSystemContentPriorityChanged;
+        transactions.back().states.front().layerId = id;
+        transactions.back().states.front().state.systemContentPriority = priority;
+
+        mLifecycleManager.applyTransactions(transactions);
+    }
+
 private:
     LayerLifecycleManager& mLifecycleManager;
 };

@@ -18,6 +18,8 @@
 
 #include "RenderEngineThreaded.h"
 
+#include "skia/Cache.h"
+
 #include <sched.h>
 #include <chrono>
 #include <future>
@@ -86,6 +88,8 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
     if (setSchedFifo(true) != NO_ERROR) {
         ALOGW("Couldn't set SCHED_FIFO");
     }
+
+    skia::Cache::initializeDiskCache();
 
     mRenderEngine = factory();
 

@@ -1548,6 +1548,8 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
 
     // Rotate surface by 90
     setMatrix(11, 0.f, -1.f, 1.f, 0.f);
+    // ensure there is overlap
+    setPosition(11, 500, 500);
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
 
@@ -1579,6 +1581,98 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
               RADIUS * t.getScaleX());
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomRight.y,
               RADIUS * t.getScaleY());
+}
+
+TEST_F(LayerSnapshotTest, childDoesNotInheritParentSettingsWhenNoCornerOverlap) {
+    // ROOT
+    // ├── 1 (crop rect set to contain child layer)
+    // │   ├── 11
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(11,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(200 /*width*/,
+                                                                        200 /*height*/,
+                                                                        2ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+
+    setRoundedCorners(1, RADIUS);
+
+    FloatRect parentCropRect(0, 0, 1000, 1000);
+    setCrop(1, parentCropRect);
+
+    setPosition(11, 300, 300);
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii, ZERO_RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, childInheritsParentSettingsWhenCropIsEmpty) {
+    // ROOT
+    // ├── 1 (crop rect set to contain child layer)
+    // │   ├── 11
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    // No buffer is set on child layer
+
+    setRoundedCorners(1, RADIUS);
+
+    FloatRect parentCropRect(0, 0, 1000, 1000);
+    setCrop(1, parentCropRect);
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii, gui::CornerRadii(RADIUS));
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.cropRect, parentCropRect);
+}
+
+TEST_F(LayerSnapshotTest, childScaledInheritsParentSettings) {
+    // ROOT
+    // ├── 1 (crop rect set to contain child layer)
+    // │   ├── 11
+    static constexpr float RADIUS = 250.f;
+
+    setBuffer(1,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        1ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+    setBuffer(11,
+              std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
+                                                                        1000 /*height*/,
+                                                                        2ULL /* bufferId */,
+                                                                        HAL_PIXEL_FORMAT_RGBA_8888,
+                                                                        0 /*usage*/));
+
+    setRoundedCorners(1, RADIUS);
+
+    FloatRect parentCropRect(0, 0, 1000, 1000);
+    setCrop(1, parentCropRect);
+
+    // Scale child layer up
+    setMatrix(11, 2.f, 0.f, 0.f, 2.f);
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    ui::Transform t = getSnapshot({.id = 11})->localTransform.inverse();
+
+    EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.hasRoundedCorners());
 }
 
 TEST_F(LayerSnapshotTest, setClientDrawnClippedRadii) {
@@ -2457,6 +2551,19 @@ TEST_F(LayerSnapshotTest, stopLayer_mirrorHierarchy) {
 
     std::vector<uint32_t> expected = {1, 11, 111, 12, 121, 122, 1221, 13, 2, 3, 1, 11, 111, 12};
     UPDATE_AND_VERIFY(mSnapshotBuilder, expected);
+}
+
+TEST_F(LayerSnapshotTest, systemContentPriorityPassedToChildLayers) {
+    setSystemContentPriority(11, 1);
+    setSystemContentPriority(12, 2);
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->systemContentPriority,
+              gui::ISystemContentPriorityConstants::Unset);
+    EXPECT_EQ(getSnapshot({.id = 11})->systemContentPriority, 1);
+    EXPECT_EQ(getSnapshot({.id = 12})->systemContentPriority, 2);
+    EXPECT_EQ(getSnapshot({.id = 122})->systemContentPriority, 2);
+    EXPECT_EQ(getSnapshot({.id = 1221})->systemContentPriority, 2);
 }
 
 } // namespace android::surfaceflinger::frontend

@@ -75,6 +75,7 @@
 
 #include "Cache.h"
 #include "ColorSpaces.h"
+#include "ShaderCache.h"
 #include "compat/SkiaGpuContext.h"
 #include "filters/BlurFilter.h"
 #include "filters/GainmapFactory.h"
@@ -286,6 +287,7 @@ void trace(sp<Fence> fence) {
 } // namespace
 
 using base::StringAppendF;
+using uirenderer::skiapipeline::ShaderCache;
 
 std::future<void> SkiaRenderEngine::primeCache(PrimeCacheConfig config) {
     Cache::primeShaderCache(this, config);
@@ -306,7 +308,11 @@ void SkiaRenderEngine::SkSLCacheMonitor::store(const SkData& key, const SkData& 
 }
 
 int SkiaRenderEngine::reportShadersCompiled() {
-    return mSkSLCacheMonitor.totalShadersCompiled();
+    if (FlagManager::getInstance().shader_disk_cache()) {
+        return ShaderCache::get().totalShadersCompiled();
+    } else {
+        return mSkSLCacheMonitor.totalShadersCompiled();
+    }
 }
 
 void SkiaRenderEngine::setEnableTracing(bool tracingEnabled) {
@@ -316,7 +322,14 @@ void SkiaRenderEngine::setEnableTracing(bool tracingEnabled) {
 SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
                                    BlurAlgorithm blurAlgorithm)
       : RenderEngine(threaded), mDefaultPixelFormat(pixelFormat) {
+    // Note: do not introduce further switching on flags here, or within individual blur filters.
+    // BlurAlgorithm should be the only determining factor.
     switch (blurAlgorithm) {
+        case BlurAlgorithm::None: {
+            ALOGD("Background Blurs Disabled");
+            mBlurFilter = nullptr;
+            break;
+        }
         case BlurAlgorithm::Gaussian: {
             ALOGD("Background Blurs Enabled (Gaussian algorithm)");
             mBlurFilter = new GaussianBlurFilter(mRuntimeEffectManager);
@@ -329,15 +342,12 @@ SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
         }
         case BlurAlgorithm::KawaseDualFilter: {
             ALOGD("Background Blurs Enabled (Kawase dual-filtering algorithm)");
-            if (FlagManager::getInstance().window_blur_kawase2_fix_aliasing()) {
-                mBlurFilter = new KawaseBlurDualFilterV2(mRuntimeEffectManager);
-            } else {
-                mBlurFilter = new KawaseBlurDualFilter(mRuntimeEffectManager);
-            }
+            mBlurFilter = new KawaseBlurDualFilter(mRuntimeEffectManager);
             break;
         }
-        default: {
-            mBlurFilter = nullptr;
+        case BlurAlgorithm::KawaseDualFilterV2: {
+            ALOGD("Background Blurs Enabled (Kawase dual-filtering V2 algorithm)");
+            mBlurFilter = new KawaseBlurDualFilterV2(mRuntimeEffectManager);
             break;
         }
     }
@@ -438,6 +448,20 @@ static bool needsToneMapping(ui::Dataspace sourceDataspace, ui::Dataspace destin
 
     return !(isSourceLinear && isDestSRGB) && !(isSourceSRGB && isDestLinear) &&
             sourceTransfer != destTransfer;
+}
+
+GrContextOptions::PersistentCache& SkiaRenderEngine::persistentCache(const void* identity,
+                                                                     ssize_t size) {
+    if (FlagManager::getInstance().shader_disk_cache()) {
+        auto& cache = ShaderCache::get();
+        if (!mInitializedDiskCache) {
+            cache.initShaderDiskCache(identity, size);
+            mInitializedDiskCache = true;
+        }
+        return cache;
+    } else {
+        return mSkSLCacheMonitor;
+    }
 }
 
 void SkiaRenderEngine::ensureContextsCreated() {
@@ -1483,8 +1507,14 @@ void SkiaRenderEngine::dump(std::string& result) {
     StringAppendF(&result, "RenderEngine supports protected context: %d\n",
                   supportsProtectedContent());
     StringAppendF(&result, "RenderEngine is in protected context: %d\n", mInProtectedContext);
+    int shadersCachedSinceLastCall = 0;
+    if (FlagManager::getInstance().shader_disk_cache()) {
+        shadersCachedSinceLastCall = ShaderCache::get().shadersCachedSinceLastCall();
+    } else {
+        shadersCachedSinceLastCall = mSkSLCacheMonitor.shadersCachedSinceLastCall();
+    }
     StringAppendF(&result, "RenderEngine shaders cached since last dump/primeCache: %d\n",
-                  mSkSLCacheMonitor.shadersCachedSinceLastCall());
+                  shadersCachedSinceLastCall);
 
     std::vector<ResourcePair> cpuResourceMap = {
             {"skia/sk_resource_cache/bitmap_", "Bitmaps"},

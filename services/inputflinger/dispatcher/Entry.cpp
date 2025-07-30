@@ -101,8 +101,8 @@ PointerCaptureChangedEntry::PointerCaptureChangedEntry(int32_t id, nsecs_t event
         pointerCaptureRequest(request) {}
 
 std::string PointerCaptureChangedEntry::getDescription() const {
-    return StringPrintf("PointerCaptureChangedEvent(pointerCaptureEnabled=%s)",
-                        pointerCaptureRequest.isEnable() ? "true" : "false");
+    return StringPrintf("PointerCaptureChangedEvent(mode=%s)",
+                        ftl::enum_string(pointerCaptureRequest.mode).c_str());
 }
 
 // --- DragEntry ---

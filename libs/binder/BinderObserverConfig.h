@@ -98,20 +98,24 @@ private:
         virtual std::string getProcessName();
 
         virtual ShardingConfig getSystemServerSharding() {
+            // While the feature is in staging, set the sharding to full monitoring, so it can
+            // be tested deterministically.
             // TODO(b/299356196): Read sharding config from system properties (and sanitize it!)
             return {
-                    .processMod = 10,
-                    .spamMod = 50,
-                    .callMod = 100,
+                    .processMod = 1,
+                    .spamMod = 1,
+                    .callMod = 1,
             };
         }
 
         virtual ShardingConfig getOtherProcessesSharding() {
+            // While the feature is in staging, set the sharding to full monitoring, so it can
+            // be tested deterministically.
             // TODO(b/299356196): Read sharding config from system properties (and sanitize it!)
             return {
-                    .processMod = 50,
-                    .spamMod = 10,
-                    .callMod = 20,
+                    .processMod = 1,
+                    .spamMod = 1,
+                    .callMod = 1,
             };
         }
 

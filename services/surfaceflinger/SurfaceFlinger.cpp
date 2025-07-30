@@ -944,13 +944,19 @@ renderengine::RenderEngine::BlurAlgorithm chooseBlurAlgorithm(bool supportsBlur)
     auto const algorithm = base::GetProperty(PROPERTY_DEBUG_RENDERENGINE_BLUR_ALGORITHM, "");
     if (algorithm == "gaussian") {
         return renderengine::RenderEngine::BlurAlgorithm::Gaussian;
-    } else if (algorithm == "kawase2") {
-        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
     } else if (algorithm == "kawase") {
         return renderengine::RenderEngine::BlurAlgorithm::Kawase;
+    } else if (algorithm == "kawase2") {
+        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
+    } else if (algorithm == "kawase2_fix_aliasing") {
+        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
     } else {
         if (FlagManager::getInstance().window_blur_kawase2()) {
-            return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
+            if (FlagManager::getInstance().window_blur_kawase2_fix_aliasing()) {
+                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
+            } else {
+                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
+            }
         }
         return renderengine::RenderEngine::BlurAlgorithm::Kawase;
     }
@@ -1345,7 +1351,7 @@ void SurfaceFlinger::getDynamicDisplayInfoInternal(ui::DynamicDisplayInfo*& info
     const auto mode = display->refreshRateSelector().getActiveMode();
     info->activeDisplayModeId = ftl::to_underlying(mode.modePtr->getId());
     info->renderFrameRate = mode.fps.getValue();
-    info->hasArrSupport = mode.modePtr->getVrrConfig() && FlagManager::getInstance().vrr_config();
+    info->hasArrSupport = mode.modePtr->getVrrConfig().has_value();
 
     const auto [normal, high] = display->refreshRateSelector().getFrameRateCategoryRates();
     ui::FrameRateCategoryRate frameRateCategoryRate(normal.getValue(), high.getValue());
@@ -1714,8 +1720,7 @@ void SurfaceFlinger::initiateDisplayModeChanges() {
                                                           constraints, outTimeline);
         if (error != display::DisplayModeController::ModeChangeResult::Changed) {
             dropModeRequest(displayId);
-            if (FlagManager::getInstance().display_config_error_hal() &&
-                error == display::DisplayModeController::ModeChangeResult::Rejected) {
+            if (error == display::DisplayModeController::ModeChangeResult::Rejected) {
                 mScheduler->onDisplayModeRejected(displayId, desiredModeId);
             }
             continue;
@@ -2479,9 +2484,6 @@ void SurfaceFlinger::onComposerHalHotplugEvent(hal::HWDisplayId hwcDisplayId,
     }
 
     if (event == DisplayHotplugEvent::ERROR_LINK_UNSTABLE) {
-        if (!FlagManager::getInstance().display_config_error_hal()) {
-            return;
-        }
         {
             std::lock_guard<std::mutex> lock(mHotplugMutex);
             mPendingHotplugEvents.push_back(
@@ -2964,10 +2966,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
 
     if (pacesetterFrameTarget.wouldBackpressureHwc()) {
         if (mBackpressureGpuComposition || pacesetterFrameTarget.didMissHwcFrame()) {
-            if (FlagManager::getInstance().vrr_config()) {
-                mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
-                        pacesetterFrameTarget.expectedPresentTime());
-            }
+            mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
+                    pacesetterFrameTarget.expectedPresentTime());
             const Duration slack = TimePoint::now() - pacesetterFrameTarget.frameBeginTime();
             scheduleCommit(FrameHint::kNone, slack);
             return false;
@@ -3029,7 +3029,7 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         // Tell VsyncTracker that we are going to present this frame before scheduling
         // setTransactionFlags which will schedule another SF frame. This was if the tracker
         // needs to adjust the vsync timeline, it will be done before the next frame.
-        if (FlagManager::getInstance().vrr_config() && mustComposite) {
+        if (mustComposite) {
             mScheduler->getVsyncSchedule()
                     ->getTracker()
                     .onFrameBegin(pacesetterFrameTarget.expectedPresentTime(),
@@ -4051,9 +4051,7 @@ bool SurfaceFlinger::configureLocked() {
 
                 using Config = scheduler::RefreshRateSelector::Config;
                 const Config config =
-                        {.enableFrameRateOverride = sysprop::enable_frame_rate_override(true)
-                                 ? Config::FrameRateOverride::Enabled
-                                 : Config::FrameRateOverride::Disabled,
+                        {.enableFrameRateOverride = sysprop::enable_frame_rate_override(true),
                          .frameRateMultipleThreshold =
                                  base::GetIntProperty("debug.sf.frame_rate_multiple_threshold"s, 0),
                          .legacyIdleTimerTimeout = idleTimerTimeoutMs,
@@ -5124,10 +5122,8 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
     // The pacesetter must be registered before EventThread creation below.
     mScheduler->registerDisplay(display->getPhysicalId(), display->holdRefreshRateSelector(),
                                 getDefaultPacesetterDisplay());
-    if (FlagManager::getInstance().vrr_config()) {
-        mScheduler->setRenderRate(display->getPhysicalId(), activeMode.fps,
-                                  /*applyImmediately*/ true);
-    }
+    mScheduler->setRenderRate(display->getPhysicalId(), activeMode.fps,
+                              /*applyImmediately*/ true);
 
     const auto configs = mScheduler->getCurrentVsyncConfigs();
 
@@ -7815,33 +7811,30 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             // Second argument is a delay in ms for triggering the jank. This is useful for working
             // with tools that steal the adb connection. This argument is optional.
             case 1045: {
-                if (FlagManager::getInstance().vrr_config()) {
-                    float jankAmount = data.readFloat();
-                    int32_t jankDelayMs = 0;
-                    if (data.readInt32(&jankDelayMs) != NO_ERROR) {
-                        jankDelayMs = 0;
-                    }
-
-                    const auto jankDelayDuration = Duration(std::chrono::milliseconds(jankDelayMs));
-
-                    const bool jankAmountValid = jankAmount > 0.0 && jankAmount < 100.0;
-
-                    if (!jankAmountValid) {
-                        ALOGD("Ignoring invalid jank amount: %f", jankAmount);
-                        reply->writeInt32(BAD_VALUE);
-                        return BAD_VALUE;
-                    }
-
-                    (void)mScheduler->scheduleDelayed(
-                            [&, jankAmount]() FTL_FAKE_GUARD(kMainThreadContext) {
-                                mScheduler->injectPacesetterDelay(jankAmount);
-                                scheduleComposite(FrameHint::kActive);
-                            },
-                            jankDelayDuration.ns());
-                    reply->writeInt32(NO_ERROR);
-                    return NO_ERROR;
+                float jankAmount = data.readFloat();
+                int32_t jankDelayMs = 0;
+                if (data.readInt32(&jankDelayMs) != NO_ERROR) {
+                    jankDelayMs = 0;
                 }
-                return err;
+
+                const auto jankDelayDuration = Duration(std::chrono::milliseconds(jankDelayMs));
+
+                const bool jankAmountValid = jankAmount > 0.0 && jankAmount < 100.0;
+
+                if (!jankAmountValid) {
+                    ALOGD("Ignoring invalid jank amount: %f", jankAmount);
+                    reply->writeInt32(BAD_VALUE);
+                    return BAD_VALUE;
+                }
+
+                (void)mScheduler->scheduleDelayed(
+                        [&, jankAmount]() FTL_FAKE_GUARD(kMainThreadContext) {
+                            mScheduler->injectPacesetterDelay(jankAmount);
+                            scheduleComposite(FrameHint::kActive);
+                        },
+                        jankDelayDuration.ns());
+                reply->writeInt32(NO_ERROR);
+                return NO_ERROR;
             }
             // Introduce jank to HWC
             case 1046: {

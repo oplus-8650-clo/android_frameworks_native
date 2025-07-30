@@ -104,40 +104,23 @@ std::vector<DisplayModeIterator> sortByRefreshRate(const DisplayModes& modes) {
 }
 
 std::pair<unsigned, unsigned> divisorRange(Fps vsyncRate, Fps peakFps, FpsRange range,
-                                           RefreshRateSelector::Config::FrameRateOverride config) {
-    if (config != RefreshRateSelector::Config::FrameRateOverride::Enabled) {
+                                           bool enableFrameRateOverride) {
+    if (!enableFrameRateOverride) {
         return {1, 1};
     }
 
     using fps_approx_ops::operator/;
     // use signed type as `fps / range.max` might be 0
-    auto start = std::max(1, static_cast<int>(peakFps / range.max) - 1);
-    if (FlagManager::getInstance().vrr_config()) {
-        start = std::max(1,
-                         static_cast<int>(vsyncRate /
-                                          std::min(range.max, peakFps, fps_approx_ops::operator<)) -
-                                 1);
-    }
+    const auto start =
+            std::max(1,
+                     static_cast<int>(vsyncRate /
+                                      std::min(range.max, peakFps, fps_approx_ops::operator<)) -
+                             1);
     const auto end = vsyncRate /
             std::max(range.min, RefreshRateSelector::kMinSupportedFrameRate,
                      fps_approx_ops::operator<);
 
     return {start, end};
-}
-
-bool shouldEnableFrameRateOverride(const std::vector<DisplayModeIterator>& sortedModes) {
-    for (const auto it1 : sortedModes) {
-        const auto& mode1 = it1->second;
-        for (const auto it2 : sortedModes) {
-            const auto& mode2 = it2->second;
-
-            if (RefreshRateSelector::getFrameRateDivisor(mode1->getPeakFps(),
-                                                         mode2->getPeakFps()) >= 2) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 std::string toString(const RefreshRateSelector::PolicyVariant& policy) {
@@ -196,14 +179,7 @@ auto RefreshRateSelector::createFrameRateModes(
                 break;
             }
 
-            if (mConfig.enableFrameRateOverride == Config::FrameRateOverride::Enabled &&
-                !renderRange.includes(fps)) {
-                continue;
-            }
-
-            if (mConfig.enableFrameRateOverride ==
-                        Config::FrameRateOverride::AppOverrideNativeRefreshRates &&
-                !isNativeRefreshRate(fps)) {
+            if (mConfig.enableFrameRateOverride && !renderRange.includes(fps)) {
                 continue;
             }
 
@@ -962,7 +938,7 @@ auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequireme
                                                 GlobalSignals globalSignals) const
         -> UidToFrameRateOverride {
     SFTRACE_CALL();
-    if (mConfig.enableFrameRateOverride == Config::FrameRateOverride::Disabled) {
+    if (!mConfig.enableFrameRateOverride) {
         return {};
     }
 
@@ -982,12 +958,6 @@ auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequireme
 
     for (unsigned n = numMultiples; n > 0; n--) {
         const Fps divisor = displayRefreshRate / n;
-        if (mConfig.enableFrameRateOverride ==
-                    Config::FrameRateOverride::AppOverrideNativeRefreshRates &&
-            !isNativeRefreshRate(divisor)) {
-            continue;
-        }
-
         if (policyPtr->appRequestRanges.render.includes(divisor)) {
             ALOGV("%s: adding %s as a potential frame rate", __func__, to_string(divisor).c_str());
             scoredFrameRates.emplace_back(divisor, 0);
@@ -1277,8 +1247,7 @@ void RefreshRateSelector::setActiveMode(DisplayModeId modeId, Fps renderFrameRat
     LOG_ALWAYS_FATAL_IF(!activeModeOpt);
 
     mActiveModeOpt.emplace(FrameRateMode{renderFrameRate, ftl::as_non_null(activeModeOpt->get())});
-    mIsVrrDevice = FlagManager::getInstance().vrr_config() &&
-            activeModeOpt->get()->getVrrConfig().has_value();
+    mIsVrrDevice = activeModeOpt->get()->getVrrConfig().has_value();
 }
 
 RefreshRateSelector::RefreshRateSelector(DisplayModes modes, DisplayModeId activeModeId,
@@ -1327,26 +1296,6 @@ void RefreshRateSelector::updateDisplayModes(DisplayModes modes, DisplayModeId a
     // Reset the policy because the old one may no longer be valid.
     mDisplayManagerPolicy = {};
     mDisplayManagerPolicy.defaultMode = activeModeId;
-
-    mFrameRateOverrideConfig = [&] {
-        switch (mConfig.enableFrameRateOverride) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverride:
-            case Config::FrameRateOverride::Enabled:
-                return mConfig.enableFrameRateOverride;
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-                return shouldEnableFrameRateOverride(sortedModes)
-                        ? Config::FrameRateOverride::AppOverrideNativeRefreshRates
-                        : Config::FrameRateOverride::Disabled;
-        }
-    }();
-
-    if (mConfig.enableFrameRateOverride ==
-        Config::FrameRateOverride::AppOverrideNativeRefreshRates) {
-        for (const auto& [_, mode] : mDisplayModes) {
-            mAppOverrideNativeRefreshRates.try_emplace(mode->getPeakFps(), ftl::unit);
-        }
-    }
 
     constructAvailableRefreshRates();
 }
@@ -1660,7 +1609,7 @@ void RefreshRateSelector::dump(utils::Dumper& dumper) const {
         dumper.dump("overridePolicy"sv, currentPolicy.toString());
     }
 
-    dumper.dump("frameRateOverrideConfig"sv, *ftl::enum_name(mFrameRateOverrideConfig));
+    dumper.dump("enableFrameRateOverride"sv, mConfig.enableFrameRateOverride);
 
     dumper.dump("idleTimer"sv);
     {

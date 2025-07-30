@@ -331,7 +331,7 @@ bool AidlComposer::isSupported(OptionalFeature feature) const {
 }
 
 bool AidlComposer::isVrrSupported() const {
-    return mComposerInterfaceVersion >= 3 && FlagManager::getInstance().vrr_config();
+    return mComposerInterfaceVersion >= 3;
 }
 
 std::vector<Capability> AidlComposer::getCapabilities() {

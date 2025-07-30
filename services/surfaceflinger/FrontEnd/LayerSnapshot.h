@@ -17,6 +17,7 @@
 #pragma once
 
 #include <PowerAdvisor/Workload.h>
+#include <android/gui/ISystemContentPriorityConstants.h>
 #include <compositionengine/LayerFECompositionState.h>
 #include <gui/CornerRadii.h>
 #include <renderengine/LayerSettings.h>
@@ -118,6 +119,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     uint32_t touchCropId;
     gui::Uid uid = gui::Uid::INVALID;
     gui::Pid pid = gui::Pid::INVALID;
+    int32_t systemContentPriority = gui::ISystemContentPriorityConstants::Unset;
     enum class Reachability : uint32_t {
         // Can traverse the hierarchy from a root node and reach this snapshot
         Reachable,

@@ -70,7 +70,6 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
 
     if (sharding.processMod == 0) {
         // Sharding of 0 means disabled. No need to read further configuration.
-        ALOGI("Binder stats disabled for %s uid=%d by configuration.", processName.c_str(), uid);
         return std::unique_ptr<BinderObserverConfig>(
                 new BinderObserverConfig(std::move(environment), false, sharding, 0));
     }
@@ -93,8 +92,6 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
     token += environment->hashString8(processName) % modulo;
     bool enabled = token % modulo == 0;
 
-    ALOGI("Binder stats for %s uid=%d enabled=%d sharding={%zu, %zu, %zu}", processName.c_str(),
-          uid, enabled, sharding.processMod, sharding.spamMod, sharding.callMod);
     return std::unique_ptr<BinderObserverConfig>(
             new BinderObserverConfig(std::move(environment), enabled, sharding, aidlOffset));
 }

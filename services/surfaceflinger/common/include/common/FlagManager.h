@@ -85,7 +85,6 @@ public:
     bool deprecate_vsync_sf() const;
     bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
-    bool display_config_error_hal() const;
     bool enable_layer_command_batching() const;
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
@@ -106,13 +105,13 @@ public:
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
     bool parse_edid_version_and_input_type() const;
+    bool shader_disk_cache() const;
     bool skip_invisible_windows_in_input() const;
     bool stable_edid_ids() const;
     bool stop_layer() const;
     bool synced_resolution_switch() const;
     bool true_hdr_screenshots() const;
     bool use_known_refresh_rate_for_fps_consistency() const;
-    bool vrr_config() const;
     bool vulkan_renderengine() const;
     bool wb_virtualdisplay2() const;
     bool window_blur_kawase2() const;

@@ -3113,6 +3113,23 @@ TEST_F(InputDeviceTest, Configure_AssignsVirtualDevice) {
     ASSERT_FALSE(mDevice->isVirtualDevice());
 }
 
+TEST_F(InputDeviceTest, TouchpadDoesNotResetWhenChangingDisplays) {
+    FakeInputMapper& mapper =
+            mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                                AINPUT_SOURCE_TOUCHPAD | AINPUT_SOURCE_MOUSE);
+
+    InputReaderConfiguration config;
+    // Send display info change. This simulates the cursor moving to another screen.
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, config,
+                               InputReaderConfiguration::Change::DISPLAY_INFO);
+    // The device should still be enabled, and its configuration should be updated.
+    // But its state should not be reset because it was already enabled.
+    ASSERT_NO_FATAL_FAILURE(mapper.assertConfigureWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mapper.assertResetWasNotCalled());
+    ASSERT_TRUE(mDevice->isEnabled());
+}
+
 // --- TouchInputMapperTest ---
 
 class TouchInputMapperTest : public InputMapperTest {
@@ -4957,7 +4974,6 @@ TEST_F(SingleTouchInputMapperTest,
     prepareButtons();
     prepareAxes(POSITION);
     SingleTouchInputMapper& mapper = constructAndAddMapper<SingleTouchInputMapper>();
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyDeviceResetWasCalled());
     NotifyMotionArgs motionArgs;
 
     // Start a new gesture.
@@ -5017,7 +5033,6 @@ TEST_F(SingleTouchInputMapperTest, ButtonIsReleasedOnTouchUp) {
     prepareButtons();
     prepareAxes(POSITION);
     SingleTouchInputMapper& mapper = constructAndAddMapper<SingleTouchInputMapper>();
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyDeviceResetWasCalled());
 
     // Press a stylus button.
     processKey(mapper, BTN_STYLUS, 1);
@@ -5058,7 +5073,6 @@ TEST_F(SingleTouchInputMapperTest, StylusButtonMotionEventsDisabled) {
     mFakePolicy->setStylusButtonMotionEventsEnabled(false);
 
     SingleTouchInputMapper& mapper = constructAndAddMapper<SingleTouchInputMapper>();
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyDeviceResetWasCalled());
 
     // Press a stylus button.
     processKey(mapper, BTN_STYLUS, 1);
@@ -5095,7 +5109,6 @@ TEST_F(SingleTouchInputMapperTest, WhenDeviceTypeIsSetToTouchNavigation_setsCorr
     prepareButtons();
     prepareAxes(POSITION);
     SingleTouchInputMapper& mapper = constructAndAddMapper<SingleTouchInputMapper>();
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyDeviceResetWasCalled());
 
     ASSERT_EQ(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD, mapper.getSources());
 }
@@ -8450,7 +8463,6 @@ TEST_F(MultiTouchInputMapperTest, StylusSourceIsAddedDynamicallyFromToolType) {
     prepareDisplay(ui::ROTATION_0);
     prepareAxes(POSITION | ID | SLOT | PRESSURE | TOOL_TYPE);
     MultiTouchInputMapper& mapper = constructAndAddMapper<MultiTouchInputMapper>();
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyDeviceResetWasCalled());
 
     // Even if the device supports reporting the ABS_MT_TOOL_TYPE axis, which could give it the
     // ability to report MT_TOOL_PEN, we do not report the device as coming from a stylus source.

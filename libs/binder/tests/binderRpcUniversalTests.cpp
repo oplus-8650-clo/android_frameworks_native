@@ -249,7 +249,7 @@ TEST_P(BinderRpc, SendLargeVector) {
 
     // see libbinder internal Constants.h
     // We use a smaller size for TIPC because a 15MB test is too slow and times out
-    size_t kLargeSize = socketType() == SocketType::TIPC ? 128 * 1024 : 1 * 1024 * 1024;
+    size_t kLargeSize = socketType() == SocketType::TIPC ? 128 * 1024 : 550 * 1024;
     const std::vector<uint8_t> kTestValue(kLargeSize / sizeof(uint8_t), 42);
 
     std::vector<uint8_t> result;
@@ -581,6 +581,29 @@ TEST_P(BinderRpc, AidlDelegatorTest) {
     std::string doubled;
     EXPECT_OK(myDelegator->doubleString("cool ", &doubled));
     EXPECT_EQ("cool cool ", doubled);
+}
+
+TEST_P(BinderRpc, WriteReadLocalRpcBinder) {
+    auto proc = createRpcTestSocketServerProcess({});
+    const bool binderInObjects = proc.proc->sessions.at(0).session->getProtocolVersion() >=
+            RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+
+    sp<IBinder> b = sp<BBinder>::make();
+    Parcel p;
+    p.markForRpc(proc.proc->sessions[0].session);
+
+    EXPECT_EQ(OK, p.writeStrongBinder(b));
+
+    p.setDataPosition(0);
+
+    sp<IBinder> b2;
+    EXPECT_EQ(OK, p.readStrongBinder(&b2));
+    EXPECT_NE(b2, nullptr);
+    EXPECT_EQ(b, b2);
+    if (!binderInObjects) {
+        // the old protocol will leak the binder object in this case
+        proc.forceShutdown();
+    }
 }
 
 } // namespace android

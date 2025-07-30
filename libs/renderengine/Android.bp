@@ -33,6 +33,7 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libcrypto",
         "libcutils",
         "libEGL",
         "libGLESv1_CM",
@@ -48,6 +49,7 @@ cc_defaults {
     ],
 
     static_libs: [
+        "libEGL_blobCache",
         "libshaders",
         "libtonemap",
         "libsurfaceflinger_common",
@@ -89,6 +91,7 @@ filegroup {
         "skia/GaneshVkRenderEngine.cpp",
         "skia/GraphiteVkRenderEngine.cpp",
         "skia/GLExtensions.cpp",
+        "skia/ShaderCache.cpp",
         "skia/SkiaRenderEngine.cpp",
         "skia/SkiaGLRenderEngine.cpp",
         "skia/SkiaVkRenderEngine.cpp",
@@ -127,11 +130,13 @@ cc_defaults {
         "libsurfaceflinger_common_deps",
     ],
     static_libs: [
+        "libEGL_blobCache",
         "libgui_window_info_static",
         "libskia_renderengine",
     ],
     shared_libs: [
         "libbinder",
+        "libcrypto",
     ],
 }
 

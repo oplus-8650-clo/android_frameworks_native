@@ -218,7 +218,8 @@ TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestAdaptiveScaleFactorUndefinedIg
 }
 
 TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestAdaptiveScaleFactorAppliedAfterScale,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled))) {
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, vibration_scale_bounds_fix_enabled),
+                                          ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled))) {
     // Adaptive scale mutes vibration
     float expectedMuted[TEST_BUFFER_LENGTH];
     std::fill(std::begin(expectedMuted), std::end(expectedMuted), 0);
@@ -254,6 +255,8 @@ TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestAdaptiveScaleFactorUndefinedIg
 }
 
 TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestAdaptiveScaleFactorAppliedAfterScaleV2,
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS,
+                                                       vibration_scale_bounds_fix_enabled)),
                   REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled))) {
     // Adaptive scale mutes vibration
     float expectedMuted[TEST_BUFFER_LENGTH];

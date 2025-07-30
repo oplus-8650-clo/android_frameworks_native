@@ -350,9 +350,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
         }
 
         if (!compositor.commit(pacesetterPtr->displayId, targets)) {
-            if (FlagManager::getInstance().vrr_config()) {
-                compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
-            }
+            compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
             mSchedulerCallback.onCommitNotComposited();
             return;
         }
@@ -372,8 +370,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
         targeters.try_emplace(id, &targeter);
     }
 
-    if (FlagManager::getInstance().vrr_config() &&
-        CC_UNLIKELY(mPacesetterFrameDurationFractionToSkip > 0.f)) {
+    if (CC_UNLIKELY(mPacesetterFrameDurationFractionToSkip > 0.f)) {
         const auto period = pacesetterPtr->targeterPtr->target().expectedFrameDuration();
         const auto skipDuration = Duration::fromNs(
                 static_cast<nsecs_t>(period.ns() * mPacesetterFrameDurationFractionToSkip));
@@ -384,9 +381,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
     }
 
     const auto resultsPerDisplay = compositor.composite(pacesetterPtr->displayId, targeters);
-    if (FlagManager::getInstance().vrr_config()) {
-        compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
-    }
+    compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
     compositor.sample();
 
     for (const auto& [id, targeter] : targeters) {

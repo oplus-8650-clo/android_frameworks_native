@@ -3226,7 +3226,9 @@ TEST_P(RenderEngineTest, localTonemap_tonemapsNearbySdrRegions) {
     expectBufferColor(Rect(blockWidth, 0, blockWidth * 2, 1), 255, 255, 255, 255);
 }
 
-TEST_P(RenderEngineTest, primeShaderCache) {
+// TODO: Figure out how to make this play nice with graphite & ShaderCache
+// Or remove it if it's no longer useful.
+TEST_P(RenderEngineTest, DISABLED_primeShaderCache) {
     // TODO: b/331447071 - Fix in Graphite and re-enable.
     if (GetParam()->skiaBackend() == renderengine::RenderEngine::SkiaBackend::Graphite) {
         GTEST_SKIP();

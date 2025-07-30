@@ -578,8 +578,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitExactVote2) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitGte_vrr) {
-    // Set the test to be on a vrr mode.
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     auto layer = createLegacyAndFrontedEndLayer(1);
@@ -618,8 +616,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitGte_vrr) {
 // Test for MRR device with VRR features enabled.
 TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitGte_nonVrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, true);
-    // The vrr_config flag is explicitly not set false because this test for an MRR device
-    // should still work in a VRR-capable world.
 
     auto layer = createLegacyAndFrontedEndLayer(1);
     showLayer(1);
@@ -656,8 +652,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitGte_nonVrr) {
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_arr) {
     SET_FLAG_FOR_TEST(flags::arr_setframerate_gte_enum, true);
-    // Set the test to be on a vrr mode.
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     auto layer = createLegacyAndFrontedEndLayer(1);
@@ -689,8 +683,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_arr) {
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_mrr) {
     SET_FLAG_FOR_TEST(flags::arr_setframerate_gte_enum, true);
-    // True by default on MRR devices as well, but the device is not set to VRR mode.
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
 
     auto layer = createLegacyAndFrontedEndLayer(1);
     showLayer(1);
@@ -785,7 +777,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference) {
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
 
     const LayerHistory::LayerVoteType defaultVote = LayerHistory::LayerVoteType::Min;
 
@@ -818,7 +809,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_mrr) {
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const LayerHistory::LayerVoteType defaultVote = LayerHistory::LayerVoteType::Min;
@@ -850,7 +840,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_vrr) {
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
@@ -885,7 +874,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
     const uid_t uid = 456;
@@ -919,7 +907,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_
 TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
@@ -951,7 +938,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_vrr) {
 TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
     SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
     const uid_t uid = 456;
@@ -1071,8 +1057,6 @@ TEST_F(LayerHistoryIntegrationTest, invisibleExplicitLayerDoesNotVote) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, frontBufferedLayerVotesMax) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     auto layer = createLegacyAndFrontedEndLayer(1);
     setFrontBuffer(1);
     showLayer(1);

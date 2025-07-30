@@ -92,7 +92,7 @@ public:
     sp<IBinder> getResponsiveWindowToken();
     void assertNotifyAnrWasNotCalled();
     PointerCaptureRequest assertSetPointerCaptureCalled(const sp<gui::WindowInfoHandle>& window,
-                                                        bool enabled);
+                                                        PointerCaptureMode mode);
     void assertSetPointerCaptureNotCalled();
     void assertDropTargetEquals(const InputDispatcherInterface& dispatcher,
                                 const sp<IBinder>& targetToken);

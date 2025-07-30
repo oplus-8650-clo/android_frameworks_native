@@ -1406,7 +1406,14 @@ private:
 
         // Layout below
 
-        std::vector<uint32_t> mObjectPositions; // Sorted
+        // Sorted list of offsets to objects. The first four bytes are always
+        // the ObjectType.
+        //
+        // The contents vary depending on the protocol version. Binder objects
+        // are only added to the list when the protocol version is at least 2.
+        // File descriptors are always added to this list, but there will be an
+        // error at transaction time if the protocol version isn't at least 1.
+        std::vector<uint32_t> mObjectPositions;
         mutable std::unique_ptr<Impl> mImpl;
         // If this is NOT_SENT, then this object owns RPC resources and must clean them
         // up. Otherwise, they must be acquired by the other side of the RPC
