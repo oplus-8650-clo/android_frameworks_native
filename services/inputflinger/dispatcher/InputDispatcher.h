@@ -140,7 +140,7 @@ public:
             ui::LogicalDisplayId displayId, const std::string& name, gui::Pid pid) override;
     status_t removeInputChannel(const sp<IBinder>& connectionToken) override;
     status_t pilferPointers(const sp<IBinder>& token) override;
-    void requestPointerCapture(const sp<IBinder>& windowToken, bool enabled) override;
+    void requestPointerCapture(const sp<IBinder>& windowToken, PointerCaptureMode mode) override;
     bool flushSensor(int deviceId, InputDeviceSensorType sensorType) override;
     void setDisplayEligibilityForPointerCapture(ui::LogicalDisplayId displayId,
                                                 bool isEligible) override;
@@ -703,8 +703,12 @@ private:
     void disablePointerCaptureForcedLocked() REQUIRES(mLock);
 
     // Set the Pointer Capture state in the Policy.
-    // The window is not nullptr for requests to enable, otherwise it is nullptr.
-    void setPointerCaptureLocked(const sp<IBinder>& window) REQUIRES(mLock);
+    // The window must not be null unless the mode is UNCAPTURED.
+    void setPointerCaptureLocked(PointerCaptureMode mode, const sp<IBinder>& window)
+            REQUIRES(mLock);
+
+    // Clear the pointer capture state.
+    void clearPointerCaptureLocked() REQUIRES(mLock);
 
     // Dispatcher state at time of last ANR.
     std::string mLastAnrState GUARDED_BY(mLock);

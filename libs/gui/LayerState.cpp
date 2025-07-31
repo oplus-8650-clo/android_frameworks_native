@@ -106,7 +106,8 @@ layer_state_t::layer_state_t()
         destinationFrame(Rect::INVALID_RECT),
         dropInputMode(gui::DropInputMode::NONE),
         pictureProfileHandle(PictureProfileHandle::NONE),
-        appContentPriority(0) {
+        appContentPriority(0),
+        systemContentPriority(gui::ISystemContentPriorityConstants::Unset) {
     matrix.dsdx = matrix.dtdy = 1.0f;
     matrix.dsdy = matrix.dtdx = 0.0f;
     hdrMetadata.validTypes = 0;
@@ -234,6 +235,7 @@ status_t layer_state_t::write(Parcel& output) const
         SAFE_PARCEL(output.writeParcelable, *luts);
     }
 
+    SAFE_PARCEL(output.writeInt32, systemContentPriority);
     return NO_ERROR;
 }
 
@@ -411,6 +413,7 @@ status_t layer_state_t::read(const Parcel& input)
         luts = nullptr;
     }
 
+    SAFE_PARCEL(input.readInt32, &systemContentPriority);
     return NO_ERROR;
 }
 
@@ -826,6 +829,10 @@ void layer_state_t::merge(const layer_state_t& other) {
             appContentPriority = other.appContentPriority;
         }
     }
+    if (other.what & eSystemContentPriorityChanged) {
+        what |= eSystemContentPriorityChanged;
+        systemContentPriority = other.systemContentPriority;
+    }
     if ((other.what & what) != other.what) {
         ALOGE("Unmerged SurfaceComposer Transaction properties. LayerState::merge needs updating? "
               "other.what=0x%" PRIX64 " what=0x%" PRIX64 " unmerged flags=0x%" PRIX64,
@@ -915,6 +922,7 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
     if (other.what & eLutsChanged) diff |= eLutsChanged;
     CHECK_DIFF(diff, ePictureProfileHandleChanged, other, pictureProfileHandle);
     CHECK_DIFF(diff, eAppContentPriorityChanged, other, appContentPriority);
+    CHECK_DIFF(diff, eSystemContentPriorityChanged, other, systemContentPriority);
     if (other.what & eStopLayerChanged) diff |= eStopLayerChanged;
 
     return diff;

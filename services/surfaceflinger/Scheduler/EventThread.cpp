@@ -452,9 +452,7 @@ VsyncEventData EventThread::getLatestVsyncEventData(const sp<EventThreadConnecti
         return {vsyncTime, vsyncTime - mReadyDuration.count()};
     }();
     generateFrameTimeline(vsyncEventData, frameInterval.ns(), now, presentTime, deadline);
-    if (FlagManager::getInstance().vrr_config()) {
-        mCallback.onExpectedPresentTimePosted(TimePoint::fromNs(presentTime));
-    }
+    mCallback.onExpectedPresentTimePosted(TimePoint::fromNs(presentTime));
     return vsyncEventData;
 }
 
@@ -823,9 +821,7 @@ void EventThread::dispatchEvent(const DisplayEventReceiver::Event& event,
                 removeDisplayEventConnectionLocked(consumer);
         }
     }
-
-    if (event.header.type == DisplayEventType::DISPLAY_EVENT_VSYNC &&
-        FlagManager::getInstance().vrr_config()) {
+    if (event.header.type == DisplayEventType::DISPLAY_EVENT_VSYNC) {
         mLastCommittedVsyncTime =
                 TimePoint::fromNs(event.vsync.vsyncData.preferredExpectedPresentationTime());
         mCallback.onExpectedPresentTimePosted(mLastCommittedVsyncTime);

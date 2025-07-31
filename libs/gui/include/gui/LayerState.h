@@ -24,6 +24,7 @@
 #include <android/gui/BorderSettings.h>
 #include <android/gui/BoxShadowSettings.h>
 #include <android/gui/DisplayCaptureArgs.h>
+#include <android/gui/ISystemContentPriorityConstants.h>
 #include <android/gui/IWindowInfosReportedListener.h>
 #include <android/gui/LayerCaptureArgs.h>
 #include <android/gui/TrustedPresentationThresholds.h>
@@ -260,6 +261,7 @@ struct layer_state_t {
         eBoxShadowSettingsChanged = 0x800000'00000000,
         eStopLayerChanged = 0x1000000'00000000,
         eBackgroundBlurScaleChanged = 0x2000000'00000000,
+        eSystemContentPriorityChanged = 0x4000000'00000000,
     };
 
     layer_state_t();
@@ -321,7 +323,8 @@ struct layer_state_t {
             layer_state_t::eFlagsChanged | layer_state_t::eTrustedOverlayChanged |
             layer_state_t::eFrameRateChanged | layer_state_t::eFrameRateCategoryChanged |
             layer_state_t::eFrameRateSelectionStrategyChanged |
-            layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFixedTransformHintChanged;
+            layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFixedTransformHintChanged |
+            layer_state_t::eSystemContentPriorityChanged;
 
     // Changes affecting data sent to input.
     static constexpr uint64_t INPUT_CHANGES = layer_state_t::eAlphaChanged |
@@ -491,6 +494,10 @@ struct layer_state_t {
     // experience. A higher value will result in more likelihood of getting access to limited
     // resources, such as picture processing hardware.
     int32_t appContentPriority = 0;
+
+    // A value indicating the importance of the layer's content from the perspective of system
+    // server.
+    int32_t systemContentPriority = gui::ISystemContentPriorityConstants::Unset;
 
     gui::CachingHint cachingHint = gui::CachingHint::Enabled;
 

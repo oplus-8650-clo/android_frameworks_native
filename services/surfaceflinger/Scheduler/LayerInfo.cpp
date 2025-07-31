@@ -62,10 +62,7 @@ void LayerInfo::setLastPresentTime(nsecs_t lastPresentTime, nsecs_t now, LayerUp
             mLastAnimationTime = std::max(lastPresentTime, now);
             break;
         case LayerUpdateType::SetFrameRate:
-            if (FlagManager::getInstance().vrr_config()) {
-                break;
-            }
-            FALLTHROUGH_INTENDED;
+            break;
         case LayerUpdateType::Buffer:
             mLastUpdatedTime = std::max(lastPresentTime, now);
             FrameTimeData frameTime = {.presentTime = lastPresentTime,
@@ -344,7 +341,7 @@ LayerInfo::RefreshRateVotes LayerInfo::getRefreshRateVote(const RefreshRateSelec
     }
 
     // Vote for max refresh rate whenever we're front-buffered.
-    if (FlagManager::getInstance().vrr_config() && isFrontBuffered()) {
+    if (isFrontBuffered()) {
         SFTRACE_FORMAT_INSTANT("front buffered");
         ALOGV("%s is front-buffered", mName.c_str());
         votes.push_back({LayerHistory::LayerVoteType::Max, Fps()});

@@ -141,10 +141,6 @@ nsecs_t VSyncPredictor::currentPeriod() const {
 }
 
 Period VSyncPredictor::minFramePeriod() const {
-    if (!FlagManager::getInstance().vrr_config()) {
-        return Period::fromNs(currentPeriod());
-    }
-
     std::lock_guard lock(mMutex);
     return minFramePeriodLocked();
 }
@@ -776,31 +772,29 @@ std::optional<TimePoint> VSyncPredictor::VsyncTimeline::nextAnticipatedVSyncTime
             lastVsyncOpt && std::abs(*lastVsyncOpt - missedVsync.vsync.ns()) < threshold;
     const auto mightBackpressure = minFramePeriodOpt && mRenderRateOpt &&
             mRenderRateOpt->getPeriod() < 2 * (*minFramePeriodOpt);
-    if (FlagManager::getInstance().vrr_config()) {
-        if (lastFrameMissed) {
-            // If the last frame missed is the last vsync, we already shifted the timeline. Depends
-            // on whether we skipped the frame (onFrameMissed) or not (onFrameBegin) we apply a
-            // different fixup if we are violating the minFramePeriod.
-            // There is no need to shift the vsync timeline again.
-            if (vsyncTime - missedVsync.vsync.ns() < minFramePeriodOpt->ns()) {
-                vsyncTime += missedVsync.fixup.ns();
-                SFTRACE_FORMAT_INSTANT("lastFrameMissed");
-            }
-        } else if (mightBackpressure && lastVsyncOpt) {
-            const auto vsyncDiff = vsyncTime - *lastVsyncOpt;
-            if (vsyncDiff <= minFramePeriodOpt->ns() - threshold) {
-                // avoid a duplicate vsync
-                SFTRACE_FORMAT_INSTANT("skipping a vsync to avoid duplicate frame. next in %.2f "
-                                       "which "
-                                       "is %.2f "
-                                       "from "
-                                       "prev. "
-                                       "adjust by %.2f",
-                                       static_cast<float>(vsyncTime - TimePoint::now().ns()) / 1e6f,
-                                       static_cast<float>(vsyncDiff) / 1e6f,
-                                       static_cast<float>(mRenderRateOpt->getPeriodNsecs()) / 1e6f);
-                vsyncTime += mRenderRateOpt->getPeriodNsecs();
-            }
+    if (lastFrameMissed) {
+        // If the last frame missed is the last vsync, we already shifted the timeline. Depends
+        // on whether we skipped the frame (onFrameMissed) or not (onFrameBegin) we apply a
+        // different fixup if we are violating the minFramePeriod.
+        // There is no need to shift the vsync timeline again.
+        if (vsyncTime - missedVsync.vsync.ns() < minFramePeriodOpt->ns()) {
+            vsyncTime += missedVsync.fixup.ns();
+            SFTRACE_FORMAT_INSTANT("lastFrameMissed");
+        }
+    } else if (mightBackpressure && lastVsyncOpt) {
+        const auto vsyncDiff = vsyncTime - *lastVsyncOpt;
+        if (vsyncDiff <= minFramePeriodOpt->ns() - threshold) {
+            // avoid a duplicate vsync
+            SFTRACE_FORMAT_INSTANT("skipping a vsync to avoid duplicate frame. next in %.2f "
+                                   "which "
+                                   "is %.2f "
+                                   "from "
+                                   "prev. "
+                                   "adjust by %.2f",
+                                   static_cast<float>(vsyncTime - TimePoint::now().ns()) / 1e6f,
+                                   static_cast<float>(vsyncDiff) / 1e6f,
+                                   static_cast<float>(mRenderRateOpt->getPeriodNsecs()) / 1e6f);
+            vsyncTime += mRenderRateOpt->getPeriodNsecs();
         }
     }
 
@@ -839,12 +833,8 @@ nsecs_t VSyncPredictor::VsyncTimeline::snapToVsyncAlignedWithRenderRate(Model mo
 
         int mod = mLastVsyncSequence->seq % divisor;
         if (mod == 0) return 0;
-
-        // This is actually a bug fix, but guarded with vrr_config since we found it with this
-        // config
-        if (FlagManager::getInstance().vrr_config()) {
-            if (mod < 0) mod += divisor;
-        }
+        else if (mod < 0)
+            mod += divisor;
 
         return divisor - mod;
     }();

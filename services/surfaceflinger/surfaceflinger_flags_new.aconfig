@@ -152,14 +152,6 @@ flag {
 } # disable_transparent_region_hint
 
 flag {
-  name: "display_config_error_hal"
-  namespace: "core_graphics"
-  description: "Report HAL display configuration errors like modeset failure or link training failure"
-  bug: "374184110"
-  is_fixed_read_only: true
-} # display_config_error_hal
-
-flag {
   name: "flush_buffer_slots_to_uncache"
   namespace: "core_graphics"
   description: "Flush DisplayCommands for disabled displays in order to uncache requested buffers."
@@ -307,6 +299,13 @@ flag {
   }
 } # set_client_drawn_corner_radii
 
+
+flag {
+  name: "shader_disk_cache"
+  namespace: "core_graphics"
+  description: "Enable shader disk cache for RenderEngine"
+  bug: "428980914"
+} # shader_disk_cache
 
 flag {
   name: "skip_invisible_windows_in_input"

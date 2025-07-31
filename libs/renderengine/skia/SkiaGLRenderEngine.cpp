@@ -303,11 +303,16 @@ SkiaRenderEngine::Contexts SkiaGLRenderEngine::createContexts() {
 
     LOG_ALWAYS_FATAL_IF(!glInterface.get(), "GrGLMakeNativeInterface() failed");
 
+    auto glesVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    auto size = glesVersion ? strlen(glesVersion) : -1;
+
+    auto& cache = persistentCache(glesVersion, size);
+
     SkiaRenderEngine::Contexts contexts;
-    contexts.first = SkiaGpuContext::MakeGL_Ganesh(glInterface, mSkSLCacheMonitor);
+    contexts.first = SkiaGpuContext::MakeGL_Ganesh(glInterface, cache);
     if (supportsProtectedContentImpl()) {
         useProtectedContextImpl(GrProtected::kYes);
-        contexts.second = SkiaGpuContext::MakeGL_Ganesh(glInterface, mSkSLCacheMonitor);
+        contexts.second = SkiaGpuContext::MakeGL_Ganesh(glInterface, cache);
         useProtectedContextImpl(GrProtected::kNo);
     }
 

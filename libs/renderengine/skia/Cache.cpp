@@ -18,6 +18,7 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "AutoBackendTexture.h"
+#include "ShaderCache.h"
 #include "SkiaRenderEngine.h"
 #include "android-base/unique_fd.h"
 #include "cutils/properties.h"
@@ -30,12 +31,20 @@
 #include "ui/Rect.h"
 #include "utils/Timers.h"
 
+#include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <com_android_graphics_libgui_flags.h>
+#include <common/FlagManager.h>
 #include <common/trace.h>
+#include <private/EGL/cache.h>
 
 namespace android::renderengine::skia {
 
 namespace {
+
+static const std::string kCacheAvailableProp = "service.sf.cache_dir_available";
+static const char* kEglShaderCachePath = "/data/misc/surfaceflinger/egl_shaders";
+static const char* kSkiaShaderCachePath = "/data/misc/surfaceflinger/skia_shaders";
 
 // clang-format off
 // Any non-identity matrix will do.
@@ -1050,6 +1059,27 @@ void Cache::primeShaderCache(SkiaRenderEngine* renderengine, PrimeCacheConfig co
         const int shadersCompiled = renderengine->reportShadersCompiled() - previousCount;
         ALOGD("Shader cache generated %d shaders in %f ms\n", shadersCompiled, compileTimeMs);
     }
+}
+
+void Cache::initializeDiskCache() {
+    static bool sInitialized = false;
+    if (sInitialized) return;
+
+    if (FlagManager::getInstance().shader_disk_cache()) {
+        auto& cache = uirenderer::skiapipeline::ShaderCache::get();
+        auto before = systemTime();
+        SFTRACE_NAME("Initializing disk cache");
+        if (base::WaitForProperty(kCacheAvailableProp, "1", std::chrono::seconds(5))) {
+            auto after = systemTime();
+            ALOGD("Waited %.4fms for disk to be ready", (after - before) / 1000000.0f);
+            egl_set_cache_filename(kEglShaderCachePath);
+            cache.setFilename(kSkiaShaderCachePath);
+        } else {
+            ALOGW("Timeout waiting for shader disk cache location");
+        }
+    }
+
+    sInitialized = true;
 }
 
 } // namespace android::renderengine::skia

@@ -19,6 +19,7 @@
 #include <variant>
 
 #include <gtest/gtest.h>
+#include <input/Input.h>
 
 namespace android {
 
@@ -152,22 +153,24 @@ void FakeInputDispatcherPolicy::assertNotifyAnrWasNotCalled() {
 }
 
 PointerCaptureRequest FakeInputDispatcherPolicy::assertSetPointerCaptureCalled(
-        const sp<gui::WindowInfoHandle>& window, bool enabled) {
+        const sp<gui::WindowInfoHandle>& window, PointerCaptureMode mode) {
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
 
-    if (!mPointerCaptureChangedCondition
-                 .wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
-                           [this, enabled, window]() REQUIRES(mLock) {
-                               if (enabled) {
-                                   return mPointerCaptureRequest->isEnable() &&
-                                           mPointerCaptureRequest->window == window->getToken();
-                               } else {
-                                   return !mPointerCaptureRequest->isEnable();
-                               }
-                           })) {
-        ADD_FAILURE() << "Timed out waiting for setPointerCapture(" << window->getName() << ", "
-                      << enabled << ") to be called.";
+    if (!mPointerCaptureChangedCondition.wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
+                                                  [this, mode, window]() REQUIRES(mLock) {
+                                                      if (mode != PointerCaptureMode::UNCAPTURED) {
+                                                          return mPointerCaptureRequest->mode ==
+                                                                  mode &&
+                                                                  mPointerCaptureRequest->window ==
+                                                                  window->getToken();
+                                                      } else {
+                                                          return mPointerCaptureRequest->mode ==
+                                                                  mode;
+                                                      }
+                                                  })) {
+        ADD_FAILURE() << "Timed out waiting for setPointerCapture({" << window->getName() << ", "
+                      << ftl::enum_string(mode) << "}) to be called.";
         return {};
     }
     auto request = *mPointerCaptureRequest;
@@ -181,9 +184,8 @@ void FakeInputDispatcherPolicy::assertSetPointerCaptureNotCalled() {
 
     if (mPointerCaptureChangedCondition.wait_for(lock, EVENT_SHOULD_NOT_OCCUR_TIMEOUT) !=
         std::cv_status::timeout) {
-        FAIL() << "Expected setPointerCapture(request) to not be called, but was called. "
-                  "enabled = "
-               << std::to_string(mPointerCaptureRequest->isEnable());
+        FAIL() << "Expected setPointerCapture(request) to not be called, but was called. mode = "
+               << ftl::enum_string(mPointerCaptureRequest->mode);
     }
     mPointerCaptureRequest.reset();
 }

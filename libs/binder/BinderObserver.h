@@ -15,14 +15,12 @@
  */
 #pragma once
 
-#include <binder/Binder.h>
 #include <mutex>
 
 #include "BinderObserverConfig.h"
 #include "BinderStatsPusher.h"
 #include "BinderStatsSpscQueue.h"
 #include "BinderStatsUtils.h"
-#include "binder_module.h"
 
 namespace android {
 

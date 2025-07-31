@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,12 @@
  * limitations under the License.
  */
 
-#pragma once
+package android.gui;
 
-namespace android::renderengine {
+/** @hide */
+interface ISystemContentPriorityConstants
+{
+    /** INT_MAX:  System Content Priority not set. */
+    const int Unset = 0x7FFFFFFF;
+}
 
-struct PrimeCacheConfig;
-
-namespace skia {
-
-class SkiaRenderEngine;
-
-class Cache {
-public:
-    static void primeShaderCache(SkiaRenderEngine*, PrimeCacheConfig config);
-
-    static void initializeDiskCache();
-
-private:
-    Cache() = default;
-};
-
-} // namespace skia
-} // namespace android::renderengine

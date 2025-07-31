@@ -2278,7 +2278,7 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     mRemovedBuffers.clear();
     mSharedBufferSlot = BufferItem::INVALID_BUFFER_SLOT;
     mSharedBufferHasBeenQueued = false;
-    freeAllBuffersLocked();
+    freeUndequeuedBuffersLocked();
     int err = mGraphicBufferProducer->disconnect(api, mode);
     if (!err) {
         mReqFormat = 0;

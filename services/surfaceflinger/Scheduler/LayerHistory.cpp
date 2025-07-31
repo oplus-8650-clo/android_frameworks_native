@@ -61,7 +61,7 @@ bool isLayerActive(const LayerInfo& info, nsecs_t threshold, bool isVrrDevice) {
     }
 
     // Make all front buffered layers active
-    if (FlagManager::getInstance().vrr_config() && info.isFrontBuffered() && info.isVisible()) {
+    if (info.isFrontBuffered() && info.isVisible()) {
         return true;
     }
 

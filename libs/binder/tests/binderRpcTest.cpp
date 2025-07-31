@@ -713,33 +713,28 @@ TEST_P(BinderRpc, OnewayCallExhaustion) {
     proc.proc->sessions.erase(proc.proc->sessions.begin() + 1);
 }
 
-// TODO(b/392717039): can we move this to universal tests?
-// TODO(b/424526253): restore limit down
+// TODO(b/392717039): move to universal tests
 TEST_P(BinderRpc, SendTooLargeVector) {
     if (GetParam().singleThreaded) {
         GTEST_SKIP() << "Requires multi-threaded server to test one of the sessions crashing.";
     }
 
-    auto proc = createRpcTestSocketServerProcess({.numSessions = 2});
+    auto proc = createRpcTestSocketServerProcess({});
 
-    // need a working transaction
+    // works before
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 
     // see libbinder internal Constants.h
-    const size_t kTooLargeSize = 25 * 1024 * 1024;
+    const size_t kTooLargeSize = 650 * 1024;
     const std::vector<uint8_t> kTestValue(kTooLargeSize / sizeof(uint8_t), 42);
 
-    // TODO(b/392717039): Telling a server to allocate too much data currently causes the session to
-    // close since RpcServer treats any transaction error as a failure. We likely want to change
-    // this behavior to be a soft failure, since it isn't hard to keep track of this state.
-    sp<IBinderRpcTest> rootIface2 = interface_cast<IBinderRpcTest>(proc.proc->sessions.at(1).root);
     std::vector<uint8_t> result;
-    status_t res = rootIface2->repeatBytes(kTestValue, &result).transactionError();
+    status_t res = proc.rootIface->repeatBytes(kTestValue, &result).transactionError();
 
-    EXPECT_EQ(res, DEAD_OBJECT) << statusToString(res);
+    EXPECT_EQ(res, FAILED_TRANSACTION) << statusToString(res);
 
-    // died, so remove it for checks in destructor of proc
-    proc.proc->sessions.erase(proc.proc->sessions.begin() + 1);
+    // works after
+    EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 }
 
 TEST_P(BinderRpc, SessionWithIncomingThreadpoolDoesntLeak) {

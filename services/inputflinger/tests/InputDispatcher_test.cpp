@@ -11590,34 +11590,34 @@ protected:
     }
 
     PointerCaptureRequest requestAndVerifyPointerCapture(const sp<FakeWindowHandle>& window,
-                                                         bool enabled) {
-        mDispatcher->requestPointerCapture(window->getToken(), enabled);
-        auto request = mFakePolicy->assertSetPointerCaptureCalled(window, enabled);
+                                                         PointerCaptureMode mode) {
+        mDispatcher->requestPointerCapture(window->getToken(), mode);
+        auto request = mFakePolicy->assertSetPointerCaptureCalled(window, mode);
         notifyPointerCaptureChanged(request);
-        window->consumeCaptureEvent(enabled);
+        window->consumeCaptureEvent(mode != PointerCaptureMode::UNCAPTURED);
         return request;
     }
 };
 
 TEST_F(InputDispatcherPointerCaptureTests, EnablePointerCaptureWhenFocused) {
     // Ensure that capture cannot be obtained for unfocused windows.
-    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), true);
+    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), PointerCaptureMode::ABSOLUTE);
     mFakePolicy->assertSetPointerCaptureNotCalled();
     mSecondWindow->assertNoEvents();
 
     // Ensure that capture can be enabled from the focus window.
-    requestAndVerifyPointerCapture(mWindow, true);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // Ensure that capture cannot be disabled from a window that does not have capture.
-    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), false);
+    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), PointerCaptureMode::UNCAPTURED);
     mFakePolicy->assertSetPointerCaptureNotCalled();
 
     // Ensure that capture can be disabled from the window with capture.
-    requestAndVerifyPointerCapture(mWindow, false);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::UNCAPTURED);
 }
 
 TEST_F(InputDispatcherPointerCaptureTests, DisablesPointerCaptureAfterWindowLosesFocus) {
-    auto request = requestAndVerifyPointerCapture(mWindow, true);
+    auto request = requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     setFocusedWindow(mSecondWindow);
 
@@ -11625,7 +11625,7 @@ TEST_F(InputDispatcherPointerCaptureTests, DisablesPointerCaptureAfterWindowLose
     mWindow->consumeCaptureEvent(false);
     mWindow->consumeFocusEvent(false);
     mSecondWindow->consumeFocusEvent(true);
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
 
     // Ensure that additional state changes from InputReader are not sent to the window.
     notifyPointerCaptureChanged({});
@@ -11637,30 +11637,31 @@ TEST_F(InputDispatcherPointerCaptureTests, DisablesPointerCaptureAfterWindowLose
 }
 
 TEST_F(InputDispatcherPointerCaptureTests, UnexpectedStateChangeDisablesPointerCapture) {
-    auto request = requestAndVerifyPointerCapture(mWindow, true);
+    auto request = requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // InputReader unexpectedly disables and enables pointer capture.
     notifyPointerCaptureChanged({});
     notifyPointerCaptureChanged(request);
 
     // Ensure that Pointer Capture is disabled.
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
     mWindow->consumeCaptureEvent(false);
     mWindow->assertNoEvents();
 }
 
 TEST_F(InputDispatcherPointerCaptureTests, OutOfOrderRequests) {
-    requestAndVerifyPointerCapture(mWindow, true);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // The first window loses focus.
     setFocusedWindow(mSecondWindow);
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
     mWindow->consumeCaptureEvent(false);
 
     // Request Pointer Capture from the second window before the notification from InputReader
     // arrives.
-    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), true);
-    auto request = mFakePolicy->assertSetPointerCaptureCalled(mSecondWindow, true);
+    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), PointerCaptureMode::ABSOLUTE);
+    auto request =
+            mFakePolicy->assertSetPointerCaptureCalled(mSecondWindow, PointerCaptureMode::ABSOLUTE);
 
     // InputReader notifies Pointer Capture was disabled (because of the focus change).
     notifyPointerCaptureChanged({});
@@ -11674,12 +11675,14 @@ TEST_F(InputDispatcherPointerCaptureTests, OutOfOrderRequests) {
 
 TEST_F(InputDispatcherPointerCaptureTests, EnableRequestFollowsSequenceNumbers) {
     // App repeatedly enables and disables capture.
-    mDispatcher->requestPointerCapture(mWindow->getToken(), true);
-    auto firstRequest = mFakePolicy->assertSetPointerCaptureCalled(mWindow, true);
-    mDispatcher->requestPointerCapture(mWindow->getToken(), false);
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
-    mDispatcher->requestPointerCapture(mWindow->getToken(), true);
-    auto secondRequest = mFakePolicy->assertSetPointerCaptureCalled(mWindow, true);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::ABSOLUTE);
+    auto firstRequest =
+            mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::ABSOLUTE);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::UNCAPTURED);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::ABSOLUTE);
+    auto secondRequest =
+            mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // InputReader notifies that PointerCapture has been enabled for the first request. Since the
     // first request is now stale, this should do nothing.
@@ -11692,14 +11695,15 @@ TEST_F(InputDispatcherPointerCaptureTests, EnableRequestFollowsSequenceNumbers) 
 }
 
 TEST_F(InputDispatcherPointerCaptureTests, RapidToggleRequests) {
-    requestAndVerifyPointerCapture(mWindow, true);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // App toggles pointer capture off and on.
-    mDispatcher->requestPointerCapture(mWindow->getToken(), false);
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::UNCAPTURED);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
 
-    mDispatcher->requestPointerCapture(mWindow->getToken(), true);
-    auto enableRequest = mFakePolicy->assertSetPointerCaptureCalled(mWindow, true);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::ABSOLUTE);
+    auto enableRequest =
+            mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // InputReader notifies that the latest "enable" request was processed, while skipping over the
     // preceding "disable" request.
@@ -11729,7 +11733,7 @@ TEST_F(InputDispatcherPointerCaptureTests, MouseHoverAndPointerCapture) {
     mWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_HOVER_MOVE)));
 
     // Start pointer capture
-    requestAndVerifyPointerCapture(mWindow, true);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // Send some relative mouse movements and receive them in the window.
     mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_MOVE, AINPUT_SOURCE_MOUSE_RELATIVE)
@@ -11739,7 +11743,7 @@ TEST_F(InputDispatcherPointerCaptureTests, MouseHoverAndPointerCapture) {
                                       WithSource(AINPUT_SOURCE_MOUSE_RELATIVE)));
 
     // Stop pointer capture
-    requestAndVerifyPointerCapture(mWindow, false);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::UNCAPTURED);
 
     // Continue hovering on the window
     mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_HOVER_MOVE, AINPUT_SOURCE_MOUSE)
@@ -11753,7 +11757,7 @@ TEST_F(InputDispatcherPointerCaptureTests, MouseHoverAndPointerCapture) {
 
 TEST_F(InputDispatcherPointerCaptureTests, MultiDisplayPointerCapture) {
     // The default display is the focused display to begin with.
-    requestAndVerifyPointerCapture(mWindow, true);
+    requestAndVerifyPointerCapture(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // Move the second window to a second display, make it the focused window on that display.
     mSecondWindow->editInfo()->displayId = SECOND_DISPLAY_ID;
@@ -11764,7 +11768,7 @@ TEST_F(InputDispatcherPointerCaptureTests, MultiDisplayPointerCapture) {
     mWindow->assertNoEvents();
 
     // The second window cannot gain capture because it is not on the focused display.
-    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), true);
+    mDispatcher->requestPointerCapture(mSecondWindow->getToken(), PointerCaptureMode::ABSOLUTE);
     mFakePolicy->assertSetPointerCaptureNotCalled();
     mSecondWindow->assertNoEvents();
 
@@ -11774,13 +11778,13 @@ TEST_F(InputDispatcherPointerCaptureTests, MultiDisplayPointerCapture) {
 
     // This causes the first window to lose pointer capture, and it's unable to request capture.
     mWindow->consumeCaptureEvent(false);
-    mFakePolicy->assertSetPointerCaptureCalled(mWindow, false);
+    mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::UNCAPTURED);
 
-    mDispatcher->requestPointerCapture(mWindow->getToken(), true);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::ABSOLUTE);
     mFakePolicy->assertSetPointerCaptureNotCalled();
 
     // The second window is now able to gain pointer capture successfully.
-    requestAndVerifyPointerCapture(mSecondWindow, true);
+    requestAndVerifyPointerCapture(mSecondWindow, PointerCaptureMode::ABSOLUTE);
 }
 
 using InputDispatcherPointerCaptureDeathTest = InputDispatcherPointerCaptureTests;
@@ -11790,8 +11794,9 @@ TEST_F(InputDispatcherPointerCaptureDeathTest,
     testing::GTEST_FLAG(death_test_style) = "threadsafe";
     ScopedSilentDeath _silentDeath;
 
-    mDispatcher->requestPointerCapture(mWindow->getToken(), true);
-    auto request = mFakePolicy->assertSetPointerCaptureCalled(mWindow, true);
+    mDispatcher->requestPointerCapture(mWindow->getToken(), PointerCaptureMode::ABSOLUTE);
+    auto request =
+            mFakePolicy->assertSetPointerCaptureCalled(mWindow, PointerCaptureMode::ABSOLUTE);
 
     // Dispatch a pointer changed event with a wrong token.
     request.window = mSecondWindow->getToken();

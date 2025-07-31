@@ -18,6 +18,7 @@
 
 #include <include/gpu/vk/VulkanBackendContext.h>
 #include <include/gpu/vk/VulkanExtensions.h>
+#include <include/gpu/vk/VulkanPreferredFeatures.h>
 #include <include/gpu/vk/VulkanTypes.h>
 
 #include <vulkan/vulkan.h>
@@ -55,6 +56,8 @@ public:
     const std::vector<std::string>& getInstanceExtensionNames() { return mInstanceExtensionNames; }
     const std::vector<std::string>& getDeviceExtensionNames() { return mDeviceExtensionNames; }
 
+    uint32_t driverVersion() const { return mDriverVersion; }
+
 private:
     struct VulkanFuncs {
         PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
@@ -81,11 +84,12 @@ private:
     VkQueue mQueue = VK_NULL_HANDLE;
     int mQueueIndex = 0;
     uint32_t mApiVersion = 0;
+    uint32_t mDriverVersion = 0;
     skgpu::VulkanExtensions mVulkanExtensions;
-    VkPhysicalDeviceFeatures2* mPhysicalDeviceFeatures2 = nullptr;
-    VkPhysicalDeviceSamplerYcbcrConversionFeatures* mSamplerYcbcrConversionFeatures = nullptr;
-    VkPhysicalDeviceProtectedMemoryFeatures* mProtectedMemoryFeatures = nullptr;
-    VkPhysicalDeviceFaultFeaturesEXT* mDeviceFaultFeatures = nullptr;
+    skgpu::VulkanPreferredFeatures mVulkanFeatures;
+    VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2 = {};
+    VkPhysicalDeviceProtectedMemoryFeatures mProtectedMemoryFeatures = {};
+    VkPhysicalDeviceFaultFeaturesEXT mDeviceFaultFeatures = {};
     skgpu::VulkanGetProc mGrGetProc = nullptr;
     bool mIsProtected = false;
     bool mIsRealtimePriority = false;

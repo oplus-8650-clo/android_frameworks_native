@@ -346,22 +346,6 @@ void BufferQueueCore::freeAllBuffersLocked() {
     VALIDATE_CONSISTENCY();
 }
 
-void BufferQueueCore::discardFreeBuffersLocked() {
-    // Notify producer about the discarded buffers.
-    if (mConnectedProducerListener != nullptr && mFreeBuffers.size() > 0) {
-        std::vector<int32_t> freeBuffers(mFreeBuffers.begin(), mFreeBuffers.end());
-        mConnectedProducerListener->onBuffersDiscarded(freeBuffers);
-    }
-
-    for (int s : mFreeBuffers) {
-        mFreeSlots.insert(s);
-        clearBufferSlotLocked(s);
-    }
-    mFreeBuffers.clear();
-
-    VALIDATE_CONSISTENCY();
-}
-
 bool BufferQueueCore::adjustAvailableSlotsLocked(int delta) {
     if (delta >= 0) {
         // If we're going to fail, do so before modifying anything

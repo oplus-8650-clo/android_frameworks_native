@@ -145,7 +145,7 @@ struct TestableRefreshRateSelector : RefreshRateSelector {
     }
 };
 
-class RefreshRateSelectorTest : public testing::TestWithParam<Config::FrameRateOverride> {
+class RefreshRateSelectorTest : public testing::TestWithParam<bool /*enableFrameRateOverride*/> {
 protected:
     using RefreshRateOrder = TestableRefreshRateSelector::RefreshRateOrder;
 
@@ -324,15 +324,12 @@ RefreshRateSelectorTest::~RefreshRateSelectorTest() {
 
 namespace {
 
-INSTANTIATE_TEST_SUITE_P(PerOverrideConfig, RefreshRateSelectorTest,
-                         testing::Values(Config::FrameRateOverride::Disabled,
-                                         Config::FrameRateOverride::AppOverrideNativeRefreshRates,
-                                         Config::FrameRateOverride::AppOverride,
-                                         Config::FrameRateOverride::Enabled));
+INSTANTIATE_TEST_SUITE_P(PerOverrideConfig, RefreshRateSelectorTest, testing::Values(false, true));
 
 TEST_P(RefreshRateSelectorTest, oneMode_canSwitch) {
     auto selector = createSelector(kModes_60, kModeId60);
-    if (GetParam() == Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (enableFrameRateOverride) {
         EXPECT_TRUE(selector.canSwitch());
     } else {
         EXPECT_FALSE(selector.canSwitch());
@@ -1275,16 +1272,13 @@ TEST_P(RefreshRateSelectorTest, getMaxRefreshRatesByPolicy) {
     const auto refreshRates = selector.rankRefreshRates(selector.getActiveMode().getGroup(),
                                                         RefreshRateOrder::Descending);
 
-    const auto expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60}, {30_Hz, kMode30}};
-            case Config::FrameRateOverride::Enabled:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60}, {45_Hz, kMode90}, {30_Hz, kMode30}};
-        }
-    }();
+    const bool enableFrameRateOverride = GetParam();
+    const auto expectedRefreshRates = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{90_Hz, kMode90},
+                                         {60_Hz, kMode60},
+                                         {45_Hz, kMode90},
+                                         {30_Hz, kMode30}}
+            : std::vector<FrameRateMode>{{90_Hz, kMode90}, {60_Hz, kMode60}, {30_Hz, kMode30}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1304,16 +1298,9 @@ TEST_P(RefreshRateSelectorTest, getMinRefreshRatesByPolicy) {
     const auto refreshRates = selector.rankRefreshRates(selector.getActiveMode().getGroup(),
                                                         RefreshRateOrder::Ascending);
 
-    const auto expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
-            case Config::FrameRateOverride::Enabled:
-                return {{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
-        }
-    }();
+    const bool enableFrameRateOverride = GetParam();
+    const auto expectedRefreshRates =
+            std::vector<FrameRateMode>{{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1336,16 +1323,8 @@ TEST_P(RefreshRateSelectorTest, getMinRefreshRatesByPolicyOutsideTheGroup) {
     const auto refreshRates =
             selector.rankRefreshRates(/*anchorGroupOpt*/ std::nullopt, RefreshRateOrder::Ascending);
 
-    const auto expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
-            case Config::FrameRateOverride::Enabled:
-                return {{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
-        }
-    }();
+    const auto expectedRefreshRates =
+            std::vector<FrameRateMode>{{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1368,16 +1347,13 @@ TEST_P(RefreshRateSelectorTest, getMaxRefreshRatesByPolicyOutsideTheGroup) {
     const auto refreshRates = selector.rankRefreshRates(/*anchorGroupOpt*/ std::nullopt,
                                                         RefreshRateOrder::Descending);
 
-    const auto expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60}, {30_Hz, kMode30}};
-            case Config::FrameRateOverride::Enabled:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60}, {45_Hz, kMode90}, {30_Hz, kMode30}};
-        }
-    }();
+    const bool enableFrameRateOverride = GetParam();
+    const auto expectedRefreshRates = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{90_Hz, kMode90},
+                                         {60_Hz, kMode60},
+                                         {45_Hz, kMode90},
+                                         {30_Hz, kMode30}}
+            : std::vector<FrameRateMode>{{90_Hz, kMode90}, {60_Hz, kMode60}, {30_Hz, kMode30}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1395,17 +1371,11 @@ TEST_P(RefreshRateSelectorTest, powerOnImminentConsidered) {
     auto [refreshRates, signals, _] = selector.getRankedFrameRates({}, {});
     EXPECT_FALSE(signals.powerOnImminent);
 
-    auto expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60}};
-            case Config::FrameRateOverride::Enabled:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60},   {45_Hz, kMode90},
-                        {30_Hz, kMode60}, {22.5_Hz, kMode90}, {20_Hz, kMode60}};
-        }
-    }();
+    const bool enableFrameRateOverride = GetParam();
+    auto expectedRefreshRates = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{90_Hz, kMode90}, {60_Hz, kMode60},   {45_Hz, kMode90},
+                                         {30_Hz, kMode60}, {22.5_Hz, kMode90}, {20_Hz, kMode60}}
+            : std::vector<FrameRateMode>{{90_Hz, kMode90}, {60_Hz, kMode60}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1454,17 +1424,10 @@ TEST_P(RefreshRateSelectorTest, powerOnImminentConsidered) {
             selector.getRankedRefreshRatesAsPair(layers, {.powerOnImminent = false});
     EXPECT_FALSE(signals.powerOnImminent);
 
-    expectedRefreshRates = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{60_Hz, kMode60}, {90_Hz, kMode90}};
-            case Config::FrameRateOverride::Enabled:
-                return {{60_Hz, kMode60}, {90_Hz, kMode90},   {45_Hz, kMode90},
-                        {30_Hz, kMode60}, {22.5_Hz, kMode90}, {20_Hz, kMode60}};
-        }
-    }();
+    expectedRefreshRates = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{60_Hz, kMode60}, {90_Hz, kMode90},   {45_Hz, kMode90},
+                                         {30_Hz, kMode60}, {22.5_Hz, kMode90}, {20_Hz, kMode60}}
+            : std::vector<FrameRateMode>{{60_Hz, kMode60}, {90_Hz, kMode90}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
 
     for (size_t i = 0; i < expectedRefreshRates.size(); ++i) {
@@ -1614,11 +1577,11 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_30_60
 }
 
 TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_120_vrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     // Device with VRR config mode
     auto selector = createSelector(kVrrMode_120, kModeId120);
 
@@ -1842,11 +1805,10 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_60_12
 }
 
 TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_vrrHighHintTouch_primaryRangeIsSingleRate) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
 
     auto selector = createSelector(kVrrMode_120, kModeId120);
     selector.setActiveMode(kModeId120, 60_Hz);
@@ -2112,12 +2074,12 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_Touch
     EXPECT_FALSE(actualRankedFrameRates.consideredSignals.touch);
 }
 
-TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_touchBoost_twoUids_arr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_touchBoost_twoUids) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     // Device with VRR config mode
     auto selector = createSelector(kVrrMode_120, kModeId120);
 
@@ -2153,195 +2115,12 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withFrameRateCategory_touch
 }
 
 TEST_P(RefreshRateSelectorTest,
-       getBestFrameRateMode_withFrameRateCategory_idleTimer_60_120_nonVrr) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, false);
-    using KernelIdleTimerAction = RefreshRateSelector::KernelIdleTimerAction;
-    struct LayerArg {
-        // Params
-        FrameRateCategory frameRateCategory = FrameRateCategory::Default;
-        LayerVoteType voteType = LayerVoteType::ExplicitDefault;
-
-        // Expected result
-        Fps expectedFrameRate = 0_Hz;
-        DisplayModeId expectedModeId = kModeId60;
-    };
-
-    const auto runTest = [&](const TestableRefreshRateSelector& selector,
-                             const std::initializer_list<LayerArg>& layerArgs,
-                             const RefreshRateSelector::GlobalSignals& signals) {
-        std::vector<LayerRequirement> layers;
-        for (auto testCase : layerArgs) {
-            ALOGI("**** %s: Testing frameRateCategory=%s", __func__,
-                  ftl::enum_string(testCase.frameRateCategory).c_str());
-
-            if (testCase.frameRateCategory != FrameRateCategory::Default) {
-                std::stringstream ss;
-                ss << "ExplicitCategory (" << ftl::enum_string(testCase.frameRateCategory) << ")";
-                LayerRequirement layer = {.name = ss.str(),
-                                          .vote = LayerVoteType::ExplicitCategory,
-                                          .frameRateCategory = testCase.frameRateCategory,
-                                          .weight = 1.f};
-                layers.push_back(layer);
-            }
-
-            if (testCase.voteType != LayerVoteType::ExplicitDefault) {
-                std::stringstream ss;
-                ss << ftl::enum_string(testCase.voteType);
-                LayerRequirement layer = {.name = ss.str(),
-                                          .vote = testCase.voteType,
-                                          .weight = 1.f};
-                layers.push_back(layer);
-            }
-
-            EXPECT_EQ(testCase.expectedFrameRate,
-                      selector.getBestFrameRateMode(layers, signals).modePtr->getPeakFps())
-                    << "Did not get expected frame rate for"
-                    << " category=" << ftl::enum_string(testCase.frameRateCategory);
-            EXPECT_EQ(testCase.expectedModeId,
-                      selector.getBestFrameRateMode(layers, signals).modePtr->getId())
-                    << "Did not get expected DisplayModeId for modeId="
-                    << ftl::to_underlying(testCase.expectedModeId)
-                    << " category=" << ftl::enum_string(testCase.frameRateCategory);
-        }
-    };
-
-    {
-        // IdleTimer not configured
-        auto selector = createSelector(makeModes(kMode60, kMode120), kModeId120);
-        ASSERT_EQ(0ms, selector.getIdleTimerTimeout());
-
-        runTest(selector,
-                std::initializer_list<LayerArg>{
-                        // Rate does not change due to NoPreference.
-                        {.frameRateCategory = FrameRateCategory::NoPreference,
-                         .expectedFrameRate = 120_Hz,
-                         .expectedModeId = kModeId120},
-                        {.voteType = LayerVoteType::NoVote,
-                         .expectedFrameRate = 120_Hz,
-                         .expectedModeId = kModeId120},
-                        {.frameRateCategory = FrameRateCategory::NoPreference,
-                         .expectedFrameRate = 120_Hz,
-                         .expectedModeId = kModeId120},
-                },
-                {.idle = false});
-    }
-
-    // IdleTimer configured
-    constexpr std::chrono::milliseconds kIdleTimerTimeoutMs = 10ms;
-    auto selector = createSelector(makeModes(kMode60, kMode120), kModeId120,
-                                   Config{
-                                           .legacyIdleTimerTimeout = kIdleTimerTimeoutMs,
-                                   });
-    ASSERT_EQ(KernelIdleTimerAction::TurnOn, selector.getIdleTimerAction());
-    ASSERT_EQ(kIdleTimerTimeoutMs, selector.getIdleTimerTimeout());
-    runTest(selector,
-            std::initializer_list<LayerArg>{
-                    // Rate won't change immediately and will stay 120 due to NoPreference, as
-                    // idle timer did not timeout yet.
-                    {.frameRateCategory = FrameRateCategory::NoPreference,
-                     .expectedFrameRate = 120_Hz,
-                     .expectedModeId = kModeId120},
-                    {.voteType = LayerVoteType::NoVote,
-                     .expectedFrameRate = 120_Hz,
-                     .expectedModeId = kModeId120},
-                    {.frameRateCategory = FrameRateCategory::NoPreference,
-                     .expectedFrameRate = 120_Hz,
-                     .expectedModeId = kModeId120},
-            },
-            {.idle = false});
-
-    // Idle timer is triggered using GlobalSignals.
-    ASSERT_EQ(KernelIdleTimerAction::TurnOn, selector.getIdleTimerAction());
-    ASSERT_EQ(kIdleTimerTimeoutMs, selector.getIdleTimerTimeout());
-    runTest(selector,
-            std::initializer_list<LayerArg>{
-                    {.frameRateCategory = FrameRateCategory::NoPreference,
-                     .expectedFrameRate = 60_Hz,
-                     .expectedModeId = kModeId60},
-                    {.voteType = LayerVoteType::NoVote,
-                     .expectedFrameRate = 60_Hz,
-                     .expectedModeId = kModeId60},
-                    {.frameRateCategory = FrameRateCategory::NoPreference,
-                     .expectedFrameRate = 60_Hz,
-                     .expectedModeId = kModeId60},
-            },
-            {.idle = true});
-}
-
-TEST_P(RefreshRateSelectorTest,
-       getBestFrameRateMode_withFrameRateCategory_smoothSwitchOnly_60_120_nonVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
-        return;
-    }
-
-    SET_FLAG_FOR_TEST(flags::vrr_config, false);
-    // VRR compatibility is determined by the presence of a vrr config in the DisplayMode.
-    auto selector = createSelector(makeModes(kMode60, kMode120), kModeId120);
-
-    struct Case {
-        // Params
-        FrameRateCategory frameRateCategory = FrameRateCategory::Default;
-        bool smoothSwitchOnly = false;
-
-        // Expected result
-        Fps expectedFrameRate = 0_Hz;
-        DisplayModeId expectedModeId = kModeId60;
-    };
-
-    const std::initializer_list<Case> testCases = {
-            // These layers may switch modes because smoothSwitchOnly=false.
-            {FrameRateCategory::Default, false, 120_Hz, kModeId120},
-            {FrameRateCategory::NoPreference, false, 120_Hz, kModeId120},
-            {FrameRateCategory::Low, false, 60_Hz, kModeId60},
-            {FrameRateCategory::Normal, false, 60_Hz, kModeId60},
-            {FrameRateCategory::High, false, 120_Hz, kModeId120},
-
-            // These layers cannot change mode due to smoothSwitchOnly, and will definitely use
-            // active mode (120Hz).
-            {FrameRateCategory::NoPreference, true, 120_Hz, kModeId120},
-            {FrameRateCategory::Low, true, 120_Hz, kModeId120},
-            {FrameRateCategory::Normal, true, 120_Hz, kModeId120},
-            {FrameRateCategory::High, true, 120_Hz, kModeId120},
-    };
-
-    for (auto testCase : testCases) {
-        std::vector<LayerRequirement> layers;
-        ALOGI("**** %s: Testing frameRateCategory=%s (smooth=%d)", __func__,
-              ftl::enum_string(testCase.frameRateCategory).c_str(), testCase.smoothSwitchOnly);
-
-        if (testCase.frameRateCategory != FrameRateCategory::Default) {
-            std::stringstream ss;
-            ss << "ExplicitCategory (" << ftl::enum_string(testCase.frameRateCategory)
-               << " smooth:" << testCase.smoothSwitchOnly << ")";
-            LayerRequirement layer = {.name = ss.str(),
-                                      .vote = LayerVoteType::ExplicitCategory,
-                                      .frameRateCategory = testCase.frameRateCategory,
-                                      .frameRateCategorySmoothSwitchOnly =
-                                              testCase.smoothSwitchOnly,
-                                      .weight = 1.f};
-            layers.push_back(layer);
-        }
-
-        auto actualFrameRateMode = selector.getBestFrameRateMode(layers);
-        EXPECT_EQ(testCase.expectedFrameRate, actualFrameRateMode.fps)
-                << "Did not get expected frame rate for category="
-                << ftl::enum_string(testCase.frameRateCategory)
-                << " (smooth=" << testCase.smoothSwitchOnly << ")";
-
-        EXPECT_EQ(testCase.expectedModeId, actualFrameRateMode.modePtr->getId())
-                << "Did not get expected mode for category="
-                << ftl::enum_string(testCase.frameRateCategory)
-                << " (smooth=" << testCase.smoothSwitchOnly << ")";
-    }
-}
-
-TEST_P(RefreshRateSelectorTest,
        getBestFrameRateMode_withFrameRateCategory_smoothSwitchOnly_60_120_vrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     // VRR compatibility is determined by the presence of a vrr config in the DisplayMode.
     auto selector = createSelector(kVrrModes_60_120, kModeId120);
 
@@ -2599,22 +2378,16 @@ TEST_P(RefreshRateSelectorTest, testDisplayModeOrdering) {
     lr5.name = "30Hz";
     lr5.focused = true;
 
-    auto expectedRanking = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{120_Hz, kMode120},
-                        {90_Hz, kMode90},
-                        {72_Hz, kMode72},
-                        {60_Hz, kMode60},
-                        {30_Hz, kMode30}};
-            case Config::FrameRateOverride::Enabled:
-                return {{120_Hz, kMode120}, {90_Hz, kMode90},  {72_Hz, kMode72}, {60_Hz, kMode60},
-                        {45_Hz, kMode90},   {40_Hz, kMode120}, {36_Hz, kMode72}, {30_Hz, kMode30}};
-        }
-    }();
-
+    const bool enableFrameRateOverride = GetParam();
+    auto expectedRanking = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{120_Hz, kMode120}, {90_Hz, kMode90}, {72_Hz, kMode72},
+                                         {60_Hz, kMode60},   {45_Hz, kMode90}, {40_Hz, kMode120},
+                                         {36_Hz, kMode72},   {30_Hz, kMode30}}
+            : std::vector<FrameRateMode>{{120_Hz, kMode120},
+                                         {90_Hz, kMode90},
+                                         {72_Hz, kMode72},
+                                         {60_Hz, kMode60},
+                                         {30_Hz, kMode30}};
     auto actualRanking = selector.getRankedFrameRates(layers, {}).ranking;
     ASSERT_EQ(expectedRanking.size(), actualRanking.size());
 
@@ -2641,21 +2414,15 @@ TEST_P(RefreshRateSelectorTest, testDisplayModeOrdering) {
     lr5.desiredRefreshRate = 120_Hz;
     lr5.name = "120Hz";
 
-    expectedRanking = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{120_Hz, kMode120},
-                        {90_Hz, kMode90},
-                        {72_Hz, kMode72},
-                        {60_Hz, kMode60},
-                        {30_Hz, kMode30}};
-            case Config::FrameRateOverride::Enabled:
-                return {{120_Hz, kMode120}, {90_Hz, kMode90},  {72_Hz, kMode72}, {60_Hz, kMode60},
-                        {45_Hz, kMode90},   {40_Hz, kMode120}, {36_Hz, kMode72}, {30_Hz, kMode30}};
-        }
-    }();
+    expectedRanking = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{120_Hz, kMode120}, {90_Hz, kMode90}, {72_Hz, kMode72},
+                                         {60_Hz, kMode60},   {45_Hz, kMode90}, {40_Hz, kMode120},
+                                         {36_Hz, kMode72},   {30_Hz, kMode30}}
+            : std::vector<FrameRateMode>{{120_Hz, kMode120},
+                                         {90_Hz, kMode90},
+                                         {72_Hz, kMode72},
+                                         {60_Hz, kMode60},
+                                         {30_Hz, kMode30}};
     actualRanking = selector.getRankedFrameRates(layers, {}).ranking;
 
     ASSERT_EQ(expectedRanking.size(), actualRanking.size());
@@ -2681,21 +2448,15 @@ TEST_P(RefreshRateSelectorTest, testDisplayModeOrdering) {
     lr5.desiredRefreshRate = 72_Hz;
     lr5.name = "72Hz";
 
-    expectedRanking = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{30_Hz, kMode30},
-                        {60_Hz, kMode60},
-                        {90_Hz, kMode90},
-                        {120_Hz, kMode120},
-                        {72_Hz, kMode72}};
-            case Config::FrameRateOverride::Enabled:
-                return {{30_Hz, kMode30}, {60_Hz, kMode60},  {90_Hz, kMode90}, {120_Hz, kMode120},
-                        {45_Hz, kMode90}, {40_Hz, kMode120}, {72_Hz, kMode72}, {36_Hz, kMode72}};
-        }
-    }();
+    expectedRanking = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{30_Hz, kMode30},   {60_Hz, kMode60}, {90_Hz, kMode90},
+                                         {120_Hz, kMode120}, {45_Hz, kMode90}, {40_Hz, kMode120},
+                                         {72_Hz, kMode72},   {36_Hz, kMode72}}
+            : std::vector<FrameRateMode>{{30_Hz, kMode30},
+                                         {60_Hz, kMode60},
+                                         {90_Hz, kMode90},
+                                         {120_Hz, kMode120},
+                                         {72_Hz, kMode72}};
     actualRanking = selector.getRankedFrameRates(layers, {}).ranking;
 
     ASSERT_EQ(expectedRanking.size(), actualRanking.size());
@@ -2724,21 +2485,15 @@ TEST_P(RefreshRateSelectorTest, testDisplayModeOrdering) {
     lr5.desiredRefreshRate = 120_Hz;
     lr5.name = "120Hz-2";
 
-    expectedRanking = []() -> std::vector<FrameRateMode> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{90_Hz, kMode90},
-                        {60_Hz, kMode60},
-                        {120_Hz, kMode120},
-                        {72_Hz, kMode72},
-                        {30_Hz, kMode30}};
-            case Config::FrameRateOverride::Enabled:
-                return {{90_Hz, kMode90}, {60_Hz, kMode60},  {120_Hz, kMode120}, {72_Hz, kMode72},
-                        {45_Hz, kMode90}, {40_Hz, kMode120}, {36_Hz, kMode72},   {30_Hz, kMode30}};
-        }
-    }();
+    expectedRanking = enableFrameRateOverride
+            ? std::vector<FrameRateMode>{{90_Hz, kMode90}, {60_Hz, kMode60}, {120_Hz, kMode120},
+                                         {72_Hz, kMode72}, {45_Hz, kMode90}, {40_Hz, kMode120},
+                                         {36_Hz, kMode72}, {30_Hz, kMode30}}
+            : std::vector<FrameRateMode>{{90_Hz, kMode90},
+                                         {60_Hz, kMode60},
+                                         {120_Hz, kMode120},
+                                         {72_Hz, kMode72},
+                                         {30_Hz, kMode30}};
     actualRanking = selector.getRankedFrameRates(layers, {}).ranking;
 
     ASSERT_EQ(expectedRanking.size(), actualRanking.size());
@@ -3256,7 +3011,8 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_ExplicitExact) {
     explicitExactOrMultipleLayer.name = "ExplicitExactOrMultiple";
     explicitExactOrMultipleLayer.desiredRefreshRate = 60_Hz;
 
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         EXPECT_FRAME_RATE_MODE(kMode30, 30_Hz,
                                selector.getBestScoredFrameRate(layers).frameRateMode);
         EXPECT_FRAME_RATE_MODE(kMode30, 30_Hz,
@@ -3274,7 +3030,7 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_ExplicitExact) {
     explicitExactOrMultipleLayer.desiredRefreshRate = 120_Hz;
     explicitExactLayer.desiredRefreshRate = 60_Hz;
 
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    if (!enableFrameRateOverride) {
         EXPECT_FRAME_RATE_MODE(kMode60, 60_Hz,
                                selector.getBestScoredFrameRate(layers).frameRateMode);
     } else {
@@ -3345,7 +3101,8 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_ExplicitExactTouchBoost) {
     explicitExactLayer.desiredRefreshRate = 30_Hz;
 
     EXPECT_EQ(kMode60, selector.getBestFrameRateMode(layers).modePtr);
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         EXPECT_EQ(kMode60, selector.getBestFrameRateMode(layers, {.touch = true}).modePtr);
     } else {
         EXPECT_EQ(kMode120, selector.getBestFrameRateMode(layers, {.touch = true}).modePtr);
@@ -3380,7 +3137,8 @@ TEST_P(RefreshRateSelectorTest, getBestFrameRateMode_withCloseRefreshRates) {
     if (g_noSlowTests) {
         GTEST_SKIP();
     }
-    if (GetParam() != Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (enableFrameRateOverride) {
         return;
     }
 
@@ -3644,7 +3402,8 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_NonExplicit) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_Disabled) {
-    if (GetParam() != Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (enableFrameRateOverride) {
         return;
     }
 
@@ -3666,13 +3425,10 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_Disabled) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_60on120) {
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    ASSERT_TRUE(GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ||
-                GetParam() == Config::FrameRateOverride::AppOverride ||
-                GetParam() == Config::FrameRateOverride::Enabled);
 
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
 
@@ -3701,13 +3457,10 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_60on120) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_twoUids) {
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    ASSERT_TRUE(GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ||
-                GetParam() == Config::FrameRateOverride::AppOverride ||
-                GetParam() == Config::FrameRateOverride::Enabled);
 
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
 
@@ -3741,11 +3494,11 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_twoUids) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_twoUids_arr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     // Device with VRR config mode
     auto selector = createSelector(kVrrMode_120, kModeId120);
 
@@ -3786,13 +3539,10 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_twoUids_arr) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_withFrameRateCategory) {
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    ASSERT_TRUE(GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ||
-                GetParam() == Config::FrameRateOverride::AppOverride ||
-                GetParam() == Config::FrameRateOverride::Enabled);
 
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
 
@@ -3990,13 +3740,10 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_withFrameRateCategory) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_touch) {
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    ASSERT_TRUE(GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ||
-                GetParam() == Config::FrameRateOverride::AppOverride ||
-                GetParam() == Config::FrameRateOverride::Enabled);
 
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
 
@@ -4048,13 +3795,10 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_touch) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_DivisorIsNotDisplayRefreshRate) {
-    if (GetParam() == Config::FrameRateOverride::Disabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
-
-    ASSERT_TRUE(GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ||
-                GetParam() == Config::FrameRateOverride::AppOverride ||
-                GetParam() == Config::FrameRateOverride::Enabled);
 
     auto selector = createSelector(kModes_60_120, kModeId120);
 
@@ -4063,25 +3807,23 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_DivisorIsNotDisplayRefresh
     layers[0].ownerUid = 1234;
     layers[0].desiredRefreshRate = 30_Hz;
 
-    const auto expetedFps =
-            GetParam() == Config::FrameRateOverride::AppOverrideNativeRefreshRates ? 60_Hz : 30_Hz;
     layers[0].vote = LayerVoteType::ExplicitDefault;
     auto frameRateOverrides = selector.getFrameRateOverrides(layers, 120_Hz, {});
     EXPECT_EQ(1u, frameRateOverrides.size());
     ASSERT_EQ(1u, frameRateOverrides.count(1234));
-    EXPECT_EQ(expetedFps, frameRateOverrides.at(1234));
+    EXPECT_EQ(30_Hz, frameRateOverrides.at(1234));
 
     layers[0].vote = LayerVoteType::ExplicitExactOrMultiple;
     frameRateOverrides = selector.getFrameRateOverrides(layers, 120_Hz, {});
     EXPECT_EQ(1u, frameRateOverrides.size());
     ASSERT_EQ(1u, frameRateOverrides.count(1234));
-    EXPECT_EQ(expetedFps, frameRateOverrides.at(1234));
+    EXPECT_EQ(30_Hz, frameRateOverrides.at(1234));
 
     layers[0].vote = LayerVoteType::ExplicitExact;
     frameRateOverrides = selector.getFrameRateOverrides(layers, 120_Hz, {});
     EXPECT_EQ(1u, frameRateOverrides.size());
     ASSERT_EQ(1u, frameRateOverrides.count(1234));
-    EXPECT_EQ(expetedFps, frameRateOverrides.at(1234));
+    EXPECT_EQ(30_Hz, frameRateOverrides.at(1234));
 }
 
 TEST_P(RefreshRateSelectorTest, renderFrameRateInvalidPolicy) {
@@ -4106,8 +3848,8 @@ TEST_P(RefreshRateSelectorTest, renderFrameRateRestrictsPhysicalRefreshRate) {
         EXPECT_EQ(SetPolicyResult::Changed,
                   selector.setDisplayManagerPolicy(
                           {kModeId60, {physical, render}, {physical, render}}));
-        const auto expectedMaxMode =
-                GetParam() == Config::FrameRateOverride::Enabled ? kMode120 : kMode60;
+        const bool enableFrameRateOverride = GetParam();
+        const auto expectedMaxMode = enableFrameRateOverride ? kMode120 : kMode60;
         EXPECT_EQ(expectedMaxMode, selector.getMaxRefreshRateByPolicy());
         EXPECT_EQ(kMode60, selector.getMinRefreshRateByPolicy());
     }
@@ -4124,7 +3866,8 @@ TEST_P(RefreshRateSelectorTest, renderFrameRateRestrictsPhysicalRefreshRate) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverrides_InPolicy) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
@@ -4184,22 +3927,16 @@ TEST_P(RefreshRateSelectorTest, renderFrameRates) {
     auto selector = createSelector(kModes_30_60_72_90_120, kModeId120);
 
     // [renderRate, refreshRate]
-    const auto expected = []() -> std::vector<std::pair<Fps, Fps>> {
-        switch (GetParam()) {
-            case Config::FrameRateOverride::Disabled:
-            case Config::FrameRateOverride::AppOverrideNativeRefreshRates:
-            case Config::FrameRateOverride::AppOverride:
-                return {{30_Hz, 30_Hz},
-                        {60_Hz, 60_Hz},
-                        {72_Hz, 72_Hz},
-                        {90_Hz, 90_Hz},
-                        {120_Hz, 120_Hz}};
-            case Config::FrameRateOverride::Enabled:
-                return {{30_Hz, 30_Hz}, {36_Hz, 72_Hz}, {40_Hz, 120_Hz}, {45_Hz, 90_Hz},
-                        {60_Hz, 60_Hz}, {72_Hz, 72_Hz}, {90_Hz, 90_Hz},  {120_Hz, 120_Hz}};
-        }
-    }();
-
+    const bool enableFrameRateOverride = GetParam();
+    const auto expected = enableFrameRateOverride
+            ? std::vector<std::pair<Fps, Fps>>{{30_Hz, 30_Hz}, {36_Hz, 72_Hz},  {40_Hz, 120_Hz},
+                                               {45_Hz, 90_Hz}, {60_Hz, 60_Hz},  {72_Hz, 72_Hz},
+                                               {90_Hz, 90_Hz}, {120_Hz, 120_Hz}}
+            : std::vector<std::pair<Fps, Fps>>{{30_Hz, 30_Hz},
+                                               {60_Hz, 60_Hz},
+                                               {72_Hz, 72_Hz},
+                                               {90_Hz, 90_Hz},
+                                               {120_Hz, 120_Hz}};
     const auto& primaryRefreshRates = selector.getPrimaryFrameRates();
     ASSERT_EQ(expected.size(), primaryRefreshRates.size());
 
@@ -4211,7 +3948,8 @@ TEST_P(RefreshRateSelectorTest, renderFrameRates) {
 }
 
 TEST_P(RefreshRateSelectorTest, refreshRateIsCappedWithRenderFrameRate) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
@@ -4267,8 +4005,8 @@ TEST_P(RefreshRateSelectorTest, renderFrameRates_60_120) {
     std::vector<LayerRequirement> layers = {{.weight = 1.f}};
     auto& layer = layers[0];
 
-    const auto expectedRenderRate =
-            GetParam() == Config::FrameRateOverride::Enabled ? 30_Hz : 60_Hz;
+    const bool enableFrameRateOverride = GetParam();
+    const auto expectedRenderRate = enableFrameRateOverride ? 30_Hz : 60_Hz;
 
     layer.name = "30Hz ExplicitDefault";
     layer.desiredRefreshRate = 30_Hz;
@@ -4370,7 +4108,8 @@ TEST_P(RefreshRateSelectorTest, noLowerFrameRateOnMinVote) {
 }
 
 TEST_P(RefreshRateSelectorTest, frameRateIsCappedByPolicy) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
@@ -4405,7 +4144,8 @@ TEST_P(RefreshRateSelectorTest, frameRateNotInRange) {
 }
 
 TEST_P(RefreshRateSelectorTest, frameRateIsLowerThanMinSupported) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
@@ -4434,7 +4174,8 @@ TEST_P(RefreshRateSelectorTest, frameRateOverrideInBlockingZone60_120) {
     layers[0].desiredRefreshRate = 30_Hz;
     layers[0].vote = LayerVoteType::ExplicitExactOrMultiple;
 
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         EXPECT_FRAME_RATE_MODE(kMode120, 120_Hz,
                                selector.getBestScoredFrameRate(layers).frameRateMode);
     } else {
@@ -4457,7 +4198,8 @@ TEST_P(RefreshRateSelectorTest, frameRateOverrideInBlockingZone60_90) {
     layers[0].desiredRefreshRate = 30_Hz;
     layers[0].vote = LayerVoteType::ExplicitExactOrMultiple;
 
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         EXPECT_FRAME_RATE_MODE(kMode90, 90_Hz,
                                selector.getBestScoredFrameRate(layers).frameRateMode);
     } else {
@@ -4485,11 +4227,11 @@ TEST_P(RefreshRateSelectorTest, frameRateOverrideInBlockingZone60_90_NonDivisor)
 
 // VRR tests
 TEST_P(RefreshRateSelectorTest, singleMinMaxRateForVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     auto selector = createSelector(kVrrMode_120, kModeId120);
     EXPECT_TRUE(selector.supportsFrameRateOverride());
 
@@ -4505,11 +4247,11 @@ TEST_P(RefreshRateSelectorTest, singleMinMaxRateForVrr) {
 }
 
 TEST_P(RefreshRateSelectorTest, renderRateChangesWithPolicyChangeForVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     auto selector = createSelector(kVrrModes_60_120, kModeId120);
 
     const FpsRange only120 = {120_Hz, 120_Hz};
@@ -4563,11 +4305,11 @@ TEST_P(RefreshRateSelectorTest, renderRateChangesWithPolicyChangeForVrr) {
 }
 
 TEST_P(RefreshRateSelectorTest, modeChangesWithPolicyChangeForVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     auto selector = createSelector(kVrrModes_60_120, kModeId120);
 
     const FpsRange range120 = {0_Hz, 120_Hz};
@@ -4587,11 +4329,11 @@ TEST_P(RefreshRateSelectorTest, modeChangesWithPolicyChangeForVrr) {
 }
 
 TEST_P(RefreshRateSelectorTest, getFrameRateOverridesForVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     auto selector = createSelector(kVrrMode_120, kModeId120);
     // TODO(b/297600226) Run at lower than 30 Fps for dVRR
     const std::vector<Fps> desiredRefreshRates = {30_Hz, 34.285_Hz, 40_Hz, 48_Hz,
@@ -4617,11 +4359,11 @@ TEST_P(RefreshRateSelectorTest, getFrameRateOverridesForVrr) {
 }
 
 TEST_P(RefreshRateSelectorTest, renderFrameRatesForVrr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     auto selector = createSelector(kVrrMode_120, kModeId120);
     const FpsRange only120 = {120_Hz, 120_Hz};
     const FpsRange range120 = {0_Hz, 120_Hz};
@@ -4672,7 +4414,8 @@ TEST_P(RefreshRateSelectorTest, renderFrameRatesForVrr) {
 }
 
 TEST_P(RefreshRateSelectorTest, getSupportedFrameRates) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
@@ -4694,11 +4437,11 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRates) {
 }
 
 TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesArr) {
-    if (GetParam() != Config::FrameRateOverride::Enabled) {
+    const bool enableFrameRateOverride = GetParam();
+    if (!enableFrameRateOverride) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
     const auto selector = createSelector(kVrrMode_120, kModeId120);
 
     const std::vector<float> expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,

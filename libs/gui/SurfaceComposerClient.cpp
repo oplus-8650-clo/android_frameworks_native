@@ -2399,6 +2399,19 @@ SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setConte
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setSystemContentPriority(
+        const sp<SurfaceControl>& sc, int32_t priority) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eSystemContentPriorityChanged;
+    s->systemContentPriority = priority;
+    registerSurfaceControlForCallback(sc);
+    return *this;
+}
+
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::addTransactionBarrier(
         gui::TransactionBarrier barrier) {
     mState.mBarriers.emplace_back(std::move(barrier));
@@ -2775,7 +2788,6 @@ void SurfaceComposerClient::getDynamicDisplayInfoInternal(gui::DynamicDisplayInf
         outMode.sfVsyncOffset = mode.sfVsyncOffset;
         outMode.presentationDeadline = mode.presentationDeadline;
         outMode.group = mode.group;
-        outMode.outputType = static_cast<ui::OutputType>(mode.outputType);
         std::transform(mode.supportedHdrTypes.begin(), mode.supportedHdrTypes.end(),
                        std::back_inserter(outMode.supportedHdrTypes),
                        [](const int32_t& value) { return static_cast<ui::Hdr>(value); });

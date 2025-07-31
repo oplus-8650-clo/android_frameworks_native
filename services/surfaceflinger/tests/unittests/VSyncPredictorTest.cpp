@@ -784,8 +784,6 @@ TEST_F(VSyncPredictorTest, setRenderRateIsIgnoredIfNotDivisor) {
 }
 
 TEST_F(VSyncPredictorTest, setRenderRateWhenRenderRateGoesDown) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(500);
@@ -813,8 +811,6 @@ TEST_F(VSyncPredictorTest, setRenderRateWhenRenderRateGoesDown) {
 }
 
 TEST_F(VSyncPredictorTest, setRenderRateHighIsAppliedImmediately) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(500);
@@ -884,8 +880,6 @@ TEST_F(VSyncPredictorTest, setRenderRateHighIsAppliedImmediately) {
 }
 
 TEST_F(VSyncPredictorTest, minFramePeriodDoesntApplyWhenSameWithRefreshRate) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(1000);
@@ -912,8 +906,6 @@ TEST_F(VSyncPredictorTest, minFramePeriodDoesntApplyWhenSameWithRefreshRate) {
 }
 
 TEST_F(VSyncPredictorTest, setRenderRateExplicitAppliedImmediately) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(500);
@@ -980,8 +972,6 @@ TEST_F(VSyncPredictorTest, setRenderRateFreezesAtAlignedSequence) {
 }
 
 TEST_F(VSyncPredictorTest, selectsClosestVsyncAfterInactivity) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(500);
@@ -1008,8 +998,6 @@ TEST_F(VSyncPredictorTest, selectsClosestVsyncAfterInactivity) {
 }
 
 TEST_F(VSyncPredictorTest, returnsCorrectVsyncWhenLastIsNot) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto vsyncRate = Fps::fromPeriodNsecs(500);
@@ -1032,8 +1020,6 @@ TEST_F(VSyncPredictorTest, returnsCorrectVsyncWhenLastIsNot) {
 }
 
 TEST_F(VSyncPredictorTest, adjustsVrrTimeline) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto refreshRate = Fps::fromPeriodNsecs(500);
@@ -1073,8 +1059,6 @@ TEST_F(VSyncPredictorTest, adjustsVrrTimeline) {
 }
 
 TEST_F(VSyncPredictorTest, adjustsVrrTimelineTwoClients) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto refreshRate = Fps::fromPeriodNsecs(500);
@@ -1185,8 +1169,6 @@ TEST_F(VSyncPredictorTest, renderRateChangeAfterAppliedImmediately) {
 }
 
 TEST_F(VSyncPredictorTest, timelineNotAdjustedForEarlyPresent) {
-    SET_FLAG_FOR_TEST(flags::vrr_config, true);
-
     const int32_t kGroup = 0;
     const auto kResolution = ui::Size(1920, 1080);
     const auto refreshRate = Fps::fromPeriodNsecs(500);

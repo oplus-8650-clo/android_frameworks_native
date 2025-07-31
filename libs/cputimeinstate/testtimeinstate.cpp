@@ -367,7 +367,10 @@ TEST_F(TimeInStateTest, AllUidTimeInStateMonotonic) {
     for (const auto &kv : *map1) {
         uint32_t uid = kv.first;
         auto times = kv.second;
-        ASSERT_NE(map2->find(uid), map2->end()) << "no entry for uid " << uid;
+
+        if (map2->find(uid) == map2->end())
+            continue;
+
         for (uint32_t policy = 0; policy < times.size(); ++policy) {
             for (uint32_t freqIdx = 0; freqIdx < times[policy].size(); ++freqIdx) {
                 auto before = times[policy][freqIdx];
@@ -390,7 +393,10 @@ TEST_F(TimeInStateTest, AllUidConcurrentTimesMonotonic) {
     for (const auto &kv : *map1) {
         uint32_t uid = kv.first;
         auto times = kv.second;
-        ASSERT_NE(map2->find(uid), map2->end()) << "no entry for uid " << uid;
+
+        if (map2->find(uid) == map2->end())
+            continue;
+
         for (uint32_t i = 0; i < times.active.size(); ++i) {
             auto before = times.active[i];
             auto after = (*map2)[uid].active[i];

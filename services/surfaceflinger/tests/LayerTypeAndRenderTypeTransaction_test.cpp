@@ -638,6 +638,183 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, ParentCornerRadiusTakesPrecedence)
     }
 }
 
+TEST_P(LayerTypeAndRenderTypeTransactionTest, ChildOverlapsParentCornerRegion) {
+    sp<SurfaceControl> parent;
+    sp<SurfaceControl> child;
+    const uint32_t parentSize = 100;
+    const uint32_t childSize = 75;
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(50.f);
+    const uint32_t testArea = 4;
+
+    ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", childSize, childSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, childSize, childSize));
+
+    // Set parent with rounded corners
+    Transaction()
+            .setCornerRadius(parent, cornerRadius)
+            .setCrop(parent, Rect(parentSize, parentSize))
+            .apply();
+
+    Transaction()
+            .reparent(child, parent)
+            .setPosition(child, 10, 10)
+            .setCrop(child, Rect(childSize, childSize))
+            .apply();
+
+    {
+        auto shot = getScreenCapture();
+
+        // Check if the child's top-left corner is transparent
+        shot->expectColor(Rect(10, 10, 10 + testArea, 10 + testArea), Color::BLACK);
+
+        // Solid center
+        shot->expectColor(Rect(childSize / 2 - testArea / 2 + 1, childSize / 2 - testArea / 2 + 1,
+                               childSize / 2 + testArea / 2, childSize / 2 + testArea / 2),
+                          Color::GREEN);
+    }
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, ChildInheritsParentSettingsWhenChildCropIsEmpty) {
+    sp<SurfaceControl> parent;
+    sp<SurfaceControl> child;
+    const uint32_t size = 100;
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(50.f);
+    const uint32_t testArea = 4;
+
+    ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", size, size));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, size, size));
+    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", size, size));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, size, size));
+
+    // Set parent with rounded corners
+    Transaction().setCornerRadius(parent, cornerRadius).setCrop(parent, Rect(size, size)).apply();
+
+    Transaction().reparent(child, parent).apply();
+
+    {
+        const uint8_t bottom = size - 1;
+        const uint8_t right = size - 1;
+
+        auto shot = getScreenCapture();
+        // Corners are transparent
+        shot->expectColor(Rect(0, 0, testArea, testArea), Color::BLACK);
+        shot->expectColor(Rect(size - testArea, 0, right, testArea), Color::BLACK);
+        shot->expectColor(Rect(0, bottom - testArea, testArea, bottom), Color::BLACK);
+        shot->expectColor(Rect(size - testArea, bottom - testArea, right, bottom), Color::BLACK);
+
+        // Solid center
+        shot->expectColor(Rect(size / 2 - testArea / 2 + 1, size / 2 - testArea / 2 + 1,
+                               size / 2 + testArea / 2, size / 2 + testArea / 2),
+                          Color::GREEN);
+    }
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, ChildDoesNotOverlapParentCornerRegion) {
+    sp<SurfaceControl> parent;
+    sp<SurfaceControl> child;
+    const uint32_t parentSize = 100;
+    const uint32_t childSize = 75;
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(10.f);
+    const uint32_t testArea = 4;
+
+    ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", childSize, childSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, childSize, childSize));
+
+    // Set parent with rounded corners
+    Transaction()
+            .setCornerRadius(parent, cornerRadius)
+            .setCrop(parent, Rect(parentSize, parentSize))
+            .apply();
+
+    Transaction()
+            .reparent(child, parent)
+            .setPosition(child, 25, 25)
+            .setCrop(child, Rect(childSize, childSize))
+            .apply();
+
+    {
+        auto shot = getScreenCapture();
+
+        // Check if the child's top-left corner is solid
+        shot->expectColor(Rect(25, 25, 25 + testArea, 25 + testArea), Color::GREEN);
+
+        // Solid center
+        shot->expectColor(Rect(childSize / 2 - testArea / 2 + 1, childSize / 2 - testArea / 2 + 1,
+                               childSize / 2 + testArea / 2, childSize / 2 + testArea / 2),
+                          Color::GREEN);
+    }
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, SetCornerRadiusChildScaledUp) {
+    sp<SurfaceControl> parent;
+    sp<SurfaceControl> child;
+    const uint32_t parentSize = 100;
+    const uint32_t childSize = 20;
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(25.0f);
+    const uint32_t testArea = 4;
+
+    ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", childSize, childSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, childSize, childSize));
+
+    Transaction()
+            .setCornerRadius(parent, cornerRadius)
+            .setCrop(parent, Rect(parentSize, parentSize))
+            .apply();
+
+    // Child positioned such that it doesn't intersect parent TL corner region
+    // unless scaled up
+    Transaction()
+            .reparent(child, parent)
+            .setPosition(child, 30, 30)
+            .setMatrix(child, 2.0f, 0.0f, 0.0f, 2.0f)
+            .setCrop(child, Rect(childSize, childSize))
+            .apply();
+    {
+        auto shot = getScreenCapture();
+        shot->expectColor(Rect(0, 0, testArea, testArea), Color::BLACK);
+        shot->expectColor(Rect(30, 30, 30 + testArea, 30 + testArea), Color::GREEN);
+    }
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, SetCornerRadiusChildScaledDown) {
+    sp<SurfaceControl> parent;
+    sp<SurfaceControl> child;
+    const uint32_t parentSize = 100;
+    const uint32_t childSize = 20;
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(25.0f);
+    const uint32_t testArea = 4;
+
+    ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, parentSize, parentSize));
+    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", childSize, childSize));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, childSize, childSize));
+
+    Transaction()
+            .setCornerRadius(parent, cornerRadius)
+            .setCrop(parent, Rect(parentSize, parentSize))
+            .apply();
+
+    // Child positioned such that it will not intersect with parent's TL corner
+    // when scaled down
+    Transaction()
+            .reparent(child, parent)
+            .setPosition(child, 50, 50)
+            .setMatrix(child, 0.5f, 0.0f, 0.0f, 0.5f)
+            .setCrop(child, Rect(childSize, childSize))
+            .apply();
+
+    {
+        auto shot = getScreenCapture();
+        shot->expectColor(Rect(50, 50, 50 + testArea, 50 + testArea), Color::GREEN);
+    }
+}
+
 TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadius) {
     sp<SurfaceControl> layer;
     const uint8_t size = 64;

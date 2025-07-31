@@ -27,6 +27,7 @@
 #include <android/os/IInputConstants.h>
 #include <android/os/MotionEventFlag.h>
 #endif
+#include <android/os/PointerCaptureMode.h>
 #include <android/os/PointerIconType.h>
 #include <ftl/flags.h>
 #include <math.h>
@@ -1284,22 +1285,35 @@ public:
     TouchModeEvent* createTouchModeEvent() override { return new TouchModeEvent(); };
 };
 
+/** Modes in which the pointer can be captured by a window. */
+enum class PointerCaptureMode : int32_t {
+    UNCAPTURED = static_cast<int32_t>(::android::os::PointerCaptureMode::UNCAPTURED),
+    ABSOLUTE = static_cast<int32_t>(::android::os::PointerCaptureMode::ABSOLUTE),
+    ftl_first = UNCAPTURED,
+    ftl_last = ABSOLUTE,
+};
+
 /*
  * Describes a unique request to enable or disable Pointer Capture.
  */
 struct PointerCaptureRequest {
 public:
-    inline PointerCaptureRequest() : window(), seq(0) {}
-    inline PointerCaptureRequest(sp<IBinder> window, uint32_t seq) : window(window), seq(seq) {}
+    inline PointerCaptureRequest() : window(), mode(PointerCaptureMode::UNCAPTURED), seq(0) {}
+    inline PointerCaptureRequest(sp<IBinder> window, uint32_t seq)
+          : window(window), mode(PointerCaptureMode::ABSOLUTE), seq(seq) {}
     inline bool operator==(const PointerCaptureRequest& other) const {
-        return window == other.window && seq == other.seq;
+        return window == other.window && mode == other.mode && seq == other.seq;
     }
-    inline bool isEnable() const { return window != nullptr; }
+    inline bool isEnable() const {
+        return mode != PointerCaptureMode::UNCAPTURED && window != nullptr;
+    }
 
     // The requesting window.
-    // If the request is to enable the capture, this is the input token of the window that requested
-    // pointer capture. Otherwise, this is nullptr.
+    // If the request is for a mode other than UNCAPTURED, this is the input token of the window
+    // that requested pointer capture. Otherwise, this is nullptr.
     sp<IBinder> window;
+
+    PointerCaptureMode mode;
 
     // The sequence number for the request.
     uint32_t seq;

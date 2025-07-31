@@ -133,7 +133,6 @@ protected:
         int mTotalShadersCompiled = 0;
     };
 
-    SkSLCacheMonitor mSkSLCacheMonitor;
     RuntimeEffectManager mRuntimeEffectManager;
 
     // Graphics context used for creating surfaces and submitting commands.
@@ -141,6 +140,8 @@ protected:
     // occasionally needs to be referenced by subclasses (e.g. for Graphite's
     // precompilation).
     unique_ptr<SkiaGpuContext> mContext;
+
+    GrContextOptions::PersistentCache& persistentCache(const void* identity, ssize_t size);
 
 private:
     void mapExternalTextureBuffer(const sp<GraphicBuffer>& buffer,
@@ -218,6 +219,9 @@ private:
     // Same as mContext, but for protected content (eg. DRM)
     unique_ptr<SkiaGpuContext> mProtectedContext;
     bool mInProtectedContext = false;
+
+    bool mInitializedDiskCache = false;
+    SkSLCacheMonitor mSkSLCacheMonitor;
 };
 
 } // namespace skia
