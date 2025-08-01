@@ -51,9 +51,6 @@
 
 #include "EventThread.h"
 
-#undef LOG_TAG
-#define LOG_TAG "EventThread"
-
 using namespace std::chrono_literals;
 
 namespace android {

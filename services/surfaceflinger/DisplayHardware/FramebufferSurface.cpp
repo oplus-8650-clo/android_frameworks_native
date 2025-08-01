@@ -20,8 +20,6 @@
 #pragma clang diagnostic ignored "-Wconversion"
 
 // #define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "FramebufferSurface"
 
 #include <errno.h>
 #include <stdio.h>

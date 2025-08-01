@@ -16,9 +16,6 @@
 
 #include "GraphiteVkRenderEngine.h"
 
-#undef LOG_TAG
-#define LOG_TAG "RenderEngine"
-
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/graphite/BackendSemaphore.h>
 #include <include/gpu/graphite/Context.h>

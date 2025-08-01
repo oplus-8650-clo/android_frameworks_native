@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#undef LOG_TAG
-#define LOG_TAG "DisplayModeController"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "Display/DisplayModeController.h"

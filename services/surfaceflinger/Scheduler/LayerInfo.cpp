@@ -33,9 +33,6 @@
 #include <ftl/enum.h>
 #include <system/window.h>
 
-#undef LOG_TAG
-#define LOG_TAG "LayerInfo"
-
 namespace android::scheduler {
 
 bool LayerInfo::sTraceEnabled = false;
@@ -171,6 +168,31 @@ Fps LayerInfo::getFps(nsecs_t now) const {
     return Fps::fromPeriodNsecs(totalTime / (numFrames - 1));
 }
 
+bool LayerInfo::isLayerActive(nsecs_t threshold) const {
+    if (!isVisible()) {
+        return false;
+    }
+
+    // Layers with an explicit frame rate or frame rate category are kept active,
+    // but ignore NoVote.
+    const auto frameRate = getSetFrameRateVote();
+    if (frameRate.isValid() && !frameRate.isNoVote() &&
+        frameRate.isVoteValidForMrr(isVrrDisplay())) {
+        return true;
+    }
+
+    // Make all front buffered layers active
+    if (isFrontBuffered() && isVisible()) {
+        return true;
+    }
+
+    return isVisible() && getLastUpdatedTime() >= threshold;
+}
+
+bool LayerInfo::isVrrDisplay() const {
+    return mLayerProps->refreshRateSelector && mLayerProps->refreshRateSelector->isVrrDevice();
+}
+
 bool LayerInfo::isAnimating(nsecs_t now) const {
     return mLastAnimationTime >= getActiveLayerThreshold(now);
 }
@@ -267,14 +289,18 @@ std::optional<nsecs_t> LayerInfo::calculateAverageFrameTime() const {
     return static_cast<nsecs_t>(averageFrameTime);
 }
 
-std::optional<Fps> LayerInfo::calculateRefreshRateIfPossible(const RefreshRateSelector& selector,
-                                                             nsecs_t now) {
+std::optional<Fps> LayerInfo::calculateRefreshRateIfPossible(nsecs_t now) {
     SFTRACE_CALL();
     static constexpr float MARGIN = 1.0f; // 1Hz
     if (!hasEnoughDataForHeuristic()) {
         ALOGV("Not enough data");
         return std::nullopt;
     }
+
+    if (!mLayerProps->refreshRateSelector) {
+        return std::nullopt;
+    }
+    const RefreshRateSelector& selector = *mLayerProps->refreshRateSelector;
 
     if (const auto averageFrameTime = calculateAverageFrameTime()) {
         const auto refreshRate = Fps::fromPeriodNsecs(*averageFrameTime);
@@ -302,8 +328,7 @@ std::optional<Fps> LayerInfo::calculateRefreshRateIfPossible(const RefreshRateSe
                                                : std::nullopt;
 }
 
-LayerInfo::RefreshRateVotes LayerInfo::getRefreshRateVote(const RefreshRateSelector& selector,
-                                                          nsecs_t now) {
+LayerInfo::RefreshRateVotes LayerInfo::getRefreshRateVote(nsecs_t now) {
     SFTRACE_CALL();
     LayerInfo::RefreshRateVotes votes;
 
@@ -375,7 +400,7 @@ LayerInfo::RefreshRateVotes LayerInfo::getRefreshRateVote(const RefreshRateSelec
         return votes;
     }
 
-    auto refreshRate = calculateRefreshRateIfPossible(selector, now);
+    auto refreshRate = calculateRefreshRateIfPossible(now);
     if (refreshRate.has_value()) {
         SFTRACE_FORMAT_INSTANT("calculated (%s)", to_string(*refreshRate).c_str());
         ALOGV("%s calculated refresh rate: %s", mName.c_str(), to_string(*refreshRate).c_str());
@@ -420,6 +445,14 @@ FloatRect LayerInfo::getBounds() const {
 
 ui::Transform LayerInfo::getTransform() const {
     return mLayerProps->transform;
+}
+
+RefreshRateSelector* LayerInfo::getRefreshRateSelector() const {
+    return mLayerProps->refreshRateSelector;
+}
+
+LayerFilter LayerInfo::getLayerFilter() const {
+    return mLayerProps->refreshRateSelector->getLayerFilter();
 }
 
 LayerInfo::RefreshRateHistory::HeuristicTraceTagData

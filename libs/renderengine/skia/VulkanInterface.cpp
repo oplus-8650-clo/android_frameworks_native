@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-#undef LOG_TAG
-#define LOG_TAG "RenderEngine"
-
 #include "VulkanInterface.h"
 
 #include <include/gpu/GpuTypes.h>

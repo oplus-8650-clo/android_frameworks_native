@@ -16,9 +16,6 @@
 
 #include "GaneshVkRenderEngine.h"
 
-#undef LOG_TAG
-#define LOG_TAG "RenderEngine"
-
 #include "ShaderCache.h"
 
 #include <include/gpu/ganesh/vk/GrVkBackendSemaphore.h>

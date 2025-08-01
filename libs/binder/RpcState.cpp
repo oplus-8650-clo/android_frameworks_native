@@ -693,57 +693,62 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
             .parcelDataSize = static_cast<uint32_t>(data.dataSize()),
     };
 
-    // Oneway calls have no sync point, so if many are sent before, whether this
-    // is a twoway or oneway transaction, they may have filled up the socket.
-    // So, make sure we drain them before polling
-    constexpr size_t kWaitMaxUs = 1000000;
-    constexpr size_t kWaitLogUs = 10000;
-    size_t waitUs = 0;
-
     iovec iovs[]{
             {&command, sizeof(RpcWireHeader)},
             {&transaction, sizeof(RpcWireTransaction)},
             {const_cast<uint8_t*>(data.data()), data.dataSize()},
             objectTableSpan.toIovec(),
     };
-    auto altPoll = [&] {
-        if (waitUs > kWaitLogUs) {
-            // At this point, the transaction buffer is filling up, and we would like to
-            // poll and wait for us to be able to write. However, if we just wait, then
-            // in the case of too many oneway calls, if the other side is blocked on
-            // sending decRefs, because our in buffer is full, we need to go ahead
-            // and drain these. We should never see a nested call at this point because
-            // this is failing to send the transaction itself. A nested call cannot
-            // occur until the entire transaction is sent, then we will handle them
-            // while waiting for the reply. It's also possible to hit this point when
-            // we just send too big of a command, and it fills up the buffer. Then
-            // we need to wait for it to be read. However, we cannot poll because
-            // there is no way to know why the other side is blocked. If it is blocked
-            // sending decRefs from oneway calls (there may have been just enough sent
-            // before this call), then we have to handle them.
-            //
-            // TODO: if we have incoming threads, we may be able to force all the decrefs
-            // to happen on the incoming calls in order to avoid this sleep.
-            ALOGE("Cannot send command, trying to process pending refcounts. Waiting "
-                  "%zuus. Common when too much data is sent or too many oneway calls build up",
-                  waitUs);
-        }
+    std::optional<SmallFunction<status_t()>> altPoll = std::nullopt;
+    struct {
+        const sp<RpcSession::RpcConnection> connection;
+        const sp<RpcSession> session;
+        size_t waitUs;
+    } tmpHeap = {connection, session, 0};
+    if (session->getMaxIncomingThreads() == 0) {
+        altPoll = [this, &tmpHeap] {
+            // Oneway calls have no sync point, so if many are sent before, whether this
+            // is a twoway or oneway transaction, they may have filled up the socket.
+            // So, make sure we drain them before polling
+            constexpr size_t kWaitMaxUs = 1000000;
+            constexpr size_t kWaitLogUs = 10000;
+            if (tmpHeap.waitUs > kWaitLogUs) {
+                // At this point, the transaction buffer is filling up, and we would like to
+                // poll and wait for us to be able to write. However, if we just wait, then
+                // in the case of too many oneway calls, if the other side is blocked on
+                // sending decRefs, because our in buffer is full, we need to go ahead
+                // and drain these. We should never see a nested call at this point because
+                // this is failing to send the transaction itself. A nested call cannot
+                // occur until the entire transaction is sent, then we will handle them
+                // while waiting for the reply. It's also possible to hit this point when
+                // we just send too big of a command, and it fills up the buffer. Then
+                // we need to wait for it to be read. However, we cannot poll because
+                // there is no way to know why the other side is blocked. If it is blocked
+                // sending decRefs from oneway calls (there may have been just enough sent
+                // before this call), then we have to handle them.
+                //
+                // TODO: if we have incoming threads, we may be able to force all the decrefs
+                // to happen on the incoming calls in order to avoid this sleep.
+                ALOGE("Cannot send command, trying to process pending refcounts. Waiting "
+                      "%zuus. Common when too much data is sent or too many oneway calls build up",
+                      tmpHeap.waitUs);
+            }
 
-        if (waitUs > 0) {
-            usleep(waitUs);
-            waitUs = std::min(kWaitMaxUs, waitUs * 2);
-        } else {
-            waitUs = 1;
-        }
+            if (tmpHeap.waitUs > 0) {
+                usleep(tmpHeap.waitUs);
+                tmpHeap.waitUs = std::min(kWaitMaxUs, tmpHeap.waitUs * 2);
+            } else {
+                tmpHeap.waitUs = 1;
+            }
 
-        // This is restricted to "CONTROL_ONLY" because we should not receive any
-        // nested transactions until the entire transaction is sent and starts
-        // executing.
-        return drainCommands(connection, session, CommandType::CONTROL_ONLY);
-    };
-    if (status_t status =
-                rpcSend(connection, session, "transaction", iovs, countof(iovs), std::ref(altPoll),
-                        rpcFields->mImpl ? &rpcFields->mImpl->mFds : nullptr);
+            // This is restricted to "CONTROL_ONLY" because we should not receive any
+            // nested transactions until the entire transaction is sent and starts
+            // executing.
+            return drainCommands(tmpHeap.connection, tmpHeap.session, CommandType::CONTROL_ONLY);
+        };
+    }
+    if (status_t status = rpcSend(connection, session, "transaction", iovs, countof(iovs), altPoll,
+                                  rpcFields->mImpl ? &rpcFields->mImpl->mFds : nullptr);
         status != OK) {
         // rpcSend calls shutdownAndWait, so all refcounts should be reset. If we ever tolerate
         // errors here, then we may need to undo the binder-sent counts for the transaction as
@@ -1409,6 +1414,7 @@ status_t RpcState::doDecStrong(const sp<RpcSession>& session, uint64_t addr, uin
     auto it = mNodeForAddress.find(addr);
     if (it == mNodeForAddress.end()) {
         ALOGE("Unknown binder address %" PRIu64 " for dec strong. Terminating!", addr);
+        _l.unlock();
         (void)session->shutdownAndWait(false);
         return BAD_VALUE;
     }
@@ -1424,9 +1430,12 @@ status_t RpcState::doDecStrong(const sp<RpcSession>& session, uint64_t addr, uin
     }
 
     if (it->second.timesSent < amount) {
-        ALOGE("Record of sending binder %zu times, but requested decStrong for %" PRIu64 " of %u",
+        ALOGE("Record of sending binder %zu times, but requested decStrong for %" PRIu64
+              " of %u. Terminating!",
               it->second.timesSent, addr, amount);
-        return OK;
+        _l.unlock();
+        (void)session->shutdownAndWait(false);
+        return BAD_VALUE;
     }
 
     LOG_ALWAYS_FATAL_IF(it->second.sentRef == nullptr, "Inconsistent state, lost ref for %" PRIu64,

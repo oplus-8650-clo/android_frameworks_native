@@ -708,6 +708,16 @@ private:
     status_t            finishUnflattenBinder(const sp<IBinder>& binder, sp<IBinder>* out) const;
     status_t            flattenBinder(const sp<IBinder>& binder);
     status_t            unflattenBinder(sp<IBinder>* out) const;
+    [[nodiscard]] status_t readRpcObjectType(int32_t* objectType) const;
+    [[nodiscard]] static constexpr size_t getRpcObjectSize(int32_t objectType);
+    [[nodiscard]] status_t readRpcBinderAddress(uint64_t* addr) const;
+    [[nodiscard]] status_t readRpcFdIndex(int32_t* addr) const;
+    // This is similar to readAligned without a call to validateReadData.
+    // validateReadData would cause the read to fail because we are reading
+    // over objects - but it's intentional in this case!
+    // Used only for the readRpc* methods directly above.
+    template <class T>
+    [[nodiscard]] status_t readPartialRpcObject(T* val) const;
 
     LIBBINDER_EXPORTED status_t readOutVectorSizeWithCheck(size_t elmSize, int32_t* size) const;
 

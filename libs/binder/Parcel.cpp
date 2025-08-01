@@ -348,14 +348,51 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
 #endif // BINDER_WITH_KERNEL_IPC
 }
 
+template <class T>
+status_t Parcel::readPartialRpcObject(T* val) const {
+    static_assert(sizeof(T) == sizeof(int32_t) || sizeof(T) == sizeof(uint64_t));
+    size_t end;
+    if (__builtin_add_overflow(mDataPos, sizeof(T), &end) || end > mDataSize) {
+        return NOT_ENOUGH_DATA;
+    }
+    memcpy(val, mData + mDataPos, sizeof(T));
+    mDataPos += sizeof(T);
+    return OK;
+}
+
+status_t Parcel::readRpcObjectType(int32_t* objectType) const {
+    return readPartialRpcObject(objectType);
+}
+
+status_t Parcel::readRpcBinderAddress(uint64_t* addr) const {
+    return readPartialRpcObject(addr);
+}
+
+status_t Parcel::readRpcFdIndex(int32_t* fdIndex) const {
+    return readPartialRpcObject(fdIndex);
+}
+
+constexpr size_t Parcel::getRpcObjectSize(int32_t objectType) {
+    switch (objectType) {
+        case RpcFields::TYPE_BINDER:
+            return sizeof(RpcFields::ObjectType) + sizeof(uint64_t);
+            break;
+        case RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR:
+            return sizeof(RpcFields::ObjectType) + sizeof(int32_t);
+            break;
+        default:
+            LOG_ALWAYS_FATAL("Unknown RpcFields type: %" PRId32, objectType);
+    }
+}
+
 status_t Parcel::unflattenBinder(sp<IBinder>* out) const
 {
     if (const auto* rpcFields = maybeRpcFields()) {
         const size_t objectPos = mDataPos;
 
         // see TYPE_BINDER/TYPE_BINDER_NULL
-        int32_t isPresent;
-        if (status_t status = readInt32(&isPresent); status != OK) return status;
+        int32_t isPresent = 0;
+        if (status_t status = readRpcObjectType(&isPresent); status != OK) return status;
 
         sp<IBinder> binder;
 
@@ -377,8 +414,8 @@ status_t Parcel::unflattenBinder(sp<IBinder>* out) const
                 LOG_ALWAYS_FATAL_IF(binder == nullptr);
             }
 
-            uint64_t addr;
-            if (status_t status = readUint64(&addr); status != OK) return status;
+            uint64_t addr = 0;
+            if (status_t status = readRpcBinderAddress(&addr); status != OK) return status;
 
             if (binder == nullptr) {
                 if (rpcFields->mSendState == RpcFields::RpcSendState::RECEIVED) {
@@ -731,15 +768,14 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                                 newDataPos);
 
                 mDataPos = newDataPos;
-                int32_t objectType;
-                if (status_t status = readInt32(&objectType); status != OK) {
+                int32_t objectType = 0;
+                if (status_t status = readRpcObjectType(&objectType); status != OK) {
                     return status;
                 }
 
                 if (objectType == RpcFields::TYPE_BINDER) {
-                    uint64_t addr;
-                    if (status_t status = readUint64(&addr); status != OK) return status;
-
+                    uint64_t addr = 0;
+                    if (status_t status = readRpcBinderAddress(&addr); status != OK) return status;
                     sp<IBinder> binder = rpcFields->mSession->state()->lookupAddress(addr);
                     if (binder == nullptr) {
                         ALOGE("Invalid state could not find address: %" PRIu64
@@ -778,10 +814,10 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                 }
 
                 // Read FD, duplicate, and add to list.
-                int32_t fdIndex;
-                if (status_t status = readInt32(&fdIndex); status != OK) {
-                    return status;
-                }
+                size_t indexDataPos = mDataPos;
+                int32_t fdIndex = -1;
+                if (status_t status = readRpcFdIndex(&fdIndex); status != OK) return status;
+
                 int oldFd = toRawFd(otherRpcFields->mImpl->mFds.at(fdIndex));
                 // To match kernel binder behavior, we always dup, even if the
                 // FD was unowned in the source parcel.
@@ -791,11 +827,13 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
                           statusToString(status).c_str());
                 }
                 rpcFields->mImpl->mFds.emplace_back(unique_fd(newFd));
-                // Fixup the index in the data.
-                mDataPos = newDataPos + 4;
-                if (status_t status = writeInt32(rpcFields->mImpl->mFds.size() - 1); status != OK) {
-                    return status;
+                if (otherRpcFields->mImpl->mFds.size() > std::numeric_limits<int32_t>::max()) {
+                    ALOGE("Too many FDs in Parcel to be able to write an index");
+                    return INVALID_OPERATION;
                 }
+                // Fixup the index in the data.
+                *reinterpret_cast<int32_t*>(mData + indexDataPos) =
+                        static_cast<int32_t>(otherRpcFields->mImpl->mFds.size()) - 1;
             }
         }
     }
@@ -1986,8 +2024,40 @@ status_t Parcel::validateReadData(size_t upperBound) const
 {
     const auto* kernelFields = maybeKernelFields();
     if (kernelFields == nullptr) {
-        // Can't validate RPC Parcel reads because the location of binder
-        // objects is unknown.
+        if (upperBound == 0) return OK;
+        auto* rpcFields = maybeRpcFields();
+        LOG_ALWAYS_FATAL_IF(rpcFields == nullptr);
+        if (rpcFields->mObjectPositions.empty()) return OK;
+
+        const size_t savedDataPos = mDataPos;
+        auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
+
+        // lower bound of objects that could overlap with or start at/after mDataPos
+        size_t low = mDataPos < getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER)
+                ? 0
+                : mDataPos - getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER) + 1;
+        auto start = std::lower_bound(rpcFields->mObjectPositions.begin(),
+                                      rpcFields->mObjectPositions.end(), low);
+        if (start == rpcFields->mObjectPositions.end()) return OK;
+        auto end = std::upper_bound(start, rpcFields->mObjectPositions.end(), upperBound - 1);
+        for (auto it = start; it != end; it++) {
+            uint32_t pos = *it;
+            mDataPos = pos;
+            int32_t objectType = 0;
+            if (status_t status = readRpcObjectType(&objectType); status != OK) return status;
+            size_t objSize = getRpcObjectSize(objectType);
+            if ((pos <= savedDataPos && savedDataPos < pos + objSize) ||
+                (savedDataPos < pos && upperBound > pos)) {
+                if (!mServiceFuzzing) {
+                    ALOGE("Validate read data failed! This would be reading the raw values of an "
+                          "object in the parcel (at position %u) that is marked for RPC. objSize: "
+                          "%zu, "
+                          "savedDataPos: %zu, upperBound: %zu",
+                          pos, objSize, savedDataPos, upperBound);
+                }
+                return PERMISSION_DENIED;
+            }
+        }
         return OK;
     }
 
@@ -2065,8 +2135,7 @@ status_t Parcel::read(void* outData, size_t len) const
 
     if ((mDataPos+pad_size(len)) >= mDataPos && (mDataPos+pad_size(len)) <= mDataSize
             && len <= pad_size(len)) {
-        const auto* kernelFields = maybeKernelFields();
-        if (kernelFields != nullptr && kernelFields->mObjectsSize > 0) {
+        if (objectsCount() > 0) {
             status_t err = validateReadData(mDataPos + pad_size(len));
             if(err != NO_ERROR) {
                 // Still increment the data position by the expected length
@@ -2093,8 +2162,7 @@ const void* Parcel::readInplace(size_t len) const
 
     if ((mDataPos+pad_size(len)) >= mDataPos && (mDataPos+pad_size(len)) <= mDataSize
             && len <= pad_size(len)) {
-        const auto* kernelFields = maybeKernelFields();
-        if (kernelFields != nullptr && kernelFields->mObjectsSize > 0) {
+        if (objectsCount() > 0) {
             status_t err = validateReadData(mDataPos + pad_size(len));
             if(err != NO_ERROR) {
                 // Still increment the data position by the expected length
@@ -2146,8 +2214,7 @@ status_t Parcel::readAligned(T *pArg) const {
     static_assert(std::is_trivially_copyable_v<T>);
 
     if ((mDataPos+sizeof(T)) <= mDataSize) {
-        const auto* kernelFields = maybeKernelFields();
-        if (kernelFields != nullptr && kernelFields->mObjectsSize > 0) {
+        if (objectsCount() > 0) {
             status_t err = validateReadData(mDataPos + sizeof(T));
             if(err != NO_ERROR) {
                 // Still increment the data position by the expected length
@@ -2551,12 +2618,14 @@ int Parcel::readFileDescriptor() const {
             return BAD_TYPE;
         }
 
-        int32_t objectType = readInt32();
+        int32_t objectType = 0;
+        if (status_t status = readRpcObjectType(&objectType); status != OK) return status;
         if (objectType != RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR) {
             return BAD_TYPE;
         }
+        int32_t fdIndex = -1;
+        if (status_t status = readRpcFdIndex(&fdIndex); status != OK) return status;
 
-        int32_t fdIndex = readInt32();
         if (rpcFields->mImpl == nullptr || fdIndex < 0 ||
             static_cast<size_t>(fdIndex) >= rpcFields->mImpl->mFds.size()) {
             ALOGE("RPC Parcel contains invalid file descriptor index. index=%d fd_count=%zu",
@@ -3059,12 +3128,11 @@ status_t Parcel::rpcSetDataReference(
     // acquire and validate all objects
     bool bindersInObjectPositions = session->getProtocolVersion() >=
             RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
-
     size_t numFds = 0;
     for (uint32_t pos : rpcFields->mObjectPositions) {
         mDataPos = pos;
         int32_t objectType;
-        if (status_t status = readInt32(&objectType); status != OK) {
+        if (status_t status = readRpcObjectType(&objectType); status != OK) {
             ALOGE("Failed to read object type: %s, pos: %" PRIu32 ". Terminating.",
                   statusToString(status).c_str(), pos);
             (void)session->shutdownAndWait(false);
@@ -3356,27 +3424,16 @@ status_t Parcel::continueWrite(size_t desired)
                 }
 #endif // BINDER_WITH_KERNEL_IPC
             } else {
+                const size_t savedDataPos = mDataPos;
+                auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
                 while (objectsSize > 0) {
                     // Object size varies by type.
                     uint32_t pos = rpcFields->mObjectPositions[objectsSize - 1];
-                    size_t size = sizeof(RpcFields::ObjectType);
-                    uint32_t minObjectEnd;
-                    if (__builtin_add_overflow(pos, sizeof(RpcFields::ObjectType), &minObjectEnd) ||
-                        minObjectEnd > mDataSize) {
-                        return BAD_VALUE;
-                    }
-                    const auto type = *reinterpret_cast<const RpcFields::ObjectType*>(mData + pos);
-                    switch (type) {
-                        case RpcFields::TYPE_BINDER_NULL:
-                            break;
-                        case RpcFields::TYPE_BINDER:
-                            size += sizeof(uint64_t); // address
-                            break;
-                        case RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR:
-                            size += sizeof(int32_t); // fd index
-                            break;
-                    }
-
+                    mDataPos = pos;
+                    int32_t objectType = 0;
+                    if (status_t status = readRpcObjectType(&objectType); status != OK)
+                        return status;
+                    size_t size = getRpcObjectSize(objectType);
                     if (pos + size <= desired) break;
                     objectsSize--;
                 }
@@ -3564,12 +3621,13 @@ status_t Parcel::truncateRpcObjects(size_t newObjectsSize) {
                 // this is only called during shutdown, position will be cleared
                 mDataPos = rpcFields->mObjectPositions[i];
 
-                int32_t objectType;
-                LOG_ALWAYS_FATAL_IF(OK != readInt32(&objectType),
+                int32_t objectType = 0;
+                LOG_ALWAYS_FATAL_IF(readRpcObjectType(&objectType) != OK,
                                     "Inconsistent acquisition state.");
                 if (objectType != RpcFields::TYPE_BINDER) continue;
-                uint64_t addr;
-                LOG_ALWAYS_FATAL_IF(OK != readUint64(&addr), "Inconsistent acquisition state.");
+                uint64_t addr = 0;
+                LOG_ALWAYS_FATAL_IF(readRpcBinderAddress(&addr) != OK,
+                                    "Inconsistent acquisition state.");
                 if (status_t status =
                             rpcFields->mSession->state()->cancelBinderLeaving(rpcFields->mSession,
                                                                               addr);
@@ -3595,21 +3653,17 @@ status_t Parcel::truncateRpcObjects(size_t newObjectsSize) {
         }
         return OK;
     }
+    const size_t savedDataPos = mDataPos;
+    auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
+
     while (rpcFields->mObjectPositions.size() > newObjectsSize) {
         uint32_t pos = rpcFields->mObjectPositions.back();
-        uint32_t minObjectEnd;
-        if (__builtin_add_overflow(pos, sizeof(RpcFields::ObjectType), &minObjectEnd) ||
-            minObjectEnd > mDataSize) {
-            return BAD_VALUE;
-        }
-        const auto type = *reinterpret_cast<const RpcFields::ObjectType*>(mData + pos);
-        if (type == RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR) {
-            uint32_t objectEnd;
-            if (__builtin_add_overflow(minObjectEnd, sizeof(int32_t), &objectEnd) ||
-                objectEnd > mDataSize) {
-                return BAD_VALUE;
-            }
-            const auto fdIndex = *reinterpret_cast<const int32_t*>(mData + minObjectEnd);
+        mDataPos = pos;
+        int32_t objectType = 0;
+        if (status_t status = readRpcObjectType(&objectType); status != OK) return status;
+        if (objectType == RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR) {
+            int32_t fdIndex = -1;
+            if (status_t status = readRpcFdIndex(&fdIndex); status != OK) return status;
             if (rpcFields->mImpl == nullptr || fdIndex < 0 ||
                 static_cast<size_t>(fdIndex) >= rpcFields->mImpl->mFds.size()) {
                 ALOGE("RPC Parcel contains invalid file descriptor index. index=%d fd_count=%zu",

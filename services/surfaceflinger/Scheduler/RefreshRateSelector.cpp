@@ -39,9 +39,6 @@
 
 #include <com_android_graphics_surfaceflinger_flags.h>
 
-#undef LOG_TAG
-#define LOG_TAG "RefreshRateSelector"
-
 namespace android::scheduler {
 namespace {
 
@@ -449,10 +446,10 @@ float RefreshRateSelector::calculateLayerScoreLocked(const LayerRequirement& lay
             kNonExactMatchingPenalty;
 }
 
-auto RefreshRateSelector::getRankedFrameRates(const std::vector<LayerRequirement>& layers,
+auto RefreshRateSelector::getRankedFrameRates(const std::vector<LayerRequirement>& allLayers,
                                               GlobalSignals signals, Fps pacesetterFps) const
         -> RankedFrameRates {
-    GetRankedFrameRatesCache cache{layers, signals, pacesetterFps};
+    GetRankedFrameRatesCache cache{allLayers, signals, pacesetterFps};
 
     std::lock_guard lock(mLock);
 
@@ -460,7 +457,7 @@ auto RefreshRateSelector::getRankedFrameRates(const std::vector<LayerRequirement
         return mGetRankedFrameRatesCache->result;
     }
 
-    cache.result = getRankedFrameRatesLocked(layers, signals, pacesetterFps);
+    cache.result = getRankedFrameRatesLocked(allLayers, signals, pacesetterFps);
     mGetRankedFrameRatesCache = std::move(cache);
     return mGetRankedFrameRatesCache->result;
 }
@@ -468,27 +465,45 @@ auto RefreshRateSelector::getRankedFrameRates(const std::vector<LayerRequirement
 using LayerRequirementPtrs = std::vector<const RefreshRateSelector::LayerRequirement*>;
 using PerUidLayerRequirements = std::unordered_map<uid_t, LayerRequirementPtrs>;
 
-PerUidLayerRequirements groupLayersByUid(
-        const std::vector<RefreshRateSelector::LayerRequirement>& layers) {
+PerUidLayerRequirements groupLayersByUid(const LayerRequirementPtrs& layers) {
     PerUidLayerRequirements layersByUid;
     for (const auto& layer : layers) {
-        const auto it = layersByUid.emplace(layer.ownerUid, LayerRequirementPtrs()).first;
+        const auto it = layersByUid.emplace(layer->ownerUid, LayerRequirementPtrs()).first;
         auto& layersWithSameUid = it->second;
-        layersWithSameUid.push_back(&layer);
+        layersWithSameUid.push_back(layer);
     }
     return layersByUid;
 }
 
-auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequirement>& layers,
+LayerRequirementPtrs filterLayersForOutput(
+        const std::vector<RefreshRateSelector::LayerRequirement>& layers,
+        LayerFilter outputFilter) {
+    const bool allowArbitraryFollowerRates =
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+    LayerRequirementPtrs filteredLayers;
+    for (const auto& layer : layers) {
+        if (!allowArbitraryFollowerRates ||
+            outputFilter.layerStack == layer.layerFilter.layerStack) {
+            filteredLayers.push_back(&layer);
+        }
+    }
+
+    return filteredLayers;
+}
+
+auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequirement>& allLayers,
                                                     GlobalSignals signals, Fps pacesetterFps) const
         -> RankedFrameRates {
     using namespace fps_approx_ops;
     SFTRACE_CALL();
-    ALOGV("%s: %zu layers", __func__, layers.size());
+
+    const LayerRequirementPtrs layers = filterLayersForOutput(allLayers, mLayerFilter);
+    ALOGV("%s: %zu allLayers, %zu layers", __func__, allLayers.size(), layers.size());
 
     const auto& activeMode = *getActiveModeLocked().modePtr;
 
-    if (pacesetterFps.isValid()) {
+    if (pacesetterFps.isValid() &&
+        !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
         ALOGV("Follower display");
 
         const auto ranking = rankFrameRates(activeMode.getGroup(), RefreshRateOrder::Descending,
@@ -565,7 +580,8 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
     int seamedFocusedLayers = 0;
     int categorySmoothSwitchOnlyLayers = 0;
 
-    for (const auto& layer : layers) {
+    for (const auto* layerPtr : layers) {
+        const auto& layer = *layerPtr;
         switch (layer.vote) {
             case LayerVoteType::NoVote:
                 noVoteLayers++;
@@ -690,7 +706,8 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
         scores.emplace_back(RefreshRateScore{it, 0.0f});
     }
 
-    for (const auto& layer : layers) {
+    for (const auto* layerPtr : layers) {
+        const auto& layer = *layerPtr;
         ALOGV("Calculating score for %s (%s, weight %.2f, desired %.2f, category %s) ",
               layer.name.c_str(), ftl::enum_string(layer.vote).c_str(), layer.weight,
               layer.desiredRefreshRate.getValue(),
@@ -933,7 +950,7 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
     return {ranking, kNoSignals};
 }
 
-auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequirement>& layers,
+auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequirement>& allLayers,
                                                 Fps displayRefreshRate,
                                                 GlobalSignals globalSignals) const
         -> UidToFrameRateOverride {
@@ -942,8 +959,10 @@ auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequireme
         return {};
     }
 
-    ALOGV("%s: %zu layers", __func__, layers.size());
     std::lock_guard lock(mLock);
+    const LayerRequirementPtrs layers = filterLayersForOutput(allLayers, mLayerFilter);
+
+    ALOGV("%s: %zu allLayers, %zu layers", __func__, allLayers.size(), layers.size());
 
     const auto* policyPtr = getCurrentPolicyLocked();
     // We don't want to run lower than 30fps
@@ -1520,6 +1539,11 @@ std::vector<float> RefreshRateSelector::getSupportedFrameRates() const {
                    std::back_inserter(supportedFrameRates),
                    [](FrameRateMode mode) { return mode.fps.getValue(); });
     return supportedFrameRates;
+}
+
+void RefreshRateSelector::setLayerFilter(LayerFilter layerFilter) {
+    std::scoped_lock lock(mLock);
+    mLayerFilter = layerFilter;
 }
 
 FpsRange RefreshRateSelector::getSupportedFrameRateRangeLocked() const {

@@ -20,10 +20,12 @@
 #include <utility>
 #include <variant>
 
+#include <common/LayerFilter.h>
 #include <ftl/concat.h>
 #include <ftl/optional.h>
 #include <ftl/unit.h>
 #include <gui/DisplayEventReceiver.h>
+#include <ui/LayerStack.h>
 
 #include <scheduler/Fps.h>
 #include <scheduler/FrameRateMode.h>
@@ -37,8 +39,6 @@
 namespace android::scheduler {
 
 using namespace std::chrono_literals;
-
-using FrameRateOverride = DisplayEventReceiver::Event::FrameRateOverride;
 
 // Selects the refresh rate of a display by ranking its `DisplayModes` in accordance with
 // the DisplayManager (or override) `Policy`, the `LayerRequirement` of each active layer,
@@ -190,11 +190,14 @@ public:
         // Whether layer is in focus or not based on WindowManager's state
         bool focused = false;
 
+        LayerFilter layerFilter;
+
         bool operator==(const LayerRequirement& other) const {
             return name == other.name && vote == other.vote &&
                     isApproxEqual(desiredRefreshRate, other.desiredRefreshRate) &&
                     seamlessness == other.seamlessness && weight == other.weight &&
-                    focused == other.focused && frameRateCategory == other.frameRateCategory;
+                    focused == other.focused && frameRateCategory == other.frameRateCategory &&
+                    layerFilter == other.layerFilter;
         }
 
         bool operator!=(const LayerRequirement& other) const { return !(*this == other); }
@@ -421,6 +424,13 @@ public:
 
     std::vector<float> getSupportedFrameRates() const EXCLUDES(mLock);
 
+    LayerFilter getLayerFilter() const EXCLUDES(mLock) {
+        std::lock_guard lock(mLock);
+        return mLayerFilter;
+    }
+
+    void setLayerFilter(LayerFilter layerFilter) EXCLUDES(mLock);
+
 private:
     friend struct TestableRefreshRateSelector;
 
@@ -429,7 +439,7 @@ private:
     // See mActiveModeOpt for thread safety.
     const FrameRateMode& getActiveModeLocked() const REQUIRES(mLock);
 
-    RankedFrameRates getRankedFrameRatesLocked(const std::vector<LayerRequirement>& layers,
+    RankedFrameRates getRankedFrameRatesLocked(const std::vector<LayerRequirement>& allLayers,
                                                GlobalSignals signals, Fps pacesetterFps) const
             REQUIRES(mLock);
 
@@ -528,6 +538,8 @@ private:
     std::optional<Policy> mOverridePolicy GUARDED_BY(mLock);
 
     unsigned mNumModeSwitchesInPolicy GUARDED_BY(kMainThreadContext) = 0;
+
+    LayerFilter mLayerFilter GUARDED_BY(mLock);
 
     mutable std::mutex mLock;
 

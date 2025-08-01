@@ -29,6 +29,7 @@ cc_defaults {
     name: "surfaceflinger_defaults",
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
+        "-DLOG_TAG=\"SurfaceFlinger\"",
         "-Wall",
         "-Wconversion",
         "-Werror",
@@ -54,7 +55,6 @@ cc_defaults {
     cflags: [
         "-DEGL_EGLEXT_PROTOTYPES",
         "-DGL_GLEXT_PROTOTYPES",
-        "-DLOG_TAG=\"SurfaceFlinger\"",
     ],
     shared_libs: [
         "android.hardware.common-V2-ndk",

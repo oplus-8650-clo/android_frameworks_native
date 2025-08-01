@@ -18,9 +18,6 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wextra"
 
-#undef LOG_TAG
-#define LOG_TAG "VSyncPredictor"
-
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include <algorithm>

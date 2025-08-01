@@ -22,8 +22,6 @@
  */
 
 // QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
-#undef LOG_TAG
-#define LOG_TAG "Scheduler"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "Scheduler.h"
@@ -939,7 +937,7 @@ void Scheduler::chooseRefreshRateForContent(
 
     SFTRACE_CALL();
 
-    LayerHistory::Summary summary = mLayerHistory.summarize(*selectorPtr, systemTime());
+    LayerHistory::Summary summary = mLayerHistory.summarize(systemTime());
     applyPolicy(&Policy::contentRequirements, std::move(summary));
 
     if (updateAttachedChoreographer) {
@@ -1189,6 +1187,22 @@ bool Scheduler::updateFrameRateOverridesLocked(GlobalSignals consideredSignals,
     // Note that RefreshRateSelector::supportsFrameRateOverrideByContent is checked when querying
     // the FrameRateOverrideMappings rather than here.
     return mFrameRateOverrideMappings.updateFrameRateOverridesByContent(frameRateOverrides);
+}
+
+RefreshRateSelector* Scheduler::selectorPtrForLayerStack(ui::LayerStack stack) const {
+    std::scoped_lock lock(mDisplayLock);
+
+    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+        for (const auto& [_, display] : mDisplays) {
+            RefreshRateSelector* selector = display.selectorPtr.get();
+            if (selector && selector->getLayerFilter().layerStack == stack) {
+                return selector;
+            }
+        }
+    }
+
+    // Fall back to the pacesetter's RefreshRateSelector
+    return pacesetterSelectorPtrLocked().get();
 }
 
 void Scheduler::promotePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId,

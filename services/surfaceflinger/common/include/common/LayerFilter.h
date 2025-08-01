@@ -50,4 +50,8 @@ struct LayerFilter {
     }
 };
 
+inline bool operator==(LayerFilter lhs, LayerFilter rhs) {
+    return lhs.layerStack == rhs.layerStack && lhs.toInternalDisplay == rhs.toInternalDisplay;
+}
+
 } // namespace android

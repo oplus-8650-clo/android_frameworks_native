@@ -14,10 +14,17 @@
  * limitations under the License.
  */
 
+#if !defined(BINDER_NO_KERNEL_IPC_TESTING) && !defined(__TRUSTY__)
+#include <linux/android/binder.h>
+#endif //  !defined(BINDER_NO_KERNEL_IPC_TESTING) && !defined(__TRUSTY__)
+#ifndef BINDER_DISABLE_BLOB
+#include <sys/mman.h>
+#endif // BINDER_DISABLE_BLOB
 #include <chrono>
 #include <cstdlib>
 #include <type_traits>
 
+#include "binderKernelRpcCommon.h"
 #include "binderRpcTestCommon.h"
 #include "binderRpcTestFixture.h"
 
@@ -604,6 +611,66 @@ TEST_P(BinderRpc, WriteReadLocalRpcBinder) {
         // the old protocol will leak the binder object in this case
         proc.forceShutdown();
     }
+}
+
+#if !defined(BINDER_DISABLE_BLOB) && !defined(BINDER_NO_KERNEL_IPC_TESTING)
+
+TEST_P(BinderRpc, RpcValidateReadFds) {
+    auto fileDescriptorTransportMode = RpcSession::FileDescriptorTransportMode::UNIX;
+    if (socketType() == SocketType::TIPC) {
+        // TIPC does not support file descriptors yet
+        GTEST_SKIP() << "Test is not relevant if we don't support FDs";
+    }
+    auto proc = createRpcTestSocketServerProcess({
+            .clientFileDescriptorTransportMode = fileDescriptorTransportMode,
+            .serverSupportedFileDescriptorTransportModes = {fileDescriptorTransportMode},
+    });
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    p1.markForRpc(proc.proc->sessions[0].session);
+    readFdsTest(p1, fd);
+    close(fd);
+}
+
+TEST_P(BinderRpc, RpcValidateReadOverFds) {
+    auto fileDescriptorTransportMode = RpcSession::FileDescriptorTransportMode::UNIX;
+    if (socketType() == SocketType::TIPC) {
+        // TIPC does not support file descriptors yet
+        GTEST_SKIP() << "Test is not relevant if we don't support FDs";
+    }
+    auto proc = createRpcTestSocketServerProcess({
+            .clientFileDescriptorTransportMode = fileDescriptorTransportMode,
+            .serverSupportedFileDescriptorTransportModes = {fileDescriptorTransportMode},
+    });
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    p1.markForRpc(proc.proc->sessions[0].session);
+    readOverFdsTest(p1, fd, sizeof(int32_t) * 2);
+    close(fd);
+}
+
+#endif // !defined(BINDER_DISABLE_BLOB) && !defined(BINDER_NO_KERNEL_IPC_TESTING)
+
+TEST_P(BinderRpc, RpcValidateReadBinders) {
+    auto proc = createRpcTestSocketServerProcess({});
+    const bool binderInObjects = proc.proc->sessions.at(0).session->getProtocolVersion() >=
+            RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+    if (!binderInObjects) GTEST_SKIP() << "Test is not relevant if we don't track binders";
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    p1.markForRpc(proc.proc->sessions[0].session);
+    readBindersTest(p1, b1);
+}
+
+TEST_P(BinderRpc, RpcValidateReadOverBinders) {
+    auto proc = createRpcTestSocketServerProcess({});
+    const bool binderInObjects = proc.proc->sessions.at(0).session->getProtocolVersion() >=
+            RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
+    if (!binderInObjects) GTEST_SKIP() << "Test is not relevant if we don't track binders";
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    p1.markForRpc(proc.proc->sessions[0].session);
+    readOverBindersTest(p1, b1, sizeof(int32_t) + sizeof(uint64_t));
 }
 
 } // namespace android

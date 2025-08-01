@@ -392,9 +392,8 @@ MATCHER(Is120Hz, "") {
 }
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
-    mScheduler->registerDisplay(kDisplayId1,
-                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()));
+    auto selector = std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId());
+    mScheduler->registerDisplay(kDisplayId1, selector);
 
     const sp<MockLayer> layer = sp<MockLayer>::make(mFlinger.flinger());
     scheduler::LayerProps layerProps = {
@@ -405,6 +404,7 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
             .frameRateSelectionPriority = Layer::PRIORITY_UNSET,
             .isSmallDirty = false,
             .isFrontBuffered = false,
+            .refreshRateSelector = selector.get(),
     };
     mScheduler->recordLayerHistory(layer->getSequence(), layerProps, 0, systemTime(),
                                    LayerHistory::LayerUpdateType::Buffer);
@@ -1420,6 +1420,34 @@ TEST_F(SelectPacesetterDisplayTest, TwoDisplaysWithinEpsilon) FTL_FAKE_GUARD(kMa
     // refresh rate, let the current pacesetter stay.
     selector2->setActiveMode(kDisplay2Mode60point01->getId(), 60.01_Hz);
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+}
+
+TEST_F(SchedulerTest, selectorPtrForLayerStack) FTL_FAKE_GUARD(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+
+    auto selector1 =
+            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId());
+    ui::LayerStack stack1 = ui::LayerStack::fromValue(123);
+    selector1->setLayerFilter({stack1, false});
+
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1, selector1, kActiveDisplayId);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    auto selector2 =
+            std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
+    ui::LayerStack stack2 = ui::LayerStack::fromValue(467);
+    selector2->setLayerFilter({stack2, false});
+    mScheduler->registerDisplay(kDisplayId2, selector2, kActiveDisplayId);
+
+    EXPECT_EQ(mScheduler->selectorPtrForLayerStack(stack1), selector1.get());
+
+    EXPECT_EQ(mScheduler->selectorPtrForLayerStack(stack2), selector2.get());
+
+    // Expect the pacesetter selector if the argument does not match any known selector stack.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+    EXPECT_EQ(mScheduler->selectorPtrForLayerStack(ui::LayerStack::fromValue(11111u)),
+              selector1.get());
 }
 
 } // namespace android::scheduler

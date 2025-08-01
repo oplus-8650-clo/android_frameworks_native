@@ -61,6 +61,7 @@ public:
     bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
     bool disable_transparent_region_hint() const;
+    bool frontend_caching_v0() const;
     bool graphite_renderengine_preview_rollout() const;
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
@@ -88,6 +89,7 @@ public:
     bool enable_layer_command_batching() const;
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
+    bool follower_arbitrary_refresh_rate_selection() const;
     bool force_compile_graphite_renderengine() const;
     bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;

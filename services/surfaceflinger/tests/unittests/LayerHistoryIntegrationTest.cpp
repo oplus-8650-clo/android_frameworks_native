@@ -56,10 +56,19 @@ protected:
 
     static constexpr auto kVrrModeId = DisplayModeId(2);
 
+    static constexpr ui::LayerStack kLayerStack = ui::LayerStack::fromValue(1);
+    static constexpr LayerFilter kLayerFilter = {kLayerStack, false};
+
     LayerHistoryIntegrationTest() : LayerSnapshotTestBase() {
         mFlinger.resetScheduler(mScheduler);
         mLifecycleManager = {};
         mHierarchyBuilder = {};
+
+        frontend::DisplayInfo info;
+        info.info.logicalWidth = 1920;
+        info.info.logicalHeight = 1080;
+        mFrontEndDisplayInfos.emplace_or_replace(kLayerStack, info);
+        mSelector->setLayerFilter(kLayerFilter);
     }
 
     void updateLayerSnapshotsAndLayerHistory(nsecs_t now) {
@@ -81,6 +90,17 @@ protected:
         updateLayerSnapshotsAndLayerHistory(time);
     }
 
+    void setLayerStack(uint32_t id, ui::LayerStack layerStack) {
+        std::vector<QueuedTransactionState> transactions;
+        transactions.emplace_back();
+        transactions.back().states.push_back({});
+
+        transactions.back().states.front().state.what = layer_state_t::eLayerStackChanged;
+        transactions.back().states.front().layerId = id;
+        transactions.back().states.front().state.layerStack = layerStack;
+        mLifecycleManager.applyTransactions(transactions);
+    }
+
     LayerHistory& history() { return mScheduler->mutableLayerHistory(); }
     const LayerHistory& history() const { return mScheduler->mutableLayerHistory(); }
 
@@ -88,7 +108,7 @@ protected:
         // LayerHistory::summarize makes no guarantee of the order of the elements in the summary
         // however, for testing only, a stable order is required, therefore we sort the list here.
         // Any tests requiring ordered results must create layers with names.
-        auto summary = history().summarize(*mScheduler->refreshRateSelector(), now);
+        auto summary = history().summarize(now);
         std::sort(summary.begin(), summary.end(),
                   [](const RefreshRateSelector::LayerRequirement& lhs,
                      const RefreshRateSelector::LayerRequirement& rhs) -> bool {
@@ -142,6 +162,7 @@ protected:
                                                   std::make_optional<uint32_t>(sequence)});
         mFlinger.injectLegacyLayer(layer);
         createRootLayer(sequence);
+        setLayerStack(sequence, kLayerStack);
         return layer;
     }
 
@@ -157,6 +178,7 @@ protected:
         const auto layer = sp<Layer>::make(args);
         mFlinger.injectLegacyLayer(layer);
         createRootLayerWithUid(sequence, uid);
+        setLayerStack(sequence, kLayerStack);
         return layer;
     }
 

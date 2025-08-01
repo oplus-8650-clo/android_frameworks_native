@@ -11,7 +11,7 @@ package {
 cc_defaults {
     name: "renderengine_defaults",
     cflags: [
-        "-DLOG_TAG=\"RenderEngine\"",
+        "-DLOG_TAG=\"SurfaceFlinger\"",
         "-Wall",
         "-Werror",
         "-Wthread-safety",

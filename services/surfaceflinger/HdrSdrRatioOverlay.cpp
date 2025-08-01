@@ -20,9 +20,6 @@
 
 #include <SkSurface.h>
 
-#undef LOG_TAG
-#define LOG_TAG "HdrSdrRatioOverlay"
-
 namespace android {
 
 void HdrSdrRatioOverlay::drawNumber(float number, int left, SkColor color, SkCanvas& canvas) {
