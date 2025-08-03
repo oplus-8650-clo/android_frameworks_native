@@ -23,9 +23,6 @@
 
 #include <SkSurface.h>
 
-#undef LOG_TAG
-#define LOG_TAG "RefreshRateOverlay"
-
 namespace android {
 
 auto RefreshRateOverlay::draw(int refreshRate, int renderFps, bool idle, SkColor color,

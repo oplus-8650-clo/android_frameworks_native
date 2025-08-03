@@ -2040,15 +2040,18 @@ status_t SurfaceFlinger::getMaxLayerPictureProfiles(const sp<IBinder>& displayTo
                                                     int32_t* outMaxProfiles) {
     const char* const whence = __func__;
     auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(mStateLock) {
-        const ssize_t index = mCurrentState.displays.indexOfKey(displayToken);
-        if (index < 0) {
+        auto physicalDisplayId = getPhysicalDisplayIdLocked(displayToken);
+        if (!physicalDisplayId) {
             ALOGE("%s: Invalid display token %p", whence, displayToken.get());
             return 0;
         }
-        const DisplayDeviceState& state = mCurrentState.displays.valueAt(index);
-        return state.maxLayerPictureProfiles > 0 ? state.maxLayerPictureProfiles
-                : state.hasPictureProcessing     ? 1
-                                                 : 0;
+        int32_t maxProfiles = getHwComposer().getMaxLayerPictureProfiles(
+                *physicalDisplayId);
+        bool hasPictureProcessing = getHwComposer().hasDisplayCapability(
+                *physicalDisplayId, DisplayCapability::PICTURE_PROCESSING);
+        // A display-global picture processing pipeline can allow for one layer
+        // to have a picture profile.
+        return maxProfiles > 0 ? maxProfiles : hasPictureProcessing ? 1 : 0;
     });
     *outMaxProfiles = future.get();
     return NO_ERROR;
@@ -2571,7 +2574,8 @@ void SurfaceFlinger::configure() {
 void SurfaceFlinger::updateLayerHistory(nsecs_t now) {
     for (const auto& snapshot : mLayerSnapshotBuilder.getSnapshots()) {
         using Changes = frontend::RequestedLayerState::Changes;
-        if (snapshot->path.isClone()) {
+        if (snapshot->path.isClone() &&
+            !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
             continue;
         }
 
@@ -2611,6 +2615,8 @@ void SurfaceFlinger::updateLayerHistory(nsecs_t now) {
                 .frameRateSelectionPriority = snapshot->frameRateSelectionPriority,
                 .isSmallDirty = snapshot->isSmallDirty,
                 .isFrontBuffered = snapshot->isFrontBuffered(),
+                .refreshRateSelector =
+                        mScheduler->selectorPtrForLayerStack(snapshot->outputFilter.layerStack),
         };
 
         if (snapshot->changes.any(Changes::Geometry | Changes::Visibility)) {
@@ -3277,6 +3283,18 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
                                         layerFE->mSnapshot->outputFilter.layerStack);
     }
 
+    std::optional<std::future<void>> offloadedCompositionFuture;
+    std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers;
+    if (optionalOffloadedRefreshArgs) {
+        setVisibleRegionDirtyIfNeeded(*optionalOffloadedRefreshArgs);
+
+        offloadedLayers =
+                addLayerSnapshotsToCompositionArgs(*optionalOffloadedRefreshArgs, kCursorOnly);
+        offloadedCompositionFuture =
+                offloadGpuCompositedDisplays(std::move(*optionalOffloadedRefreshArgs),
+                                             offloadedLayers);
+    }
+
     mainThreadRefreshArgs.layersWithQueuedFrames.reserve(mLayersWithQueuedFrames.size());
     for (auto& [layer, _] : mLayersWithQueuedFrames) {
         if (const auto& layerFE =
@@ -3292,18 +3310,6 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
                                                 ui::UNASSIGNED_LAYER_STACK);
             }
         }
-    }
-
-    std::optional<std::future<void>> offloadedCompositionFuture;
-    std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers;
-    if (optionalOffloadedRefreshArgs) {
-        setVisibleRegionDirtyIfNeeded(*optionalOffloadedRefreshArgs);
-
-        offloadedLayers =
-                addLayerSnapshotsToCompositionArgs(*optionalOffloadedRefreshArgs, kCursorOnly);
-        offloadedCompositionFuture =
-                offloadGpuCompositedDisplays(std::move(*optionalOffloadedRefreshArgs),
-                                             offloadedLayers);
     }
 
     mCompositionEngine->present(mainThreadRefreshArgs);
@@ -4150,9 +4156,6 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
             connectionType == ui::DisplayConnectionType::Internal;
     state.isProtected = true;
     state.displayName = std::move(info.name);
-    state.maxLayerPictureProfiles = getHwComposer().getMaxLayerPictureProfiles(displayId);
-    state.hasPictureProcessing =
-            getHwComposer().hasDisplayCapability(displayId, DisplayCapability::PICTURE_PROCESSING);
     mCurrentState.displays.add(token, state);
     ALOGI("Connecting %s", displayString);
     return activeModeId;
@@ -4341,6 +4344,8 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     std::optional<VirtualDisplayIdVariant> virtualDisplayIdVariantOpt;
     if (const auto& physical = state.physical) {
         builder.setId(physical->id);
+        builder.setMaxLayerPictureProfiles(
+                getHwComposer().getMaxLayerPictureProfiles(physical->id));
     } else {
         /* QTI_BEGIN */
         auto qtiVirtualDisplayId =
@@ -4358,8 +4363,6 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     builder.setPixels(resolution);
     builder.setIsSecure(state.isSecure);
     builder.setIsProtected(state.isProtected);
-    builder.setHasPictureProcessing(state.hasPictureProcessing);
-    builder.setMaxLayerPictureProfiles(state.maxLayerPictureProfiles);
     builder.setPowerAdvisor(mPowerAdvisor.get());
     builder.setName(state.displayName);
     auto compositionDisplay = getCompositionEngine().createDisplay(builder.build());

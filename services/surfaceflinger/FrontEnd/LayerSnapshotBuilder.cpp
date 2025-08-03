@@ -18,8 +18,6 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 #include "FrontEnd/LayerSnapshot.h"
 #include "ui/Transform.h"
-#undef LOG_TAG
-#define LOG_TAG "SurfaceFlinger"
 
 #include <numeric>
 #include <optional>

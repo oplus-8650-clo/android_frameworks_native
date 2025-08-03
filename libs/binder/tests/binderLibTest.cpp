@@ -56,6 +56,7 @@
 
 #include "../Utils.h"
 #include "../binder_module.h"
+#include "binderKernelRpcCommon.h"
 
 using namespace android;
 using namespace android::binder::impl;
@@ -1176,6 +1177,34 @@ TEST_F(BinderLibTest, CoalesceFreezeCallbacksWhenListenerIsFrozen) {
         EXPECT_TRUE(events[0]);
     }
 }
+
+TEST(Parcel, ValidateReadFds) {
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    readFdsTest(p1, fd);
+    close(fd);
+}
+
+TEST(Parcel, ValidateReadOverFds) {
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    readOverFdsTest(p1, fd, sizeof(flat_binder_object));
+    close(fd);
+}
+
+#if !defined(__TRUSTY__)
+TEST(Parcel, ValidateReadBinders) {
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    readBindersTest(p1, b1);
+}
+
+TEST(Parcel, ValidateReadOverBinders) {
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    readOverBindersTest(p1, b1, sizeof(flat_binder_object));
+}
+#endif // !defined(__TRUSTY__)
 
 TEST_F(BinderLibTest, PassFile) {
     int ret;

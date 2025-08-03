@@ -42,6 +42,7 @@
 #include <trusty/tipc.h>
 #endif // BINDER_RPC_TO_TRUSTY_TEST
 
+#include "../OS.h"
 #include "../RpcWireFormat.h"
 #include "../Utils.h"
 #include "binderRpcTestCommon.h"
@@ -601,6 +602,35 @@ TEST_P(BinderRpc, OnewayStressTest) {
     saturateThreadPool(kNumServerThreads, proc.rootIface);
 }
 
+TEST_P(BinderRpc, OnewayStressTestWithIncomingThread) {
+    if (clientOrServerSingleThreaded()) {
+        GTEST_SKIP() << "This test requires multiple threads";
+    }
+
+    constexpr size_t kNumClientThreads = 10;
+    constexpr size_t kNumServerThreads = 10;
+    constexpr size_t kNumCalls = 1000;
+
+    auto proc = createRpcTestSocketServerProcess(
+            {.numMaxThreads = kNumServerThreads, .numIncomingConnectionsBySession = {1}});
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < kNumClientThreads; i++) {
+        threads.push_back(std::thread([&] {
+            for (size_t j = 0; j < kNumCalls; j++) {
+                EXPECT_OK(proc.rootIface->sendString("a"));
+            }
+        }));
+    }
+
+    for (auto& t : threads) t.join();
+
+    saturateThreadPool(kNumServerThreads, proc.rootIface);
+    // There is a race with a leaked binder and session when
+    // .numIncomingConnectionsBySession > 0, so force the shutdown
+    proc.forceShutdown();
+}
+
 TEST_P(BinderRpc, OnewayCallQueueingWithFds) {
     if (!supportsFdTransport()) {
         GTEST_SKIP() << "Would fail trivially (which is tested elsewhere)";
@@ -1112,7 +1142,8 @@ TEST_P(BinderRpc, AppendInvalidFd) {
                     {RpcSession::FileDescriptorTransportMode::UNIX},
     });
 
-    int badFd = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 0);
+    int badFd;
+    ASSERT_EQ(OK, binder::os::dupFileDescriptor(STDERR_FILENO, &badFd));
     ASSERT_NE(badFd, -1);
 
     // Close the file descriptor so it becomes invalid for dup

@@ -402,6 +402,9 @@ public:
                 mSmallAreaDetectionAllowMappings.getThresholdForAppId(appId).has_value();
     }
 
+    RefreshRateSelector* selectorPtrForLayerStack(ui::LayerStack) const REQUIRES(kMainThreadContext)
+            EXCLUDES(mDisplayLock);
+
     // Injects a delay that is a fraction of the predicted frame duration for the next frame.
     void injectPacesetterDelay(float frameDurationFraction) REQUIRES(kMainThreadContext) {
         mPacesetterFrameDurationFractionToSkip = frameDurationFraction;

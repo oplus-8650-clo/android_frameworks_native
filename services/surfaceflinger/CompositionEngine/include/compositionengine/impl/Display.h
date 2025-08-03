@@ -123,7 +123,6 @@ private:
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                                      ui::RenderIntent::COLORIMETRIC};
 
-    bool mHasPictureProcessing = false;
     int32_t mMaxLayerPictureProfiles = 0;
 };
 

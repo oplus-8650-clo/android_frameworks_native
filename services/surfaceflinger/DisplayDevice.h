@@ -355,8 +355,6 @@ struct DisplayDeviceState {
     bool isProtected = false;
     // Refer to DisplayDevice::mRequestedRefreshRate, for virtual display only
     Fps requestedRefreshRate;
-    int32_t maxLayerPictureProfiles = 0;
-    bool hasPictureProcessing = false;
     hardware::graphics::composer::hal::PowerMode initialPowerMode{
             hardware::graphics::composer::hal::PowerMode::OFF};
 

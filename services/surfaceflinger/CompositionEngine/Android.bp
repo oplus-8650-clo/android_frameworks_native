@@ -19,7 +19,6 @@ cc_defaults {
         "poweradvisor_deps",
     ],
     cflags: [
-        "-DLOG_TAG=\"CompositionEngine\"",
         "-DATRACE_TAG=ATRACE_TAG_GRAPHICS",
     ],
     shared_libs: [
