@@ -321,6 +321,20 @@ Status BackendUnifiedServiceManager::toBinderService(const ::std::string& name,
                         createServiceWithMetadata(nullptr, false));
                 return Status::ok();
             }
+            // Pre-flight check to handle transient connection errors.
+            os::ParcelFileDescriptor pfd;
+            if (Status status = accessor->addConnection(&pfd); !status.isOk()) {
+                if (status.serviceSpecificErrorCode() ==
+                    IAccessor::ERROR_FAILED_TO_CONNECT_TO_SOCKET) {
+                    ALOGW("Accessor failed with transient error, returning null to retry: %s",
+                          status.toString8().c_str());
+                    *_out = os::Service::make<os::Service::Tag::serviceWithMetadata>(
+                            createServiceWithMetadata(nullptr, false));
+                    return Status::ok();
+                }
+                ALOGE("Failed to add connection via accessor: %s", status.toString8().c_str());
+                return status;
+            }
             auto request = [=] {
                 os::ParcelFileDescriptor fd;
                 Status ret = accessor->addConnection(&fd);
@@ -332,7 +346,8 @@ Status BackendUnifiedServiceManager::toBinderService(const ::std::string& name,
                 }
             };
             auto session = RpcSession::make();
-            status_t status = session->setupPreconnectedClient(base::unique_fd{}, request);
+            status_t status =
+                    session->setupPreconnectedClient(base::unique_fd(pfd.release()), request);
             if (status != OK) {
                 ALOGE("Failed to set up preconnected binder RPC client: %s",
                       statusToString(status).c_str());

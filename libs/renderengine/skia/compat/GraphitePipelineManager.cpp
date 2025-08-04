@@ -16,8 +16,11 @@
 
 #include "GraphitePipelineManager.h"
 
+#include <common/trace.h>
+#include <ftl/enum.h>
 #include <include/core/SkData.h>
 #include <include/core/SkRefCnt.h>
+#include <include/core/SkSpan.h>
 #include <include/effects/SkRuntimeEffect.h>
 #include <include/gpu/graphite/GraphiteTypes.h>
 #include <include/gpu/graphite/PrecompileContext.h>
@@ -28,6 +31,7 @@
 #include <include/gpu/graphite/precompile/PrecompileShader.h>
 #include <include/gpu/graphite/vk/precompile/VulkanPrecompileShader.h>
 #include <include/gpu/vk/VulkanTypes.h>
+#include <pthread.h>
 
 #include <type_traits>
 
@@ -582,9 +586,59 @@ constexpr DrawTypeFlags kRRectAndNonAARect =
 
 // clang-format on
 
+std::vector<PrecompileSettings> chooseBlurPrecompileSettings(RuntimeEffectManager& effectManager) {
+    std::vector<PrecompileSettings> settingsList;
+    // Note: reorder these cases to match BlurAlgorithm's definition order as precompilation support
+    // for each algorithm is added. Each case should be added explicitly to ensure awareness of
+    // potential precompilation gaps when new blurring algorithms are added.
+    switch (effectManager.getChosenBlurAlgorithm()) {
+        case RenderEngine::BlurAlgorithm::None:
+            break;
+        case RenderEngine::BlurAlgorithm::KawaseDualFilter:
+            settingsList.push_back({KawaseBlurLowSrcSrcOver(effectManager),
+                                    DrawTypeFlags::kNonAAFillRect, kRGBA_1_D});
+            settingsList.push_back(
+                    {KawaseBlurHighSrc(effectManager), DrawTypeFlags::kNonAAFillRect, kRGBA_1_D});
+            break;
+        case RenderEngine::BlurAlgorithm::Gaussian:
+        case RenderEngine::BlurAlgorithm::Kawase:
+        case RenderEngine::BlurAlgorithm::KawaseDualFilterV2:
+            ALOGW("Pipeline precompilation for %s is not yet supported",
+                  ftl::enum_string_full(effectManager.getChosenBlurAlgorithm()).c_str());
+            break;
+    }
+
+    // Mix effect is used regardless of blurring algorithm (excluding BlurAlgorithm::None).
+    if (!settingsList.empty()) {
+        settingsList.push_back({BlurFilterMix(effectManager), kRRectAndNonAARect, kRGBA_1_D});
+    }
+    return settingsList;
+}
+
+void precompilePipelineCases(graphite::PrecompileContext* precompileContext,
+                             SkSpan<const PrecompileSettings> cases) {
+    SFTRACE_FORMAT("Precompiling %zu cases", cases.size());
+
+    for (size_t i = 0; i < cases.size(); i++) {
+        const PrecompileSettings& settings = cases[i];
+        Precompile(precompileContext, settings.fPaintOptions, settings.fDrawTypeFlags,
+                   settings.fRenderPassProps);
+
+        if (settings.fAnalyticClipping) {
+            DrawTypeFlags newFlags = settings.fDrawTypeFlags | DrawTypeFlags::kAnalyticClip;
+
+            Precompile(precompileContext, settings.fPaintOptions,
+                       static_cast<DrawTypeFlags>(newFlags), settings.fRenderPassProps);
+        }
+    }
+}
+
 void GraphitePipelineManager::PrecompilePipelines(
         std::unique_ptr<graphite::PrecompileContext> precompileContext,
         RuntimeEffectManager& effectManager) {
+    pthread_setname_np(pthread_self(), "Precompile"); // Limited to 15 characters
+    SFTRACE_CALL();
+
     // Easy references to SkRuntimeEffects for various LinearEffects that may be reused in multiple
     // precompilation scenarios.
     // clang-format off
@@ -760,18 +814,6 @@ void GraphitePipelineManager::PrecompilePipelines(
         { MouriMapChunk8x8Effect(effectManager),
           DrawTypeFlags::kNonAAFillRect,
           kRGBA16F_1_D_Linear },
-
-        { KawaseBlurLowSrcSrcOver(effectManager),
-          DrawTypeFlags::kNonAAFillRect,
-          kRGBA_1_D },
-
-        { KawaseBlurHighSrc(effectManager),
-          DrawTypeFlags::kNonAAFillRect,
-          kRGBA_1_D },
-
-        { BlurFilterMix(effectManager),
-          kRRectAndNonAARect,
-          kRGBA_1_D },
 
         // These two are solid colors drawn w/ a LinearEffect
         { LinearEffect(kUNKNOWN__SRGB__false__UNKNOWN__Shader,
@@ -1032,20 +1074,12 @@ void GraphitePipelineManager::PrecompilePipelines(
 
     // clang-format on
 
-    ALOGD("Pipeline precompilation started");
+    ALOGD("Precompiling blur pipeline cases for %s",
+          ftl::enum_string_full(effectManager.getChosenBlurAlgorithm()).c_str());
+    precompilePipelineCases(precompileContext.get(), chooseBlurPrecompileSettings(effectManager));
 
-    for (size_t i = 0; i < std::size(precompileCases); i++) {
-        const PrecompileSettings& settings = precompileCases[i];
-        Precompile(precompileContext.get(), settings.fPaintOptions, settings.fDrawTypeFlags,
-                   settings.fRenderPassProps);
-
-        if (settings.fAnalyticClipping) {
-            DrawTypeFlags newFlags = settings.fDrawTypeFlags | DrawTypeFlags::kAnalyticClip;
-
-            Precompile(precompileContext.get(), settings.fPaintOptions,
-                       static_cast<DrawTypeFlags>(newFlags), settings.fRenderPassProps);
-        }
-    }
+    ALOGD("Precompiling general pipeline cases");
+    precompilePipelineCases(precompileContext.get(), {precompileCases});
 
     ALOGD("Pipeline precompilation finished");
 }

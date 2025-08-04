@@ -1309,8 +1309,10 @@ void RefreshRateSelector::updateDisplayModes(DisplayModes modes, DisplayModeId a
                                    ftl::as_non_null(activeModeOpt->get())};
 
     const auto sortedModes = sortByRefreshRate(mDisplayModes);
-    mMinRefreshRateModeIt = sortedModes.front();
-    mMaxRefreshRateModeIt = sortedModes.back();
+    if (!FlagManager::getInstance().filter_refresh_rates_within_config_group()) {
+        mMinRefreshRateModeIt = sortedModes.front();
+        mMaxRefreshRateModeIt = sortedModes.back();
+    }
 
     // Reset the policy because the old one may no longer be valid.
     mDisplayManagerPolicy = {};
@@ -1460,6 +1462,17 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
     ALOGV("%s: %s ", __func__, policy->toString().c_str());
 
     const auto& defaultMode = mDisplayModes.get(policy->defaultMode)->get();
+    if (FlagManager::getInstance().filter_refresh_rates_within_config_group()) {
+        const auto sortedModes = sortByRefreshRate(mDisplayModes);
+        mMinRefreshRateModeIt = *std::find_if(sortedModes.cbegin(), sortedModes.cend(),
+                                              [group = defaultMode->getGroup()](const auto& it) {
+                                                  return it->second->getGroup() == group;
+                                              });
+        mMaxRefreshRateModeIt = *std::find_if(sortedModes.crbegin(), sortedModes.crend(),
+                                              [group = defaultMode->getGroup()](const auto& it) {
+                                                  return it->second->getGroup() == group;
+                                              });
+    }
 
     const auto filterRefreshRates = [&](const FpsRanges& ranges,
                                         const char* rangeName) REQUIRES(mLock) {

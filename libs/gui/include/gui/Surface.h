@@ -532,7 +532,7 @@ protected:
 
     void querySupportedTimestampsLocked() const;
 
-    void freeAllBuffersLocked() REQUIRES(mMutex);
+    void clearBuffersForDisconnectLocked() REQUIRES(mMutex);
     void freeUndequeuedBuffersLocked() REQUIRES(mMutex);
 
     int getSlotFromBufferLocked(const sp<GraphicBuffer>& buffer) const;
@@ -588,6 +588,17 @@ protected:
 #else
     BufferSlot mSlots[NUM_BUFFER_SLOTS];
 #endif
+
+    struct BufferHash {
+        std::size_t operator()(const sp<GraphicBuffer>& buffer) const {
+            return std::hash<GraphicBuffer*>{}(buffer.get());
+        }
+    };
+
+    // mLeakedBuffers holds references to buffers that were dequeued at the time of a disconnection.
+    // The contract for ANW's dequeue implies that a reference is held onto these until they're
+    // given back to the Surface via queue or cancel.
+    std::unordered_set<sp<GraphicBuffer>, BufferHash> mLeakedBuffers;
 
     // mReqWidth is the buffer width that will be requested at the next dequeue
     // operation. It is initialized to 1.
@@ -700,6 +711,7 @@ protected:
     // must be used from the lock/unlock thread
     sp<GraphicBuffer>           mLockedBuffer;
     sp<GraphicBuffer>           mPostedBuffer;
+    bool                        mIsConnected;
     bool                        mConnectedToCpu;
 
     // When a CPU producer is attached, this reflects the region that the

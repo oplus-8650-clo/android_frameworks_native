@@ -18,6 +18,7 @@
 #include <binder/unique_fd.h>
 #include <poll.h>
 
+#include "Constants.h"
 #include "FdTrigger.h"
 #include "RpcState.h"
 
@@ -60,8 +61,9 @@ status_t interruptableReadOrWrite(
         return OK;
     }
 
-    // size to break up message - this is not reset for this read/write operation.
-    constexpr size_t kChunkMax = 65536;
+    // We should never break up a message by default, but we do reduce chunk size on
+    // ENOMEM conditions.
+    constexpr size_t kChunkMax = binder::kRpcTransactionLimitBytes;
     const size_t kChunkMin = getpagesize(); // typical allocated granularity for sockets
     size_t chunkSize = kChunkMax;
 
@@ -81,9 +83,9 @@ status_t interruptableReadOrWrite(
 
         // This block dynamically adjusts packet sizes down to work around a
         // limitation in the vsock driver where large packets are sometimes
-        // dropped (b/419364025 b/399469406 b/421244320).
-        // TODO: only apply this workaround on vsock ???
-        // TODO: fix vsock
+        // dropped (b/419364025 b/399469406 b/421244320), though since this is
+        // fixed, it's only used in ENOMEM conditions to try to allocate
+        // smaller packets.
         {
             size_t chunkRemaining = chunkSize;
             int i = 0;

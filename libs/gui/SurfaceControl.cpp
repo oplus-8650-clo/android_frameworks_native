@@ -307,7 +307,7 @@ sp<SurfaceControl> SurfaceControl::getParentingLayer() {
     if (mBbqChild != nullptr) {
         return mBbqChild;
     }
-    return this;
+    return sp<SurfaceControl>::fromExisting(this);
 }
 
 uint64_t SurfaceControl::resolveFrameNumber(const std::optional<uint64_t>& frameNumber) {

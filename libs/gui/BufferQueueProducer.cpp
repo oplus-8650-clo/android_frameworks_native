@@ -109,7 +109,7 @@ BufferQueueProducer::BufferQueueProducer(const sp<BufferQueueCore>& core,
 // QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 #ifdef QTI_DISPLAY_EXTENSION
     if (!mQtiBQPExtn) {
-        mQtiBQPExtn = new libguiextension::QtiBufferQueueProducerExtension(this);
+        mQtiBQPExtn = sp<libguiextension::QtiBufferQueueProducerExtension>::make(this);
     }
 #endif
 // QTI_BEGIN: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
@@ -1591,7 +1591,7 @@ status_t BufferQueueProducer::disconnect(int api, DisconnectMode mode) {
                                 IInterface::asBinder(mCore->mLinkedToDeath);
                         // This can fail if we're here because of the death
                         // notification, but we just ignore it
-                        token->unlinkToDeath(static_cast<IBinder::DeathRecipient*>(this));
+                        token->unlinkToDeath(wp<IBinder::DeathRecipient>::fromExisting(this));
                     }
 #endif
                     mCore->mSharedBufferSlot =

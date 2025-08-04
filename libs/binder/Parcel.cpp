@@ -2020,45 +2020,49 @@ status_t Parcel::writeNoException()
     return status.writeToParcel(this);
 }
 
+status_t Parcel::validateRpcReadData(size_t upperBound) const {
+    if (upperBound == 0) return OK;
+    auto* rpcFields = maybeRpcFields();
+    LOG_ALWAYS_FATAL_IF(rpcFields == nullptr);
+    if (rpcFields->mObjectPositions.empty()) return OK;
+
+    const size_t savedDataPos = mDataPos;
+    auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
+
+    // lower bound of objects that could overlap with or start at/after mDataPos
+    size_t low = mDataPos < getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER)
+            ? 0
+            : mDataPos - getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER) + 1;
+    auto start = std::lower_bound(rpcFields->mObjectPositions.begin(),
+                                  rpcFields->mObjectPositions.end(), low);
+    if (start == rpcFields->mObjectPositions.end()) return OK;
+    auto end = std::upper_bound(start, rpcFields->mObjectPositions.end(), upperBound - 1);
+    for (auto it = start; it != end; it++) {
+        uint32_t pos = *it;
+        mDataPos = pos;
+        int32_t objectType = 0;
+        if (status_t status = readRpcObjectType(&objectType); status != OK) return status;
+        size_t objSize = getRpcObjectSize(objectType);
+        if ((pos <= savedDataPos && savedDataPos < pos + objSize) ||
+            (savedDataPos < pos && upperBound > pos)) {
+            if (!mServiceFuzzing) {
+                ALOGE("Validate read data failed! This would be reading the raw values of an "
+                      "object in the parcel (at position %u) that is marked for RPC. objSize: "
+                      "%zu, "
+                      "savedDataPos: %zu, upperBound: %zu",
+                      pos, objSize, savedDataPos, upperBound);
+            }
+            return PERMISSION_DENIED;
+        }
+    }
+    return OK;
+}
+
 status_t Parcel::validateReadData(size_t upperBound) const
 {
     const auto* kernelFields = maybeKernelFields();
     if (kernelFields == nullptr) {
-        if (upperBound == 0) return OK;
-        auto* rpcFields = maybeRpcFields();
-        LOG_ALWAYS_FATAL_IF(rpcFields == nullptr);
-        if (rpcFields->mObjectPositions.empty()) return OK;
-
-        const size_t savedDataPos = mDataPos;
-        auto scopeGuard = make_scope_guard([&]() { mDataPos = savedDataPos; });
-
-        // lower bound of objects that could overlap with or start at/after mDataPos
-        size_t low = mDataPos < getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER)
-                ? 0
-                : mDataPos - getRpcObjectSize(RpcFields::ObjectType::TYPE_BINDER) + 1;
-        auto start = std::lower_bound(rpcFields->mObjectPositions.begin(),
-                                      rpcFields->mObjectPositions.end(), low);
-        if (start == rpcFields->mObjectPositions.end()) return OK;
-        auto end = std::upper_bound(start, rpcFields->mObjectPositions.end(), upperBound - 1);
-        for (auto it = start; it != end; it++) {
-            uint32_t pos = *it;
-            mDataPos = pos;
-            int32_t objectType = 0;
-            if (status_t status = readRpcObjectType(&objectType); status != OK) return status;
-            size_t objSize = getRpcObjectSize(objectType);
-            if ((pos <= savedDataPos && savedDataPos < pos + objSize) ||
-                (savedDataPos < pos && upperBound > pos)) {
-                if (!mServiceFuzzing) {
-                    ALOGE("Validate read data failed! This would be reading the raw values of an "
-                          "object in the parcel (at position %u) that is marked for RPC. objSize: "
-                          "%zu, "
-                          "savedDataPos: %zu, upperBound: %zu",
-                          pos, objSize, savedDataPos, upperBound);
-                }
-                return PERMISSION_DENIED;
-            }
-        }
-        return OK;
+        return validateRpcReadData(upperBound);
     }
 
 #ifdef BINDER_WITH_KERNEL_IPC

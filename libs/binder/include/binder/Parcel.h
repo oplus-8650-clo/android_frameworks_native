@@ -700,6 +700,9 @@ private:
     void                scanForFds() const;
     status_t scanForBinders(bool* result) const;
 
+    // Only used to keep validateReadData function size down for performance
+    // in read* methods
+    status_t validateRpcReadData(size_t len) const;
     status_t            validateReadData(size_t len) const;
 
     void                updateWorkSourceRequestHeaderPosition() const;

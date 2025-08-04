@@ -186,6 +186,7 @@ filegroup {
         "DisplayHardware/HWComposer.cpp",
         "DisplayHardware/HidlComposerHal.cpp",
         "DisplayHardware/VirtualDisplay/SinkSurfaceHelper.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplayBufferSlotTracker.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplayThread.cpp",
         "DisplayHardware/VirtualDisplaySurface.cpp",

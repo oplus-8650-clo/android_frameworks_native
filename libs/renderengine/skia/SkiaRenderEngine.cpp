@@ -319,7 +319,9 @@ void SkiaRenderEngine::setEnableTracing(bool tracingEnabled) {
 
 SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
                                    BlurAlgorithm blurAlgorithm)
-      : RenderEngine(threaded), mDefaultPixelFormat(pixelFormat) {
+      : RenderEngine(threaded),
+        mRuntimeEffectManager(RuntimeEffectManager(blurAlgorithm)),
+        mDefaultPixelFormat(pixelFormat) {
     // Note: do not introduce further switching on flags here, or within individual blur filters.
     // BlurAlgorithm should be the only determining factor.
     switch (blurAlgorithm) {

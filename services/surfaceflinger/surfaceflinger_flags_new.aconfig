@@ -36,6 +36,13 @@ flag {
 } # adpf_sessionmanager
 
 flag {
+  name: "anchor_list"
+  namespace: "core_graphics"
+  description: "Use an anchor list for frame rate selection"
+  bug: "356986687"
+} # anchor_list
+
+flag {
   name: "arr_setframerate_api"
   namespace: "core_graphics"
   description: "New SDK Surface#setFrameRate API and Surface.FrameRateParams for Android 16"
@@ -150,6 +157,24 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # disable_transparent_region_hint
+
+flag {
+  name: "display_config_error_hal"
+  namespace: "core_graphics"
+  description: "Report HAL display configuration errors like modeset failure or link training failure"
+  bug: "374184110"
+  is_fixed_read_only: true
+} # display_config_error_hal
+
+flag {
+  name: "filter_refresh_rates_within_config_group"
+  namespace: "core_graphics"
+  description: "Filter refresh rates within a config group"
+  bug: "415374829"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # filter_refresh_rates_within_config_group
 
 flag {
   name: "flush_buffer_slots_to_uncache"

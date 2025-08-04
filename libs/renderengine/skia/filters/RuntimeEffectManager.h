@@ -19,6 +19,7 @@
 #include <android-base/thread_annotations.h>
 #include <ftl/enum.h>
 #include <math/mat4.h>
+#include <renderengine/RenderEngine.h>
 
 #include <cstddef>
 
@@ -61,12 +62,18 @@ public:
         kLast,
     };
 
+    RuntimeEffectManager(RenderEngine::BlurAlgorithm chosenBlurAlgorithm)
+          : mChosenBlurAlgorithm(chosenBlurAlgorithm) {}
+
     // Fatal error if a RuntimeEffect has already been created/stored for effectId, or if
     // RuntimeEffect compilation fails.
     // TODO(b/380159947): use macros to generate enum/name pair
     sk_sp<SkRuntimeEffect> createAndStoreRuntimeEffect(KnownId effectId,
                                                        const std::string& effectName,
                                                        const SkString& effectSkSL);
+
+    RenderEngine::BlurAlgorithm getChosenBlurAlgorithm() const { return mChosenBlurAlgorithm; }
+
     // Fatal error if a RuntimeEffect has not been created/stored yet for effectId.
     sk_sp<SkRuntimeEffect> getKnownRuntimeEffect(KnownId effectId);
 
@@ -100,6 +107,9 @@ private:
     static sk_sp<SkRuntimeEffect> buildLinearRuntimeEffect(
             const shaders::LinearEffect& linearEffect);
 
+    // Metadata
+    const RenderEngine::BlurAlgorithm mChosenBlurAlgorithm;
+    // State
     std::mutex mMutex;
     std::array<sk_sp<SkRuntimeEffect>, static_cast<size_t>(KnownId::kLast)> mKnownRuntimeEffects{};
     std::unordered_map<shaders::LinearEffect, sk_sp<SkRuntimeEffect>, shaders::LinearEffectHasher>
