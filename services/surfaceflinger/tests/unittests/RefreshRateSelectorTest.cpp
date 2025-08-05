@@ -231,6 +231,11 @@ protected:
                                  hal::VrrConfig{.minFrameIntervalNs =
                                                         static_cast<Fps>(60_Hz).getPeriodNsecs()},
                                  /*group=*/1));
+    static inline const ftl::NonNull<DisplayModePtr> kVrrMode90TE360 = ftl::as_non_null(
+            createVrrDisplayMode(kModeId90, 360_Hz,
+                                 hal::VrrConfig{.minFrameIntervalNs =
+                                                        static_cast<Fps>(90_Hz).getPeriodNsecs()},
+                                 /*group=*/2));
 
     // Test configurations.
     static inline const DisplayModes kModes_60 = makeModes(kMode60);
@@ -260,6 +265,8 @@ protected:
     static inline const DisplayModes kVrrMode_120 = makeModes(kVrrMode120TE240);
     static inline const DisplayModes kVrrModes_60_120 =
             makeModes(kVrrMode60TE120, kVrrMode120TE240);
+    static inline const DisplayModes kVrrModes_90_120 =
+            makeModes(kVrrMode90TE360, kVrrMode120TE240);
 
     // This is a typical TV configuration.
     static inline const DisplayModes kModes_24_25_30_50_60_Frac =
@@ -407,6 +414,7 @@ TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap) {
 }
 
 TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap_differentGroups) {
+    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, false);
     auto selector = createSelector(kModes_60_90_G1, kModeId60);
 
     const auto minRate = selector.getMinRefreshRateByPolicy();
@@ -428,6 +436,35 @@ TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap_differentGroup
     EXPECT_EQ(kMode90_G1, performanceRate);
     EXPECT_EQ(kMode90_G1, minRate90);
     EXPECT_EQ(kMode90_G1, performanceRate90);
+}
+
+TEST_P(RefreshRateSelectorTest, twoModes_storesONeRefreshRateMap_differentGroups) {
+    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, true);
+    auto selector = createSelector(kModes_60_90_G1, kModeId60);
+
+    auto minRate = selector.getMinRefreshRateByPolicy();
+    auto performanceRate = selector.getMaxSupportedRefreshRate();
+    auto minRateByPolicy = selector.getMinRefreshRateByPolicy();
+    auto performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
+
+    EXPECT_EQ(kMode60, minRate);
+    EXPECT_EQ(kMode60, minRateByPolicy);
+    EXPECT_EQ(kMode60, performanceRate);
+    EXPECT_EQ(kMode60, performanceRateByPolicy);
+
+    EXPECT_EQ(SetPolicyResult::Changed,
+              selector.setDisplayManagerPolicy({kModeId90, {60_Hz, 90_Hz}}));
+    selector.setActiveMode(kModeId90, 90_Hz);
+
+    minRate = selector.getMinRefreshRateByPolicy();
+    performanceRate = selector.getMaxSupportedRefreshRate();
+    minRateByPolicy = selector.getMinRefreshRateByPolicy();
+    performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
+
+    EXPECT_EQ(kMode90_G1, minRate);
+    EXPECT_EQ(kMode90_G1, minRateByPolicy);
+    EXPECT_EQ(kMode90_G1, performanceRate);
+    EXPECT_EQ(kMode90_G1, performanceRateByPolicy);
 }
 
 TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap_differentResolutions) {
@@ -4536,6 +4573,27 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesArr) {
     }
 
     const auto selector = createSelector(kVrrMode_120, kModeId120);
+
+    const std::vector<float> expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
+                                         30.0f,  26.666f, 24.0f, 21.818f, 20.0f};
+
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMultipleArrModes) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, true);
+    const auto selector = createSelector(kVrrModes_90_120, kModeId120);
 
     const std::vector<float> expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
                                          30.0f,  26.666f, 24.0f, 21.818f, 20.0f};

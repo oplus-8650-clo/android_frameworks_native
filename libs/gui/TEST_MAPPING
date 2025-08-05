@@ -5,6 +5,9 @@
     },
     {
       "path": "frameworks/native/services/surfaceflinger"
+    },
+    {
+      "path": "frameworks/base/tests/ChoreographerTests"
     }
   ],
   "presubmit": [

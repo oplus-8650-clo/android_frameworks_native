@@ -42,6 +42,7 @@
 #include "compositionengine/DisplaySurface.h"
 
 #include "SinkSurfaceHelper.h"
+#include "VirtualDisplayBufferSlotTracker.h"
 #include "VirtualDisplaySurface2.h"
 
 namespace android {
@@ -243,9 +244,7 @@ status_t VirtualDisplaySurface2::advanceFrame(float hdrSdrRatio) {
         sp<GraphicBuffer>& buffer = frameInfo.clientComposedBufferItem.mGraphicBuffer;
         sp<Fence>& fence = frameInfo.clientComposedBufferItem.mFence;
 
-        // TODO(b/340933138): use an LRU to track slots instead of constantly overwriting them.
-        uint32_t slot = 0;
-        bool shouldSendBuffer = true;
+        auto [shouldSendBuffer, slot] = mSlotTracker.getSlot(buffer);
         status =
                 mHWC.setClientTarget(halDisplayId, slot, fence,
                                      (shouldSendBuffer ? buffer : nullptr), dataspace, hdrSdrRatio);
