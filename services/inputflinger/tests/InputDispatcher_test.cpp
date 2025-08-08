@@ -28,6 +28,7 @@
 #include <android-base/silent_death_test.h>
 #include <android-base/stringprintf.h>
 #include <android-base/thread_annotations.h>
+#include <android/configuration.h>
 #include <binder/Binder.h>
 #include <com_android_input_flags.h>
 #include <fcntl.h>
@@ -12357,6 +12358,7 @@ protected:
         // The drag window covers the entire display
         mDragWindow = sp<FakeWindowHandle>::make(mApp, mDispatcher, "DragWindow", dragStartDisplay);
         mDragWindow->setTouchableRegion(Region{{0, 0, 0, 0}});
+        mDragWindow->setDisplayTopologyAware(true);
         mDispatcher->onWindowInfosChanged(
                 {{*mDragWindow->getInfo(), *mSpyWindow->getInfo(), *mWindow->getInfo(),
                   *mSecondWindow->getInfo(), *mWindowOnSecondDisplay->getInfo()},
@@ -15162,20 +15164,18 @@ INSTANTIATE_TEST_SUITE_P(WithAndWithoutTransfer, TransferOrDontTransferFixture, 
 
 class InputDispatcherConnectedDisplayTest : public InputDispatcherDragTests {
 protected:
-    constexpr static int DENSITY_MEDIUM = 160;
-
     const DisplayTopologyGraph mTopology =
             DisplayTopologyGraph::create(/*primaryDisplayId=*/DISPLAY_ID,
                                          /*topologyGraph=*/
                                          {{DISPLAY_ID,
                                            {{{SECOND_DISPLAY_ID, DisplayTopologyPosition::TOP,
                                               0.0f}},
-                                            DENSITY_MEDIUM,
+                                            ACONFIGURATION_DENSITY_MEDIUM,
                                             FloatRect(0, -500, 500, 0)}},
                                           {SECOND_DISPLAY_ID,
                                            {{{DISPLAY_ID, DisplayTopologyPosition::BOTTOM, 0.0f}},
-                                            DENSITY_MEDIUM,
-                                            FloatRect(0, 0, 500, 5000)}}})
+                                            ACONFIGURATION_DENSITY_MEDIUM,
+                                            FloatRect(0, 0, 500, 500)}}})
                     .value();
 
     void SetUp() override {
@@ -15188,68 +15188,88 @@ protected:
 
         mDispatcher->setDisplayTopology(mTopology);
     }
+
+    void testMultiDisplayMouseGesture() {
+        // pointer-down
+        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
+                                          .displayId(DISPLAY_ID)
+                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                                          .build());
+        mWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID),
+                                          WithRawCoords(60, 60)));
+
+        mDispatcher->notifyMotion(
+                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
+                        .displayId(DISPLAY_ID)
+                        .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                        .build());
+        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
+                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
+
+        // pointer-move
+        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                                          .displayId(DISPLAY_ID)
+                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                                          .build());
+        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
+
+        // pointer-move with different display, by default windows are not topology aware and
+        // receive events as if they were in the same display.
+        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                                          .displayId(SECOND_DISPLAY_ID)
+                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                                          .build());
+        // events should be delivered with the second displayId and in corresponding coordinate
+        // space.
+        // The second display is in ROT_270 orientation, so the input coordinates are transformed
+        // accordingly (70, 70) -> (70, 430)
+        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                          WithDisplayId(SECOND_DISPLAY_ID),
+                                          WithRawCoords(70, 430)));
+
+        // pointer-up
+        mDispatcher->notifyMotion(
+                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                        .displayId(SECOND_DISPLAY_ID)
+                        .buttonState(0)
+                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                        .build());
+        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+                                          WithDisplayId(SECOND_DISPLAY_ID),
+                                          WithRawCoords(70, 430)));
+
+        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
+                                          .displayId(SECOND_DISPLAY_ID)
+                                          .buttonState(0)
+                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(430))
+                                          .build());
+        mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
+    }
 };
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGesture) {
     SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
+    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
 
-    // pointer-down
-    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
-                                      .displayId(DISPLAY_ID)
-                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                      .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                      .build());
-    mWindow->consumeMotionEvent(
-            AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
+    // Only the windows that are topology aware receive the cross display gesture.
+    mWindow->setDisplayTopologyAware(true);
+    updateWindowInfos();
 
-    mDispatcher->notifyMotion(
-            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
-                    .displayId(DISPLAY_ID)
-                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                    .build());
-    mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
-                                      WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
+    testMultiDisplayMouseGesture();
+}
 
-    // pointer-move
-    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                      .displayId(DISPLAY_ID)
-                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                      .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                      .build());
-    mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                      WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
+TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGestureWithoutTopologyAwareFlag) {
+    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
+    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, false);
 
-    // pointer-move with different display
-    // TODO (b/383092013): by default windows will not be topology aware and receive events as it
-    // was in the same display. This behaviour has not been implemented yet.
-    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                      .displayId(SECOND_DISPLAY_ID)
-                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                      .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                                      .build());
-    // events should be delivered with the second displayId and in corrosponding coordinate space
-    mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                      WithDisplayId(SECOND_DISPLAY_ID), WithRawCoords(70, 430)));
-
-    // pointer-up
-    mDispatcher->notifyMotion(
-            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
-                    .displayId(SECOND_DISPLAY_ID)
-                    .buttonState(0)
-                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                    .build());
-    mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
-                                      WithDisplayId(SECOND_DISPLAY_ID), WithRawCoords(70, 430)));
-
-    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
-                                      .displayId(SECOND_DISPLAY_ID)
-                                      .buttonState(0)
-                                      .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                                      .build());
-    mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
+    testMultiDisplayMouseGesture();
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrimaryDisplay) {
@@ -15434,5 +15454,288 @@ TEST_F(InputDispatcherConnectedDisplayPointerInWindowTest, MouseOnWindowOnNonPri
     ASSERT_TRUE(mDispatcher->isPointerInWindow(mWindowOnSecondDisplay->getToken(),
                                                SECOND_DISPLAY_ID, DEVICE_ID, /*pointerId=*/0));
 }
+
+struct TestCoords {
+    float2 original;
+    float2 expected;
+    float2 expectedRaw;
+};
+
+using InputDispatcherCrossDisplayGestureTestFixtureParam =
+        std::tuple<std::string_view /*name*/, ui::Rotation /*sourceDisplayOrientation*/,
+                   ui::Rotation /*destinationDisplayOrientation*/, int32_t /*sourceDisplayDensity*/,
+                   int32_t /*destinationDisplayDensity*/, TestCoords /*sourceDisplayCoords*/,
+                   TestCoords /*destinationDisplayCoords*/>;
+
+class InputDispatcherCrossDisplayGestureTestFixture
+      : public InputDispatcherTest,
+        public testing::WithParamInterface<InputDispatcherCrossDisplayGestureTestFixtureParam> {
+protected:
+    static constexpr int32_t DISPLAY_HEIGHT = 500;
+    static constexpr int32_t DISPLAY_WIDTH = 1000;
+    static constexpr int32_t DISPLAY_OFFSET = 100;
+
+    std::vector<gui::DisplayInfo> mDisplayInfos;
+    std::vector<gui::WindowInfo> mWindowInfos;
+
+    gui::DisplayInfo addDisplay(ui::LogicalDisplayId displayId, ui::Rotation rotation) {
+        const bool isRotated = rotation == ui::ROTATION_90 || rotation == ui::ROTATION_270;
+        const int32_t logicalDisplayWidth = isRotated ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
+        const int32_t logicalDisplayHeight = isRotated ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
+        const ui::Transform displayTransform(ui::Transform::toRotationFlags(rotation),
+                                             logicalDisplayWidth, logicalDisplayHeight);
+
+        gui::DisplayInfo displayInfo;
+        displayInfo.displayId = displayId;
+        displayInfo.transform = displayTransform;
+        displayInfo.logicalWidth = logicalDisplayWidth;
+        displayInfo.logicalHeight = logicalDisplayHeight;
+        mDisplayInfos.push_back(displayInfo);
+        return displayInfo;
+    }
+
+    sp<FakeWindowHandle> addWindow(const gui::DisplayInfo& displayInfo) {
+        // Create a window with its bounds determined in the logical display.
+        const Rect frameInLogicalDisplay(100, 100, 400, 400);
+        const Rect frameInDisplay =
+                displayInfo.transform.inverse().transform(frameInLogicalDisplay);
+        sp<FakeWindowHandle> window =
+                sp<FakeWindowHandle>::make(std::make_shared<FakeApplicationHandle>(), mDispatcher,
+                                           "Test Window", displayInfo.displayId);
+        window->setFrame(frameInDisplay, displayInfo.transform);
+        mWindowInfos.push_back(*window->getInfo());
+        return window;
+    }
+
+    void updateWindowInfos() {
+        mDispatcher->onWindowInfosChanged({mWindowInfos, mDisplayInfos, 0, 0});
+    }
+
+    float pxToDp(int px, int dpi) {
+        return static_cast<float>(px * ACONFIGURATION_DENSITY_MEDIUM) / static_cast<float>(dpi);
+    }
+};
+
+TEST_P(InputDispatcherCrossDisplayGestureTestFixture, InputDispatcherCrossDisplayGestureTest) {
+    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
+    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
+
+    const auto& [_, sourceDisplayOrientation, destinationDisplayOrientation, sourceDisplayDensity,
+                 destinationDisplayDensity, sourceDisplayCoords, destinationDisplayCoords] =
+            GetParam();
+
+    // Create two displays to be used in the topology.
+    const gui::DisplayInfo displayInfo = addDisplay(DISPLAY_ID, sourceDisplayOrientation);
+    sp<FakeWindowHandle> window = addWindow(displayInfo);
+
+    addDisplay(SECOND_DISPLAY_ID, destinationDisplayOrientation);
+    updateWindowInfos();
+
+    // Topology values are defined in DP units.
+    const bool isSourceDisplayRotated = sourceDisplayOrientation == ui::ROTATION_90 ||
+            sourceDisplayOrientation == ui::ROTATION_270;
+    const int32_t sourceDisplayLogicalWidthDp =
+            pxToDp(isSourceDisplayRotated ? DISPLAY_HEIGHT : DISPLAY_WIDTH, sourceDisplayDensity);
+    const int32_t sourceDisplayLogicalHeightDp =
+            pxToDp(isSourceDisplayRotated ? DISPLAY_WIDTH : DISPLAY_HEIGHT, sourceDisplayDensity);
+
+    const bool isDestinationDisplayRotated = destinationDisplayOrientation == ui::ROTATION_90 ||
+            destinationDisplayOrientation == ui::ROTATION_270;
+    const int32_t destinationDisplayLogicalWidthDp =
+            pxToDp(isDestinationDisplayRotated ? DISPLAY_HEIGHT : DISPLAY_WIDTH,
+                   destinationDisplayDensity);
+    const int32_t destinationDisplayLogicalHeightDp =
+            pxToDp(isDestinationDisplayRotated ? DISPLAY_WIDTH : DISPLAY_HEIGHT,
+                   destinationDisplayDensity);
+
+    mDispatcher->setDisplayTopology(
+            DisplayTopologyGraph::create(
+                    /*primaryDisplayId=*/DISPLAY_ID,
+                    /*graph=*/
+                    {{DISPLAY_ID,
+                      {.adjacentDisplays = {{SECOND_DISPLAY_ID, DisplayTopologyPosition::TOP,
+                                             DISPLAY_OFFSET}},
+                       .density = sourceDisplayDensity,
+                       .boundsInGlobalDp =
+                               FloatRect(-DISPLAY_OFFSET, destinationDisplayLogicalHeightDp,
+                                         destinationDisplayLogicalWidthDp - DISPLAY_OFFSET,
+                                         sourceDisplayLogicalHeightDp +
+                                                 destinationDisplayLogicalHeightDp)}},
+                     {SECOND_DISPLAY_ID,
+                      {.adjacentDisplays = {{DISPLAY_ID, DisplayTopologyPosition::BOTTOM,
+                                             -DISPLAY_OFFSET}},
+                       .density = destinationDisplayDensity,
+                       .boundsInGlobalDp = FloatRect(0, 0, destinationDisplayLogicalWidthDp,
+                                                     destinationDisplayLogicalHeightDp)}}})
+                    .value());
+
+    // pointer-down
+    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
+                                      .displayId(DISPLAY_ID)
+                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                      .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                                       .x(sourceDisplayCoords.original.x)
+                                                       .y(sourceDisplayCoords.original.y))
+                                      .build());
+    window->consumeMotionEvent(
+            AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID),
+                  WithRawCoords(sourceDisplayCoords.expectedRaw.x,
+                                sourceDisplayCoords.expectedRaw.y),
+                  WithCoords(sourceDisplayCoords.expected.x, sourceDisplayCoords.expected.y)));
+
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                     .x(sourceDisplayCoords.original.x)
+                                     .y(sourceDisplayCoords.original.y))
+                    .build());
+    window->consumeMotionEvent(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS), WithDisplayId(DISPLAY_ID),
+                  WithRawCoords(sourceDisplayCoords.expectedRaw.x,
+                                sourceDisplayCoords.expectedRaw.y),
+                  WithCoords(sourceDisplayCoords.expected.x, sourceDisplayCoords.expected.y)));
+
+    // pointer-move
+    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                                      .displayId(DISPLAY_ID)
+                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                      .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                                       .x(sourceDisplayCoords.original.x)
+                                                       .y(sourceDisplayCoords.original.y))
+                                      .build());
+    window->consumeMotionEvent(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE), WithDisplayId(DISPLAY_ID),
+                  WithRawCoords(sourceDisplayCoords.expectedRaw.x,
+                                sourceDisplayCoords.expectedRaw.y),
+                  WithCoords(sourceDisplayCoords.expected.x, sourceDisplayCoords.expected.y)));
+
+    // pointer-move with different display, by default windows are not be topology aware and receive
+    // events as it was in the same display.
+    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                                      .displayId(SECOND_DISPLAY_ID)
+                                      .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                                      .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                                       .x(destinationDisplayCoords.original.x)
+                                                       .y(destinationDisplayCoords.original.y))
+                                      .build());
+
+    // events should be delivered with the same displayId and coordinate space
+    window->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithDisplayId(DISPLAY_ID),
+                                     WithRawCoords(destinationDisplayCoords.expectedRaw.x,
+                                                   destinationDisplayCoords.expectedRaw.y),
+                                     WithCoords(destinationDisplayCoords.expected.x,
+                                                destinationDisplayCoords.expected.y)));
+
+    // pointer-up
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(0)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                     .x(destinationDisplayCoords.original.x)
+                                     .y(destinationDisplayCoords.original.y))
+                    .build());
+    window->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+                                     WithDisplayId(DISPLAY_ID),
+                                     WithRawCoords(destinationDisplayCoords.expectedRaw.x,
+                                                   destinationDisplayCoords.expectedRaw.y),
+                                     WithCoords(destinationDisplayCoords.expected.x,
+                                                destinationDisplayCoords.expected.y)));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
+                                      .displayId(SECOND_DISPLAY_ID)
+                                      .buttonState(0)
+                                      .pointer(PointerBuilder(0, ToolType::MOUSE)
+                                                       .x(destinationDisplayCoords.original.x)
+                                                       .y(destinationDisplayCoords.original.y))
+                                      .build());
+    window->consumeMotionUp(DISPLAY_ID);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        InputDispatcherTest, InputDispatcherCrossDisplayGestureTestFixture,
+        testing::Values(
+                // Note window is placed at (100, 100), non-raw coords will be offset
+                // by the equivalent amount.
+                std::make_tuple("UnrotatedDisplays",
+                                /*sourceDisplayOrientation*/ ui::ROTATION_0,
+                                /*destinationDisplayOrientation*/ ui::ROTATION_0,
+                                /*sourceDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*destinationDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*sourceDisplayCoords*/
+                                TestCoords{.original = vec2(150, 200),
+                                           .expected = vec2(50, 100),
+                                           .expectedRaw = vec2(150, 200)},
+                                /*destinationDisplayCoords*/
+                                TestCoords{.original = vec2(50, 400),
+                                           .expected = vec2(50, -200),
+                                           .expectedRaw = vec2(150, -100)}),
+                std::make_tuple("SourceDisplayRotated",
+                                /*sourceDisplayOrientation*/ ui::ROTATION_90,
+                                /*destinationDisplayOrientation*/ ui::ROTATION_0,
+                                /*sourceDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*destinationDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*sourceDisplayCoords*/
+                                TestCoords{.original = vec2(200, 350),
+                                           .expected = vec2(50, 100),
+                                           .expectedRaw = vec2(150, 200)},
+                                /*destinationDisplayCoords*/
+                                TestCoords{.original = vec2(50, 400),
+                                           .expected = vec2(50, -200),
+                                           .expectedRaw = vec2(150, -100)}),
+                std::make_tuple("DestinationDisplayRotated",
+                                /*sourceDisplayOrientation*/ ui::ROTATION_0,
+                                /*destinationDisplayOrientation*/ ui::ROTATION_90,
+                                /*sourceDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*destinationDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*sourceDisplayCoords*/
+                                TestCoords{.original = vec2(150, 200),
+                                           .expected = vec2(50, 100),
+                                           .expectedRaw = vec2(150, 200)},
+                                /*destinationDisplayCoords*/
+                                TestCoords{.original = vec2(900, 450),
+                                           .expected = vec2(50, -200),
+                                           .expectedRaw = vec2(150, -100)}),
+                std::make_tuple("BothDisplaysRotated",
+                                /*sourceDisplayOrientation*/ ui::ROTATION_90,
+                                /*destinationDisplayOrientation*/ ui::ROTATION_90,
+                                /*sourceDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*destinationDisplayDensity*/ ACONFIGURATION_DENSITY_MEDIUM,
+                                /*sourceDisplayCoords*/
+                                TestCoords{.original = vec2(200, 350),
+                                           .expected = vec2(50, 100),
+                                           .expectedRaw = vec2(150, 200)},
+                                /*destinationDisplayCoords*/
+                                TestCoords{.original = vec2(900, 450),
+                                           .expected = vec2(50, -200),
+                                           .expectedRaw = vec2(150, -100)}),
+                std::make_tuple(
+                        "UnrotatedDisplaysWithDifferentDensities",
+                        /*sourceDisplayOrientation*/ ui::ROTATION_0,
+                        /*destinationDisplayOrientation*/ ui::ROTATION_0,
+                        /*sourceDisplayDensity*/ 3 * ACONFIGURATION_DENSITY_MEDIUM,      // XXHIGH
+                        /*destinationDisplayDensity*/ 2 * ACONFIGURATION_DENSITY_MEDIUM, // XHIGH
+                        /*sourceDisplayCoords*/
+                        TestCoords{.original = vec2(150, 200),
+                                   .expected = vec2(50, 100),
+                                   .expectedRaw = vec2(150, 200)},
+                        /*destinationDisplayCoords*/
+                        TestCoords{.original = vec2(50, 400),
+                                   // expected values are same as UnrotatedDisplays, only
+                                   // the section that is part of destination display is
+                                   // scaled by the density scale i.e. 1/2 and the overall
+                                   // values scaled by the source display density i.e. 3
+                                   // (100, 100) offset fram rawCoords
+                                   .expected = vec2(275, -250),
+                                   // ((100 + 50/2) * 3, - (100/2) * 3)
+                                   .expectedRaw = vec2(375, -150)})),
+        [](const testing::TestParamInfo<InputDispatcherCrossDisplayGestureTestFixtureParam>& p) {
+            return std::string{std::get<0>(p.param)};
+        });
 
 } // namespace android::inputdispatcher

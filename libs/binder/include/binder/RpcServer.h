@@ -62,12 +62,9 @@ public:
     setupUnixDomainSocketBootstrapServer(binder::unique_fd serverFd);
 
     /**
-     * This represents a session for responses, e.g.:
+     * Creates an RPC server that binds to a Unix socket address |path|.
      *
-     *     process A serves binder a
-     *     process B opens a session to process A
-     *     process B makes binder b and sends it to A
-     *     A uses this 'back session' to send things back to B
+     * |path| must not be null.
      */
     [[nodiscard]] LIBBINDER_EXPORTED status_t setupUnixDomainServer(const char* path);
 

@@ -87,15 +87,12 @@ vec2 calculatePositionOnDestinationViewport(const DisplayViewport& destinationVi
     }
 }
 
-// The standardised medium display density for which 1 px  = 1 dp
-constexpr int32_t DENSITY_MEDIUM = ACONFIGURATION_DENSITY_MEDIUM;
-
-inline float pxToDp(int px, int dpi) {
-    return static_cast<float>(px * DENSITY_MEDIUM) / static_cast<float>(dpi);
+float pxToDp(int px, int dpi) {
+    return static_cast<float>(px * ACONFIGURATION_DENSITY_MEDIUM) / static_cast<float>(dpi);
 }
 
-inline int dpToPx(float dp, int dpi) {
-    return static_cast<int>((dp * dpi) / DENSITY_MEDIUM);
+int dpToPx(float dp, int dpi) {
+    return static_cast<int>((dp * dpi) / static_cast<float>(ACONFIGURATION_DENSITY_MEDIUM));
 }
 
 } // namespace

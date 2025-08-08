@@ -3023,8 +3023,16 @@ void InputDispatcher::DispatcherTouchState::addPointerWindowTarget(
         LOG(ERROR) << __func__ << ": Mismatch! it->globalScaleFactor=" << it->globalScaleFactor
                    << ", windowInfo->globalScaleFactor=" << windowInfo.globalScaleFactor;
     }
-
-    Result<void> result = it->addPointers(pointerIds, windowInfo.transform);
+    ui::Transform transform = windowInfo.transform;
+    if (input_flags::use_topology_aware_flag() &&
+        !windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE) &&
+        pointerDisplayId.has_value() && windowInfo.displayId != pointerDisplayId.value()) {
+        transform = transform *
+                (mWindowInfos.getDisplayTransform(windowInfo.displayId).inverse() *
+                 mWindowInfos.getCrossDisplayTransform(/*sourceDisplay=*/pointerDisplayId.value(),
+                                                       /*destinationDisplay=*/windowInfo.displayId));
+    }
+    Result<void> result = it->addPointers(pointerIds, transform);
     if (!result.ok()) {
         dump();
         LOG(FATAL) << result.error().message();
@@ -3466,9 +3474,23 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                 }
 
                 dispatchEntry->resolvedMotionFlags = resolvedFlags;
-                if (resolvedAction != motionEntry.action) {
-                    std::optional<std::vector<PointerProperties>> usingProperties;
+                bool shouldCreateNewMotionEntry = resolvedAction != motionEntry.action;
+
+                ui::LogicalDisplayId resolvedDisplayId = motionEntry.displayId;
+                if (input_flags::use_topology_aware_flag() && !connection->monitor) {
+                    const WindowInfo& windowInfo = *inputTarget.windowHandle->getInfo();
+                    if (motionEntry.displayId.isValid() &&
+                        motionEntry.displayId != windowInfo.displayId &&
+                        !windowInfo.inputConfig.test(
+                                gui::WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
+                        shouldCreateNewMotionEntry = true;
+                        resolvedDisplayId = windowInfo.displayId;
+                    }
+                }
+
+                if (shouldCreateNewMotionEntry) {
                     std::optional<std::vector<PointerCoords>> usingCoords;
+                    std::optional<std::vector<PointerProperties>> usingProperties;
                     if (resolvedAction == AMOTION_EVENT_ACTION_HOVER_EXIT ||
                         resolvedAction == AMOTION_EVENT_ACTION_CANCEL) {
                         // This is a HOVER_EXIT or an ACTION_CANCEL event that was synthesized by
@@ -3492,7 +3514,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                         auto newEntry = std::make_shared<
                                 MotionEntry>(mIdGenerator.nextId(), motionEntry.injectionState,
                                              motionEntry.eventTime, motionEntry.deviceId,
-                                             motionEntry.source, motionEntry.displayId,
+                                             motionEntry.source, resolvedDisplayId,
                                              motionEntry.policyFlags, resolvedAction,
                                              motionEntry.actionButton, resolvedFlags,
                                              motionEntry.metaState, motionEntry.buttonState,
@@ -5234,8 +5256,17 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
     if (InputFlags::connectedDisplaysCursorEnabled() && pointerDisplayId.has_value() &&
         *pointerDisplayId != windowInfo.displayId) {
         // Sending pointer to a different display than the window. This is a
-        // cross-display drag gesture, so always use the new display's transform.
-        return getDisplayTransform(*pointerDisplayId);
+        // cross-display drag gesture, use the new display's transform if window is topology aware.
+        // Otherwise use the window's display coordinate space.
+        if (!input_flags::use_topology_aware_flag() ||
+            windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
+            return getDisplayTransform(*pointerDisplayId);
+        } else {
+            // If the window is not topology aware it will receive event in its own display's
+            // coordinate space.
+            return getCrossDisplayTransform(/*sourceDisplay=*/pointerDisplayId.value(),
+                                            /*destinationDisplay=*/windowInfo.displayId);
+        }
     }
     // If the window has a cloneLayerStackTransform, always use it as the transform for the "getRaw"
     // APIs. If not, fall back to using the DisplayInfo transform of the window's display
@@ -5275,6 +5306,13 @@ bool InputDispatcher::DispatcherWindowInfo::windowAcceptsTouchAt(const gui::Wind
         return false;
     }
     return true;
+}
+
+ui::Transform InputDispatcher::DispatcherWindowInfo::getCrossDisplayTransform(
+        ui::LogicalDisplayId sourceDisplay, ui::LogicalDisplayId destinationDisplay) const {
+    const ui::Transform sourceTransform = getDisplayTransform(sourceDisplay);
+    return mTopology.globalDpToLocalPxTransform(destinationDisplay) *
+            (mTopology.localPxToGlobalDpTransform(sourceDisplay) * sourceTransform);
 }
 
 ui::LogicalDisplayId InputDispatcher::DispatcherWindowInfo::getPrimaryDisplayId(
