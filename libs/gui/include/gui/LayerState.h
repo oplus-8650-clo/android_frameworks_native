@@ -342,6 +342,11 @@ struct layer_state_t {
             layer_state_t::eStretchChanged | layer_state_t::eBorderSettingsChanged |
             layer_state_t::eBoxShadowSettingsChanged;
 
+    // Changes that affect the frame rate
+    static constexpr uint64_t FRAME_RATE_CHANGES = layer_state_t::eFrameRateCategoryChanged |
+            layer_state_t::eFrameRateSelectionStrategyChanged |
+            layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFrameRateChanged;
+
     bool hasValidBuffer() const;
     void sanitize(int32_t permissions);
 

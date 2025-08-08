@@ -577,6 +577,15 @@ private:
 
     // Returns the range of supported frame rates.
     FpsRange getSupportedFrameRateRangeLocked() const REQUIRES(mLock);
+
+    // The number of frame rates to be supported when using frame rate override for ARR.
+    static constexpr size_t kNumFrameRates = 15;
+
+    // A list of frame rates to be used for ARR.
+    // RefreshRateSelector will select that closet possible frame rates from the list
+    // and pad it to fill the gaps until it reaches kNumFrameRates.
+    const std::vector<Fps> kFpsAnchorList = {1_Hz,  2_Hz,  5_Hz,  10_Hz, 15_Hz,
+                                             20_Hz, 24_Hz, 30_Hz, 48_Hz, 60_Hz};
 };
 
 } // namespace android::scheduler

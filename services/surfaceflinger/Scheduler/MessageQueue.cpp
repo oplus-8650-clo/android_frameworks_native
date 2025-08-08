@@ -235,4 +235,8 @@ void MessageQueue::qtiScheduleFrameImmed() {
 }
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+void MessageQueue::scheduleImmediateFrame() {
+    mHandler->dispatchFrame(VsyncId(), TimePoint::now());
+}
+
 } // namespace android::impl
