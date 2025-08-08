@@ -237,6 +237,18 @@ protected:
                                                         static_cast<Fps>(90_Hz).getPeriodNsecs()},
                                  /*group=*/2));
 
+    static inline const ftl::NonNull<DisplayModePtr> kVrrMode120TE360 = ftl::as_non_null(
+            createVrrDisplayMode(kModeId120, 360_Hz,
+                                 hal::VrrConfig{
+                                         .minFrameIntervalNs =
+                                                 static_cast<Fps>(120_Hz).getPeriodNsecs()}));
+
+    static inline const ftl::NonNull<DisplayModePtr> kVrrMode120TE480 = ftl::as_non_null(
+            createVrrDisplayMode(kModeId120, 480_Hz,
+                                 hal::VrrConfig{
+                                         .minFrameIntervalNs =
+                                                 static_cast<Fps>(120_Hz).getPeriodNsecs()}));
+
     // Test configurations.
     static inline const DisplayModes kModes_60 = makeModes(kMode60);
     static inline const DisplayModes kModes_35_60_90 = makeModes(kMode35, kMode60, kMode90);
@@ -267,6 +279,8 @@ protected:
             makeModes(kVrrMode60TE120, kVrrMode120TE240);
     static inline const DisplayModes kVrrModes_90_120 =
             makeModes(kVrrMode90TE360, kVrrMode120TE240);
+    static inline const DisplayModes kVrrMode_120_360 = makeModes(kVrrMode120TE360);
+    static inline const DisplayModes kVrrMode_120_480 = makeModes(kVrrMode120TE480);
 
     // This is a typical TV configuration.
     static inline const DisplayModes kModes_24_25_30_50_60_Frac =
@@ -1332,7 +1346,6 @@ TEST_P(RefreshRateSelectorTest, getMaxRefreshRatesByPolicy) {
     auto selector = createSelector(kModes_30_60_90, kModeId60);
     const auto refreshRates = selector.rankRefreshRates(selector.getActiveMode().getGroup(),
                                                         RefreshRateOrder::Descending);
-
     const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
     const auto expectedRefreshRates = enableFrameRateOverride
             ? std::vector<FrameRateMode>{{90_Hz, kMode90},
@@ -4502,8 +4515,14 @@ TEST_P(RefreshRateSelectorTest, renderFrameRatesForVrr) {
               selector.setDisplayManagerPolicy(
                       {kModeId120, {only120, range120}, {only120, range120}}));
 
-    std::vector<Fps> expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz,
-                                 40_Hz, 48_Hz,     60_Hz, 80_Hz,     120_Hz};
+    std::vector<Fps> expected;
+    if (FlagManager::getInstance().anchor_list()) {
+        expected = {1_Hz,  2_Hz,      5_Hz,  10_Hz, 15_Hz, 20_Hz, 24_Hz, 26.666_Hz,
+                    30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz, 80_Hz, 120_Hz};
+    } else {
+        expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz,
+                    40_Hz, 48_Hz,     60_Hz, 80_Hz,     120_Hz};
+    }
 
     auto primaryRefreshRates = selector.getPrimaryFrameRates();
     ASSERT_EQ(expected.size(), primaryRefreshRates.size());
@@ -4519,7 +4538,13 @@ TEST_P(RefreshRateSelectorTest, renderFrameRatesForVrr) {
               selector.setDisplayManagerPolicy(
                       {kModeId120, {range120, range90}, {range120, range90}}));
 
-    expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz, 80_Hz};
+    if (FlagManager::getInstance().anchor_list()) {
+        expected = {1_Hz,      2_Hz,  5_Hz,      10_Hz, 15_Hz, 20_Hz, 24_Hz,
+                    26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz, 80_Hz};
+    } else {
+        expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz,
+                    60_Hz, 80_Hz};
+    }
 
     primaryRefreshRates = selector.getPrimaryFrameRates();
     ASSERT_EQ(expected.size(), primaryRefreshRates.size());
@@ -4533,7 +4558,12 @@ TEST_P(RefreshRateSelectorTest, renderFrameRatesForVrr) {
     EXPECT_EQ(SetPolicyResult::Changed,
               selector.setDisplayManagerPolicy(
                       {kModeId120, {range120, range60}, {range120, range60}}));
-    expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz};
+    if (FlagManager::getInstance().anchor_list()) {
+        expected = {1_Hz,      2_Hz,  5_Hz,      10_Hz, 15_Hz, 20_Hz, 24_Hz,
+                    26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz};
+    } else {
+        expected = {20_Hz, 21.818_Hz, 24_Hz, 26.666_Hz, 30_Hz, 34.285_Hz, 40_Hz, 48_Hz, 60_Hz};
+    }
 
     primaryRefreshRates = selector.getPrimaryFrameRates();
     ASSERT_EQ(expected.size(), primaryRefreshRates.size());
@@ -4574,8 +4604,15 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesArr) {
 
     const auto selector = createSelector(kVrrMode_120, kModeId120);
 
-    const std::vector<float> expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
-                                         30.0f,  26.666f, 24.0f, 21.818f, 20.0f};
+    std::vector<float> expected;
+    if (FlagManager::getInstance().anchor_list()) {
+        expected = {120.0f,  80.0f, 60.0f,   48.0f, 40.0f,
+                    34.285f, 30.0f, 26.666f, 24.0f, 20.0f,
+                    15.0f,   10.0f, 5.0f,    2.0f,  1.0f};
+    } else {
+        expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
+                    30.0f,  26.666f, 24.0f, 21.818f, 20.0f};
+    }
 
     const auto allSupportedFrameRates = selector.getSupportedFrameRates();
     ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
@@ -4595,9 +4632,79 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMultipleArrModes) {
     SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, true);
     const auto selector = createSelector(kVrrModes_90_120, kModeId120);
 
-    const std::vector<float> expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
-                                         30.0f,  26.666f, 24.0f, 21.818f, 20.0f};
+    std::vector<float> expected;
+    if (FlagManager::getInstance().anchor_list()) {
+        expected = {120.0f,  80.0f, 60.0f,   48.0f, 40.0f,
+                    34.285f, 30.0f, 26.666f, 24.0f, 20.0f,
+                    15.0f,   10.0f, 5.0f,    2.0f,  1.0f};
+    } else {
+        expected = {120.0f, 80.0f,   60.0f, 48.0f,   40.0f, 34.285f,
+                    30.0f,  26.666f, 24.0f, 21.818f, 20.0f};
+    }
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
 
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesAnchorListArr240) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::anchor_list, true);
+
+    const auto selector = createSelector(kVrrMode_120, kModeId120);
+
+    const std::vector<float> expected = {120.0f,  80.0f, 60.0f,   48.0f, 40.0f,
+                                         34.286f, 30.0f, 26.667f, 24.0f, 20.0f,
+                                         15.0f,   10.0f, 5.0f,    2.0f,  1.0f};
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesAnchorListArr360) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::anchor_list, true);
+
+    const auto selector = createSelector(kVrrMode_120_360, kModeId120);
+
+    const std::vector<float> expected = {120.0f, 90.0f, 72.0f, 60.0f, 51.428f, 45.0f, 40.0f, 30.0f,
+                                         24.0f,  20.0f, 15.0f, 10.0f, 5.0f,    2.0f,  1.0f};
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesAnchorListArr480) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::anchor_list, true);
+
+    const auto selector = createSelector(kVrrMode_120_480, kModeId120);
+
+    const std::vector<float> expected = {120.0f, 96.0f, 80.0f, 68.5710f, 60.0f, 48.0f, 40.0f, 30.0f,
+                                         24.0f,  20.0f, 15.0f, 10.0f,    5.0f,  2.0f,  1.0f};
     const auto allSupportedFrameRates = selector.getSupportedFrameRates();
     ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
     constexpr float kEpsilon = 0.001f;

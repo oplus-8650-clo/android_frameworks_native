@@ -141,6 +141,7 @@ public:
     using Impl::getScheduledFrameResult;
     using Impl::scheduleConfigure;
     using Impl::scheduleFrame;
+    using Impl::scheduleImmediateFrame;
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     using Impl::qtiScheduleFrameImmed;

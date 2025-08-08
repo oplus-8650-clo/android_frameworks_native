@@ -30,14 +30,6 @@
 #include <mutex>
 #include <sstream>
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(GRAPHITE_RENDERENGINE) || \
-        COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(FORCE_COMPILE_GRAPHITE_RENDERENGINE)
-#define COMPILE_GRAPHITE_RENDERENGINE 1
-#else
-#define COMPILE_GRAPHITE_RENDERENGINE 0
-#endif
-
 using namespace android;
 using namespace android::renderengine;
 
@@ -351,14 +343,7 @@ void registerBenchmarks() {
          {RenderEngine::GraphicsApi::GL, RenderEngine::GraphicsApi::Vk}) {
         argBuilder.setGraphicsApi(graphicsApi);
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COMPILE_GRAPHITE_RENDERENGINE
-        const auto skiaBackends = {RenderEngine::SkiaBackend::Ganesh,
-                                   RenderEngine::SkiaBackend::Graphite};
-#else
-        const auto skiaBackends = {RenderEngine::SkiaBackend::Ganesh};
-#endif
-        for (RenderEngine::SkiaBackend skiaBackend : skiaBackends) {
+        for (RenderEngine::SkiaBackend skiaBackend : ftl::enum_range<RenderEngine::SkiaBackend>()) {
             argBuilder.setSkiaBackend(skiaBackend);
 
             // BM_homescreen_blur

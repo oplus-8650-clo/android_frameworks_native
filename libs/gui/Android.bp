@@ -575,6 +575,7 @@ qtidisplayextension_cc_library_static {
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     header_libs: [
+        "jni_headers",
         "libgui_aidl_headers",
     ],
     static_libs: [

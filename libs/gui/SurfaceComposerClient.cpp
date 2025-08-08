@@ -2789,6 +2789,7 @@ void SurfaceComposerClient::getDynamicDisplayInfoInternal(gui::DynamicDisplayInf
         outMode.sfVsyncOffset = mode.sfVsyncOffset;
         outMode.presentationDeadline = mode.presentationDeadline;
         outMode.group = mode.group;
+        outMode.outputType = static_cast<ui::OutputType>(mode.outputType);
         std::transform(mode.supportedHdrTypes.begin(), mode.supportedHdrTypes.end(),
                        std::back_inserter(outMode.supportedHdrTypes),
                        [](const int32_t& value) { return static_cast<ui::Hdr>(value); });

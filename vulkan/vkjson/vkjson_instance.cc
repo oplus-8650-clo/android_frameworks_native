@@ -611,6 +611,16 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     properties.pNext = &device.khr_driver_properties.driver_properties_khr;
   }
 
+  if (HasExtension("VK_KHR_external_fence_capabilities", device.extensions)) {
+    device.khr_external_fence_capabilities.reported = true;
+    device.khr_external_fence_capabilities.id_properties_khr.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+    device.khr_external_fence_capabilities.id_properties_khr.pNext =
+        properties.pNext;
+    properties.pNext =
+        &device.khr_external_fence_capabilities.id_properties_khr;
+  }
+
   if (HasExtension("VK_KHR_external_memory_capabilities", device.extensions)) {
     device.khr_external_memory_capabilities.reported = true;
     device.khr_external_memory_capabilities.id_properties_khr.sType =
@@ -619,6 +629,17 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
         properties.pNext;
     properties.pNext =
         &device.khr_external_memory_capabilities.id_properties_khr;
+  }
+
+  if (HasExtension("VK_KHR_external_semaphore_capabilities",
+                   device.extensions)) {
+    device.khr_external_semaphore_capabilities.reported = true;
+    device.khr_external_semaphore_capabilities.id_properties_khr.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+    device.khr_external_semaphore_capabilities.id_properties_khr.pNext =
+        properties.pNext;
+    properties.pNext =
+        &device.khr_external_semaphore_capabilities.id_properties_khr;
   }
 
   if (HasExtension("VK_KHR_fragment_shader_barycentric", device.extensions)) {

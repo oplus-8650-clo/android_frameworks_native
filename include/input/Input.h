@@ -1299,8 +1299,10 @@ enum class PointerCaptureMode : int32_t {
 struct PointerCaptureRequest {
 public:
     inline PointerCaptureRequest() : window(), mode(PointerCaptureMode::UNCAPTURED), seq(0) {}
-    inline PointerCaptureRequest(sp<IBinder> window, uint32_t seq)
-          : window(window), mode(PointerCaptureMode::ABSOLUTE), seq(seq) {}
+    inline PointerCaptureRequest(PointerCaptureMode mode, sp<IBinder> window, uint32_t seq)
+          : window(window), mode(mode), seq(seq) {
+        LOG_ALWAYS_FATAL_IF(mode != PointerCaptureMode::UNCAPTURED && window == nullptr);
+    }
     inline bool operator==(const PointerCaptureRequest& other) const {
         return window == other.window && mode == other.mode && seq == other.seq;
     }

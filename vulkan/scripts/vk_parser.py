@@ -1040,7 +1040,7 @@ def extract_extension_struct_mapping(root: ET.Element, struct_to_type_map: Dict[
                     continue
 
                 # Process only relevant physical device structs not already added to the map
-                if type_name not in processed_structs and type_name in ALL_STRUCT_NAMES:
+                if type_name in ALL_STRUCT_NAMES:
                     if "Properties" not in type_name and "Features" not in type_name:
                         if type_name not in disabled_structs:
                             disabled_structs.append(type_name)

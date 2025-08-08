@@ -83,6 +83,7 @@ public:
     virtual void postMessageDelayed(sp<MessageHandler>&&, nsecs_t uptimeDelay) = 0;
     virtual void scheduleConfigure() = 0;
     virtual void scheduleFrame(Duration workDurationSlack = Duration::fromNs(0)) = 0;
+    virtual void scheduleImmediateFrame() = 0;
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     virtual void qtiScheduleFrameImmed() = 0;
@@ -166,6 +167,7 @@ public:
 
     void scheduleConfigure() override;
     void scheduleFrame(Duration workDurationSlack = Duration::fromNs(0)) override;
+    void scheduleImmediateFrame() override;
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     void qtiScheduleFrameImmed() override;

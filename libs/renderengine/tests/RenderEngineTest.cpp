@@ -45,14 +45,6 @@
 #include "../skia/SkiaVkRenderEngine.h"
 #include "../threaded/RenderEngineThreaded.h"
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(GRAPHITE_RENDERENGINE) || \
-        COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(FORCE_COMPILE_GRAPHITE_RENDERENGINE)
-#define COMPILE_GRAPHITE_RENDERENGINE 1
-#else
-#define COMPILE_GRAPHITE_RENDERENGINE 0
-#endif
-
 constexpr int DEFAULT_DISPLAY_WIDTH = 128;
 constexpr int DEFAULT_DISPLAY_HEIGHT = 256;
 constexpr int DEFAULT_DISPLAY_OFFSET = 64;
@@ -124,8 +116,6 @@ public:
     }
 };
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COMPILE_GRAPHITE_RENDERENGINE
 class GraphiteVkRenderEngineFactory : public RenderEngineFactory {
 public:
     std::string name() override { return "GraphiteVkRenderEngineFactory"; }
@@ -138,7 +128,6 @@ public:
         return renderengine::RenderEngine::SkiaBackend::Graphite;
     }
 };
-#endif
 
 class RenderEngineTest : public ::testing::TestWithParam<std::shared_ptr<RenderEngineFactory>> {
 public:
@@ -1405,15 +1394,10 @@ void RenderEngineTest::drawShadowWithoutCaster(const FloatRect& castingBounds,
     invokeDraw(settings, layers);
 }
 
-// TODO: b/341728634 - Clean up conditional compilation.
 INSTANTIATE_TEST_SUITE_P(PerRenderEngineType, RenderEngineTest,
                          testing::Values(std::make_shared<SkiaGLESRenderEngineFactory>(),
-                                         std::make_shared<GaneshVkRenderEngineFactory>()
-#if COMPILE_GRAPHITE_RENDERENGINE
-                                                 ,
-                                         std::make_shared<GraphiteVkRenderEngineFactory>()
-#endif
-                                                 ));
+                                         std::make_shared<GaneshVkRenderEngineFactory>(),
+                                         std::make_shared<GraphiteVkRenderEngineFactory>()));
 
 TEST_P(RenderEngineTest, drawLayers_noLayersToDraw) {
     if (!GetParam()->apiSupported()) {

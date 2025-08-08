@@ -33,11 +33,11 @@ use ffi::{
     AHardwareBuffer, AHardwareBuffer_Desc, AHardwareBuffer_Plane, AHardwareBuffer_Planes,
     AHardwareBuffer_readFromParcel, AHardwareBuffer_writeToParcel, ARect,
 };
-use std::ffi::c_void;
 use std::fmt::{self, Debug, Formatter};
 use std::mem::{forget, ManuallyDrop};
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::ptr::{self, null, null_mut, NonNull};
+use std::{ffi::c_void, rc::Rc};
 
 /// Wrapper around a C `AHardwareBuffer_Desc`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -349,15 +349,20 @@ impl HardwareBuffer {
             ffi::AHardwareBuffer_lockPlanes(self.0.as_ptr(), usage.0, fence, rect, &mut planes)
         };
         status_result(status)?;
+
+        // `AHardwareBuffer_unlock` unlocks all the planes together, so we use a shared guard.
+        let guard = Rc::new(HardwareBufferGuard {
+            buffer: self,
+            address: NonNull::new(planes.planes[0].data)
+                .expect("AHardwareBuffer_lockPlanes set a null plane data"),
+        });
         let plane_count = planes.planeCount.try_into().unwrap();
         Ok(planes.planes[..plane_count]
             .iter()
             .map(|plane| PlaneGuard {
-                guard: HardwareBufferGuard {
-                    buffer: self,
-                    address: NonNull::new(plane.data)
-                        .expect("AHardwareBuffer_lockAndGetInfo set a null outVirtualAddress"),
-                },
+                _guard: guard.clone(),
+                address: NonNull::new(plane.data)
+                    .expect("AHardwareBuffer_lockPlanes set a null plane data"),
                 pixel_stride: plane.pixelStride,
                 row_stride: plane.rowStride,
             })
@@ -566,7 +571,9 @@ pub struct LockedBufferInfo<'a> {
 #[derive(Debug)]
 pub struct PlaneGuard<'a> {
     /// The locked buffer guard.
-    pub guard: HardwareBufferGuard<'a>,
+    _guard: Rc<HardwareBufferGuard<'a>>,
+    /// The address of the buffer plane in memory.
+    pub address: NonNull<c_void>,
     /// The stride in bytes between the color channel for one pixel to the next pixel.
     pub pixel_stride: u32,
     /// The stride in bytes between rows in the buffer.
@@ -829,5 +836,30 @@ mod test {
         assert_eq!(info.bytes_per_pixel, 4);
         assert_eq!(info.stride, WIDTH * 4);
         drop(info);
+    }
+
+    #[test]
+    fn lock_planes() {
+        let buffer = HardwareBuffer::new(&HardwareBufferDescription::new(
+            1024,
+            512,
+            1,
+            AHardwareBuffer_Format::AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420,
+            AHardwareBuffer_UsageFlags::AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+            0,
+        ))
+        .expect("Failed to create buffer");
+
+        // SAFETY: No other threads or processes have access to the buffer.
+        let plane_guards = unsafe {
+            buffer.lock_planes(
+                AHardwareBuffer_UsageFlags::AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+
+        drop(plane_guards);
     }
 }

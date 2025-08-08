@@ -22,6 +22,7 @@
 #include <ftl/enum.h>
 #include <input/DisplayTopologyGraph.h>
 #include <input/PrintTools.h>
+#include <log/log_main.h>
 #include <ui/LogicalDisplayId.h>
 
 #include <algorithm>
@@ -170,6 +171,47 @@ std::string dumpTopologyGraphComponents(
 }
 
 } // namespace
+
+ui::Transform DisplayTopologyGraph::localPxToGlobalDpTransform(
+        ui::LogicalDisplayId displayId) const {
+    const auto displayPropertiesIt = graph.find(displayId);
+    LOG_ALWAYS_FATAL_IF(displayPropertiesIt == graph.end(), "Invalid display %d in %s",
+                        displayId.val(), __func__);
+    const auto& displayProperties = displayPropertiesIt->second;
+
+    // Scale to convert from px to DP.
+    const float pxToDpScaleFactor = static_cast<float>(ACONFIGURATION_DENSITY_MEDIUM) /
+            static_cast<float>(displayProperties.density);
+    ui::Transform pxToDpScaleTransform;
+    pxToDpScaleTransform.set(pxToDpScaleFactor, 0.0f, 0.0f, pxToDpScaleFactor);
+
+    // Translate origin from local to the topology origin to convert to the global coordinates.
+    const auto& displayBounds = displayProperties.boundsInGlobalDp;
+    ui::Transform localDpToGlobalDpTransform;
+    localDpToGlobalDpTransform.set(displayBounds.left, displayBounds.top);
+    return localDpToGlobalDpTransform * pxToDpScaleTransform;
+}
+
+ui::Transform DisplayTopologyGraph::globalDpToLocalPxTransform(
+        ui::LogicalDisplayId displayId) const {
+    const auto displayPropertiesIt = graph.find(displayId);
+    LOG_ALWAYS_FATAL_IF(displayPropertiesIt == graph.end(), "Invalid display %d in %s",
+                        displayId.val(), __func__);
+    const auto& displayProperties = displayPropertiesIt->second;
+
+    // Translate from the topology origin to the destination-display's origin.
+    const auto& displayBounds = displayProperties.boundsInGlobalDp;
+    ui::Transform globalDpToLocalDpTransform;
+    globalDpToLocalDpTransform.set(-displayBounds.left, -displayBounds.top);
+
+    // Scale to convert from dp to px.
+    const float dpToPxScaleFactor = static_cast<float>(displayProperties.density) /
+            static_cast<float>(ACONFIGURATION_DENSITY_MEDIUM);
+    ui::Transform dpToPxScaleTransform;
+    dpToPxScaleTransform.set(dpToPxScaleFactor, 0.0f, 0.0f, dpToPxScaleFactor);
+
+    return dpToPxScaleTransform * globalDpToLocalDpTransform;
+}
 
 std::string DisplayTopologyAdjacentDisplay::dump() const {
     std::string dump;

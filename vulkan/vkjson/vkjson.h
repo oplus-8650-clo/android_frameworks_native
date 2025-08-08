@@ -1553,8 +1553,26 @@ struct VkJsonKHRDynamicRenderingLocalRead {
       dynamic_rendering_local_read_features_khr;
 };
 
+struct VkJsonKHRExternalFenceCapabilities {
+  VkJsonKHRExternalFenceCapabilities() {
+    reported = false;
+    memset(&id_properties_khr, 0, sizeof(VkPhysicalDeviceIDPropertiesKHR));
+  }
+  bool reported;
+  VkPhysicalDeviceIDPropertiesKHR id_properties_khr;
+};
+
 struct VkJsonKHRExternalMemoryCapabilities {
   VkJsonKHRExternalMemoryCapabilities() {
+    reported = false;
+    memset(&id_properties_khr, 0, sizeof(VkPhysicalDeviceIDPropertiesKHR));
+  }
+  bool reported;
+  VkPhysicalDeviceIDPropertiesKHR id_properties_khr;
+};
+
+struct VkJsonKHRExternalSemaphoreCapabilities {
+  VkJsonKHRExternalSemaphoreCapabilities() {
     reported = false;
     memset(&id_properties_khr, 0, sizeof(VkPhysicalDeviceIDPropertiesKHR));
   }
@@ -3219,7 +3237,9 @@ struct VkJsonDevice {
   VkJsonKHRDriverProperties khr_driver_properties;
   VkJsonKHRDynamicRendering khr_dynamic_rendering;
   VkJsonKHRDynamicRenderingLocalRead khr_dynamic_rendering_local_read;
+  VkJsonKHRExternalFenceCapabilities khr_external_fence_capabilities;
   VkJsonKHRExternalMemoryCapabilities khr_external_memory_capabilities;
+  VkJsonKHRExternalSemaphoreCapabilities khr_external_semaphore_capabilities;
   VkJsonKHRFragmentShaderBarycentric khr_fragment_shader_barycentric;
   VkJsonKHRFragmentShadingRate khr_fragment_shading_rate;
   VkJsonKHRGlobalPriority khr_global_priority;

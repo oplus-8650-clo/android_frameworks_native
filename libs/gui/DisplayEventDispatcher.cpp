@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// TODO(393217449) Fix code and remove.
-#undef ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION
 
 #define LOG_TAG "DisplayEventDispatcher"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
@@ -61,7 +59,8 @@ status_t DisplayEventDispatcher::initialize() {
     }
 
     if (mLooper != nullptr) {
-        int rc = mLooper->addFd(mReceiver.getFd(), 0, Looper::EVENT_INPUT, this, NULL);
+        int rc = mLooper->addFd(mReceiver.getFd(), 0, Looper::EVENT_INPUT,
+                                sp<DisplayEventDispatcher>::fromExisting(this), NULL);
         if (rc < 0) {
             return UNKNOWN_ERROR;
         }

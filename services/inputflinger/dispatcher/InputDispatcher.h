@@ -316,6 +316,9 @@ private:
                 const android::gui::WindowInfo& windowInfo,
                 std::optional<ui::LogicalDisplayId> pointerDisplayId = std::nullopt) const;
 
+        ui::Transform getCrossDisplayTransform(ui::LogicalDisplayId sourceDisplay,
+                                               ui::LogicalDisplayId destinationDisplay) const;
+
         // Lookup for WindowInfoHandle from token and optionally a display-id. In cases where
         // display-id is not provided lookup is done for all displays.
         sp<android::gui::WindowInfoHandle> findWindowHandle(

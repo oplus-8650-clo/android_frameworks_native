@@ -20,7 +20,7 @@
 
 #include "InputManager.h"
 #include "InputDispatcherFactory.h"
-#include "InputReaderFactory.h"
+#include "InputReader.h"
 #include "UnwantedInteractionBlocker.h"
 
 #include <aidl/com/android/server/inputflinger/IInputFlingerRust.h>
@@ -156,7 +156,8 @@ InputManager::InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
     mTracingStages.emplace_back(
             std::make_unique<TracedInputListener>("UnwantedInteractionBlocker", *mBlocker));
 
-    mReader = createInputReader(readerPolicy, *mTracingStages.back(), env);
+    mReader = std::make_unique<InputReader>(std::make_unique<EventHub>(), readerPolicy,
+                                            *mTracingStages.back(), env);
 }
 
 InputManager::~InputManager() {

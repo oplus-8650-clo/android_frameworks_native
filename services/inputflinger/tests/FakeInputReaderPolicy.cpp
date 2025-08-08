@@ -18,6 +18,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/thread_annotations.h>
+#include <android/os/PointerCaptureMode.h>
 #include <gtest/gtest.h>
 
 #include "TestConstants.h"
@@ -211,8 +212,9 @@ void FakeInputReaderPolicy::setTouchAffineTransformation(const TouchAffineTransf
     transform = t;
 }
 
-PointerCaptureRequest FakeInputReaderPolicy::setPointerCapture(const sp<IBinder>& window) {
-    mConfig.pointerCaptureRequest = {window, mNextPointerCaptureSequenceNumber++};
+PointerCaptureRequest FakeInputReaderPolicy::setPointerCapture(PointerCaptureMode mode,
+                                                               const sp<IBinder>& window) {
+    mConfig.pointerCaptureRequest = {mode, window, mNextPointerCaptureSequenceNumber++};
     return mConfig.pointerCaptureRequest;
 }
 
