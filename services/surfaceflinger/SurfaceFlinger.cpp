@@ -879,7 +879,7 @@ void SurfaceFlinger::bootFinished() {
     }));
 }
 
-bool shouldUseGraphiteIfCompiledAndSupported() {
+bool shouldUseGraphiteIfSupported() {
     return FlagManager::getInstance().graphite_renderengine() ||
             (FlagManager::getInstance().graphite_renderengine_preview_rollout() &&
              base::GetBoolProperty(PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_PREVIEW_OPTIN, false));
@@ -905,23 +905,8 @@ void chooseRenderEngineType(renderengine::RenderEngineCreationArgs::Builder& bui
                 .setGraphicsApi(renderengine::RenderEngine::GraphicsApi::Vk);
     } else {
         const auto kVulkan = renderengine::RenderEngine::GraphicsApi::Vk;
-// TODO: b/341728634 - Clean up conditional compilation.
-// Note: this guard in particular must check e.g.
-// COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS_GRAPHITE_RENDERENGINE directly (instead of calling e.g.
-// COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(GRAPHITE_RENDERENGINE)) because that macro is undefined
-// in the libsurfaceflingerflags_test variant of com_android_graphics_surfaceflinger_flags.h, which
-// is used by layertracegenerator (which also needs SurfaceFlinger.cpp). :)
-#if COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS_GRAPHITE_RENDERENGINE || \
-        COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS_FORCE_COMPILE_GRAPHITE_RENDERENGINE
-        const bool useGraphite = shouldUseGraphiteIfCompiledAndSupported() &&
-                renderengine::RenderEngine::canSupport(kVulkan);
-#else
-        const bool useGraphite = false;
-        if (shouldUseGraphiteIfCompiledAndSupported()) {
-            ALOGE("RenderEngine's Graphite Skia backend was requested, but it is not compiled in "
-                  "this build! Falling back to Ganesh backend selection logic.");
-        }
-#endif
+        const bool useGraphite =
+                shouldUseGraphiteIfSupported() && renderengine::RenderEngine::canSupport(kVulkan);
         const bool useVulkan = useGraphite ||
                 (FlagManager::getInstance().vulkan_renderengine() &&
                  renderengine::RenderEngine::canSupport(kVulkan));

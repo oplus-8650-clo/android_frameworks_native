@@ -28,45 +28,22 @@
 #include <ftl/enum.h>
 #include <log/log.h>
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(GRAPHITE_RENDERENGINE) || \
-        COM_ANDROID_GRAPHICS_SURFACEFLINGER_FLAGS(FORCE_COMPILE_GRAPHITE_RENDERENGINE)
-#define COMPILE_GRAPHITE_RENDERENGINE 1
-#else
-#define COMPILE_GRAPHITE_RENDERENGINE 0
-#endif
-
 namespace android {
 namespace renderengine {
 
+// TODO: b/341728634 - Don't compile Ganesh unless requested once Graphite is the stable default.
 std::unique_ptr<RenderEngine> RenderEngine::create(const RenderEngineCreationArgs& args) {
     threaded::CreateInstanceFactory createInstanceFactory;
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COMPILE_GRAPHITE_RENDERENGINE
-    const RenderEngine::SkiaBackend actualSkiaBackend = args.skiaBackend;
-#else
-    if (args.skiaBackend == RenderEngine::SkiaBackend::Graphite) {
-        ALOGE("RenderEngine with Graphite Skia backend was requested, but Graphite was not "
-              "included in the build. Falling back to Ganesh (%s)",
-              ftl::enum_string(args.graphicsApi).c_str());
-    }
-    const RenderEngine::SkiaBackend actualSkiaBackend = RenderEngine::SkiaBackend::Ganesh;
-#endif
-
     ALOGD("%sRenderEngine with Skia%s Backend (%s)",
           args.threaded == Threaded::Yes ? "Threaded " : "",
-          ftl::enum_string(args.graphicsApi).c_str(), ftl::enum_string(actualSkiaBackend).c_str());
+          ftl::enum_string(args.graphicsApi).c_str(), ftl::enum_string(args.skiaBackend).c_str());
 
-// TODO: b/341728634 - Clean up conditional compilation.
-#if COMPILE_GRAPHITE_RENDERENGINE
-    if (actualSkiaBackend == SkiaBackend::Graphite) {
+    if (args.skiaBackend == SkiaBackend::Graphite) {
         createInstanceFactory = [args]() {
             return android::renderengine::skia::GraphiteVkRenderEngine::create(args);
         };
-    } else
-#endif
-    { // GANESH
+    } else { // GANESH
         if (args.graphicsApi == GraphicsApi::Vk) {
             createInstanceFactory = [args]() {
                 return android::renderengine::skia::GaneshVkRenderEngine::create(args);

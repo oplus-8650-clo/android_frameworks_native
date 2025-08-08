@@ -25,6 +25,7 @@
 
 #include <InputDevice.h>
 #include <InputReaderBase.h>
+#include <android/os/PointerCaptureMode.h>
 
 #include "input/DisplayViewport.h"
 #include "input/InputDevice.h"
@@ -71,7 +72,7 @@ public:
     TouchAffineTransformation getTouchAffineTransformation(const std::string& inputDeviceDescriptor,
                                                            ui::Rotation surfaceRotation);
     void setTouchAffineTransformation(const TouchAffineTransformation t);
-    PointerCaptureRequest setPointerCapture(const sp<IBinder>& window);
+    PointerCaptureRequest setPointerCapture(PointerCaptureMode mode, const sp<IBinder>& window);
     void setDefaultPointerDisplayId(ui::LogicalDisplayId pointerDisplayId);
     void setPointerGestureEnabled(bool enabled);
     void setVelocityControlParams(const VelocityControlParameters& params);

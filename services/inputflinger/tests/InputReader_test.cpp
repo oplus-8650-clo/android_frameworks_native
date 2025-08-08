@@ -23,7 +23,6 @@
 #include <InputMapper.h>
 #include <InputReader.h>
 #include <InputReaderBase.h>
-#include <InputReaderFactory.h>
 #include <KeyboardInputMapper.h>
 #include <MultiTouchInputMapper.h>
 #include <NotifyArgsBuilders.h>
@@ -35,6 +34,7 @@
 #include <TouchInputMapper.h>
 #include <UinputDevice.h>
 #include <android-base/thread_annotations.h>
+#include <android/os/PointerCaptureMode.h>
 #include <com_android_input_flags.h>
 #include <flag_macros.h>
 #include <ftl/enum.h>
@@ -1143,14 +1143,15 @@ TEST_F(InputReaderTest, GetKeyCodeState_ForwardsRequestsToSubdeviceMappers) {
 TEST_F(InputReaderTest, ChangingPointerCaptureNotifiesInputListener) {
     NotifyPointerCaptureChangedArgs args;
 
-    auto request = mFakePolicy->setPointerCapture(/*window=*/sp<BBinder>::make());
+    auto request = mFakePolicy->setPointerCapture(PointerCaptureMode::ABSOLUTE,
+                                                  /*window=*/sp<BBinder>::make());
     mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::POINTER_CAPTURE);
     mReader->loopOnce();
     mFakeListener->assertNotifyCaptureWasCalled(&args);
     ASSERT_TRUE(args.request.isEnable()) << "Pointer Capture should be enabled.";
     ASSERT_EQ(args.request, request) << "Pointer Capture sequence number should match.";
 
-    mFakePolicy->setPointerCapture(/*window=*/nullptr);
+    mFakePolicy->setPointerCapture(PointerCaptureMode::UNCAPTURED, /*window=*/nullptr);
     mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::POINTER_CAPTURE);
     mReader->loopOnce();
     mFakeListener->assertNotifyCaptureWasCalled(&args);

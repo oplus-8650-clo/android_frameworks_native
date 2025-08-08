@@ -556,7 +556,8 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForMouseRelativeSource) {
                                      ui::LogicalDisplayId::INVALID)}});
     mChoreographer.notifyPointerCaptureChanged(
             NotifyPointerCaptureChangedArgs(/*id=*/2, systemTime(SYSTEM_TIME_MONOTONIC),
-                                            PointerCaptureRequest(/*window=*/sp<BBinder>::make(),
+                                            PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
+                                                                  /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
 
     // Notify motion as if pointer capture is enabled.
@@ -597,7 +598,8 @@ TEST_F(PointerChoreographerTest, WhenPointerCaptureEnabledHidesPointer) {
     // Enable pointer capture and check if the PointerController hid the pointer.
     mChoreographer.notifyPointerCaptureChanged(
             NotifyPointerCaptureChangedArgs(/*id=*/1, systemTime(SYSTEM_TIME_MONOTONIC),
-                                            PointerCaptureRequest(/*window=*/sp<BBinder>::make(),
+                                            PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
+                                                                  /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
     ASSERT_FALSE(pc->isPointerShown());
 }
@@ -1707,7 +1709,8 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForTouchpadSource) {
     // Assume that pointer capture is enabled.
     mChoreographer.notifyPointerCaptureChanged(
             NotifyPointerCaptureChangedArgs(/*id=*/1, systemTime(SYSTEM_TIME_MONOTONIC),
-                                            PointerCaptureRequest(/*window=*/sp<BBinder>::make(),
+                                            PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
+                                                                  /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
 
     // Notify motion as if pointer capture is enabled.
@@ -1742,7 +1745,8 @@ TEST_F(PointerChoreographerTest, WhenPointerCaptureEnabledTouchpadHidesPointer) 
     // Enable pointer capture and check if the PointerController hid the pointer.
     mChoreographer.notifyPointerCaptureChanged(
             NotifyPointerCaptureChangedArgs(/*id=*/1, systemTime(SYSTEM_TIME_MONOTONIC),
-                                            PointerCaptureRequest(/*window=*/sp<BBinder>::make(),
+                                            PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
+                                                                  /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
     ASSERT_FALSE(pc->isPointerShown());
 }
