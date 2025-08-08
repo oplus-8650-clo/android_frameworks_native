@@ -818,7 +818,7 @@ inline bool Iterate(Visitor* visitor, VkJsonExt4444Formats* structs) {
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonExtAstcDecodeMode* structs) {
-  return visitor->Visit("aSTCDecodeFeaturesEXT",
+  return visitor->Visit("ASTCDecodeFeaturesEXT",
                         &structs->astc_decode_features_ext);
 }
 
@@ -1215,7 +1215,7 @@ inline bool Iterate(Visitor* visitor,
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonExtPciBusInfo* structs) {
-  return visitor->Visit("pCIBusInfoPropertiesEXT",
+  return visitor->Visit("PCIBusInfoPropertiesEXT",
                         &structs->pci_bus_info_properties_ext);
 }
 
@@ -1304,7 +1304,7 @@ inline bool Iterate(Visitor* visitor,
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonExtRgba10x6Formats* structs) {
-  return visitor->Visit("rGBA10X6FormatsFeaturesEXT",
+  return visitor->Visit("RGBA10X6FormatsFeaturesEXT",
                         &structs->rgba10_x6_formats_features_ext);
 }
 
@@ -1602,8 +1602,20 @@ inline bool Iterate(Visitor* visitor,
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor,
+                    VkJsonKHRExternalFenceCapabilities* structs) {
+  return visitor->Visit("IDPropertiesKHR", &structs->id_properties_khr);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
                     VkJsonKHRExternalMemoryCapabilities* structs) {
-  return visitor->Visit("iDPropertiesKHR", &structs->id_properties_khr);
+  return visitor->Visit("IDPropertiesKHR", &structs->id_properties_khr);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkJsonKHRExternalSemaphoreCapabilities* structs) {
+  return visitor->Visit("IDPropertiesKHR", &structs->id_properties_khr);
 }
 
 template <typename Visitor>
@@ -7989,9 +8001,17 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
         ret &= visitor->Visit("VK_KHR_dynamic_rendering_local_read",
                               &device->khr_dynamic_rendering_local_read);
       }
+      if (device->khr_external_fence_capabilities.reported) {
+        ret &= visitor->Visit("VK_KHR_external_fence_capabilities",
+                              &device->khr_external_fence_capabilities);
+      }
       if (device->khr_external_memory_capabilities.reported) {
         ret &= visitor->Visit("VK_KHR_external_memory_capabilities",
                               &device->khr_external_memory_capabilities);
+      }
+      if (device->khr_external_semaphore_capabilities.reported) {
+        ret &= visitor->Visit("VK_KHR_external_semaphore_capabilities",
+                              &device->khr_external_semaphore_capabilities);
       }
       if (device->khr_fragment_shader_barycentric.reported) {
         ret &= visitor->Visit("VK_KHR_fragment_shader_barycentric",
