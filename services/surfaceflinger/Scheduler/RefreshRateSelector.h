@@ -197,6 +197,7 @@ public:
                     isApproxEqual(desiredRefreshRate, other.desiredRefreshRate) &&
                     seamlessness == other.seamlessness && weight == other.weight &&
                     focused == other.focused && frameRateCategory == other.frameRateCategory &&
+                    frameRateCategorySmoothSwitchOnly == other.frameRateCategorySmoothSwitchOnly &&
                     layerFilter == other.layerFilter;
         }
 

@@ -45,9 +45,11 @@ namespace android::scheduler {
 
 using android::mock::createDisplayMode;
 using android::mock::createVrrDisplayMode;
-
+using display::DisplayModeRequest;
 using testing::_;
+using testing::Field;
 using testing::Return;
+using testing::UnorderedElementsAre;
 
 namespace {
 
@@ -99,6 +101,9 @@ protected:
             ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(2), 60.01_Hz));
     static inline const DisplayModes kDisplay2Modes =
             makeModes(kDisplay2Mode60, kDisplay2Mode120, kDisplay2Mode60point01);
+
+    static inline FrameRateMode kDisplay2Mode60_60{60_Hz, kDisplay2Mode60};
+    static inline FrameRateMode kDisplay2Mode120_120{120_Hz, kDisplay2Mode120};
 
     static constexpr PhysicalDisplayId kDisplayId3 = PhysicalDisplayId::fromPort(253u);
     static inline const ftl::NonNull<DisplayModePtr> kDisplay3Mode60 =
@@ -225,6 +230,7 @@ TEST_F(SchedulerTest, emitModeChangeEvent) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto selectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
+    selectorPtr->setLayerFilter({.layerStack = {.id = 0}});
     mScheduler->registerDisplay(kDisplayId1, selectorPtr);
     mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
 
@@ -241,6 +247,7 @@ TEST_F(SchedulerTest, emitModeChangeEvent) {
     auto layer = kLayer;
     layer.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
     layer.desiredRefreshRate = 60_Hz;
+    layer.layerFilter = {.layerStack = {.id = 0}};
     mScheduler->setContentRequirements({layer});
 
     // An event is emitted implicitly despite choosing the same mode as when idle.
@@ -421,6 +428,109 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
 
     // No-op if layer requirements have not changed.
     EXPECT_CALL(mSchedulerCallback, requestDisplayModes(_)).Times(0);
+    mScheduler->chooseRefreshRateForContent(/*LayerHierarchy*/ nullptr,
+                                            /*updateAttachedChoreographer*/ false);
+}
+
+TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+
+    // Configure pacesetter display to 120Hz.
+    const LayerFilter pacesetterLayerStack = {.layerStack = {.id = 0}};
+    const auto pacesetterSelectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
+    pacesetterSelectorPtr->setLayerFilter(pacesetterLayerStack);
+    mScheduler->registerDisplay(kDisplayId1, pacesetterSelectorPtr);
+    FTL_FAKE_GUARD(kMainThreadContext,
+                   mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON));
+    mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
+
+    // Configure follower display to 60Hz, even though it is also capable of 120Hz.
+    const LayerFilter followerLayerStack = {.layerStack = {.id = 1}};
+    const auto followerSelectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
+    followerSelectorPtr->setLayerFilter(followerLayerStack);
+    mScheduler->registerDisplay(kDisplayId2, followerSelectorPtr);
+    FTL_FAKE_GUARD(kMainThreadContext,
+                   mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
+    mScheduler->onDisplayModeChanged(kDisplayId2, kDisplay2Mode60_60, true);
+
+    ASSERT_EQ(mScheduler->getPacesetterDisplayId(), kDisplayId1);
+    ASSERT_EQ(mScheduler->getPreferredDisplayMode(), kDisplay1Mode120_120);
+
+    // Add a layer requesting 120Hz on the follower display.
+    auto layer = kLayer;
+    layer.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
+    layer.desiredRefreshRate = 120_Hz;
+    layer.layerFilter = followerLayerStack;
+    mScheduler->setContentRequirements({layer});
+
+    EXPECT_CALL(mSchedulerCallback,
+                requestDisplayModes(
+                        UnorderedElementsAre(Field(&DisplayModeRequest::mode, kDisplay1Mode120_120),
+                                             // Trigger mode change request even if only
+                                             // the follower display is changing.
+                                             Field(&DisplayModeRequest::mode,
+                                                   kDisplay2Mode120_120))))
+            .Times(1);
+
+    mScheduler->chooseRefreshRateForContent(/*LayerHierarchy*/ nullptr,
+                                            /*updateAttachedChoreographer*/ false);
+}
+
+TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacesetterCantSwitch) {
+    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+
+    // Configure pacesetter display to 120Hz.
+    const DisplayModes kDisplay1ModesOneMode = makeModes(kDisplay1Mode120);
+    const auto pacesetterSelectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay1ModesOneMode, kDisplay1Mode120->getId());
+
+    ASSERT_FALSE(pacesetterSelectorPtr->canSwitch());
+
+    const LayerFilter pacesetterLayerStack = {.layerStack = {.id = 0}};
+    pacesetterSelectorPtr->setLayerFilter(pacesetterLayerStack);
+    mScheduler->registerDisplay(kDisplayId1, pacesetterSelectorPtr);
+    FTL_FAKE_GUARD(kMainThreadContext,
+                   mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON));
+    mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
+
+    // Configure follower display to 60Hz, even though it is also capable of 120Hz.
+    const LayerFilter followerLayerStack = {.layerStack = {.id = 1}};
+    const auto followerSelectorPtr =
+            std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
+    followerSelectorPtr->setLayerFilter(followerLayerStack);
+    mScheduler->registerDisplay(kDisplayId2, followerSelectorPtr);
+    FTL_FAKE_GUARD(kMainThreadContext,
+                   mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
+    mScheduler->onDisplayModeChanged(kDisplayId2, kDisplay2Mode60_60, true);
+
+    ASSERT_EQ(mScheduler->getPacesetterDisplayId(), kDisplayId1);
+    ASSERT_EQ(mScheduler->getPreferredDisplayMode(), kDisplay1Mode120_120);
+
+    // Add a layer requesting 120Hz on the follower display.
+    auto layer = kLayer;
+    layer.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
+    layer.desiredRefreshRate = 120_Hz;
+    layer.layerFilter = followerLayerStack;
+    mScheduler->setContentRequirements({layer});
+
+    EXPECT_CALL(mSchedulerCallback,
+                requestDisplayModes(
+                        testing::UnorderedElementsAre(testing::Field(&display::DisplayModeRequest::
+                                                                             mode,
+                                                                     kDisplay1Mode120_120),
+                                                      // Trigger mode change request even if only
+                                                      // the follower display is changing mode and
+                                                      // pacesetter display is not capable of
+                                                      // switching.
+                                                      testing::Field(&display::DisplayModeRequest::
+                                                                             mode,
+                                                                     kDisplay2Mode120_120))))
+            .Times(1);
+
     mScheduler->chooseRefreshRateForContent(/*LayerHierarchy*/ nullptr,
                                             /*updateAttachedChoreographer*/ false);
 }

@@ -910,6 +910,7 @@ status_t SurfaceComposerClient::Transaction::readFromParcel(const Parcel* parcel
     }
 
     // Parsing was successful. Update the object.
+    mLogCallPoints = logCallPoints;
     mState = std::move(state);
     mListenerCallbacks = listenerCallbacks;
     mApplyToken = applyToken;

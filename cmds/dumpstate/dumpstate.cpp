@@ -1565,7 +1565,7 @@ static void DumpVintf() {
 
     const std::string sku = android::base::GetProperty("ro.boot.product.hardware.sku", "");
     const auto vintfFiles = android::vintf::details::dumpFileList(sku);
-    for (const auto vintfFile : vintfFiles) {
+    for (const auto& vintfFile : vintfFiles) {
         struct stat st;
         if (stat(vintfFile.c_str(), &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
