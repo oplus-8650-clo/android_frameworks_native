@@ -391,16 +391,6 @@ flag {
 } # unify_refresh_rate_callbacks
 
 flag {
-  name: "vsync_predictor_rate_change_with_aligned_sequence"
-  namespace: "core_graphics"
-  description: "Render rate changes where all the frame rate overrides align"
-  bug: "377240935"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # vsync_predictor_rate_change_with_aligned_sequence
-
-flag {
   name: "vsync_predictor_predicts_within_threshold"
   namespace: "core_graphics"
   description: "VSyncPredictor to ignore vsyncs before the given threshold for period and intercept calculation"

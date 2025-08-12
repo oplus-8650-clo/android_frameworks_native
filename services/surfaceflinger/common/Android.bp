@@ -100,3 +100,14 @@ cc_defaults {
         "libsurfaceflingerflags_test",
     ],
 }
+
+python_test_host {
+    name: "surfaceflinger_flag_check",
+    main: "check_flags.py",
+    srcs: ["check_flags.py"],
+    data: ["FlagManager.cpp"],
+    test_suites: ["general-tests"],
+    test_options: {
+        unit_test: false,
+    },
+}

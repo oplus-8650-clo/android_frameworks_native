@@ -938,7 +938,6 @@ TEST_F(VSyncPredictorTest, setRenderRateExplicitAppliedImmediately) {
 }
 
 TEST_F(VSyncPredictorTest, setRenderRateFreezesAtAlignedSequence) {
-    SET_FLAG_FOR_TEST(flags::vsync_predictor_rate_change_with_aligned_sequence, true);
     const auto refreshRate = Fps::fromPeriodNsecs(500);
     auto minFrameRate = Fps::fromPeriodNsecs(1000);
     const auto override1 = Fps::fromPeriodNsecs(2000);

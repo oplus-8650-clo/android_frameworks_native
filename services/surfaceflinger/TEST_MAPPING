@@ -9,6 +9,9 @@
   ],
   "presubmit": [
     {
+      "name": "surfaceflinger_flag_check"
+    },
+    {
       "name": "libsurfaceflinger_unittest"
     },
     {
