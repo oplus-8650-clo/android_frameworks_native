@@ -40,6 +40,7 @@ filegroup {
         "EventHub.cpp",
         "InputDevice.cpp",
         "InputReader.cpp",
+        "InputReaderTracer.cpp",
         "Macros.cpp",
         "TouchVideoDevice.cpp",
         "controller/PeripheralController.cpp",

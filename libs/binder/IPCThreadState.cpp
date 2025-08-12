@@ -1040,7 +1040,8 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
     return NO_ERROR;
 }
 
-status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy) {
+status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy,
+                                                         bool flush) {
     static bool isSupported =
             ProcessState::isDriverFeatureEnabled(ProcessState::DriverFeature::FREEZE_NOTIFICATION);
     if (!isSupported) {
@@ -1050,8 +1051,10 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (status_t res = flushCommands(); res != OK) {
-        LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+    if (flush) {
+        if (status_t res = flushCommands(); res != OK) {
+            LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+        }
     }
 
     return NO_ERROR;

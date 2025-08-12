@@ -49,7 +49,7 @@ public:
                     const sp<InputReaderPolicyInterface>& fuzzPolicy,
                     InputListenerInterface& fuzzListener) {
         reader = std::make_unique<InputReader>(fuzzEventHub, fuzzPolicy, fuzzListener,
-                                               /*env=*/nullptr);
+                                               /*env=*/nullptr, /*tracingBackend=*/nullptr);
     }
 
     void dump(std::string& dump) { reader->dump(dump); }

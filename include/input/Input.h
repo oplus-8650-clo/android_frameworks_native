@@ -602,8 +602,19 @@ struct PointerProperties {
 
 std::ostream& operator<<(std::ostream& out, const PointerProperties& properties);
 
+/*
+ * Represents an ID assigned to an InputDevice by InputReader. Such a device may be a combination of
+ * multiple evdev devices, each with their own RawDeviceId.
+ */
 // TODO(b/211379801) : Use a strong type from ftl/mixins.h instead
 using DeviceId = int32_t;
+
+/*
+ * Represents an ID assigned to an individual evdev device by EventHub.
+ *
+ * (This is not the same as the number used by the device's /dev/input/eventX node.)
+ */
+using RawDeviceId = int32_t;
 
 /*
  * Input events.

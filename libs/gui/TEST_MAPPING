@@ -1,4 +1,9 @@
 {
+  "desktop-presubmit": [
+    {
+      "name": "CfVkmsCursorTest"
+    }
+  ],
   "imports": [
     {
       "path": "frameworks/native/libs/nativewindow"

@@ -21,6 +21,8 @@
 #include "InputTracingPerfettoBackend.h"
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
+#include <memory>
 
 namespace android::input_trace::impl {
 
@@ -33,6 +35,16 @@ struct Visitor : V... {
 };
 
 } // namespace
+
+std::shared_ptr<input_trace::InputTracingBackendInterface> createInputTracingBackendIfEnabled(
+        JNIEnv* env) {
+    static const bool isDebuggable = base::GetBoolProperty("ro.debuggable", false);
+    if (!isDebuggable) {
+        return nullptr;
+    }
+    return std::make_shared<input_trace::impl::ThreadedBackend<
+            input_trace::impl::PerfettoBackend>>(input_trace::impl::PerfettoBackend(), env);
+}
 
 // --- ThreadedBackend ---
 
@@ -80,6 +92,16 @@ void ThreadedBackend<Backend>::traceWindowDispatch(const WindowDispatchArgs& dis
 }
 
 template <typename Backend>
+void ThreadedBackend<Backend>::traceRawEvent(const RawEvent& event) {
+    std::scoped_lock lock(mLock);
+    // TODO(b/394861376): populate metadata for determining trace level.
+    TracedEventMetadata metadata = {};
+    mQueue.emplace_back(event, metadata);
+    setIdleStatus(false);
+    mThreadWakeCondition.notify_all();
+}
+
+template <typename Backend>
 void ThreadedBackend<Backend>::threadLoop() {
     std::vector<TraceEntry> entries;
 
@@ -111,7 +133,8 @@ void ThreadedBackend<Backend>::threadLoop() {
                            [&](const TracedKeyEvent& e) { mBackend.traceKeyEvent(e, traceArgs); },
                            [&](const WindowDispatchArgs& args) {
                                mBackend.traceWindowDispatch(args, traceArgs);
-                           }},
+                           },
+                           [&](const RawEvent& e) { mBackend.traceRawEvent(e); }},
                    entry);
     }
     entries.clear();

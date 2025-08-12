@@ -101,9 +101,13 @@ public:
     MOCK_METHOD(MockProtoDispatchPointer*, add_dispatched_pointer, ());
 };
 
+class MockProtoEvdev {
+    // Currently empty as it's not used in tests.
+};
+
 using TestProtoConverter =
         AndroidInputEventProtoConverter<MockProtoMotion, MockProtoKey, MockProtoDispatch,
-                                        proto::AndroidInputEventConfig::Decoder>;
+                                        MockProtoEvdev, proto::AndroidInputEventConfig::Decoder>;
 
 TEST(AndroidInputEventProtoConverterTest, ToProtoMotionEvent) {
     TracedMotionEvent event{};

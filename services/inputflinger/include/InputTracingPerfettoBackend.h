@@ -19,6 +19,7 @@
 #include "InputTracingBackendInterface.h"
 
 #include "InputTracingPerfettoBackendConfig.h"
+#include "reader/include/RawEvent.h"
 
 #include <android/content/pm/IPackageManagerNative.h>
 #include <ftl/flags.h>
@@ -59,6 +60,7 @@ public:
     void traceKeyEvent(const TracedKeyEvent&, const TracedEventMetadata&) override;
     void traceMotionEvent(const TracedMotionEvent&, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
+    void traceRawEvent(const RawEvent&) override;
 
 private:
     // Implementation of the perfetto data source.

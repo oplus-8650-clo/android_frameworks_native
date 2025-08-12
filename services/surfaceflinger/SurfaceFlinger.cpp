@@ -6800,9 +6800,11 @@ void SurfaceFlinger::dumpHdrInfo(std::string& result) const {
 
 void SurfaceFlinger::dumpFrontEnd(std::string& result) {
     std::ostringstream out;
-    out << "\nComposition list (bottom to top)\n";
+    out << "\nComposition list (top to bottom)\n";
     ui::LayerStack lastPrintedLayerStackHeader = ui::UNASSIGNED_LAYER_STACK;
-    for (const auto& snapshot : mLayerSnapshotBuilder.getSnapshots()) {
+    const auto& snapshots = mLayerSnapshotBuilder.getSnapshots();
+    for (auto it = snapshots.rbegin(); it != snapshots.rend(); ++it) {
+        const auto& snapshot = *it;
         if (lastPrintedLayerStackHeader != snapshot->outputFilter.layerStack) {
             lastPrintedLayerStackHeader = snapshot->outputFilter.layerStack;
             out << "LayerStack=" << lastPrintedLayerStackHeader.id << "\n";
@@ -6828,18 +6830,24 @@ void SurfaceFlinger::dumpFrontEnd(std::string& result) {
 
 void SurfaceFlinger::dumpVisibleFrontEnd(std::string& result) {
     std::ostringstream out;
-    out << "\nComposition list (bottom to top)\n";
+    out << "\nComposition list (top to bottom)\n";
     ui::LayerStack lastPrintedLayerStackHeader = ui::UNASSIGNED_LAYER_STACK;
+    std::vector<frontend::LayerSnapshot*> visibleSnapshots;
     mLayerSnapshotBuilder.forEachVisibleSnapshot(
             [&](std::unique_ptr<frontend::LayerSnapshot>& snapshot) {
                 if (snapshot->hasSomethingToDraw()) {
-                    if (lastPrintedLayerStackHeader != snapshot->outputFilter.layerStack) {
-                        lastPrintedLayerStackHeader = snapshot->outputFilter.layerStack;
-                        out << "LayerStack=" << lastPrintedLayerStackHeader.id << "\n";
-                    }
-                    out << "  " << *snapshot << "\n";
+                    visibleSnapshots.push_back(snapshot.get());
                 }
             });
+
+    for (auto it = visibleSnapshots.rbegin(); it != visibleSnapshots.rend(); ++it) {
+        const frontend::LayerSnapshot* snapshot = *it;
+        if (lastPrintedLayerStackHeader != snapshot->outputFilter.layerStack) {
+            lastPrintedLayerStackHeader = snapshot->outputFilter.layerStack;
+            out << "LayerStack=" << lastPrintedLayerStackHeader.id << "\n";
+        }
+        out << "  " << *snapshot << "\n";
+    }
 
     out << "\nInput list\n";
     lastPrintedLayerStackHeader = ui::UNASSIGNED_LAYER_STACK;
@@ -6932,22 +6940,29 @@ void SurfaceFlinger::dumpHwcLayersMinidump(std::string& result) const {
             continue;
         }
 
-        StringAppendF(&result, "Display %s HWC layers:\n", to_string(*displayId).c_str());
+        StringAppendF(&result, "Display %s HWC layers (top to bottom):\n",
+                      to_string(*displayId).c_str());
         Layer::miniDumpHeader(result);
 
         const DisplayDevice& ref = *display;
+        std::vector<const frontend::LayerSnapshot*> visibleSnapshots;
         mLayerSnapshotBuilder.forEachVisibleSnapshot(
-                [&](const frontend::LayerSnapshot& snapshot) FTL_FAKE_GUARD(kMainThreadContext) {
-                    if (!snapshot.hasSomethingToDraw() ||
-                        ref.getLayerStack() != snapshot.outputFilter.layerStack) {
-                        return;
-                    }
-                    auto it = mLegacyLayers.find(snapshot.sequence);
-                    LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
-                                                    "Couldnt find layer object for %s",
-                                                    snapshot.getDebugString().c_str());
-                    it->second->miniDump(result, snapshot, ref);
+                [&visibleSnapshots](const frontend::LayerSnapshot& snapshot) {
+                    visibleSnapshots.push_back(&snapshot);
                 });
+
+        for (auto it = visibleSnapshots.rbegin(); it != visibleSnapshots.rend(); ++it) {
+            const frontend::LayerSnapshot* snapshot = *it;
+            if (!snapshot->hasSomethingToDraw() ||
+                ref.getLayerStack() != snapshot->outputFilter.layerStack) {
+                continue;
+            }
+            auto legacy_it = mLegacyLayers.find(snapshot->sequence);
+            LLOG_ALWAYS_FATAL_WITH_TRACE_IF(legacy_it == mLegacyLayers.end(),
+                                            "Couldnt find layer object for %s",
+                                            snapshot->getDebugString().c_str());
+            legacy_it->second->miniDump(result, *snapshot, ref);
+        }
         result.append("\n");
     }
 }

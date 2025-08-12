@@ -1524,7 +1524,8 @@ protected:
                                                             EVENT_DID_NOT_HAPPEN_TIMEOUT);
 
         mReader = std::make_unique<InputReader>(std::make_shared<EventHub>(), mFakePolicy,
-                                                *mTestListener, /*env=*/nullptr);
+                                                *mTestListener, /*env=*/nullptr,
+                                                /*tracingBackend=*/nullptr);
         ASSERT_EQ(mReader->start(), OK);
 
         // Since this test is run on a real device, all the input devices connected

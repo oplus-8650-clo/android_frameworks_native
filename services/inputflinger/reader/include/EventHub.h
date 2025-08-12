@@ -49,6 +49,8 @@
 #include <utils/Log.h>
 #include <utils/Mutex.h>
 
+#include "InputReaderTracer.h"
+#include "RawEvent.h"
 #include "TouchVideoDevice.h"
 #include "VibrationElement.h"
 
@@ -58,20 +60,6 @@ namespace android {
 
 /* Number of colors : {red, green, blue} */
 static constexpr size_t COLOR_NUM = 3;
-/*
- * A raw event as retrieved from the EventHub.
- */
-struct RawEvent {
-    // Time when the event happened
-    nsecs_t when;
-    // Time when the event was read by EventHub. Only populated for input events.
-    // For other events (device added/removed/etc), this value is undefined and should not be read.
-    nsecs_t readTime;
-    int32_t deviceId;
-    int32_t type;
-    int32_t code;
-    int32_t value;
-};
 
 /* Describes an absolute axis. */
 struct RawAbsoluteAxisInfo {
@@ -265,6 +253,8 @@ public:
 
         FIRST_SYNTHETIC_EVENT = DEVICE_ADDED,
     };
+
+    virtual void setTracer(std::shared_ptr<InputReaderTracer> tracer) = 0;
 
     virtual ftl::Flags<InputDeviceClass> getDeviceClasses(int32_t deviceId) const = 0;
 
@@ -513,6 +503,8 @@ private:
 class EventHub : public EventHubInterface {
 public:
     EventHub();
+
+    void setTracer(std::shared_ptr<InputReaderTracer> tracer) override final { mTracer = tracer; }
 
     ftl::Flags<InputDeviceClass> getDeviceClasses(int32_t deviceId) const override final;
 
@@ -795,6 +787,8 @@ private:
 
     // Protect all internal state.
     mutable std::mutex mLock;
+
+    std::shared_ptr<InputReaderTracer> mTracer;
 
     // The actual id of the built-in keyboard, or NO_BUILT_IN_KEYBOARD if none.
     // EventHub remaps the built-in keyboard to id 0 externally as required by the API.

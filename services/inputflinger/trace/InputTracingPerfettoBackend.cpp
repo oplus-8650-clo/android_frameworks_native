@@ -36,7 +36,7 @@ constexpr auto INPUT_EVENT_TRACE_DATA_SOURCE_NAME = "android.input.inputevent";
 
 using ProtoConverter =
         AndroidInputEventProtoConverter<proto::AndroidMotionEvent, proto::AndroidKeyEvent,
-                                        proto::AndroidWindowInputDispatchEvent,
+                                        proto::AndroidWindowInputDispatchEvent, proto::EvdevEvent,
                                         proto::AndroidInputEventConfig::Decoder>;
 
 bool isPermanentlyAllowed(gui::Uid uid) {
@@ -301,6 +301,18 @@ void PerfettoBackend::traceWindowDispatch(const WindowDispatchArgs& dispatchArgs
                 ? inputEvent->set_dispatcher_window_dispatch_event_redacted()
                 : inputEvent->set_dispatcher_window_dispatch_event();
         ProtoConverter::toProtoWindowDispatchEvent(dispatchArgs, *dispatchEvent, isRedacted);
+    });
+}
+
+void PerfettoBackend::traceRawEvent(const RawEvent& event) {
+    InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
+        // TODO(b/394861376): check the current trace level.
+        auto tracePacket = ctx.NewTracePacket();
+        tracePacket->set_timestamp(event.readTime);
+        tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
+        auto* evdevEvent = tracePacket->set_evdev_event();
+        ProtoConverter::toProtoEvdevEvent(event, *evdevEvent);
     });
 }
 

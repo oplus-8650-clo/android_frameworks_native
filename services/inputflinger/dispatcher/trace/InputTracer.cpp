@@ -18,6 +18,8 @@
 
 #include "InputTracer.h"
 
+#include <memory>
+
 #include <android-base/logging.h>
 #include <private/android_filesystem_config.h>
 
@@ -97,8 +99,8 @@ InputTargetInfo getTargetInfo(const InputTarget& target) {
 
 // --- InputTracer ---
 
-InputTracer::InputTracer(std::unique_ptr<InputTracingBackendInterface> backend)
-      : mBackend(std::move(backend)) {}
+InputTracer::InputTracer(std::shared_ptr<InputTracingBackendInterface> backend)
+      : mBackend(backend) {}
 
 std::unique_ptr<EventTrackerInterface> InputTracer::traceInboundEvent(const EventEntry& entry) {
     // This is a newly traced inbound event. Create a new state to track it and its derived events.

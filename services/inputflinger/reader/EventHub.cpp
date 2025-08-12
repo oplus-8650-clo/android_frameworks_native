@@ -2002,7 +2002,7 @@ std::vector<RawEvent> EventHub::getEvents(int timeoutMillis) {
                     for (size_t i = 0; i < count; i++) {
                         struct input_event& iev = readBuffer[i];
                         device->trackInputEvent(iev);
-                        events.push_back({
+                        RawEvent& ev = events.emplace_back(RawEvent{
                                 .when = processEventTimestamp(iev),
                                 .readTime = systemTime(SYSTEM_TIME_MONOTONIC),
                                 .deviceId = deviceId,
@@ -2010,6 +2010,9 @@ std::vector<RawEvent> EventHub::getEvents(int timeoutMillis) {
                                 .code = iev.code,
                                 .value = iev.value,
                         });
+                        if (mTracer) {
+                            mTracer->traceRawEvent(ev);
+                        }
                         const nsecs_t readDeltaNs = events.back().readTime - events.back().when;
                         if (readDeltaNs >= SLOW_READ_LOG_THRESHOLD_NS) {
                             ALOGW(

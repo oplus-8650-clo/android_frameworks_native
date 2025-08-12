@@ -258,3 +258,10 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "low_level_tracing"
+  namespace: "input"
+  description: "Log low-level events from evdev and the Gestures library in traces"
+  bug: "394861376"
+}

@@ -26,6 +26,8 @@
 #include <variant>
 #include <vector>
 
+#include "reader/include/RawEvent.h"
+
 namespace android::input_trace {
 
 /**
@@ -132,6 +134,9 @@ public:
 
     /** Trace an event being sent to a window. */
     virtual void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) = 0;
+
+    /** Trace a raw event being received. */
+    virtual void traceRawEvent(const RawEvent&) = 0;
 };
 
 } // namespace android::input_trace
