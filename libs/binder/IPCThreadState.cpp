@@ -78,6 +78,14 @@ namespace {
         return false;
 #endif
     }
+
+    bool fixRecursiveDoubleDerefs() {
+#if defined(LIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS)
+        return true;
+#else
+        return false;
+#endif
+    }
 }
 
 // Static const and functions will be optimized out if not used,
@@ -782,6 +790,12 @@ void IPCThreadState::processPendingDerefs()
 
 void IPCThreadState::processPostWriteDerefs()
 {
+    if (fixRecursiveDoubleDerefs()) {
+        LOG_ALWAYS_FATAL_IF(mIsProcessingPostWriteDerefs,
+                    "processPostWriteDerefs is called recursively.");
+        mIsProcessingPostWriteDerefs = true;
+    }
+
     for (size_t i = 0; i < mPostWriteWeakDerefs.size(); i++) {
         RefBase::weakref_type* refs = mPostWriteWeakDerefs[i];
         refs->decWeak(mProcess.get());
@@ -793,6 +807,10 @@ void IPCThreadState::processPostWriteDerefs()
         obj->decStrong(mProcess.get());
     }
     mPostWriteStrongDerefs.clear();
+
+    if (fixRecursiveDoubleDerefs()) {
+        mIsProcessingPostWriteDerefs = false;
+    }
 }
 
 void IPCThreadState::joinThreadPool(bool isMain)
@@ -1040,7 +1058,8 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
     return NO_ERROR;
 }
 
-status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy) {
+status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy,
+                                                         bool flush) {
     static bool isSupported =
             ProcessState::isDriverFeatureEnabled(ProcessState::DriverFeature::FREEZE_NOTIFICATION);
     if (!isSupported) {
@@ -1050,8 +1069,10 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (status_t res = flushCommands(); res != OK) {
-        LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+    if (flush) {
+        if (status_t res = flushCommands(); res != OK) {
+            LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+        }
     }
 
     return NO_ERROR;
@@ -1065,6 +1086,7 @@ IPCThreadState::IPCThreadState()
         mPropagateWorkSource(false),
         mIsLooper(false),
         mIsFlushing(false),
+        mIsProcessingPostWriteDerefs(false),
         mStrictModePolicy(0),
         mLastTransactionBinderFlags(0),
         mCallRestriction(mProcess->mCallRestriction) {

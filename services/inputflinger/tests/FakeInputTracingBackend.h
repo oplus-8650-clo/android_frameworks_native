@@ -28,6 +28,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "RawEvent.h"
+
 namespace android::input_trace {
 
 /**
@@ -85,6 +87,7 @@ private:
     void traceKeyEvent(const TracedKeyEvent& entry, const TracedEventMetadata&) override;
     void traceMotionEvent(const TracedMotionEvent& entry, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs& entry, const TracedEventMetadata&) override;
+    void traceRawEvent(const RawEvent& entry) override;
 };
 
 } // namespace android::input_trace

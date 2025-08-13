@@ -721,8 +721,7 @@ VSyncPredictor::VsyncTimeline::VsyncTimeline(TimePoint knownVsync, Period idealP
 void VSyncPredictor::VsyncTimeline::freeze(Model model, TimePoint lastVsync,
                                            std::vector<FrameRateOverride> frameRateOverrides) {
     LOG_ALWAYS_FATAL_IF(mValidUntil.has_value());
-    if (FlagManager::getInstance().vsync_predictor_rate_change_with_aligned_sequence() &&
-        !frameRateOverrides.empty() && mLastVsyncSequence) {
+    if (!frameRateOverrides.empty() && mLastVsyncSequence) {
         const int64_t renderRatePhase =
                 getFreezeSequencePhase(model, lastVsync, std::move(frameRateOverrides));
         lastVsync = TimePoint::fromNs(lastVsync.ns() + model.slope * renderRatePhase);

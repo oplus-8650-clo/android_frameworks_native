@@ -183,7 +183,6 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
     if (isVirtual()) {
         auto qtiHalId = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
         DisplayId qtiDisplayId = *qtiHalId;
@@ -193,7 +192,6 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
                                                                   colorProfile.renderIntent);
         return;
     }
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
 
     const auto physicalId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
     LOG_FATAL_IF(!physicalId);
@@ -237,7 +235,9 @@ std::unique_ptr<compositionengine::OutputLayer> Display::createOutputLayer(
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         if (layerFE->getCompositionState()->outputFilter.toInternalDisplay) {
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             QtiOutputExtension::qtiSetLayerAsMask(mIdVariant, outputLayer->getHwcLayer()->getId());
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         }
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
@@ -592,8 +592,8 @@ void Display::qtiBeginDraw() {
     if (displayext && hwcextn) {
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         SFTRACE_CALL();
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!physicalDisplayId.has_value() || isVirtual()) {
             if (!physicalDisplayId.has_value())
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -671,7 +671,9 @@ void Display::qtiBeginDraw() {
             return;
         }
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto halDisplayId = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!displayext->BeginDraw(static_cast<uint32_t>(*hwcDisplayId), displayLayerFlags,
                                    fbtLayerInfo, current, future)) {
             hwcextn->qtiSetClientTarget_3_1(*halDisplayId, future.index, future.fence,
@@ -705,8 +707,10 @@ void Display::qtiEndDraw() {
             return;
         }
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!physicalDisplayId) {
             return;
         }

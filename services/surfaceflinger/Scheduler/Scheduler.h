@@ -17,7 +17,9 @@
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -130,7 +132,7 @@ public:
                          std::optional<PhysicalDisplayId> defaultPacesetterId)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
     void unregisterDisplay(PhysicalDisplayId, std::optional<PhysicalDisplayId> defaultPacesetterId)
-            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock, mPolicyLock);
 
     void run();
 
@@ -384,15 +386,9 @@ public:
         return mLayerHistory.getLayerFramerate(now, id);
     }
 
-// QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
     void qtiUpdateThermalFps(float fps);
-// QTI_END: 2023-04-17: Display: sf: Add support for thermal fps
-// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
     void qtiUpdateSmoMoRefreshRateVote(std::map<int, int>& refresh_rate_votes);
-// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
-// QTI_BEGIN: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
     bool isGameFrameRateOverridePresent();
-// QTI_END: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
 
     // Returns true if frame rate overrides has changed.
     bool updateFrameRateOverrides(GlobalSignals, Fps displayRefreshRate) EXCLUDES(mPolicyLock);
@@ -534,7 +530,7 @@ private:
     void updateAttachedChoreographersFrameRate(const surfaceflinger::frontend::RequestedLayerState&,
                                                Fps fps) EXCLUDES(mChoreographerLock);
 
-    void emitModeChangeIfNeeded() REQUIRES(mPolicyLock) EXCLUDES(mDisplayLock);
+    void emitPacesetterModeChangeIfNeeded() REQUIRES(mPolicyLock) EXCLUDES(mDisplayLock);
 
     // IEventThreadCallback overrides
     bool throttleVsync(TimePoint, uid_t) override;
@@ -554,6 +550,9 @@ private:
     PhysicalDisplayId selectPacesetterDisplayLocked(
             std::optional<PhysicalDisplayId> desiredPacesetterId) const
             REQUIRES(kMainThreadContext, mDisplayLock);
+
+    // Returns true if any powered on display is capable of switching modes.
+    bool canAnySelectorSwitch() const EXCLUDES(mDisplayLock);
 
     std::unique_ptr<EventThread> mRenderEventThread;
     std::unique_ptr<EventThread> mLastCompositeEventThread;
@@ -672,10 +671,10 @@ private:
         hal::PowerMode displayPowerMode = hal::PowerMode::ON;
 
         // Chosen display mode.
-        ftl::Optional<FrameRateMode> modeOpt;
+        std::unordered_map<PhysicalDisplayId, ftl::Optional<FrameRateMode>> modeOpt;
 
         // Display mode of latest emitted event.
-        std::optional<FrameRateMode> emittedModeOpt;
+        std::unordered_map<PhysicalDisplayId, std::optional<FrameRateMode>> emittedModeOpt;
     } mPolicy GUARDED_BY(mPolicyLock);
 
     std::mutex mChoreographerLock;
@@ -698,10 +697,8 @@ private:
 
     std::atomic<std::optional<TimePoint>> mDebugPresentDelay;
 
-// QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
     // Cache thermal Fps, and limit to the given level
     float mQtiThermalFps = 90.0f;
-// QTI_END: 2023-04-17: Display: sf: Add support for thermal fps
 };
 
 } // namespace scheduler

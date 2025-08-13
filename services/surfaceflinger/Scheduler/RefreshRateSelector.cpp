@@ -203,7 +203,7 @@ std::vector<unsigned> getModeDivisorsFromAnchorList(const DisplayMode& mode, Fps
 }
 
 std::vector<unsigned> getModeDivisors(const DisplayMode& mode, FpsRange range,
-                                      std::vector<Fps> anchorList, size_t numFrameRates,
+                                      const std::vector<Fps>& anchorList, size_t numFrameRates,
                                       bool enableFrameRateOverride) {
     if (!enableFrameRateOverride) {
         return {1};

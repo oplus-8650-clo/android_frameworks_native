@@ -17,6 +17,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -29,6 +30,8 @@
 #include <input/VirtualKeyMap.h>
 #include <utils/Errors.h>
 #include <utils/KeyedVector.h>
+
+#include "InputReaderTracer.h"
 
 namespace android {
 
@@ -105,6 +108,8 @@ public:
 
     virtual ~FakeEventHub();
     FakeEventHub() {}
+
+    void setTracer(std::shared_ptr<InputReaderTracer> tracer) {}
 
     void addDevice(int32_t deviceId, const std::string& name, ftl::Flags<InputDeviceClass> classes,
                    int bus = 0);

@@ -18,12 +18,16 @@
 
 //#define LOG_NDEBUG 0
 
-#include "InputManager.h"
+#include <memory>
+
 #include "InputDispatcherFactory.h"
+#include "InputManager.h"
 #include "InputReader.h"
+#include "InputTracingThreadedBackend.h"
 #include "UnwantedInteractionBlocker.h"
 
 #include <aidl/com/android/server/inputflinger/IInputFlingerRust.h>
+#include <android-base/properties.h>
 #include <android/binder_interface_utils.h>
 #include <android/sysprop/InputProperties.sysprop.h>
 #include <binder/IPCThreadState.h>
@@ -128,7 +132,9 @@ InputManager::InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
                            InputFilterPolicyInterface& inputFilterPolicy, JNIEnv* env) {
     mInputFlingerRust = createInputFlingerRust();
 
-    mDispatcher = createInputDispatcher(dispatcherPolicy, env);
+    std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend =
+            input_trace::impl::createInputTracingBackendIfEnabled(env);
+    mDispatcher = createInputDispatcher(dispatcherPolicy, env, tracingBackend);
     mTracingStages.emplace_back(
             std::make_unique<TracedInputListener>("InputDispatcher", *mDispatcher));
 
@@ -157,7 +163,7 @@ InputManager::InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
             std::make_unique<TracedInputListener>("UnwantedInteractionBlocker", *mBlocker));
 
     mReader = std::make_unique<InputReader>(std::make_unique<EventHub>(), readerPolicy,
-                                            *mTracingStages.back(), env);
+                                            *mTracingStages.back(), env, tracingBackend);
 }
 
 InputManager::~InputManager() {

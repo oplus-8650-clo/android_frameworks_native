@@ -20,6 +20,8 @@
 #include <android/input.h>
 #include <utils/Errors.h>
 
+#include "RawEvent.h"
+
 namespace android::input_trace {
 
 namespace {
@@ -186,6 +188,12 @@ void FakeInputTracingBackend::traceWindowDispatch(const WindowDispatchArgs& args
         mTrace->mTracedWindowDispatches.push_back(args);
     }
     mTrace->mEventTracedCondition.notify_all();
+}
+
+void FakeInputTracingBackend::traceRawEvent(const RawEvent& entry) {
+    // TODO(b/394861376): log the traced raw event in the VerifyingTrace, like we do with the other
+    // types of traced event, and write some tests for raw tracing in InputTracingTest.cpp.
+    // (InputReaderIntegrationTest should provide good inspiration.)
 }
 
 } // namespace android::input_trace

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,26 @@
 
 #pragma once
 
-#include <utils/StrongPointer.h>
+#include <stdint.h>
 
-#include "InputDispatcherInterface.h"
-#include "InputDispatcherPolicyInterface.h"
-#include "InputTracingBackendInterface.h"
+#include <input/Input.h>
+#include <utils/Timers.h>
 
 namespace android {
 
-// This factory method is used to encapsulate implementation details in internal header files.
-std::unique_ptr<InputDispatcherInterface> createInputDispatcher(
-        InputDispatcherPolicyInterface& policy, JNIEnv* env,
-        std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend);
+/*
+ * A raw event as retrieved from the EventHub.
+ */
+struct RawEvent {
+    // Time when the event happened
+    nsecs_t when;
+    // Time when the event was read by EventHub. Only populated for input events.
+    // For other events (device added/removed/etc), this value is undefined and should not be read.
+    nsecs_t readTime;
+    RawDeviceId deviceId;
+    int32_t type;
+    int32_t code;
+    int32_t value;
+};
 
 } // namespace android

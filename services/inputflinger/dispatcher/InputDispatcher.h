@@ -88,11 +88,11 @@ class InputDispatcher : public android::InputDispatcherInterface {
 public:
     static constexpr bool kDefaultInTouchMode = true;
 
-    explicit InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env);
-    // Constructor used for testing.
     explicit InputDispatcher(InputDispatcherPolicyInterface&,
-                             std::unique_ptr<input_trace::InputTracingBackendInterface>,
+                             std::shared_ptr<input_trace::InputTracingBackendInterface>,
                              JNIEnv* env);
+    // Creates a dispatcher without tracing. Used in some tests.
+    explicit InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env);
     ~InputDispatcher() override;
 
     void dump(std::string& dump) const override;

@@ -51,13 +51,13 @@ public:
     bool use_skia_tracing() const;
 
     /// Trunk stable server (R/W) flags ///
-    /// IMPORTANT - please keep alphabetize to reduce merge conflicts
+    /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool add_first_vsync_to_tracker() const;
-    bool anchor_list() const;
     bool adpf_gpu_sf() const;
     bool adpf_native_session_manager() const;
-    bool adpf_use_fmq_channel_fixed() const;
     bool adpf_use_fmq_channel() const;
+    bool adpf_use_fmq_channel_fixed() const;
+    bool anchor_list() const;
     bool buffer_stuffing_fix() const;
     bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
@@ -74,10 +74,9 @@ public:
     bool resync_on_tx() const;
     bool unify_refresh_rate_callbacks() const;
     bool vsync_predictor_predicts_within_threshold() const;
-    bool vsync_predictor_rate_change_with_aligned_sequence() const;
 
     /// Trunk stable readonly flags ///
-    /// IMPORTANT - please keep alphabetize to reduce merge conflicts
+    /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool arr_setframerate_gte_enum() const;
     bool begone_bright_hlg() const;
     bool cache_when_source_crop_layer_only_moved() const;
@@ -103,10 +102,10 @@ public:
     bool no_vsyncs_on_screen_off() const;
     bool override_trusted_overlay() const;
     bool pacesetter_selection() const;
+    bool parse_edid_version_and_input_type() const;
     bool protected_if_client() const;
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
-    bool parse_edid_version_and_input_type() const;
     bool shader_disk_cache() const;
     bool skip_invisible_windows_in_input() const;
     bool stable_edid_ids() const;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,27 @@
 
 #pragma once
 
-#include <utils/StrongPointer.h>
+#include <memory>
 
-#include "InputDispatcherInterface.h"
-#include "InputDispatcherPolicyInterface.h"
 #include "InputTracingBackendInterface.h"
+#include "RawEvent.h"
 
 namespace android {
 
-// This factory method is used to encapsulate implementation details in internal header files.
-std::unique_ptr<InputDispatcherInterface> createInputDispatcher(
-        InputDispatcherPolicyInterface& policy, JNIEnv* env,
-        std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend);
+/**
+ * Tracer implementation for InputReader and associated components.
+ */
+class InputReaderTracer {
+public:
+    explicit InputReaderTracer(std::shared_ptr<input_trace::InputTracingBackendInterface> backend);
+    ~InputReaderTracer() = default;
+    InputReaderTracer(const InputReaderTracer&) = delete;
+    InputReaderTracer& operator=(const InputReaderTracer&) = delete;
+
+    void traceRawEvent(const RawEvent& event);
+
+private:
+    std::shared_ptr<input_trace::InputTracingBackendInterface> mBackend;
+};
 
 } // namespace android

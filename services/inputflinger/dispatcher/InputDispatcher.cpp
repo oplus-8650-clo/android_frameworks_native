@@ -21,7 +21,6 @@
 
 #include <android-base/chrono_utils.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android/os/IInputConstants.h>
 #include <binder/Binder.h>
@@ -55,7 +54,6 @@
 #include "DebugConfig.h"
 #include "InputDispatcher.h"
 #include "InputEventTimeline.h"
-#include "InputTracingPerfettoBackend.h"
 #include "InputTracingThreadedBackend.h"
 #include "trace/InputTracer.h"
 
@@ -81,17 +79,6 @@ namespace input_flags = com::android::input::flags;
 namespace android::inputdispatcher {
 
 namespace {
-
-// Create the input tracing backend that writes to perfetto from a single thread.
-std::unique_ptr<input_trace::InputTracingBackendInterface> createInputTracingBackendIfEnabled(
-        JNIEnv* env) {
-    static const bool isDebuggable = base::GetBoolProperty("ro.debuggable", false);
-    if (!isDebuggable) {
-        return nullptr;
-    }
-    return std::make_unique<input_trace::impl::ThreadedBackend<
-            input_trace::impl::PerfettoBackend>>(input_trace::impl::PerfettoBackend(), env);
-}
 
 template <class Entry>
 void ensureEventTraced(const Entry& entry) {
@@ -890,11 +877,11 @@ std::string dumpWindowForTouchOcclusion(const WindowInfo& info, bool isTouchedWi
 // --- InputDispatcher ---
 
 InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env)
-      : InputDispatcher(policy, createInputTracingBackendIfEnabled(env), env) {}
+      : InputDispatcher(policy, input_trace::impl::createInputTracingBackendIfEnabled(env), env) {}
 
 InputDispatcher::InputDispatcher(
         InputDispatcherPolicyInterface& policy,
-        std::unique_ptr<input_trace::InputTracingBackendInterface> traceBackend, JNIEnv* env)
+        std::shared_ptr<input_trace::InputTracingBackendInterface> traceBackend, JNIEnv* env)
       : mJniEnv(env),
         mPolicy(policy),
 
@@ -933,7 +920,7 @@ InputDispatcher::InputDispatcher(
     mKeyRepeatState.lastKeyEntry = nullptr;
 
     if (traceBackend) {
-        mTracer = std::make_unique<trace::impl::InputTracer>(std::move(traceBackend));
+        mTracer = std::make_unique<trace::impl::InputTracer>(traceBackend);
     }
 
     mLastUserActivityTimes.fill(0);

@@ -44,6 +44,14 @@ namespace {
         return false;
 #endif
     }
+
+    bool noFlushOnLastRef() {
+#if defined(LIBBINDER_NO_FLUSH_ON_LAST_REF)
+        return true;
+#else
+        return false;
+#endif
+    }
 }
 
 using android::binder::unique_fd;
@@ -643,7 +651,8 @@ status_t BpBinder::addFrozenStateChangeCallback(const wp<FrozenStateChangeCallba
             if (!mFrozen) {
                 std::ignore =
                         IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(),
-                                                                                this);
+                                                                                this,
+                                                                                /*flush=*/true);
                 return NO_MEMORY;
             }
         }
@@ -679,7 +688,8 @@ status_t BpBinder::removeFrozenStateChangeCallback(const wp<FrozenStateChangeCal
                 }
                 status_t status =
                         IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(),
-                                                                                this);
+                                                                                this,
+                                                                                /*flush=*/true);
                 if (status != NO_ERROR) {
                     ALOGE("Unexpected error from "
                           "IPCThreadState.removeFrozenStateChangeCallback: %s. "
@@ -862,17 +872,19 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
         mObituaries = nullptr;
     }
     if (mFrozen != nullptr) {
+        bool flush = !noFlushOnLastRef();
         if (waitForFrozenListenerRemovalCompletion()) {
             if (!mFrozen->isPendingClear) {
                 std::ignore =
                         IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(),
-                                                                                this);
+                                                                                this, flush);
                 mFrozen->isPendingClear = true;
             }
             mFrozen->callbacks.clear();
         } else {
             std::ignore =
-                    IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(), this);
+                    IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(), this,
+                                                                            flush);
             mFrozen.reset();
         }
     }

@@ -17,9 +17,10 @@
 #pragma once
 
 #include "InputThread.h"
-#include "InputTracingPerfettoBackend.h"
+#include "InputTracingBackendInterface.h"
 
 #include <android-base/thread_annotations.h>
+#include <memory>
 #include <mutex>
 #include <variant>
 #include <vector>
@@ -41,6 +42,7 @@ public:
     void traceKeyEvent(const TracedKeyEvent&, const TracedEventMetadata&) override;
     void traceMotionEvent(const TracedMotionEvent&, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
+    void traceRawEvent(const RawEvent&) override;
 
     /** Returns a function that, when called, will block until the tracing thread is idle. */
     std::function<void()> getIdleWaiterForTesting();
@@ -51,7 +53,7 @@ private:
     std::condition_variable mThreadWakeCondition;
     Backend mBackend;
     using TraceEntry =
-            std::pair<std::variant<TracedKeyEvent, TracedMotionEvent, WindowDispatchArgs>,
+            std::pair<std::variant<TracedKeyEvent, TracedMotionEvent, WindowDispatchArgs, RawEvent>,
                       TracedEventMetadata>;
     std::vector<TraceEntry> mQueue GUARDED_BY(mLock);
 
@@ -71,5 +73,8 @@ private:
     void threadLoop();
     void setIdleStatus(bool isIdle) REQUIRES(mLock);
 };
+
+/** If tracing should be enabled, creates and returns a ThreadedBackend. */
+std::shared_ptr<InputTracingBackendInterface> createInputTracingBackendIfEnabled(JNIEnv* env);
 
 } // namespace android::input_trace::impl
