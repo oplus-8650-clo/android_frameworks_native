@@ -40,94 +40,87 @@ namespace android {
 namespace renderengine {
 namespace skia {
 
+// Samples each vertex of a diamond using a total of 4 samples.
+// This shader is used for the initial 4x down-sampling pass, with the sampling offset
+// handpicked to minimize aliasing.
+
+const SkString kEffectSource_KawaseBlurDualFilterV2_QuarterResDownSampleBlurEffect(R"(
+    uniform shader child;
+
+    const float2 STEP_0 = float2( 0.25, 0.25);
+    const float2 STEP_1 = float2( 0.25, -0.25);
+    const float2 STEP_2 = float2(-0.25, -0.25);
+    const float2 STEP_3 = float2(-0.25, 0.25);
+
+    half4 main(float2 xy) {
+        half3 c = child.eval(xy + STEP_0).rgb;
+        c += child.eval(xy + STEP_1).rgb;
+        c += child.eval(xy + STEP_2).rgb;
+        c += child.eval(xy + STEP_3).rgb;
+
+        return half4(c * 0.25, 1.0);
+    }
+)");
+
+// Samples each vertex of a diamond plus the center pixel, using a total of 5 samples.
+// This shader is used for the 2x down-sampling passes after the initial pass.
+const SkString kEffectSource_KawaseBlurDualFilterV2_HalfResDownSampleBlurEffect(R"(
+    uniform shader child;
+
+    const float2 STEP_0 = float2( 0.5, 0.5);
+    const float2 STEP_1 = float2( 0.5, -0.5);
+    const float2 STEP_2 = float2(-0.5, -0.5);
+    const float2 STEP_3 = float2(-0.5, 0.5);
+
+    half4 main(float2 xy) {
+        half3 c = child.eval(xy).rgb * 4.0;
+        c += child.eval(xy + STEP_0).rgb;
+        c += child.eval(xy + STEP_1).rgb;
+        c += child.eval(xy + STEP_2).rgb;
+        c += child.eval(xy + STEP_3).rgb;
+
+        return half4(c * 0.125, 1.0);
+    }
+)");
+
+// A shader to sample each vertex of a unit regular heptagon, plus the original fragment
+// coordinate, using a total of 8 samples.
+const SkString kEffectSource_KawaseBlurDualFilterV2_UpSampleBlurEffect(R"(
+    uniform shader child;
+    uniform float in_blurOffset;
+    uniform float in_crossFade;
+    uniform float in_weightedCrossFade;
+
+    const float2 STEP_0 = float2( 1.0, 0.0);
+    const float2 STEP_1 = float2( 0.623489802,  0.781831482);
+    const float2 STEP_2 = float2(-0.222520934,  0.974927912);
+    const float2 STEP_3 = float2(-0.900968868,  0.433883739);
+    const float2 STEP_4 = float2( 0.900968868, -0.433883739);
+    const float2 STEP_5 = float2(-0.222520934, -0.974927912);
+    const float2 STEP_6 = float2(-0.623489802, -0.781831482);
+
+    half4 main(float2 xy) {
+        half3 c = child.eval(xy).rgb;
+
+        c += child.eval(xy + STEP_0 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_1 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_2 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_3 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_4 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_5 * in_blurOffset).rgb;
+        c += child.eval(xy + STEP_6 * in_blurOffset).rgb;
+
+        return half4(c * in_weightedCrossFade, in_crossFade);
+    }
+)");
+
 KawaseBlurDualFilterV2::KawaseBlurDualFilterV2(RuntimeEffectManager& effectManager)
       : BlurFilter(effectManager) {
-    // Samples each vertex of a diamond using a total of 4 samples.
-    // This shader is used for the initial 4x down-sampling pass, with the sampling offset
-    // handpicked to minimize aliasing.
-    const SkString kQuarterResDownSampleBlurString(R"(
-        uniform shader child;
-
-        const float2 STEP_0 = float2( 0.25, 0.25);
-        const float2 STEP_1 = float2( 0.25, -0.25);
-        const float2 STEP_2 = float2(-0.25, -0.25);
-        const float2 STEP_3 = float2(-0.25, 0.25);
-
-        half4 main(float2 xy) {
-            half3 c = child.eval(xy + STEP_0).rgb;
-            c += child.eval(xy + STEP_1).rgb;
-            c += child.eval(xy + STEP_2).rgb;
-            c += child.eval(xy + STEP_3).rgb;
-
-            return half4(c * 0.25, 1.0);
-        }
-    )");
-
-    // Samples each vertex of a diamond plus the center pixel, using a total of 5 samples.
-    // This shader is used for the 2x down-sampling passes after the initial pass.
-    const SkString kHalfResDownSampleBlurString(R"(
-        uniform shader child;
-
-        const float2 STEP_0 = float2( 0.5, 0.5);
-        const float2 STEP_1 = float2( 0.5, -0.5);
-        const float2 STEP_2 = float2(-0.5, -0.5);
-        const float2 STEP_3 = float2(-0.5, 0.5);
-
-        half4 main(float2 xy) {
-            half3 c = child.eval(xy).rgb * 4.0;
-            c += child.eval(xy + STEP_0).rgb;
-            c += child.eval(xy + STEP_1).rgb;
-            c += child.eval(xy + STEP_2).rgb;
-            c += child.eval(xy + STEP_3).rgb;
-
-            return half4(c * 0.125, 1.0);
-        }
-    )");
-
-    // A shader to sample each vertex of a unit regular heptagon, plus the original fragment
-    // coordinate, using a total of 8 samples.
-    const SkString kUpSampleBlurString(R"(
-        uniform shader child;
-        uniform float in_blurOffset;
-        uniform float in_crossFade;
-        uniform float in_weightedCrossFade;
-
-        const float2 STEP_0 = float2( 1.0, 0.0);
-        const float2 STEP_1 = float2( 0.623489802,  0.781831482);
-        const float2 STEP_2 = float2(-0.222520934,  0.974927912);
-        const float2 STEP_3 = float2(-0.900968868,  0.433883739);
-        const float2 STEP_4 = float2( 0.900968868, -0.433883739);
-        const float2 STEP_5 = float2(-0.222520934, -0.974927912);
-        const float2 STEP_6 = float2(-0.623489802, -0.781831482);
-
-        half4 main(float2 xy) {
-            half3 c = child.eval(xy).rgb;
-
-            c += child.eval(xy + STEP_0 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_1 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_2 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_3 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_4 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_5 * in_blurOffset).rgb;
-            c += child.eval(xy + STEP_6 * in_blurOffset).rgb;
-
-            return half4(c * in_weightedCrossFade, in_crossFade);
-        }
-    )");
-
-    mQuarterResDownSampleBlurEffect = effectManager.createAndStoreRuntimeEffect(
-            RuntimeEffectManager::KnownId::kKawaseBlurDualFilterV2_QuarterResDownSampleBlurEffect,
-            "KawaseBlurDualFilterV2_QuarterResDownSampleBlurEffect",
-            kQuarterResDownSampleBlurString);
-    mHalfResDownSampleBlurEffect = effectManager.createAndStoreRuntimeEffect(
-            RuntimeEffectManager::KnownId::kKawaseBlurDualFilterV2_HalfResDownSampleBlurEffect,
-            "KawaseBlurDualFilterV2_HalfResDownSampleBlurEffect", kHalfResDownSampleBlurString);
-    mUpSampleBlurEffect =
-            effectManager
-                    .createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::
-                                                         kKawaseBlurDualFilterV2_UpSampleBlurEffect,
-                                                 "KawaseBlurDualFilterV2_UpSampleBlurEffect",
-                                                 kUpSampleBlurString);
+    mQuarterResDownSampleBlurEffect =
+            effectManager.mKnownEffects[kKawaseBlurDualFilterV2_QuarterResDownSampleBlurEffect];
+    mHalfResDownSampleBlurEffect =
+            effectManager.mKnownEffects[kKawaseBlurDualFilterV2_HalfResDownSampleBlurEffect];
+    mUpSampleBlurEffect = effectManager.mKnownEffects[kKawaseBlurDualFilterV2_UpSampleBlurEffect];
 }
 
 void KawaseBlurDualFilterV2::blurInto(const sk_sp<SkSurface>& drawSurface,
@@ -236,7 +229,6 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generate(SkiaGpuContext* context, const u
     }
     // Finally blur+upscale back to our original size.
     for (int i = filterPasses - 1; i >= 0; i--) {
-        int index = kMaxSurfaces * 2 - 2 - i;
         blurInto(surfaces[i], surfaces[i + 1]->makeTemporaryImage(), step,
                  std::min(1.0f, filterDepth - i), mUpSampleBlurEffect);
     }

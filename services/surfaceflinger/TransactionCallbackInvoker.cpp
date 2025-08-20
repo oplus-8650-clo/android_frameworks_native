@@ -141,8 +141,8 @@ status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>&
                                                     handle->previousReleaseFence,
                                                     handle->transformHint,
                                                     handle->currentMaxAcquiredBufferCount,
-                                                    eventStats, handle->previousReleaseCallbackId);
-
+                                                    handle->cornerRadii, eventStats,
+                                                    handle->previousReleaseCallbackId);
         if (handle->bufferReleaseChannel &&
             handle->previousReleaseCallbackId != ReleaseCallbackId::INVALID_ID) {
             if (FlagManager::getInstance().monitor_buffer_fences()) {

@@ -98,7 +98,7 @@ sp<MediaSurfaceType> igbpToSurfaceType(const sp<IGraphicBufferProducer>& igbp) {
         return nullptr;
     }
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_MEDIA_MIGRATION)
-    return new Surface(igbp);
+    return sp<Surface>::make(igbp);
 #else
     return igbp;
 #endif

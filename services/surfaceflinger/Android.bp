@@ -189,6 +189,7 @@ filegroup {
         "DisplayHardware/VirtualDisplay/VirtualDisplayBufferSlotTracker.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplayThread.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplayThreadManager.cpp",
         "DisplayHardware/VirtualDisplaySurface.cpp",
         "PowerAdvisor/*.cpp",
     ],

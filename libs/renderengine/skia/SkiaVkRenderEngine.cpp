@@ -172,21 +172,9 @@ void SkiaVkRenderEngine::appendBackendSpecificInfoToDump(std::string& result) {
     StringAppendF(&result, "Vulkan protected device initialized: %d\n",
                   sProtectedContentVulkanInterface.isInitialized());
 
-    if (!sVulkanInterface.isInitialized()) {
-        return;
+    if (sVulkanInterface.isInitialized()) {
+        sVulkanInterface.appendVulkanInfoToDump(result);
     }
-
-    StringAppendF(&result, "Instance extensions: [\n");
-    for (const auto& name : sVulkanInterface.getInstanceExtensionNames()) {
-        StringAppendF(&result, "  %s\n", name.c_str());
-    }
-    StringAppendF(&result, "]\n");
-
-    StringAppendF(&result, "Device extensions: [\n");
-    for (const auto& name : sVulkanInterface.getDeviceExtensionNames()) {
-        StringAppendF(&result, "  %s\n", name.c_str());
-    }
-    StringAppendF(&result, "]\n");
 }
 
 } // namespace skia

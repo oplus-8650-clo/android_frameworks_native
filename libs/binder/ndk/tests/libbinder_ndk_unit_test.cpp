@@ -257,7 +257,7 @@ int lazyService(const char* instance) {
 bool isServiceRunning(const char* serviceName) {
     static const sp<android::IServiceManager> sm(android::defaultServiceManager());
     const Vector<String16> services = sm->listServices();
-    for (const auto service : services) {
+    for (const auto& service : services) {
         if (service == String16(serviceName)) return true;
     }
     return false;

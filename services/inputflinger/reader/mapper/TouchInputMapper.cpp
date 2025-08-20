@@ -63,8 +63,6 @@ namespace input_flags = com::android::input::flags;
 // data.
 static constexpr nsecs_t STYLUS_DATA_LATENCY = ms2ns(10);
 
-// Minimum width between two pointers to determine a gesture as freeform gesture in mm
-static const float MIN_FREEFORM_GESTURE_WIDTH_IN_MILLIMETER = 30;
 // --- Static Definitions ---
 
 static const DisplayViewport kUninitializedViewport;
@@ -928,11 +926,6 @@ void TouchInputMapper::configureInputDevice(nsecs_t when, bool* outResetNeeded) 
 
     // Raw width and height in the natural orientation.
     const ui::Size rawSize{mRawPointerAxes.getRawWidth(), mRawPointerAxes.getRawHeight()};
-    const int32_t rawXResolution = mRawPointerAxes.x.resolution;
-    const int32_t rawYResolution = mRawPointerAxes.y.resolution;
-    // Calculate the mean resolution when both x and y resolution are set, otherwise set it to 0.
-    const float rawMeanResolution =
-            (rawXResolution > 0 && rawYResolution > 0) ? (rawXResolution + rawYResolution) / 2 : 0;
 
     const DisplayViewport& newViewport = newViewportOpt.value_or(kUninitializedViewport);
     bool viewportChanged;

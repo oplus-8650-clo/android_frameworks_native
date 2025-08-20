@@ -78,6 +78,7 @@ layer_state_t::layer_state_t()
         reserved(0),
         cornerRadii(gui::CornerRadii(0.0f)),
         clientDrawnCornerRadii(gui::CornerRadii(0.0f)),
+        clientDrawnCornerRadiusCrop({0, 0, 0, 0}),
         backgroundBlurRadius(0),
         backgroundBlurScale{1.0f},
         color(0),
@@ -156,6 +157,10 @@ status_t layer_state_t::write(Parcel& output) const
     SAFE_PARCEL(output.write, colorTransform.asArray(), 16 * sizeof(float));
     SAFE_PARCEL(cornerRadii.writeToParcel, &output);
     SAFE_PARCEL(clientDrawnCornerRadii.writeToParcel, &output);
+    SAFE_PARCEL(output.writeFloat, clientDrawnCornerRadiusCrop.top);
+    SAFE_PARCEL(output.writeFloat, clientDrawnCornerRadiusCrop.left);
+    SAFE_PARCEL(output.writeFloat, clientDrawnCornerRadiusCrop.bottom);
+    SAFE_PARCEL(output.writeFloat, clientDrawnCornerRadiusCrop.right);
     SAFE_PARCEL(output.writeUint32, backgroundBlurRadius);
     SAFE_PARCEL(output.writeFloat, backgroundBlurScale);
     SAFE_PARCEL(output.writeParcelable, metadata);
@@ -297,6 +302,10 @@ status_t layer_state_t::read(const Parcel& input)
     SAFE_PARCEL(input.read, &colorTransform, 16 * sizeof(float));
     SAFE_PARCEL(cornerRadii.readFromParcel, &input);
     SAFE_PARCEL(clientDrawnCornerRadii.readFromParcel, &input);
+    SAFE_PARCEL(input.readFloat, &clientDrawnCornerRadiusCrop.top);
+    SAFE_PARCEL(input.readFloat, &clientDrawnCornerRadiusCrop.left);
+    SAFE_PARCEL(input.readFloat, &clientDrawnCornerRadiusCrop.bottom);
+    SAFE_PARCEL(input.readFloat, &clientDrawnCornerRadiusCrop.right);
     SAFE_PARCEL(input.readUint32, &backgroundBlurRadius);
     SAFE_PARCEL(input.readFloat, &backgroundBlurScale);
     SAFE_PARCEL(input.readParcelable, &metadata);
@@ -627,6 +636,7 @@ void layer_state_t::merge(const layer_state_t& other) {
     if (other.what & eClientDrawnCornerRadiusChanged) {
         what |= eClientDrawnCornerRadiusChanged;
         clientDrawnCornerRadii = other.clientDrawnCornerRadii;
+        clientDrawnCornerRadiusCrop = other.clientDrawnCornerRadiusCrop;
     }
     if (other.what & eBackgroundBlurRadiusChanged) {
         what |= eBackgroundBlurRadiusChanged;
@@ -861,6 +871,7 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
     CHECK_DIFF(diff, eLayerStackChanged, other, layerStack);
     CHECK_DIFF(diff, eCornerRadiusChanged, other, cornerRadii);
     CHECK_DIFF(diff, eClientDrawnCornerRadiusChanged, other, clientDrawnCornerRadii);
+    CHECK_DIFF(diff, eClientDrawnCornerRadiusChanged, other, clientDrawnCornerRadiusCrop);
     CHECK_DIFF(diff, eBackgroundBlurRadiusChanged, other, backgroundBlurRadius);
     CHECK_DIFF(diff, eBackgroundBlurScaleChanged, other, backgroundBlurScale);
     if (other.what & eBlurRegionsChanged) diff |= eBlurRegionsChanged;

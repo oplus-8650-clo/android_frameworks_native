@@ -15,7 +15,6 @@
  */
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +46,7 @@
 #include <utils/Mutex.h>
 
 #include "test_framework/core/BufferId.h"
+#include "test_framework/core/ConstevaledTypeName.h"
 #include "test_framework/hwc3/Hwc3Controller.h"
 #include "test_framework/hwc3/ObservingComposer.h"
 #include "test_framework/hwc3/delegators/Composer.h"
@@ -72,42 +72,6 @@ using aidl::android::hardware::graphics::composer3::PowerMode;
 
 namespace {
 
-class InterfaceName {
-    template <typename T>
-    static consteval auto pretty() -> std::string_view {
-        return __PRETTY_FUNCTION__;
-    }
-
-    static consteval auto trim(std::string_view name) -> std::string_view {
-        constexpr std::string_view expected = "std::string_view";
-        constexpr std::string_view ref = pretty<std::string_view>();
-        constexpr size_t prefixLength = ref.rfind(expected);
-        static_assert(prefixLength != std::string_view::npos);
-        constexpr size_t suffixLength = ref.size() - prefixLength - expected.size();
-        static_assert(prefixLength + suffixLength + expected.size() == ref.size());
-
-        return name.substr(prefixLength, name.size() - suffixLength - prefixLength);
-    }
-
-    template <size_t... Indices>
-    static consteval auto copy(std::string_view input, std::index_sequence<Indices...> sequence)
-            -> std::array<char, 1 + sizeof...(Indices)> {
-        ftl::ignore(sequence);
-        return {input[Indices]..., 0};
-    }
-
-    template <typename T>
-    static consteval auto operator()() -> std::string_view {
-        constexpr auto name = trim(pretty<T>());
-        static constexpr auto copied = copy(name, std::make_index_sequence<name.size()>{});
-        return copied.data();
-    }
-
-  public:
-    template <typename T>
-    static constexpr auto value = operator()<T>();
-};
-
 // Implements a generic forwarder for an interface, given also an matching delegator.
 template <typename Interface, template <typename> typename Delegator, bool VersionMustMatch = true>
 struct Forwarder : public Delegator<Forwarder<Interface, Delegator, VersionMustMatch>> {
@@ -124,14 +88,14 @@ struct Forwarder : public Delegator<Forwarder<Interface, Delegator, VersionMustM
                 return base::unexpected(fmt::format(
                         "{} forwarding interface version mismatch. Destination uses {}, "
                         "forwarder uses {}, and they must be the same.",
-                        InterfaceName::value<Interface>, destinationVersion, Interface::version));
+                        core::typeNameOf<Interface>(), destinationVersion, Interface::version));
             }
         } else {
             if (destinationVersion < Interface::version) {
                 return base::unexpected(fmt::format(
                         "{} forwarding interface version mismatch. Destination uses {}, "
                         "forwarder uses {} and must not be newer.",
-                        InterfaceName::value<Interface>, destinationVersion, Interface::version));
+                        core::typeNameOf<Interface>(), destinationVersion, Interface::version));
             }
         }
 
@@ -186,8 +150,8 @@ struct ComposerClientObserver final : public ComposerClientForwarder {
 
         // begin IComposerCallback overrides
 
-        auto onVsync(int64_t in_display, int64_t in_timestamp,
-                     int32_t in_vsyncPeriodNanos) -> ::ndk::ScopedAStatus override {
+        auto onVsync(int64_t in_display, int64_t in_timestamp, int32_t in_vsyncPeriodNanos)
+                -> ::ndk::ScopedAStatus override {
             if (auto controller = mController.lock()) {
                 controller->callbacks().onVSyncCallbackSent(events::VSync{
                         .displayId = in_display,

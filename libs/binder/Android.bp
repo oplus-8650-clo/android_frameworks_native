@@ -338,6 +338,7 @@ cc_defaults {
             cflags: [
                 "-DBINDER_RPC_DEV_SERVERS",
                 "-DBINDER_ENABLE_RECORDING",
+                "-DBINDER_OBSERVER_DROIDFOOD_CONFIG",
             ],
         },
     },
@@ -559,8 +560,7 @@ cc_defaults {
     name: "libbinder_defer_bc_request_freeze_notification_flag_default",
     cflags: select(release_flag("RELEASE_LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"), {
         true: ["-DLIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"],
-        false: ["-DNO_LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"],
-        default: ["-DNO_LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"],
+        default: [],
     }),
 }
 
@@ -568,8 +568,7 @@ cc_defaults {
     name: "libbinder_no_flush_on_last_ref_flag_default",
     cflags: select(release_flag("RELEASE_LIBBINDER_NO_FLUSH_ON_LAST_REF"), {
         true: ["-DLIBBINDER_NO_FLUSH_ON_LAST_REF"],
-        false: ["-DNO_LIBBINDER_NO_FLUSH_ON_LAST_REF"],
-        default: ["-DNO_LIBBINDER_NO_FLUSH_ON_LAST_REF"],
+        default: [],
     }),
 }
 
@@ -577,8 +576,15 @@ cc_defaults {
     name: "libbinder_fix_double_derefs_flag_default",
     cflags: select(release_flag("RELEASE_LIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS"), {
         true: ["-DLIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS"],
-        false: ["-DNO_LIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS"],
-        default: ["-DNO_LIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS"],
+        default: [],
+    }),
+}
+
+cc_defaults {
+    name: "libbinder_freeze_use_flush_if_needed_flag_default",
+    cflags: select(release_flag("RELEASE_LIBBINDER_FREEZE_USE_FLUSH_IF_NEEDED"), {
+        true: ["-DLIBBINDER_FREEZE_USE_FLUSH_IF_NEEDED"],
+        default: [],
     }),
 }
 
@@ -590,6 +596,7 @@ cc_defaults {
         "libbinder_addservice_cache_flag",
         "libbinder_remove_cache_static_list_flag",
         "libbinder_fix_double_derefs_flag_default",
+        "libbinder_freeze_use_flush_if_needed_flag_default",
     ],
     srcs: [
         "BufferedTextOutput.cpp",
@@ -1080,7 +1087,6 @@ cc_library {
     name: "libprocessinfoservice_aidl",
     host_supported: true,
     srcs: [
-        "IProcessInfoService.cpp",
         "ProcessInfoService.cpp",
     ],
     export_include_dirs: ["include_processinfo"],
@@ -1088,6 +1094,7 @@ cc_library {
         "libbinder",
         "libutils",
         "liblog",
+        "process_info_service_aidl-cpp",
     ],
 }
 

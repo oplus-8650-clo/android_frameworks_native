@@ -19,6 +19,7 @@
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/vk/VulkanBackendContext.h>
 
+#include <android-base/stringprintf.h>
 #include <log/log_main.h>
 #include <utils/Timers.h>
 
@@ -30,6 +31,8 @@ namespace android {
 namespace renderengine {
 namespace skia {
 
+using base::StringAppendF;
+
 VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
     VulkanBackendContext backendContext;
     backendContext.fInstance = mInstance;
@@ -37,7 +40,7 @@ VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
     backendContext.fDevice = mDevice;
     backendContext.fQueue = mQueue;
     backendContext.fGraphicsQueueIndex = mQueueIndex;
-    backendContext.fMaxAPIVersion = mApiVersion;
+    backendContext.fMaxAPIVersion = mTargetApiVersion;
     backendContext.fVkExtensions = &mVulkanExtensions;
     backendContext.fDeviceFeatures2 = &mPhysicalDeviceFeatures2;
     backendContext.fGetProc = mGrGetProc;
@@ -316,8 +319,8 @@ void VulkanInterface::init(bool protectedContent) {
     }
 
     vkGetPhysicalDeviceProperties2(physicalDevice, &physDevProps);
+    mPhysicalDeviceProperties = physDevProps.properties;
     const uint32_t physicalDeviceApiVersion = physDevProps.properties.apiVersion;
-    mDriverVersion = physDevProps.properties.driverVersion;
     if (physicalDeviceApiVersion < VK_MAKE_VERSION(1, 1, 0)) {
         BAIL("Vulkan physical device API version %" PRIu32 ".%" PRIu32 ".%" PRIu32 " < 1.1.0",
              VK_VERSION_MAJOR(physicalDeviceApiVersion), VK_VERSION_MINOR(physicalDeviceApiVersion),
@@ -542,7 +545,7 @@ void VulkanInterface::init(bool protectedContent) {
     mDevice = device;
     mQueue = graphicsQueue;
     mQueueIndex = graphicsQueueIndex;
-    mApiVersion = std::min(physicalDeviceApiVersion, appInfo.apiVersion);
+    mTargetApiVersion = std::min(physicalDeviceApiVersion, appInfo.apiVersion);
     // grExtensions already constructed
     // feature pointers already constructed
     mGrGetProc = sGetProc;
@@ -581,7 +584,7 @@ void VulkanInterface::teardown() {
     mPhysicalDevice = VK_NULL_HANDLE; // Implicitly destroyed by destroying mInstance.
     mQueue = VK_NULL_HANDLE;          // Implicitly destroyed by destroying mDevice.
     mQueueIndex = 0;
-    mApiVersion = 0;
+    mTargetApiVersion = 0;
     mVulkanExtensions = skgpu::VulkanExtensions();
     mGrGetProc = nullptr;
     mIsProtected = false;
@@ -595,6 +598,31 @@ void VulkanInterface::teardown() {
 
     mInstanceExtensionNames.clear();
     mDeviceExtensionNames.clear();
+}
+
+void VulkanInterface::appendVulkanInfoToDump(std::string& result) const {
+    StringAppendF(&result, "Device properties: [\n");
+    StringAppendF(&result, "  Name: %s\n", mPhysicalDeviceProperties.deviceName);
+    StringAppendF(&result, "  Type: %" PRIu32 "\n", mPhysicalDeviceProperties.deviceType);
+    StringAppendF(&result, "  Driver version: %" PRIu32 "\n",
+                  mPhysicalDeviceProperties.driverVersion);
+    StringAppendF(&result, "  Supported API version: %" PRIu32 ".%" PRIu32 ".%" PRIu32 "\n",
+                  VK_VERSION_MAJOR(mPhysicalDeviceProperties.apiVersion),
+                  VK_VERSION_MINOR(mPhysicalDeviceProperties.apiVersion),
+                  VK_VERSION_PATCH(mPhysicalDeviceProperties.apiVersion));
+    StringAppendF(&result, "]\n");
+
+    StringAppendF(&result, "Instance extensions: [\n");
+    for (const auto& name : mInstanceExtensionNames) {
+        StringAppendF(&result, "  %s\n", name.c_str());
+    }
+    StringAppendF(&result, "]\n");
+
+    StringAppendF(&result, "Device extensions: [\n");
+    for (const auto& name : mDeviceExtensionNames) {
+        StringAppendF(&result, "  %s\n", name.c_str());
+    }
+    StringAppendF(&result, "]\n");
 }
 
 } // namespace skia

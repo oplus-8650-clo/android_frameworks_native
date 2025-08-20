@@ -81,7 +81,8 @@ struct SurfaceControlStats {
                         std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence,
                         const sp<Fence>& presentFence, const sp<Fence>& prevReleaseFence,
                         std::optional<uint32_t> hint, FrameEventHistoryStats eventStats,
-                        uint32_t currentMaxAcquiredBufferCount)
+                        uint32_t currentMaxAcquiredBufferCount,
+                        std::optional<gui::CornerRadii> cornerRadii)
           : surfaceControl(sc),
             latchTime(latchTime),
             acquireTimeOrFence(std::move(acquireTimeOrFence)),
@@ -89,7 +90,8 @@ struct SurfaceControlStats {
             previousReleaseFence(prevReleaseFence),
             transformHint(hint),
             frameEventStats(eventStats),
-            currentMaxAcquiredBufferCount(currentMaxAcquiredBufferCount) {}
+            currentMaxAcquiredBufferCount(currentMaxAcquiredBufferCount),
+            cornerRadii(cornerRadii) {}
 
     sp<SurfaceControl> surfaceControl;
     nsecs_t latchTime = -1;
@@ -99,6 +101,7 @@ struct SurfaceControlStats {
     std::optional<uint32_t> transformHint = 0;
     FrameEventHistoryStats frameEventStats;
     uint32_t currentMaxAcquiredBufferCount = 0;
+    std::optional<gui::CornerRadii> cornerRadii = gui::CornerRadii(0.0f);
 };
 
 using TransactionCompletedCallbackTakesContext =
@@ -553,13 +556,12 @@ public:
         Transaction& setCrop(const sp<SurfaceControl>& sc, const FloatRect& crop);
         Transaction& setCornerRadius(const sp<SurfaceControl>& sc, float cornerRadius);
         Transaction& setCornerRadius(const sp<SurfaceControl>& sc, const gui::CornerRadii& radii);
+        // Sets the client drawn corner radius and the corresponding crop for the layer
+        // used by the client. If the client drawn radius and crop both match the radius and
+        // crop computed by SF, then SF will send a zero radius to RenderEngine
         Transaction& setClientDrawnCornerRadius(const sp<SurfaceControl>& sc,
-                                                const gui::CornerRadii& radii);
-        // Sets the client drawn corner radius for the layer. If both a corner radius and a client
-        // radius are sent to SF, the client radius will be used. This indicates that the corner
-        // radius is drawn by the client and not SurfaceFlinger.
-        Transaction& setClientDrawnCornerRadius(const sp<SurfaceControl>& sc,
-                                                float clientDrawnCornerRadius);
+                                                const gui::CornerRadii& radii,
+                                                const FloatRect& crop);
         Transaction& setBackgroundBlurRadius(const sp<SurfaceControl>& sc,
                                              int backgroundBlurRadius);
         Transaction& setBackgroundBlurScale(const sp<SurfaceControl>& sc,

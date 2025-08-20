@@ -979,9 +979,6 @@ cc_test_host {
 
 cc_test {
     name: "binderHostDeviceTestService",
-    // The binary is named differently from the module so that PushFilePreparer pushes the binary
-    // directly, not the test module directory.
-    stem: "binderHostDeviceTest-service",
     defaults: ["binder_test_defaults"],
     gtest: false,
     auto_gen_config: false,

@@ -15,6 +15,7 @@
  */
 
 #include <android-base/logging.h>
+#include <android/os/IServiceManager.h>
 #include <binder/Binder.h>
 #include <binder/Functional.h>
 #include <binder/IServiceManager.h>
@@ -241,6 +242,45 @@ TEST(BinderAllocation, PingTransaction) {
     sp<IBinder> a_binder = GetRemoteBinder();
     const auto m = ScopeDisallowMalloc();
     a_binder->pingBinder();
+}
+
+// Return the max size of a string that will get the Small String Optimization
+// and avoid a heap allocation
+static size_t getSSOMaxSize() {
+    size_t mallocs = 0;
+    const auto on_malloc = OnMalloc([&](size_t /* bytes */) { mallocs++; });
+    for (int i = 1; true; i++) {
+        std::string s(i, 'a');
+        if (mallocs) return i - 1;
+    }
+}
+
+TEST(BinderAllocation, GetListOfStrings) {
+    sp<android::os::IServiceManager> sm =
+            android::interface_cast<android::os::IServiceManager>(GetRemoteBinder());
+    // 128 bytes Parcel::writeInterfaceToken -> writeInt32 (why 128 bytes?)
+    // 9480 Parcel::readUtf8VectorFromUtf16Vector -> readData -> c->resize(9480)
+    // then it's all readUtf8FromUtf16 calls from readUtf8VectorFromUtf16Vector
+    // Parcel::readUtf8VectorFromUtf16Vector -> readData -> readUtf8FromUtf16
+    const size_t numExtraMallocs = 2;
+    size_t mallocs = 0;
+    // Could save a single malloc by starting with a large enough vector,
+    // not worth doing without knowing the number of services.
+    std::vector<std::string> ret;
+    size_t maxSSOSize = getSSOMaxSize();
+
+    const auto on_malloc = OnMalloc([&](size_t /* bytes */) { mallocs++; });
+
+    ASSERT_TRUE(sm->listServices(android::IServiceManager::DUMP_FLAG_PRIORITY_ALL, &ret).isOk());
+    ASSERT_GT(ret.size(), 0u);
+
+    size_t numStringAllocations = std::ranges::count_if(ret, [maxSSOSize](const std::string& s) {
+        // In readUtf8FromUtf16 we resize with num chars + 1
+        return s.size() + 1 > maxSSOSize;
+    });
+
+    EXPECT_EQ(mallocs, numStringAllocations + numExtraMallocs)
+            << "Expecting " << numStringAllocations << " string allocs";
 }
 
 TEST(BinderAllocation, MakeScopeGuard) {

@@ -846,6 +846,7 @@ void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
     for (const auto& handle : mDrawingState.callbackHandles) {
         handle->bufferReleaseChannel = mBufferReleaseChannel;
         handle->transformHint = mTransformHint;
+        handle->cornerRadii = mCornerRadii;
         handle->dequeueReadyTime = dequeueReadyTime;
         handle->currentMaxAcquiredBufferCount =
                 mFlinger->getMaxAcquiredBufferCountForCurrentRefreshRate(mOwnerUid);

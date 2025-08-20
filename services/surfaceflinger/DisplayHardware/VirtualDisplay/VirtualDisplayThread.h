@@ -37,6 +37,8 @@
 
 namespace android {
 
+class VirtualDisplayThreadManager;
+
 /**
  * VirtualDisplayThread runs tasks for a Virtual Display on a separate thread.
  *
@@ -46,9 +48,9 @@ namespace android {
  * Tasks are submitted to the thread via submitWork, which queues the task and notifies the thread.
  * The thread then processes tasks in a FIFO manner.
  *
- * The thread can be killed via kill, which clears the queue, submits a teardown task, and then
- * submits a final task to set the state to SHUT_DOWN. No more tasks can be scheduled after kill.
- * The thread will then exit after processing these tasks.
+ * The thread can be destroyed via destroy(), which submits a final task to set the state to
+ * SHUT_DOWN. No more tasks can be scheduled after destroy(). The thread will then exit after
+ * processing these tasks.
  *
  * The thread can be checked for freezing via isFrozen, which returns true if the thread has not
  * processed a task in a certain amount of time. This is useful for detecting deadlocks in the
@@ -59,18 +61,40 @@ public:
     using Task = std::function<void()>;
 
     static std::shared_ptr<VirtualDisplayThread> create();
-    ~VirtualDisplayThread();
+    void destroy();
 
-    bool isFrozen();
+    /**
+     * An RAII handle to a VirtualDisplayThread.
+     *
+     * It can only be constructed by the VirtualDisplayThreadManager. On destruction, it notifies
+     * the VirtualDisplayThreadManager.
+     */
+    class Client {
+    public:
+        ~Client();
 
-    void submitWork(Task&& task);
+        Client(const Client&) = delete;
+        Client(Client&&) = delete;
+        Client& operator=(const Client&) = delete;
+        Client& operator=(Client&&) = delete;
 
-    void kill(Task&& teardownTask);
+        bool isFrozen() const;
+        void submitWork(Task&& task);
+
+    private:
+        friend VirtualDisplayThreadManager;
+
+        explicit Client(uid_t uid, std::shared_ptr<VirtualDisplayThread> thread);
+
+        const uid_t mUid;
+        std::shared_ptr<VirtualDisplayThread> mThread;
+    };
+
+    Client createClient();
 
 private:
     enum State : uint8_t { INITIALIZING, RUNNING, SHUTTING_DOWN, SHUT_DOWN };
 
-    VirtualDisplayThread();
     void init();
 
     static void vdThreadMain(std::shared_ptr<VirtualDisplayThread> self);
@@ -81,7 +105,7 @@ private:
 
     std::thread mThread;
 
-    std::mutex mWorkMutex;
+    mutable std::mutex mWorkMutex;
     std::condition_variable mCondVar;
     std::atomic<State> mState = INITIALIZING;
     std::queue<std::function<void()>> mWorkQueue;

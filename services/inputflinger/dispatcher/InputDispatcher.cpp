@@ -2975,9 +2975,14 @@ void InputDispatcher::DispatcherTouchState::addPointerWindowTarget(
     // causes a HOVER_EXIT to be generated. That means that the same entry of ACTION_DOWN would
     // have DISPATCH_AS_HOVER_EXIT and DISPATCH_AS_IS. And therefore, we have to create separate
     // input targets for hovering pointers and for touching pointers.
+    // This also occurs if a window is expected to receive both action_outside and HOVER_EXIT.
     // If we picked an existing input target above, but it's for HOVER_EXIT - let's use a new
     // target instead.
-    if (it != inputTargets.end() && it->dispatchMode == InputTarget::DispatchMode::HOVER_EXIT) {
+    bool enable_action_outside_bug_fix = input_flags::simultaneous_outside_and_hover_fix();
+    if (it != inputTargets.end() &&
+        (it->dispatchMode == InputTarget::DispatchMode::HOVER_EXIT ||
+         (enable_action_outside_bug_fix &&
+          it->dispatchMode == InputTarget::DispatchMode::OUTSIDE))) {
         // Force the code below to create a new input target
         it = inputTargets.end();
     }
@@ -6677,7 +6682,6 @@ void InputDispatcher::doInterceptKeyBeforeDispatchingCommand(const sp<IBinder>& 
     KeyEvent event = createKeyEvent(entry);
     event.setDisplayId(displayId);
     std::variant<nsecs_t, KeyEntry::InterceptKeyResult> interceptResult;
-    nsecs_t delay = 0;
     { // release lock
         scoped_unlock unlock(mLock);
         android::base::Timer t;

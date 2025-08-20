@@ -86,6 +86,14 @@ namespace {
         return false;
 #endif
     }
+
+    bool freezeUseFlushIfNeeded() {
+#if defined(LIBBINDER_FREEZE_USE_FLUSH_IF_NEEDED)
+        return true;
+#else
+        return false;
+#endif
+    }
 }
 
 // Static const and functions will be optimized out if not used,
@@ -1051,7 +1059,9 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (status_t res = flushCommands(); res != OK) {
+    if (freezeUseFlushIfNeeded()) {
+        flushIfNeeded();
+    } else if (status_t res = flushCommands(); res != OK) {
         LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
     }
 
@@ -1069,7 +1079,9 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (flush) {
+    if (freezeUseFlushIfNeeded()) {
+        flushIfNeeded();
+    } else if (flush) {
         if (status_t res = flushCommands(); res != OK) {
             LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
         }

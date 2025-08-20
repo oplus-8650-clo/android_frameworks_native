@@ -53,10 +53,10 @@ public:
 
     bool isInitialized() const { return mInitialized; }
     bool isRealtimePriority() const { return mIsRealtimePriority; }
-    const std::vector<std::string>& getInstanceExtensionNames() { return mInstanceExtensionNames; }
-    const std::vector<std::string>& getDeviceExtensionNames() { return mDeviceExtensionNames; }
 
-    uint32_t driverVersion() const { return mDriverVersion; }
+    uint32_t driverVersion() const { return mPhysicalDeviceProperties.driverVersion; }
+
+    void appendVulkanInfoToDump(std::string& result) const;
 
 private:
     struct VulkanFuncs {
@@ -83,11 +83,11 @@ private:
     VkDevice mDevice = VK_NULL_HANDLE;
     VkQueue mQueue = VK_NULL_HANDLE;
     int mQueueIndex = 0;
-    uint32_t mApiVersion = 0;
-    uint32_t mDriverVersion = 0;
+    uint32_t mTargetApiVersion = 0;
     skgpu::VulkanExtensions mVulkanExtensions;
     skgpu::VulkanPreferredFeatures mVulkanFeatures;
     VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2 = {};
+    VkPhysicalDeviceProperties mPhysicalDeviceProperties = {};
     VkPhysicalDeviceProtectedMemoryFeatures mProtectedMemoryFeatures = {};
     VkPhysicalDeviceFaultFeaturesEXT mDeviceFaultFeatures = {};
     skgpu::VulkanGetProc mGrGetProc = nullptr;

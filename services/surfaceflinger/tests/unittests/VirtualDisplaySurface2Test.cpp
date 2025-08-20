@@ -46,6 +46,7 @@ using namespace testing;
 
 namespace android {
 
+constexpr uid_t kUid = 123;
 constexpr size_t kNumFramesForTest = 100;
 
 class HoldingFrameAvailableListener : public BufferItemConsumer::FrameAvailableListener {
@@ -93,8 +94,9 @@ public:
     void SetUpForGpu() {
         ASSERT_TRUE(std::holds_alternative<GpuVirtualDisplayId>(mDisplayId))
                 << "mDisplayId should be member-initialized to GPU";
-        mVirtualDisplay = sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId,
-                                                           "GpuTestVirtualDisplay", mSinkSurface);
+        mVirtualDisplay =
+                sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId, "GpuTestVirtualDisplay", kUid,
+                                                 mSinkSurface);
 
         mRenderSurface = mVirtualDisplay->getCompositionSurface();
         mRenderSurfaceListener = sp<StubSurfaceListener>::make();
@@ -103,8 +105,9 @@ public:
 
     void SetUpForHwc() {
         mDisplayId = HalVirtualDisplayId(55555);
-        mVirtualDisplay = sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId,
-                                                           "HwcTestVirtualDisplay", mSinkSurface);
+        mVirtualDisplay =
+                sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId, "HwcTestVirtualDisplay", kUid,
+                                                 mSinkSurface);
 
         mRenderSurface = mVirtualDisplay->getCompositionSurface();
         mRenderSurfaceListener = sp<StubSurfaceListener>::make();

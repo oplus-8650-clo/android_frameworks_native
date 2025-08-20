@@ -390,6 +390,8 @@ public:
     void setTransformHint(std::optional<ui::Transform::RotationFlags> transformHint) {
         mTransformHint = transformHint;
     }
+    void setCornerRadii(std::optional<gui::CornerRadii> cornerRadii) { mCornerRadii = cornerRadii; }
+
     void commitTransaction();
     // Keeps track of the previously presented layer stacks. This is used to get
     // the release fences from the correct displays when we release the last buffer
@@ -549,6 +551,7 @@ private:
     // Transform hint provided to the producer. This must be accessed holding
     // the mStateLock.
     std::optional<ui::Transform::RotationFlags> mTransformHint = std::nullopt;
+    std::optional<gui::CornerRadii> mCornerRadii = std::nullopt;
 
     ReleaseCallbackId mPreviousReleaseCallbackId = ReleaseCallbackId::INVALID_ID;
     sp<IBinder> mPreviousReleaseBufferEndpoint;

@@ -163,6 +163,11 @@ public:
     void setTransactionHangCallback(std::function<void(const std::string&)> callback);
     void setApplyToken(sp<IBinder>);
 
+    void setCornerRadiiCallback(std::function<void(const gui::CornerRadii)>)
+            EXCLUDES(mCornerRadiiCallbackMutex);
+    std::function<void(const gui::CornerRadii)> getCornerRadiiCallback() const
+            EXCLUDES(mCornerRadiiCallbackMutex);
+
     void setWaitForBufferReleaseCallback(std::function<void(const nsecs_t)> callback)
             EXCLUDES(mWaitForBufferReleaseMutex);
     std::function<void(const nsecs_t)> getWaitForBufferReleaseCallback() const
@@ -220,6 +225,7 @@ private:
     sp<SurfaceControl> mSurfaceControl GUARDED_BY(mMutex);
 
     mutable std::mutex mMutex;
+    mutable std::mutex mCornerRadiiCallbackMutex;
     mutable std::mutex mWaitForBufferReleaseMutex;
     std::condition_variable mCallbackCV;
 
@@ -280,9 +286,10 @@ private:
         // This is used to check if we should update the blast layer size immediately or wait until
         // we get the next buffer. This will support scenarios where the layer can change sizes
         // and the buffer will scale to fit the new size.
-        uint32_t scalingMode = NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW;
+        uint32_t scalingMode = com::android::graphics::libgui::flags::default_scaling_mode_freeze()
+                ? NATIVE_WINDOW_SCALING_MODE_FREEZE
+                : NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW;
         Rect crop;
-
         void update(bool hasBuffer, uint32_t width, uint32_t height, uint32_t transform,
                     uint32_t scalingMode, const Rect& crop) {
             this->hasBuffer = hasBuffer;
@@ -368,6 +375,9 @@ private:
     std::function<void(const std::string&)> mTransactionHangCallback;
 
     std::unordered_set<uint64_t> mSyncedFrameNumbers GUARDED_BY(mMutex);
+
+    std::function<void(const gui::CornerRadii)> mCornerRadiiCallback
+            GUARDED_BY(mCornerRadiiCallbackMutex);
 
     std::function<void(const nsecs_t)> mWaitForBufferReleaseCallback
             GUARDED_BY(mWaitForBufferReleaseMutex);

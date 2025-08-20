@@ -815,46 +815,17 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetCornerRadiusChildScaledDown) {
     }
 }
 
-TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadius) {
-    sp<SurfaceControl> layer;
-    const uint8_t size = 64;
-    const uint8_t testArea = 4;
-    const float cornerRadius = 5.0f;
-    ASSERT_NO_FATAL_FAILURE(layer = createLayer("test", size, size));
-    ASSERT_NO_FATAL_FAILURE(fillLayerColor(layer, Color::RED, size, size));
-
-    Transaction()
-            .setClientDrawnCornerRadius(layer, cornerRadius)
-            .setCornerRadius(layer, cornerRadius)
-            .setCrop(layer, Rect(size, size))
-            .apply();
-
-    {
-        const uint8_t bottom = size - 1;
-        const uint8_t right = size - 1;
-        auto shot = getScreenCapture();
-        // Solid corners
-        shot->expectColor(Rect(0, 0, testArea, testArea), Color::RED);
-        shot->expectColor(Rect(size - testArea, 0, right, testArea), Color::RED);
-        shot->expectColor(Rect(0, bottom - testArea, testArea, bottom), Color::RED);
-        shot->expectColor(Rect(size - testArea, bottom - testArea, right, bottom), Color::RED);
-        // Solid center
-        shot->expectColor(Rect(size / 2 - testArea / 2, size / 2 - testArea / 2,
-                               size / 2 + testArea / 2, size / 2 + testArea / 2),
-                          Color::RED);
-    }
-}
-
-TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiusFourCorners) {
+TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiiWithMatchingCrop) {
     sp<SurfaceControl> layer;
     const uint8_t size = 64;
     const uint8_t testArea = 4;
     const gui::CornerRadii cornerRadius = gui::CornerRadii(20.f, 20.f, 10.f, 10.f);
+    FloatRect crop(0, 0, size, size);
     ASSERT_NO_FATAL_FAILURE(layer = createLayer("test", size, size));
     ASSERT_NO_FATAL_FAILURE(fillLayerColor(layer, Color::RED, size, size));
 
     Transaction()
-            .setClientDrawnCornerRadius(layer, cornerRadius)
+            .setClientDrawnCornerRadius(layer, cornerRadius, crop)
             .setCornerRadius(layer, cornerRadius)
             .apply();
     {
@@ -873,34 +844,31 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiusFourCorn
     }
 }
 
-TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiusWithCrop) {
+TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiiWithMismatchingCrop) {
     sp<SurfaceControl> layer;
     const uint8_t size = 64;
-    const uint8_t cropBottom = 40;
     const uint8_t testArea = 4;
-    const gui::CornerRadii cornerRadius = gui::CornerRadii(10.f, 10.f, 5.f, 5.f);
-    const gui::CornerRadii clientDrawnRadius = gui::CornerRadii(10.f, 10.f, 0.f, 0.f);
+    const gui::CornerRadii cornerRadius = gui::CornerRadii(30.f, 30.f, 20.f, 20.f);
+    FloatRect clientCrop(0, 0, size + 12, size + 12);
     ASSERT_NO_FATAL_FAILURE(layer = createLayer("test", size, size));
     ASSERT_NO_FATAL_FAILURE(fillLayerColor(layer, Color::RED, size, size));
 
     Transaction()
+            .setClientDrawnCornerRadius(layer, cornerRadius, clientCrop)
             .setCornerRadius(layer, cornerRadius)
-            .setCrop(layer, Rect(size, cropBottom))
             .apply();
-
-    Transaction().setClientDrawnCornerRadius(layer, clientDrawnRadius).apply();
     {
-        const uint8_t bottom = cropBottom - 1;
+        const uint8_t bottom = size - 1;
         const uint8_t right = size - 1;
         auto shot = getScreenCapture();
-        // Solid corners
-        shot->expectColor(Rect(0, 0, testArea, testArea), Color::RED);
-        shot->expectColor(Rect(size - testArea, 0, right, testArea), Color::RED);
-        shot->expectColor(Rect(0, bottom - testArea, testArea, bottom), Color::RED);
-        shot->expectColor(Rect(size - testArea, bottom - testArea, right, bottom), Color::RED);
+        // Corners are transparent because SF will draw rounded corners
+        shot->expectColor(Rect(0, 0, testArea, testArea), Color::BLACK);
+        shot->expectColor(Rect(size - testArea, 0, right, testArea), Color::BLACK);
+        shot->expectColor(Rect(0, bottom - testArea, testArea, bottom), Color::BLACK);
+        shot->expectColor(Rect(size - testArea, bottom - testArea, right, bottom), Color::BLACK);
         // Solid center
-        shot->expectColor(Rect(right / 2 - testArea / 2, right / 2 - testArea / 2,
-                               bottom / 2 + testArea / 2, bottom / 2 + testArea / 2),
+        shot->expectColor(Rect(size / 2 - testArea / 2, size / 2 - testArea / 2,
+                               size / 2 + testArea / 2, size / 2 + testArea / 2),
                           Color::RED);
     }
 }
@@ -913,8 +881,9 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, ParentCornerRadiusPrecedenceClient
     const uint32_t size = 64;
     const uint32_t parentSize = size * 3;
     const Rect parentCrop(size, size, size, size);
+    const FloatRect clientCrop(size, size, size, size);
     const uint32_t testLength = 4;
-    const float cornerRadius = 20.0f;
+    gui::CornerRadii cornerRadius(20.0f);
     ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
     ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::RED, parentSize, parentSize));
     ASSERT_NO_FATAL_FAILURE(child = createLayer("child", size, size));
@@ -923,7 +892,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, ParentCornerRadiusPrecedenceClient
     Transaction()
             .setCornerRadius(parent, cornerRadius)
             .setCrop(parent, parentCrop)
-            .setClientDrawnCornerRadius(parent, cornerRadius)
+            .setClientDrawnCornerRadius(parent, cornerRadius, clientCrop)
             .reparent(child, parent)
             .setPosition(child, size, size)
             .apply(true);

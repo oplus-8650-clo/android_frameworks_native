@@ -45,7 +45,7 @@ public:
         return intersection;
     }
 
-    bool contains(const FloatRect& other) {
+    bool contains(const FloatRect& other) const {
         return left <= other.left && top <= other.top && right >= other.right &&
                 bottom >= other.bottom;
     }
