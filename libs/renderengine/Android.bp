@@ -93,6 +93,7 @@ filegroup {
         "skia/GLExtensions.cpp",
         "skia/ShaderCache.cpp",
         "skia/SkiaRenderEngine.cpp",
+        "skia/BoxShadowUtils.cpp",
         "skia/SkiaGLRenderEngine.cpp",
         "skia/SkiaVkRenderEngine.cpp",
         "skia/VulkanInterface.cpp",

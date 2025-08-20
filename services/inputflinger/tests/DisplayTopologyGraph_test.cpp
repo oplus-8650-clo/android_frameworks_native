@@ -179,6 +179,35 @@ INSTANTIATE_TEST_SUITE_P(
                                                    .density = ACONFIGURATION_DENSITY_MEDIUM,
                                                    .boundsInGlobalDp = FloatRect(0, 100, 100,
                                                                                  200)}}},
+                        true),
+                std::make_tuple(
+                        "ValidMultiDisplayTopologyCornerAdjacency",
+                        /*primaryDisplayId=*/DISPLAY_ID_1,
+                        /*graph=*/
+                        DisplayPropertiesMap{
+                                {DISPLAY_ID_1,
+                                 DisplayProperties{.adjacentDisplays =
+                                                           AdjacentDisplaysVector{
+                                                                   {DISPLAY_ID_2,
+                                                                    DisplayTopologyPosition::RIGHT,
+                                                                    0},
+                                                                   {DISPLAY_ID_2,
+                                                                    DisplayTopologyPosition::BOTTOM,
+                                                                    0}},
+                                                   .density = ACONFIGURATION_DENSITY_MEDIUM,
+                                                   .boundsInGlobalDp = FloatRect(0, 0, 100, 100)}},
+                                {DISPLAY_ID_2,
+                                 DisplayProperties{.adjacentDisplays =
+                                                           AdjacentDisplaysVector{
+                                                                   {DISPLAY_ID_1,
+                                                                    DisplayTopologyPosition::LEFT,
+                                                                    0},
+                                                                   {DISPLAY_ID_1,
+                                                                    DisplayTopologyPosition::TOP,
+                                                                    0}},
+                                                   .density = ACONFIGURATION_DENSITY_MEDIUM,
+                                                   .boundsInGlobalDp = FloatRect(100, 100, 200,
+                                                                                 200)}}},
                         true)),
         [](const testing::TestParamInfo<DisplayTopologyGraphTestFixtureParam>& p) {
             return std::string{std::get<0>(p.param)};

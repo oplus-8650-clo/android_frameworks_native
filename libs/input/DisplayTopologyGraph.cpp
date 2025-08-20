@@ -112,25 +112,37 @@ bool validateTopologyGraph(
                            << adjacentDisplay.displayId << " for source " << sourceDisplay;
                 return false;
             }
-            const auto reverseEdgeIt =
-                    std::find_if(adjacentGraphIt->second.adjacentDisplays.begin(),
-                                 adjacentGraphIt->second.adjacentDisplays.end(),
-                                 [sourceDisplay](const DisplayTopologyAdjacentDisplay&
-                                                         reverseAdjacentDisplay) {
-                                     return sourceDisplay == reverseAdjacentDisplay.displayId;
-                                 });
-            if (reverseEdgeIt == adjacentGraphIt->second.adjacentDisplays.end()) {
+            std::vector<DisplayTopologyAdjacentDisplay> reverseEdges;
+            for (const auto& edge : adjacentGraphIt->second.adjacentDisplays) {
+                if (edge.displayId == sourceDisplay) {
+                    reverseEdges.push_back(edge);
+                }
+            }
+            if (reverseEdges.empty()) {
                 LOG(ERROR) << "Missing reverse edge in topology graph for: " << sourceDisplay
                            << " -> " << adjacentDisplay.displayId;
                 return false;
             }
-            DisplayTopologyPosition expectedPosition =
+
+            DisplayTopologyPosition expectedOppositePosition =
                     getOppositePosition(adjacentDisplay.position);
-            if (reverseEdgeIt->position != expectedPosition) {
-                LOG(ERROR) << "Unexpected reverse edge for: " << sourceDisplay << " -> "
+            const auto reverseEdgeIt =
+                    std::find_if(reverseEdges.begin(), reverseEdges.end(),
+                                 [expectedOppositePosition](
+                                         const DisplayTopologyAdjacentDisplay& edge) {
+                                     return expectedOppositePosition == edge.position;
+                                 });
+            if (reverseEdgeIt == reverseEdges.end()) {
+                std::string positions;
+                for (const auto& edge : reverseEdges) {
+                    positions += ftl::enum_string(edge.position);
+                    positions += " ";
+                }
+                LOG(ERROR) << "Reverse edges for: " << sourceDisplay << " -> "
                            << adjacentDisplay.displayId
-                           << " expected position: " << ftl::enum_string(expectedPosition)
-                           << " actual " << ftl::enum_string(reverseEdgeIt->position);
+                           << " found, but none had the expected position: "
+                           << ftl::enum_string(expectedOppositePosition) << " actual [" << positions
+                           << "]";
                 return false;
             }
             if (reverseEdgeIt->offsetDp != -adjacentDisplay.offsetDp) {

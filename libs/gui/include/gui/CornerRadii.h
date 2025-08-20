@@ -17,9 +17,11 @@
 
 #include <binder/Parcel.h>
 #include <binder/Parcelable.h>
+#include <format>
 #include <math/HashCombine.h>
 #include <math/vec2.h>
 #include <ostream>
+#include <string>
 #include "ui/Transform.h"
 
 #include <android/gui/CornerRadiiData.h>
@@ -76,6 +78,15 @@ public:
         this->bottomLeft.y *= t.getScaleY();
         this->bottomRight.x *= t.getScaleX();
         this->bottomRight.y *= t.getScaleY();
+    }
+
+    std::string toString() const {
+        return std::format(
+            R"(CornerRadii(tl:{:.1f},{:.1f}, tr:{:.1f},{:.1f},)" "\n"
+            R"( bl:{:.1f},{:.1f}, br:{:.1f},{:.1f}))",
+            topLeft.x, topLeft.y, topRight.x, topRight.y,
+            bottomLeft.x, bottomLeft.y, bottomRight.x, bottomRight.y
+        );
     }
 };
 

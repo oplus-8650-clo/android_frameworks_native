@@ -366,6 +366,8 @@ void SkiaRenderEngine::finishRenderingAndAbandonContexts() {
         delete mBlurFilter;
     }
 
+    mBoxShadowUtils.cleanup();
+
     // Leftover textures may hold refs to backend-specific Skia contexts, which must be released
     // before ~SkiaGpuContext is called.
     mTextureCleanupMgr.setDeferredStatus(false);
@@ -470,6 +472,8 @@ void SkiaRenderEngine::ensureContextsCreated() {
     }
 
     std::tie(mContext, mProtectedContext) = createContexts();
+
+    mBoxShadowUtils.init(getActiveContext());
 }
 
 void SkiaRenderEngine::mapExternalTextureBuffer(const sp<GraphicBuffer>& buffer,
@@ -1089,40 +1093,11 @@ void SkiaRenderEngine::drawLayersInternal(
                 SFTRACE_NAME("BoxShadows");
                 LOG_ALWAYS_FATAL_IF(layer.disableBlending,
                                     "Cannot disableBlending with a box shadow");
-                for (const gui::BoxShadowSettings::BoxShadowParams& box :
-                     layer.boxShadowSettings.boxShadows) {
-                    SkRRect boxRect = preferredOriginalBounds;
-                    boxRect.outset(box.spreadRadius, box.spreadRadius);
-                    boxRect.offset(box.offsetX, box.offsetY);
-                    float sigma = convertBlurUserRadiusToSigma(box.blurRadius);
-                    SkPaint blur;
-                    blur.setColor(box.color);
-                    blur.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, sigma, false));
-                    canvas->drawRRect(boxRect, blur);
-                }
 
-                const bool opaqueContent =
-                        (!layer.source.buffer.buffer || layer.source.buffer.isOpaque) &&
-                        layer.alpha == 1.0f;
-                if (opaqueContent && supportsForwardPixelKill()) {
-                    SFTRACE_NAME("FPKOptimization");
-                    // This optimization is just for Ganesh and can be removed once graphite is
-                    // enabled.
-                    SkRRect p = preferredOriginalBounds;
-                    // Assume corners are circles.
-                    SkScalar maxRadius = std::max({p.radii(SkRRect::kUpperLeft_Corner).fX,
-                                                   p.radii(SkRRect::kUpperRight_Corner).fX,
-                                                   p.radii(SkRRect::kLowerRight_Corner).fX,
-                                                   p.radii(SkRRect::kLowerLeft_Corner).fX});
-                    SkRect killRect = p.rect();
-                    killRect.inset(maxRadius, maxRadius);
-                    SkPaint paint;
-                    // Draw opaque rect to force FPK on mali results in 2x speedup.
-                    paint.setAntiAlias(false);
-                    paint.setColor(0);
-                    paint.setBlendMode(SkBlendMode::kSrc);
-                    canvas->drawRect(killRect, paint);
-                }
+                float cornerRadius =
+                        roundf(preferredOriginalBounds.radii(SkRRect::kUpperLeft_Corner).fX);
+                mBoxShadowUtils.drawBoxShadows(canvas, preferredOriginalBounds.rect(), cornerRadius,
+                                               layer.boxShadowSettings);
             }
         }
 

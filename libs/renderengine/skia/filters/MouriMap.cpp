@@ -24,7 +24,6 @@
 namespace android {
 namespace renderengine {
 namespace skia {
-namespace {
 
 // NOTE: These shaders are intended to operate on linear color values, but to
 // avoid mapping to/from linear Srgb using the SkSL intrinsics, color space
@@ -34,7 +33,7 @@ namespace {
 // This shader must output to a surface with a linear color space, and relies on
 // Skia's automatic colorspace conversion to map from the input `bitmap`'s
 // color space to said linear color space.
-const SkString kCrosstalkAndChunk16x16String(R"(
+const SkString kEffectSource_MouriMap_CrossTalkAndChunk16x16Effect(R"(
     uniform shader bitmap;
     uniform float inputMultiplier;
     vec4 main(vec2 xy) {
@@ -51,7 +50,7 @@ const SkString kCrosstalkAndChunk16x16String(R"(
 )");
 // This shader assumes `bitmap` is already in a linear color space and does not
 // perform any color space conversion.
-const SkString kChunk8x8String(R"(
+const SkString kEffectSource_MouriMap_Chunk8x8Effect(R"(
     uniform shader bitmap;
     vec4 main(vec2 xy) {
         float maximum = 0.0;
@@ -65,7 +64,7 @@ const SkString kChunk8x8String(R"(
 )");
 // This shader assumes `bitmap` is already in a linear color space and does not
 // perform any color space conversion.
-const SkString kBlurString(R"(
+const SkString kEffectSource_MouriMap_BlurEffect(R"(
     uniform shader bitmap;
     vec4 main(vec2 xy) {
         float C[5];
@@ -88,7 +87,7 @@ const SkString kBlurString(R"(
 // to automatically convert `image` into the linear color space (`lux`'s conversion
 // is a no-op). `makeWithWorkingColorSpace` will also automatically convert back to
 // the output color space, avoiding the need to call to/fromLinearSrgb per pixel.
-const SkString kTonemapString(R"(
+const SkString kEffectSource_MouriMap_TonemapEffect(R"(
     uniform shader image;
     uniform shader lux;
     uniform float scaleFactor;
@@ -111,6 +110,8 @@ const SkString kTonemapString(R"(
     }
 )");
 
+namespace {
+
 // Draws the given runtime shader on a GPU surface and returns the result as an SkImage.
 sk_sp<SkImage> makeImage(SkSurface* surface, const SkRuntimeShaderBuilder& builder) {
     sk_sp<SkShader> shader = builder.makeShader(nullptr);
@@ -125,20 +126,10 @@ sk_sp<SkImage> makeImage(SkSurface* surface, const SkRuntimeShaderBuilder& build
 } // namespace
 MouriMap::MouriMap(RuntimeEffectManager& effectManager)
       : mCrosstalkAndChunk16x16(
-                effectManager
-                        .createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::
-                                                             kMouriMap_CrossTalkAndChunk16x16Effect,
-                                                     "MouriMap_CrossTalkAndChunk16x16",
-                                                     kCrosstalkAndChunk16x16String)),
-        mChunk8x8(effectManager.createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::
-                                                                    kMouriMap_Chunk8x8Effect,
-                                                            "MouriMap_Chunk8x8", kChunk8x8String)),
-        mBlur(effectManager.createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::
-                                                                kMouriMap_BlurEffect,
-                                                        "MouriMap_Blur", kBlurString)),
-        mTonemap(effectManager.createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::
-                                                                   kMouriMap_TonemapEffect,
-                                                           "MouriMap_Tonemap", kTonemapString)) {}
+                effectManager.mKnownEffects[kMouriMap_CrossTalkAndChunk16x16Effect]),
+        mChunk8x8(effectManager.mKnownEffects[kMouriMap_Chunk8x8Effect]),
+        mBlur(effectManager.mKnownEffects[kMouriMap_BlurEffect]),
+        mTonemap(effectManager.mKnownEffects[kMouriMap_TonemapEffect]) {}
 
 sk_sp<SkShader> MouriMap::mouriMap(SkiaGpuContext* context, sk_sp<SkShader> input,
                                    float inputMultiplier, float targetHdrSdrRatio) {

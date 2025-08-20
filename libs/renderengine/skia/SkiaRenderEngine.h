@@ -33,6 +33,7 @@
 #include <unordered_map>
 
 #include "AutoBackendTexture.h"
+#include "BoxShadowUtils.h"
 #include "android-base/macros.h"
 #include "compat/SkiaGpuContext.h"
 #include "debug/SkiaCapture.h"
@@ -138,6 +139,8 @@ protected:
     // occasionally needs to be referenced by subclasses (e.g. for Graphite's
     // precompilation).
     unique_ptr<SkiaGpuContext> mContext;
+
+    BoxShadowUtils mBoxShadowUtils;
 
     GrContextOptions::PersistentCache& persistentCache(const void* identity, ssize_t size);
 

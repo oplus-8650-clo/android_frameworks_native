@@ -41,11 +41,9 @@
 #include <utility>
 
 #include "VirtualDisplayThread.h"
+#include "VirtualDisplayThreadManager.h"
 
 namespace android {
-
-VirtualDisplayThread::VirtualDisplayThread() = default;
-VirtualDisplayThread::~VirtualDisplayThread() = default;
 
 std::shared_ptr<VirtualDisplayThread> VirtualDisplayThread::create() {
     // make_shared doesn't work with private ctors :(
@@ -58,25 +56,45 @@ void VirtualDisplayThread::init() {
     mThread = std::thread([self = shared_from_this()]() { vdThreadMain(std::move(self)); });
 }
 
-bool VirtualDisplayThread::isFrozen() {
+void VirtualDisplayThread::destroy() {
+    ATRACE_CALL();
+    std::scoped_lock _l(mWorkMutex);
+
+    submitWorkLocked([this]() {
+        ATRACE_NAME("destroy-task");
+        mState = SHUT_DOWN;
+        // After this task, the worker thread should clean itself up, freeing the buffers
+        // automatically.
+    });
+    mState = SHUTTING_DOWN;
+}
+
+VirtualDisplayThread::Client::Client(uid_t uid, std::shared_ptr<VirtualDisplayThread> thread)
+      : mUid(uid), mThread(std::move(thread)) {}
+
+VirtualDisplayThread::Client::~Client() {
+    VirtualDisplayThreadManager::getInstance().releaseThread(mUid);
+}
+
+bool VirtualDisplayThread::Client::isFrozen() const {
     ATRACE_CALL();
 
-    std::scoped_lock _l(mWorkMutex);
-    if (!mIsWorking) {
+    std::scoped_lock _l(mThread->mWorkMutex);
+    if (!mThread->mIsWorking) {
         return false;
     }
 
     // TODO(b/340933138): revisit this
     auto now = std::chrono::steady_clock::now();
-    auto timeSinceLastTask = now - mLastWorkStartedTimeNs;
+    auto timeSinceLastTask = now - mThread->mLastWorkStartedTimeNs;
     return timeSinceLastTask >= std::chrono::milliseconds(250);
 }
 
-void VirtualDisplayThread::submitWork(std::function<void()>&& task) {
+void VirtualDisplayThread::Client::submitWork(std::function<void()>&& task) {
     ATRACE_CALL();
 
-    std::scoped_lock _l(mWorkMutex);
-    submitWorkLocked(std::move(task));
+    std::scoped_lock _l(mThread->mWorkMutex);
+    mThread->submitWorkLocked(std::move(task));
 }
 
 void VirtualDisplayThread::submitWorkLocked(std::function<void()>&& task) {
@@ -89,22 +107,6 @@ void VirtualDisplayThread::submitWorkLocked(std::function<void()>&& task) {
 
     mWorkQueue.push(std::move(task));
     mCondVar.notify_one();
-}
-
-void VirtualDisplayThread::kill(Task&& teardownTask) {
-    ATRACE_CALL();
-    std::scoped_lock _l(mWorkMutex);
-
-    // Clear out the currently pending tasks to free up any resources they're holding.
-    clearQueueLocked();
-    submitWorkLocked(std::move(teardownTask));
-    submitWorkLocked([this]() {
-        ATRACE_NAME("destroy-task");
-        mState = SHUT_DOWN;
-        // After this task, the worker thread should clean itself up, freeing the buffers
-        // automatically.
-    });
-    mState = SHUTTING_DOWN;
 }
 
 void VirtualDisplayThread::clearQueueLocked() {

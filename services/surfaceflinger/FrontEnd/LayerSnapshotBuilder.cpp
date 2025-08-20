@@ -1034,6 +1034,7 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
 
     const bool layerSettingsValid = layerSettings.hasRequestedRadius() && !layerCropRect.isEmpty();
     const bool parentRoundedCornerValid = parentRoundedCorner.hasRequestedRadius();
+
     if (layerSettingsValid && parentRoundedCornerValid) {
         // If the parent and the layer have rounded corner settings, use the parent settings if
         // the parent crop is entirely inside the layer crop. This has limitations and cause
@@ -1055,11 +1056,15 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
         }
     }
 
+    snapshot.roundedCorner.croppedRequestedRadii =
+            getClippedClientRadii(snapshot.roundedCorner.requestedRadii,
+                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+
     if (!clientDrawnRadii.isEmpty() &&
-        clientDrawnRadii ==
-                getClippedClientRadii(snapshot.roundedCorner.requestedRadii,
-                                      snapshot.roundedCorner.cropRect, snapshot.sourceBounds())) {
-        // If the client drawn radius matches the inherited/requested radius, then surfaceflinger
+        clientDrawnRadii == snapshot.roundedCorner.croppedRequestedRadii &&
+        snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop) {
+        // If the client drawn radius matches the inherited/requested radius
+        // and the geometric layer bounds match the client crop then surfaceflinger
         // does not need to draw rounded corners for this layer
         snapshot.roundedCorner.radii = gui::CornerRadii(0.f);
     } else {
@@ -1096,9 +1101,9 @@ bool LayerSnapshotBuilder::doesChildOverlapParentCornerRegion(const FloatRect& c
             !childCropRect.intersect(parentCornerRegionBR).isEmpty();
 }
 
-gui::CornerRadii LayerSnapshotBuilder::getClippedClientRadii(gui::CornerRadii requestedRadii,
-                                                             FloatRect layerCropRect,
-                                                             FloatRect layerBounds) {
+gui::CornerRadii LayerSnapshotBuilder::getClippedClientRadii(const gui::CornerRadii& requestedRadii,
+                                                             const FloatRect& layerCropRect,
+                                                             const FloatRect& layerBounds) {
     gui::CornerRadii clippedRadii;
     android::gui::Vec2 zeroVec;
     zeroVec.x = 0.f;
@@ -1107,30 +1112,30 @@ gui::CornerRadii LayerSnapshotBuilder::getClippedClientRadii(gui::CornerRadii re
     auto calculateClippedCorner = [&](const android::gui::Vec2& cornerRadius, float left, float top,
                                       float right, float bottom) {
         FloatRect cornerRegion(left, top, right, bottom);
-        return layerCropRect.contains(cornerRegion) ? cornerRadius : zeroVec;
+        return layerBounds.contains(cornerRegion) ? cornerRadius : zeroVec;
     };
 
     clippedRadii.topLeft =
-            calculateClippedCorner(requestedRadii.topLeft, layerBounds.left, layerBounds.top,
-                                   layerBounds.left + requestedRadii.topLeft.x,
-                                   layerBounds.top + requestedRadii.topLeft.y);
+            calculateClippedCorner(requestedRadii.topLeft, layerCropRect.left, layerCropRect.top,
+                                   layerCropRect.left + requestedRadii.topLeft.x,
+                                   layerCropRect.top + requestedRadii.topLeft.y);
 
-    clippedRadii.topRight =
-            calculateClippedCorner(requestedRadii.topRight,
-                                   layerBounds.right - requestedRadii.topRight.x, layerBounds.top,
-                                   layerBounds.right, layerBounds.top + requestedRadii.topRight.y);
+    clippedRadii.topRight = calculateClippedCorner(requestedRadii.topRight,
+                                                   layerCropRect.right - requestedRadii.topRight.x,
+                                                   layerCropRect.top, layerCropRect.right,
+                                                   layerCropRect.top + requestedRadii.topRight.y);
 
     clippedRadii.bottomLeft =
-            calculateClippedCorner(requestedRadii.bottomLeft, layerBounds.left,
-                                   layerBounds.bottom - requestedRadii.bottomLeft.y,
-                                   layerBounds.left + requestedRadii.bottomLeft.x,
-                                   layerBounds.bottom);
+            calculateClippedCorner(requestedRadii.bottomLeft, layerCropRect.left,
+                                   layerCropRect.bottom - requestedRadii.bottomLeft.y,
+                                   layerCropRect.left + requestedRadii.bottomLeft.x,
+                                   layerCropRect.bottom);
 
     clippedRadii.bottomRight =
             calculateClippedCorner(requestedRadii.bottomRight,
-                                   layerBounds.right - requestedRadii.bottomRight.x,
-                                   layerBounds.bottom - requestedRadii.bottomRight.y,
-                                   layerBounds.right, layerBounds.bottom);
+                                   layerCropRect.right - requestedRadii.bottomRight.x,
+                                   layerCropRect.bottom - requestedRadii.bottomRight.y,
+                                   layerCropRect.right, layerCropRect.bottom);
 
     return clippedRadii;
 }

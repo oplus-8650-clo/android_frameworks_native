@@ -121,8 +121,9 @@ private:
     static void updateRoundedCorner(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                                     const LayerSnapshot& parentSnapshot, const Args& args);
     static void scaleRadii(gui::CornerRadii& radii, float scaleX, float scaleY);
-    static gui::CornerRadii getClippedClientRadii(gui::CornerRadii requestedRadii,
-                                                  FloatRect layerCropRect, FloatRect layerBounds);
+    static gui::CornerRadii getClippedClientRadii(const gui::CornerRadii& requestedRadii,
+                                                  const FloatRect& layerCropRect,
+                                                  const FloatRect& layerBounds);
     static bool doesChildOverlapParentCornerRegion(const FloatRect& childCropRect,
                                                    const FloatRect& parentCropRect,
                                                    const gui::CornerRadii& parentRadii);

@@ -30,6 +30,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <future>
 #include <mutex>
 #include <optional>
 
@@ -57,8 +58,7 @@ class SinkSurfaceHelper : public SurfaceListener {
 public:
     static constexpr size_t kMaxDequeuedBuffers = 4;
 
-    SinkSurfaceHelper(const sp<Surface>& sink);
-    virtual ~SinkSurfaceHelper() override;
+    SinkSurfaceHelper(const sp<Surface>& sink, uid_t creatorUid);
 
     struct SinkSurfaceData {
         uint32_t width = 0;
@@ -67,7 +67,7 @@ public:
         uint64_t usage = 0;
         ADataSpace dataSpace = ADATASPACE_UNKNOWN;
     };
-    SinkSurfaceData connectSinkSurface();
+    std::future<SinkSurfaceData> connectSinkSurface();
     void abandon();
 
     bool isFrozen();
@@ -112,6 +112,7 @@ public:
     virtual void onBufferDetached(int) override {}
 
 private:
+    void connectSinkSurfaceTask(std::shared_ptr<std::promise<SinkSurfaceData>> promise);
     void sendBufferTask(sp<GraphicBuffer> buffer, sp<Fence> fence);
     void freeBufferTask(sp<GraphicBuffer> buffer, sp<Fence> fence);
     void dequeueBufferTask();
@@ -120,7 +121,8 @@ private:
 
     void cancelBuffers(std::vector<std::tuple<sp<GraphicBuffer>, sp<Fence>>> buffers);
 
-    std::shared_ptr<VirtualDisplayThread> mVDThread;
+    VirtualDisplayThread::Client mVDThread;
+    const uid_t mCreatorUid;
 
     // This should only be accessed on mVDThread.
     //

@@ -418,6 +418,13 @@ void BLASTBufferQueue::transactionCallback(nsecs_t /*latchTime*/, const sp<Fence
                     mBufferItemConsumer->setTransformHint(mTransformHint);
                     BQA_LOGV("updated mTransformHint=%d", mTransformHint);
                 }
+
+                if (stat.cornerRadii.has_value()) {
+                    BQA_LOGV("updated cornerRadii=%s", stat.cornerRadii.value().toString().c_str());
+                    std::function<void(const gui::CornerRadii)> callbackCopy =
+                            getCornerRadiiCallback();
+                    if (callbackCopy) callbackCopy(stat.cornerRadii.value());
+                }
                 // Update frametime stamps if the frame was latched and presented, indicated by a
                 // valid latch time.
                 if (stat.latchTime > 0) {
@@ -1408,6 +1415,17 @@ void BLASTBufferQueue::setTransactionHangCallback(
 void BLASTBufferQueue::setApplyToken(sp<IBinder> applyToken) {
     std::lock_guard _lock{mMutex};
     mApplyToken = std::move(applyToken);
+}
+
+void BLASTBufferQueue::setCornerRadiiCallback(
+        std::function<void(const gui::CornerRadii)> callback) {
+    std::lock_guard _lock{mCornerRadiiCallbackMutex};
+    mCornerRadiiCallback = std::move(callback);
+}
+
+std::function<void(const gui::CornerRadii)> BLASTBufferQueue::getCornerRadiiCallback() const {
+    std::lock_guard _lock{mCornerRadiiCallbackMutex};
+    return mCornerRadiiCallback;
 }
 
 void BLASTBufferQueue::setWaitForBufferReleaseCallback(

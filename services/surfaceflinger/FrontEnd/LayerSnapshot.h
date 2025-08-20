@@ -41,6 +41,8 @@ struct RoundedCornerState {
     gui::CornerRadii requestedRadii;
     // Radius drawn by client for the rounded rectangle
     gui::CornerRadii clientDrawnRadii;
+    // Radius reported to client based on layerCropRect and bounds
+    gui::CornerRadii croppedRequestedRadii;
 
     bool hasClientDrawnRadius() const { return radii.isEmpty() && !clientDrawnRadii.isEmpty(); }
     bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }

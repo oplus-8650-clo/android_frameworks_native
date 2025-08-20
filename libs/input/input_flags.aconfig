@@ -265,3 +265,23 @@ flag {
   description: "Log low-level events from evdev and the Gestures library in traces"
   bug: "394861376"
 }
+
+flag {
+  name: "use_separate_xy_dpi_scaling_for_mice"
+  namespace: "input"
+  description: "Use the xDpi and yDpi values to scale mouse moves"
+  bug: "432649760"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "simultaneous_outside_and_hover_fix"
+  namespace: "input"
+  description: "Bug fix to prevent dispatcher from crashing when a window is expected to receive simultaneous action-outside and hover-exit events"
+  bug: "423393151"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

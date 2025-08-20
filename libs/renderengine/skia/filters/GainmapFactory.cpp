@@ -23,12 +23,11 @@
 namespace android {
 namespace renderengine {
 namespace skia {
-namespace {
 
 // Please refer to https://developer.android.com/media/platform/hdr-image-format#gain_map-generation
 // This shader assumes that it will be used in a linear gamma colorspace context, e.g. all values
 // sampled from `sdr` and `hdr` are linear and it is outputting an encoded ratio of luminances.
-static const SkString kGainmapShaderString = SkString(R"(
+const SkString kEffectSource_GainmapEffect(R"(
     uniform shader sdr;
     uniform shader hdr;
     uniform float mapMaxLog2;
@@ -50,14 +49,10 @@ static const SkString kGainmapShaderString = SkString(R"(
         return vec4(pow(clamp(logRecovery, 0.0, 1.0), mapGamma));
     }
 )");
-} // namespace
 
-const float INTERPOLATION_STRENGTH_VALUE = 0.7f;
 
 GainmapFactory::GainmapFactory(RuntimeEffectManager& effectManager) {
-    mEffect =
-            effectManager.createAndStoreRuntimeEffect(RuntimeEffectManager::KnownId::kGainmapEffect,
-                                                      "GainmapEffect", kGainmapShaderString);
+    mEffect = effectManager.mKnownEffects[kGainmapEffect];
 }
 
 sk_sp<SkShader> GainmapFactory::createSkShader(const sk_sp<SkShader>& sdr,

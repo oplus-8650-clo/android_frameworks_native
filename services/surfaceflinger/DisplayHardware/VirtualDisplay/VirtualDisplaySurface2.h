@@ -87,7 +87,8 @@ class Surface;
 class VirtualDisplaySurface2 : public compositionengine::DisplaySurface {
 public:
     VirtualDisplaySurface2(HWComposer& hwComposer, VirtualDisplayIdVariant displayId,
-                           const std::string& name, const sp<Surface>& sinkSurface);
+                           const std::string& name, uid_t creatorUid,
+                           const sp<Surface>& sinkSurface);
     virtual ~VirtualDisplaySurface2() override;
 
     void onFirstRef() override;
@@ -138,6 +139,8 @@ private:
 
     void applyResizeLocked(const ui::Size& size) REQUIRES(mMutex);
 
+    void prepareSurfacesLocked() REQUIRES(mMutex);
+
     void onRenderFrameAvailable();
 
     mutable std::mutex mMutex;
@@ -146,6 +149,8 @@ private:
     const std::string mName;
 
     sp<SinkSurfaceHelper> mSinkHelper;
+    std::future<SinkSurfaceHelper::SinkSurfaceData> mSinkSurfaceDataFuture;
+    bool mIsReady = false;
     uint64_t mSinkUsage;
     PixelFormat mSinkFormat;
     ADataSpace mSinkDataSpace;

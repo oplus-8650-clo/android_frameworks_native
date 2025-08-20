@@ -944,7 +944,6 @@ bool Scheduler::canAnySelectorSwitch() const {
     std::scoped_lock lock(mDisplayLock);
     ftl::FakeGuard guard(kMainThreadContext);
 
-    bool canAnySelectorSwitch = false;
     for (const auto& [_, display] : mDisplays) {
         if (display.powerMode != hal::PowerMode::ON) {
             continue;

@@ -522,7 +522,8 @@ public:
         mLifecycleManager.applyTransactions(transactions);
     }
 
-    void setClientDrawnCornerRadius(uint32_t id, float clientDrawnCornerRadius) {
+    void setClientDrawnCornerRadius(uint32_t id, float clientDrawnCornerRadius,
+                                    const FloatRect& crop) {
         std::vector<QueuedTransactionState> transactions;
         transactions.emplace_back();
         transactions.back().states.push_back({});
@@ -532,10 +533,12 @@ public:
         transactions.back().states.front().layerId = id;
         android::gui::CornerRadii radii(clientDrawnCornerRadius);
         transactions.back().states.front().state.clientDrawnCornerRadii = radii;
+        transactions.back().states.front().state.clientDrawnCornerRadiusCrop = crop;
         mLifecycleManager.applyTransactions(transactions);
     }
 
-    void setClientDrawnCornerRadius(uint32_t id, float tl, float tr, float bl, float br) {
+    void setClientDrawnCornerRadius(uint32_t id, float tl, float tr, float bl, float br,
+                                    const FloatRect& crop) {
         std::vector<QueuedTransactionState> transactions;
         transactions.emplace_back();
         transactions.back().states.push_back({});
@@ -545,6 +548,7 @@ public:
         transactions.back().states.front().layerId = id;
         android::gui::CornerRadii radii(tl, tr, bl, br);
         transactions.back().states.front().state.clientDrawnCornerRadii = radii;
+        transactions.back().states.front().state.clientDrawnCornerRadiusCrop = crop;
         mLifecycleManager.applyTransactions(transactions);
     }
 

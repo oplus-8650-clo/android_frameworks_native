@@ -1501,7 +1501,7 @@ TEST_F(LayerSnapshotTest, setClientDrawnCornerRadius) {
     static constexpr float RADIUS = 123.f;
     static const gui::CornerRadii EXPECTED_CLIENT_DRAWN_RADIUS = gui::CornerRadii(RADIUS);
     static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
-    setClientDrawnCornerRadius(1, RADIUS);
+    setClientDrawnCornerRadius(1, RADIUS, FloatRect{0, 0, 1000, 1000});
     setRoundedCorners(1, RADIUS);
     setCrop(1, Rect{1000, 1000});
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
@@ -1513,7 +1513,7 @@ TEST_F(LayerSnapshotTest, setClientDrawnCornerRadius) {
 TEST_F(LayerSnapshotTest, setClientDrawnCornerRadiusFourCorners) {
     static gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
     static gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
-    setClientDrawnCornerRadius(1, 111.f, 222.f, 333.f, 444.f);
+    setClientDrawnCornerRadius(1, 111.f, 222.f, 333.f, 444.f, FloatRect{0, 0, 1000, 1000});
     setRoundedCorners(1, 111.f, 222.f, 333.f, 444.f);
     setCrop(1, Rect{1000, 1000});
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
@@ -1675,27 +1675,23 @@ TEST_F(LayerSnapshotTest, childScaledInheritsParentSettings) {
     EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.hasRoundedCorners());
 }
 
-TEST_F(LayerSnapshotTest, setClientDrawnClippedRadii) {
+TEST_F(LayerSnapshotTest, SetClientDrawnClippedRadii) {
     static const gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
     static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
     static const gui::CornerRadii CLIPPED_RADIUS = gui::CornerRadii(111.f, 222.f, 0.f, 0.f);
 
-    auto buffer =
-            std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
-                                                                      1000 /*height*/,
-                                                                      1ULL /* bufferId */,
-                                                                      HAL_PIXEL_FORMAT_RGBA_8888,
-                                                                      0 /*usage*/);
-    setBuffer(1, buffer);
-
-    setClientDrawnCornerRadius(1, 111.f, 222.f, 0.f, 0.f);
-    setRoundedCorners(1, 111.f, 222.f, 333.f, 444.f);
+    // set parent(1) crop to clip the bottom half of child(11)
     setCrop(1, Rect{1000, 500});
 
+    setRoundedCorners(11, 111.f, 222.f, 333.f, 444.f);
+    setCrop(11, Rect{1000, 1000});
+    setClientDrawnCornerRadius(11, 111.f, 222.f, 0.f, 0.f, FloatRect{0, 0, 1000, 500});
+
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
-    EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, ZERO_RADIUS);
-    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, CLIPPED_RADIUS);
+
+    EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.hasClientDrawnRadius());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.clientDrawnRadii, CLIPPED_RADIUS);
 }
 
 TEST_F(LayerSnapshotTest, childInheritsParentClientDrawnCornerRadius) {
@@ -1721,7 +1717,7 @@ TEST_F(LayerSnapshotTest, childInheritsParentClientDrawnCornerRadius) {
                                                                         0 /*usage*/));
 
     setRoundedCorners(1, RADIUS);
-    setClientDrawnCornerRadius(1, RADIUS);
+    setClientDrawnCornerRadius(1, RADIUS, FloatRect{0, 0, 1000, 1000});
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.hasClientDrawnRadius());
@@ -1760,7 +1756,7 @@ TEST_F(LayerSnapshotTest, childIgnoreCornerRadiusOverridesParent) {
     setRoundedCorners(1, RADIUS);
 
     setRoundedCorners(11, RADIUS);
-    setClientDrawnCornerRadius(11, RADIUS);
+    setClientDrawnCornerRadius(11, RADIUS, FloatRect{0, 0, 1000, 1000});
 
     UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
     EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.radii, RADII);

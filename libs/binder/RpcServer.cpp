@@ -238,7 +238,7 @@ static void joinRpcServer(sp<RpcServer>&& thiz) {
 
 void RpcServer::start() {
     RpcMutexLockGuard _l(mLock);
-    LOG_ALWAYS_FATAL_IF(mJoinThread.get(), "Already started!");
+    LOG_ALWAYS_FATAL_IF(mJoinThread.get() != nullptr, "Already started!");
     mJoinThread =
             std::make_unique<RpcMaybeThread>(&joinRpcServer, sp<RpcServer>::fromExisting(this));
     rpcJoinIfSingleThreaded(*mJoinThread);

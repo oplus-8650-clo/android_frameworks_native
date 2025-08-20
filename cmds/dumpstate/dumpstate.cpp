@@ -2301,12 +2301,11 @@ static void DumpstateBluetoothOnly() {
     printf("========================================================\n");
     printf("------ DUMPSYS (/system/bin/dumpsys) ------\n");
 
-    const std::vector<std::string> services = {"android.hardware.bluetooth.IBluetoothHci/default",
-                                               "bluetooth_manager", "package"};
+    const std::vector<std::string> services = {"bluetooth_manager", "package"};
     for (const std::string& service : services) {
         printf("-------------------------------------------------------------------------------\n");
         printf("DUMP OF SERVICE %s:\n", service.c_str());
-        RunDumpsys("DUMPSYS", {service}, CommandOptions::WithTimeout(90).Build(), SEC_TO_MSEC(10));
+        RunDumpsys("", {service}, CommandOptions::WithTimeout(90).Build(), SEC_TO_MSEC(10));
     }
 
     printf("========================================================\n");

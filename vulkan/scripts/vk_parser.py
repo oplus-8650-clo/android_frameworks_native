@@ -23,7 +23,10 @@ import copy
 import generator_common as gencom
 
 # --- FILE PATHS & OUTPUT CONFIGURATION ---
-VULKAN_XML_FILE_PATH = Path("../../../../external/vulkan-headers/registry/vk.xml")
+SCRIPT_DIR = Path(__file__).resolve().parent
+VULKAN_XML_FILE_PATH = SCRIPT_DIR / "../../../../external/vulkan-headers/registry/vk.xml"
+VULKAN_XML_FILE_PATH = VULKAN_XML_FILE_PATH.resolve()
+
 OUTPUT_VK_PY_PATH = Path("vk.py")
 
 # Output file initial content
@@ -1388,7 +1391,7 @@ def copy_vulkan_1_0_enums(enums_data, vk_format_map):
 
 
 # --- CODEGEN EXECUTION ---
-def gen_vk():
+def gen_vk(xml_path = None, output_path = None):
     """
     Orchestrates parsing of Vulkan XML registry and generation of vk.py.
 
@@ -1399,12 +1402,18 @@ def gen_vk():
     4. Write all parsed and processed data into vk.py, including dataclasses,
        constants, aliases, and various mapping dictionaries.
     """
+    OUTPUT_VK_PY_PATH = output_path if output_path else SCRIPT_DIR / "vk.py"
     # Ensure output directory exists
     OUTPUT_VK_PY_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with open(OUTPUT_VK_PY_PATH, "w", encoding="utf-8") as vk_py_file_handle:
         write_initial_content(vk_py_file_handle)
-        xml_root = load_xml_registry(VULKAN_XML_FILE_PATH)
+        xml_root = None
+        if xml_path is None:
+            xml_root = load_xml_registry(VULKAN_XML_FILE_PATH)
+        else:
+            xml_root = load_xml_registry(xml_path)
+
         if xml_root is None:
             return
 

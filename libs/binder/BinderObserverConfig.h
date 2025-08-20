@@ -96,28 +96,8 @@ private:
         virtual std::string readFileLine(const std::string& path);
         virtual uid_t getUid();
         virtual std::string getProcessName();
-
-        virtual ShardingConfig getSystemServerSharding() {
-            // While the feature is in staging, set the sharding to full monitoring, so it can
-            // be tested deterministically.
-            // TODO(b/299356196): Read sharding config from system properties (and sanitize it!)
-            return {
-                    .processMod = 1,
-                    .spamMod = 1,
-                    .callMod = 1,
-            };
-        }
-
-        virtual ShardingConfig getOtherProcessesSharding() {
-            // While the feature is in staging, set the sharding to full monitoring, so it can
-            // be tested deterministically.
-            // TODO(b/299356196): Read sharding config from system properties (and sanitize it!)
-            return {
-                    .processMod = 1,
-                    .spamMod = 1,
-                    .callMod = 1,
-            };
-        }
+        virtual ShardingConfig getSystemServerSharding();
+        virtual ShardingConfig getOtherProcessesSharding();
 
         virtual size_t hashString8(const std::string& content) {
             return std::hash<std::string>{}(content);

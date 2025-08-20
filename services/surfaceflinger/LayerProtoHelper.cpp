@@ -430,12 +430,14 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
                                               snapshot.roundedCorner.requestedRadii.topRight.x,
                                               snapshot.roundedCorner.requestedRadii.bottomLeft.x,
                                               snapshot.roundedCorner.requestedRadii.bottomRight.x,
-                                              [&]() { return layerInfo->mutable_corner_radii(); });
+                                              [&]() { return
+                                               layerInfo->mutable_requested_corner_radii(); });
     LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.clientDrawnRadii.topLeft.x,
                                               snapshot.roundedCorner.clientDrawnRadii.topRight.x,
                                               snapshot.roundedCorner.clientDrawnRadii.bottomLeft.x,
                                               snapshot.roundedCorner.clientDrawnRadii.bottomRight.x,
-                                              [&]() { return layerInfo->mutable_corner_radii(); });
+                                              [&]() { return
+                                                layerInfo->mutable_client_drawn_corner_radii(); });
     layerInfo->set_is_trusted_overlay(snapshot.trustedOverlay == gui::TrustedOverlay::ENABLED);
     // TODO(b/339701674) update protos
     LayerProtoHelper::writeToProtoDeprecated(transform, layerInfo->mutable_transform());
@@ -511,6 +513,7 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
 
     LayerProtoHelper::writeToProto(requestedState.destinationFrame,
                                    [&]() { return layerInfo->mutable_destination_frame(); });
+    layerInfo->set_system_content_priority(requestedState.systemContentPriority);
 }
 
 google::protobuf::RepeatedPtrField<perfetto::protos::DisplayProto>

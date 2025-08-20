@@ -34,27 +34,125 @@
 
 #include <atomic>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <utility>
 
 #include "SinkSurfaceHelper.h"
-#include "VirtualDisplayThread.h"
+#include "VirtualDisplayThreadManager.h"
 
 namespace android {
 
-SinkSurfaceHelper::SinkSurfaceHelper(const sp<Surface>& sink)
-      : mVDThread(VirtualDisplayThread::create()), mSink(sink) {}
+SinkSurfaceHelper::SinkSurfaceHelper(const sp<Surface>& sink, uid_t creatorUid)
+      : mVDThread(VirtualDisplayThreadManager::getInstance().getOrCreateThread(creatorUid)),
+        mCreatorUid(creatorUid),
+        mSink(sink) {}
 
-SinkSurfaceHelper::~SinkSurfaceHelper() = default;
-
-SinkSurfaceHelper::SinkSurfaceData SinkSurfaceHelper::connectSinkSurface() {
+std::future<SinkSurfaceHelper::SinkSurfaceData> SinkSurfaceHelper::connectSinkSurface() {
     ATRACE_CALL();
 
-    // TODO(b/340933138): We should run all of this on the VD thread, return a future, and wait with
-    // a time out, so we don't lock up the rest of SF.
+    // Note, this annoying extra shared_ptr is needed since the std::function-based task needs to be
+    // copyable.
+    auto promise = std::make_shared<std::promise<SinkSurfaceData>>();
+    auto future = promise->get_future();
+
+    mVDThread.submitWork(std::bind(&SinkSurfaceHelper::connectSinkSurfaceTask,
+                                   sp<SinkSurfaceHelper>::fromExisting(this), promise));
+
+    return future;
+}
+
+void SinkSurfaceHelper::abandon() {
+    ATRACE_CALL();
+
+    mVDThread.submitWork(
+            std::bind(&SinkSurfaceHelper::abandonTask, sp<SinkSurfaceHelper>::fromExisting(this)));
+}
+
+bool SinkSurfaceHelper::isFrozen() {
+    ATRACE_CALL();
+    return mVDThread.isFrozen();
+}
+
+std::optional<std::tuple<sp<GraphicBuffer>, sp<Fence>>> SinkSurfaceHelper::getDequeuedBuffer(
+        uint32_t width, uint32_t height, uint64_t requiredUsage) {
+    ATRACE_CALL();
+    std::scoped_lock _l(mDataMutex);
+
+    for (auto& dequeued : mDequeuedBuffers) {
+        if (dequeued.inUse) {
+            continue;
+        }
+        auto& buffer = dequeued.buffer;
+        if (buffer->width != static_cast<int32_t>(width) ||
+            buffer->height != static_cast<int32_t>(height) ||
+            ((buffer->usage & requiredUsage) != requiredUsage)) {
+            continue;
+        }
+
+        dequeued.inUse = true;
+        ALOGI("%s: Found available dequeued buffer id=%" PRIu64 " from sink.", __func__,
+              buffer->getId());
+        return {{dequeued.buffer, dequeued.fence}};
+    }
+
+    return std::nullopt;
+}
+
+bool SinkSurfaceHelper::returnDequeuedBuffer(const sp<GraphicBuffer>& buffer,
+                                             const sp<Fence>& fence) {
+    ATRACE_CALL();
+    std::scoped_lock _l(mDataMutex);
+
+    for (auto& dequeuedBuffer : mDequeuedBuffers) {
+        if (dequeuedBuffer.buffer == buffer) {
+            dequeuedBuffer.fence = Fence::merge("VD: freeBuffer", dequeuedBuffer.fence, fence);
+            dequeuedBuffer.inUse = false;
+            ALOGI("%s: Returned dequeued buffer id=%" PRIu64 " from sink.", __func__,
+                  buffer->getId());
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void SinkSurfaceHelper::sendBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence) {
+    ATRACE_CALL();
+
+    mVDThread.submitWork(std::bind(&SinkSurfaceHelper::sendBufferTask,
+                                   sp<SinkSurfaceHelper>::fromExisting(this), buffer, fence));
+}
+
+void SinkSurfaceHelper::setBufferSize(uint32_t width, uint32_t height) {
+    ATRACE_CALL();
+
+    mVDThread.submitWork(std::bind(&SinkSurfaceHelper::setBufferSizeTask,
+                                   sp<SinkSurfaceHelper>::fromExisting(this), width, height));
+}
+
+void SinkSurfaceHelper::onBufferReleased() {
+    ATRACE_CALL();
+
+    // The current function _is_ called off the main thread. But, if we run this on the VD
+    // thread, we'll be able to catch freezes during the dequeue.
+    mVDThread.submitWork(std::bind(&SinkSurfaceHelper::dequeueBufferTask,
+                                   sp<SinkSurfaceHelper>::fromExisting(this)));
+}
+
+void SinkSurfaceHelper::onRemoteDied() {
+    ATRACE_CALL();
+    mIsDead = true;
+}
+
+void SinkSurfaceHelper::connectSinkSurfaceTask(
+        std::shared_ptr<std::promise<SinkSurfaceData>> promise) {
+    ATRACE_CALL();
+
     SinkSurfaceData data;
+    // TODO(b/340933138): Should this be EGL?
     mSink->connect(NATIVE_WINDOW_API_CPU, sp<SinkSurfaceHelper>::fromExisting(this));
     mName = mSink->getConsumerName();
 
@@ -107,90 +205,7 @@ SinkSurfaceHelper::SinkSurfaceData SinkSurfaceHelper::connectSinkSurface() {
               mSink->getConsumerName().c_str(), ret);
     }
 
-    return data;
-}
-
-void SinkSurfaceHelper::abandon() {
-    ATRACE_CALL();
-
-    mVDThread->kill(
-            std::bind(&SinkSurfaceHelper::abandonTask, sp<SinkSurfaceHelper>::fromExisting(this)));
-}
-
-bool SinkSurfaceHelper::isFrozen() {
-    ATRACE_CALL();
-    return mVDThread->isFrozen();
-}
-
-std::optional<std::tuple<sp<GraphicBuffer>, sp<Fence>>> SinkSurfaceHelper::getDequeuedBuffer(
-        uint32_t width, uint32_t height, uint64_t requiredUsage) {
-    ATRACE_CALL();
-    std::scoped_lock _l(mDataMutex);
-
-    for (auto& dequeued : mDequeuedBuffers) {
-        if (dequeued.inUse) {
-            continue;
-        }
-        auto& buffer = dequeued.buffer;
-        if (buffer->width != static_cast<int32_t>(width) ||
-            buffer->height != static_cast<int32_t>(height) ||
-            ((buffer->usage & requiredUsage) != requiredUsage)) {
-            continue;
-        }
-
-        dequeued.inUse = true;
-        ALOGI("%s: Found available dequeued buffer id=%" PRIu64 " from sink.", __func__,
-              buffer->getId());
-        return {{dequeued.buffer, dequeued.fence}};
-    }
-
-    return std::nullopt;
-}
-
-bool SinkSurfaceHelper::returnDequeuedBuffer(const sp<GraphicBuffer>& buffer,
-                                             const sp<Fence>& fence) {
-    ATRACE_CALL();
-    std::scoped_lock _l(mDataMutex);
-
-    for (auto& dequeuedBuffer : mDequeuedBuffers) {
-        if (dequeuedBuffer.buffer == buffer) {
-            dequeuedBuffer.fence = Fence::merge("VD: freeBuffer", dequeuedBuffer.fence, fence);
-            dequeuedBuffer.inUse = false;
-            ALOGI("%s: Returned dequeued buffer id=%" PRIu64 " from sink.", __func__,
-                  buffer->getId());
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void SinkSurfaceHelper::sendBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence) {
-    ATRACE_CALL();
-
-    mVDThread->submitWork(std::bind(&SinkSurfaceHelper::sendBufferTask,
-                                    sp<SinkSurfaceHelper>::fromExisting(this), buffer, fence));
-}
-
-void SinkSurfaceHelper::setBufferSize(uint32_t width, uint32_t height) {
-    ATRACE_CALL();
-
-    mVDThread->submitWork(std::bind(&SinkSurfaceHelper::setBufferSizeTask,
-                                    sp<SinkSurfaceHelper>::fromExisting(this), width, height));
-}
-
-void SinkSurfaceHelper::onBufferReleased() {
-    ATRACE_CALL();
-
-    // The current function _is_ called off the main thread. But, if we run this on the VD
-    // thread, we'll be able to catch freezes during the dequeue.
-    mVDThread->submitWork(std::bind(&SinkSurfaceHelper::dequeueBufferTask,
-                                    sp<SinkSurfaceHelper>::fromExisting(this)));
-}
-
-void SinkSurfaceHelper::onRemoteDied() {
-    ATRACE_CALL();
-    mIsDead = true;
+    promise->set_value(std::move(data));
 }
 
 void SinkSurfaceHelper::sendBufferTask(sp<GraphicBuffer> buffer, sp<Fence> fence) {
@@ -241,8 +256,8 @@ void SinkSurfaceHelper::sendBufferTask(sp<GraphicBuffer> buffer, sp<Fence> fence
     }
 
     if (output.bufferReplaced) {
-        mVDThread->submitWork(std::bind(&SinkSurfaceHelper::dequeueBufferTask,
-                                        sp<SinkSurfaceHelper>::fromExisting(this)));
+        mVDThread.submitWork(std::bind(&SinkSurfaceHelper::dequeueBufferTask,
+                                       sp<SinkSurfaceHelper>::fromExisting(this)));
     }
     ALOGD("%s: Queued buffer %" PRIu64 "to surface %s.", __func__, buffer->getId(),
           mSink->getConsumerName().c_str());

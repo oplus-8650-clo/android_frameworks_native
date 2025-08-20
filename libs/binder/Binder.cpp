@@ -418,6 +418,12 @@ status_t BBinder::transact(
         reply->markSensitive();
     }
 
+    if (data.dataSize() > binder::kLogTransactionsOverBytes) {
+        ALOGW("Large data transaction of %zu bytes, interface descriptor %s, code %d, flags "
+              "%d",
+              data.dataSize(), String8(getInterfaceDescriptor()).c_str(), code, flags);
+    }
+
     status_t err = NO_ERROR;
     switch (code) {
         case PING_TRANSACTION:

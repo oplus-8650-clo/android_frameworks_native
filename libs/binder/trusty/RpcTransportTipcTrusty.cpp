@@ -227,7 +227,7 @@ public:
                     .num_iov = static_cast<uint32_t>(niovs),
                     .iov = iovs,
                     .num_handles = mMessageInfo.num_handles,
-                    .handles = haveHandles ? msgHandles : 0,
+                    .handles = haveHandles ? msgHandles : nullptr,
             };
             ssize_t rc = read_msg(mSocket.fd.get(), mMessageInfo.id, mMessageOffset, &msg);
             if (rc < 0) {

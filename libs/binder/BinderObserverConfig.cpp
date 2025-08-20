@@ -22,6 +22,11 @@
 #include "BinderObserverConfig.h"
 
 namespace android {
+#ifdef BINDER_OBSERVER_DROIDFOOD_CONFIG
+constexpr bool kUseDroidfoodConfig = true;
+#else
+constexpr bool kUseDroidfoodConfig = false;
+#endif // BINDER_OBSERVER_DROIDFOOD_CONFIG
 
 // __BIONIC__ has getprogname() but __GLIBC__ and others have program_invocation_short_name
 #if !defined(__BIONIC__)
@@ -45,6 +50,19 @@ uid_t BinderObserverConfig::Environment::getUid() {
 
 std::string BinderObserverConfig::Environment::getProcessName() {
     return getprogname();
+}
+
+BinderObserverConfig::ShardingConfig BinderObserverConfig::Environment::getSystemServerSharding() {
+    return kUseDroidfoodConfig
+            ? ShardingConfig{.processMod = 1, .spamMod = 5, .callMod = 10}
+            : ShardingConfig{.processMod = 10, .spamMod = 50, .callMod = 100};
+}
+
+BinderObserverConfig::ShardingConfig
+BinderObserverConfig::Environment::getOtherProcessesSharding() {
+    return kUseDroidfoodConfig
+            ? ShardingConfig{.processMod = 5, .spamMod = 1, .callMod = 2}
+            : ShardingConfig{.processMod = 50, .spamMod = 10, .callMod = 20};
 }
 
 std::pair<size_t, size_t> BinderObserverConfig::getBootStableTokens(Environment& environment) {

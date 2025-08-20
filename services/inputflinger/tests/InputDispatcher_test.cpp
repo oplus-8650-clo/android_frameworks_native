@@ -14740,6 +14740,60 @@ TEST_F(InputDispatcherTest, FocusedDisplayChangeIsNotified) {
     mFakePolicy->assertFocusedDisplayNotified(SECOND_DISPLAY_ID);
 }
 
+TEST_F(InputDispatcherTest, DispatchSimultaneousActionOutsideAndHoverExit) {
+    SCOPED_FLAG_OVERRIDE(simultaneous_outside_and_hover_fix, true);
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    // Aim of this test is to create a situation where a window will receive simultaneous
+    // ACTION_OUTSIDE and HOVER_EXIT event.
+    // Create two regular disjoint windows left and right, one spy that overlaps with left window.
+    // spy also have WatchOutsideTouch.
+    sp<FakeWindowHandle> left = sp<FakeWindowHandle>::make(application, mDispatcher, "Left Window",
+                                                           ui::LogicalDisplayId::DEFAULT);
+    left->setFrame(Rect(0, 0, 100, 100));
+    left->setOwnerInfo(gui::Pid{12}, gui::Uid{34});
+
+    sp<FakeWindowHandle> right =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Right Window",
+                                       ui::LogicalDisplayId::DEFAULT);
+    right->setFrame(Rect(100, 0, 200, 100));
+    right->setOwnerInfo(gui::Pid{12}, gui::Uid{34});
+
+    sp<FakeWindowHandle> spy = sp<FakeWindowHandle>::make(application, mDispatcher, "Spy Window",
+                                                          ui::LogicalDisplayId::DEFAULT);
+    spy->setFrame(Rect(0, 0, 100, 100));
+    spy->setOwnerInfo(gui::Pid{15}, gui::Uid{38});
+    spy->setTrustedOverlay(true);
+    spy->setSpy(true);
+    spy->setWatchOutsideTouch(true);
+    mDispatcher->onWindowInfosChanged(
+            {{*spy->getInfo(), *left->getInfo(), *right->getInfo()}, {}, 0, 0});
+
+    // Hover move into the left window.
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(ACTION_HOVER_MOVE, AINPUT_SOURCE_MOUSE)
+                    .pointer(PointerBuilder(/*id=*/0, ToolType::MOUSE).x(50).y(50))
+                    .rawXCursorPosition(50)
+                    .rawYCursorPosition(50)
+                    .deviceId(DEVICE_ID)
+                    .build());
+
+    left->consumeMotionEvent(WithMotionAction(ACTION_HOVER_ENTER));
+    spy->consumeMotionEvent(WithMotionAction(ACTION_HOVER_ENTER));
+
+    // click on right window, which is outside both spy and left window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_MOUSE)
+                                      .pointer(PointerBuilder(0, ToolType::MOUSE).x(150).y(50))
+                                      .rawXCursorPosition(150)
+                                      .rawYCursorPosition(50)
+                                      .deviceId(DEVICE_ID)
+                                      .build());
+
+    right->consumeMotionDown();
+    left->consumeMotionEvent(WithMotionAction(ACTION_HOVER_EXIT));
+    spy->consumeMotionOutsideWithZeroedCoords();
+    spy->consumeMotionEvent(WithMotionAction(ACTION_HOVER_EXIT));
+}
+
 class InputDispatcherObscuredFlagTest : public InputDispatcherTest {
 protected:
     std::shared_ptr<FakeApplicationHandle> mApplication;

@@ -281,6 +281,9 @@ perfetto::protos::LayerState TransactionProtoParser::toProto(
         proto.set_drop_input_mode(
                 static_cast<perfetto::protos::LayerState_DropInputMode>(layer.dropInputMode));
     }
+    if (layer.what & layer_state_t::eSystemContentPriorityChanged) {
+        proto.set_system_content_priority(layer.systemContentPriority);
+    }
     return proto;
 }
 
@@ -605,6 +608,9 @@ void TransactionProtoParser::fromProto(const perfetto::protos::LayerState& proto
     }
     if (proto.what() & layer_state_t::eDropInputModeChanged) {
         layer.dropInputMode = static_cast<gui::DropInputMode>(proto.drop_input_mode());
+    }
+    if (proto.what() & layer_state_t::eSystemContentPriorityChanged) {
+        layer.systemContentPriority = proto.system_content_priority();
     }
 }
 
