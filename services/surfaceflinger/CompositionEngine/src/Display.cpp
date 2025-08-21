@@ -182,6 +182,7 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
     mQtiColorProfile.renderIntent = colorProfile.renderIntent;
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
 
     if (isVirtual()) {
         auto qtiHalId = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
@@ -193,6 +194,7 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
         return;
     }
 
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
     const auto physicalId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
     LOG_FATAL_IF(!physicalId);
     getCompositionEngine().getHwComposer().setActiveColorMode(*physicalId, colorProfile.mode,
