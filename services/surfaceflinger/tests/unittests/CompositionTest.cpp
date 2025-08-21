@@ -197,8 +197,10 @@ void CompositionTest::captureScreenComposition() {
 
     const Rect sourceCrop(0, 0, DEFAULT_DISPLAY_WIDTH, DEFAULT_DISPLAY_HEIGHT);
 
-    auto layers =
+    auto layersResult =
             mFlinger.getLayerSnapshotsForScreenshots(mDisplay->getLayerStack(), gui::Uid::INVALID);
+    ASSERT_TRUE(layersResult.ok());
+    auto layers = layersResult.value();
 
     const uint32_t usage = GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN |
             GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE;

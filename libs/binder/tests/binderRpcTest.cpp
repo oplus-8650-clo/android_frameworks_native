@@ -67,6 +67,9 @@ using testing::AssertionSuccess;
 
 namespace android {
 
+// TODO(b/428744319) - if we have a static version of libbinder_ndk, we should
+// be able to get rid of most of the uses of kEnableSharedLibs as it will use
+// the static libbinder sysmbols and not cause ODR violations
 #ifdef BINDER_TEST_NO_SHARED_LIBS
 constexpr bool kEnableSharedLibs = false;
 #else
@@ -1522,12 +1525,18 @@ void infoProviderDataOnDelete(void* data) {
 }
 
 ABinderRpc_ConnectionInfo* infoProvider(const char* instance, void* cookie) {
+    if constexpr (!kEnableSharedLibs) {
+        return nullptr;
+    }
     if (instance == nullptr || cookie == nullptr) return nullptr;
     ConnectionInfoData* data = reinterpret_cast<ConnectionInfoData*>(cookie);
     return ABinderRpc_ConnectionInfo_new(reinterpret_cast<const sockaddr*>(&data->addr), data->len);
 }
 
 ABinderRpc_Accessor* getAccessor(const char* instance, void* cookie) {
+    if constexpr (!kEnableSharedLibs) {
+        return nullptr;
+    }
     if (instance == nullptr || cookie == nullptr) return nullptr;
     if (0 != strcmp(instance, kARpcInstance)) return nullptr;
 
@@ -1545,6 +1554,9 @@ ABinderRpc_Accessor* getAccessor(const char* instance, void* cookie) {
 class BinderARpcNdk : public ::testing::Test {};
 
 TEST_F(BinderARpcNdk, ARpcProviderNewDelete) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     bool isDeleted = false;
 
     AccessorProviderData* data = new AccessorProviderData{{}, 0, &isDeleted};
@@ -1563,6 +1575,9 @@ TEST_F(BinderARpcNdk, ARpcProviderNewDelete) {
 }
 
 TEST_F(BinderARpcNdk, ARpcProviderDeleteOnError) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     bool isDeleted = false;
     AccessorProviderData* data = new AccessorProviderData{{}, 0, &isDeleted};
 
@@ -1575,6 +1590,9 @@ TEST_F(BinderARpcNdk, ARpcProviderDeleteOnError) {
 }
 
 TEST_F(BinderARpcNdk, ARpcProvideOnErrorNoDeleteCbNoCrash) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     ABinderRpc_AccessorProvider* provider =
             ABinderRpc_registerAccessorProvider(getAccessor, kARpcSupportedServices, 0, nullptr,
                                                 nullptr);
@@ -1583,6 +1601,9 @@ TEST_F(BinderARpcNdk, ARpcProvideOnErrorNoDeleteCbNoCrash) {
 }
 
 TEST_F(BinderARpcNdk, ARpcProviderDuplicateInstance) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     const char* instance = "some.instance.name.IFoo/default";
     const uint32_t numInstances = 2;
     const char* instances[numInstances] = {
@@ -1622,6 +1643,9 @@ TEST_F(BinderARpcNdk, ARpcProviderDuplicateInstance) {
 }
 
 TEST_F(BinderARpcNdk, ARpcProviderRegisterNoInstance) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     const uint32_t numInstances = 0;
     const char* instances[numInstances] = {};
 
@@ -1635,6 +1659,9 @@ TEST_F(BinderARpcNdk, ARpcProviderRegisterNoInstance) {
 }
 
 TEST_F(BinderARpcNdk, ARpcAccessorNewDelete) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     bool isDeleted = false;
 
     ConnectionInfoData* data = new ConnectionInfoData{{}, 0, &isDeleted};
@@ -1649,6 +1676,9 @@ TEST_F(BinderARpcNdk, ARpcAccessorNewDelete) {
 }
 
 TEST_F(BinderARpcNdk, ARpcConnectionInfoNewDelete) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     sockaddr_vm addr{
             .svm_family = AF_VSOCK,
             .svm_port = VMADDR_PORT_ANY,
@@ -1663,6 +1693,9 @@ TEST_F(BinderARpcNdk, ARpcConnectionInfoNewDelete) {
 }
 
 TEST_F(BinderARpcNdk, ARpcAsFromBinderAsBinder) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     bool isDeleted = false;
 
     ConnectionInfoData* data = new ConnectionInfoData{{}, 0, &isDeleted};
@@ -1701,6 +1734,9 @@ TEST_F(BinderARpcNdk, ARpcAsFromBinderAsBinder) {
 }
 
 TEST_F(BinderARpcNdk, ARpcRequireProviderOnDeleteCallback) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     EXPECT_EQ(nullptr,
               ABinderRpc_registerAccessorProvider(getAccessor, kARpcSupportedServices,
                                                   kARpcNumSupportedServices,
@@ -1708,12 +1744,18 @@ TEST_F(BinderARpcNdk, ARpcRequireProviderOnDeleteCallback) {
 }
 
 TEST_F(BinderARpcNdk, ARpcRequireInfoOnDeleteCallback) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     EXPECT_EQ(nullptr,
               ABinderRpc_Accessor_new("the_best_service_name", infoProvider,
                                       reinterpret_cast<void*>(1), nullptr));
 }
 
 TEST_F(BinderARpcNdk, ARpcNoDataNoProviderOnDeleteCallback) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     ABinderRpc_AccessorProvider* provider =
             ABinderRpc_registerAccessorProvider(getAccessor, kARpcSupportedServices,
                                                 kARpcNumSupportedServices, nullptr, nullptr);
@@ -1722,6 +1764,9 @@ TEST_F(BinderARpcNdk, ARpcNoDataNoProviderOnDeleteCallback) {
 }
 
 TEST_F(BinderARpcNdk, ARpcNoDataNoInfoOnDeleteCallback) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     ABinderRpc_Accessor* accessor =
             ABinderRpc_Accessor_new("the_best_service_name", infoProvider, nullptr, nullptr);
     ASSERT_NE(nullptr, accessor);
@@ -1729,11 +1774,18 @@ TEST_F(BinderARpcNdk, ARpcNoDataNoInfoOnDeleteCallback) {
 }
 
 TEST_F(BinderARpcNdk, ARpcNullArgs_ConnectionInfo_new) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
     sockaddr_storage addr;
     EXPECT_EQ(nullptr, ABinderRpc_ConnectionInfo_new(reinterpret_cast<const sockaddr*>(&addr), 0));
 }
 
 TEST_F(BinderARpcNdk, ARpcDelegateAccessorWrongInstance) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
+
     AccessorProviderData* data = new AccessorProviderData();
     ABinderRpc_Accessor* accessor = getAccessor(kARpcInstance, data);
     ASSERT_NE(accessor, nullptr);
@@ -1772,6 +1824,10 @@ TEST_F(BinderARpcNdk, ARpcDelegateNonAccessor) {
 
 inline void getServiceTest(BinderRpcTestProcessSession& proc,
                            ABinderRpc_AccessorProvider_getAccessorCallback getAccessor) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
+
     constexpr size_t kNumThreads = 10;
     bool isDeleted = false;
 
@@ -1798,6 +1854,10 @@ inline void getServiceTest(BinderRpcTestProcessSession& proc,
 }
 
 TEST_P(BinderRpcAccessor, ARpcGetService) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
+
     constexpr size_t kNumThreads = 10;
     auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
@@ -1807,6 +1867,10 @@ TEST_P(BinderRpcAccessor, ARpcGetService) {
 
 // Create accessors and wrap each of the accessors in a delegator
 ABinderRpc_Accessor* getDelegatedAccessor(const char* instance, void* cookie) {
+    if constexpr (!kEnableSharedLibs) {
+        return nullptr;
+    }
+
     ABinderRpc_Accessor* accessor = getAccessor(instance, cookie);
     AIBinder* accessorBinder = ABinderRpc_Accessor_asBinder(accessor);
     // Once we have a handle to the AIBinder which holds a reference to the
@@ -1829,6 +1893,10 @@ ABinderRpc_Accessor* getDelegatedAccessor(const char* instance, void* cookie) {
 }
 
 TEST_P(BinderRpcAccessor, ARpcGetServiceWithDelegator) {
+    if constexpr (!kEnableSharedLibs) {
+        GTEST_SKIP() << "Test disabled because Binder was built as a static library";
+    }
+
     constexpr size_t kNumThreads = 10;
     auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());

@@ -117,6 +117,13 @@ HdrSdrRatioOverlay::HdrSdrRatioOverlay(ConstructorTag)
             .apply();
 }
 
+HdrSdrRatioOverlay::~HdrSdrRatioOverlay() {
+    for (const sp<GraphicBuffer>& buffer : mRingBuffer) {
+        android::removeBufferFromLocalCache(buffer);
+    }
+    mSurfaceControl.reset();
+}
+
 bool HdrSdrRatioOverlay::initCheck() const {
     return mSurfaceControl != nullptr;
 }

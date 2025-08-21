@@ -1652,8 +1652,8 @@ private:
                 [](const auto& display) { return display.isHdrSdrRatioOverlayEnabled(); });
     }
 
-    std::vector<std::pair<Layer*, sp<LayerFE>>> getLayerSnapshotsForScreenshots(
-            const SnapshotRequestArgs& args) REQUIRES(kMainThreadContext);
+    base::expected<std::vector<std::pair<Layer*, sp<LayerFE>>>, status_t>
+    getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args) REQUIRES(kMainThreadContext);
 
     const sp<WindowInfosListenerInvoker> mWindowInfosListenerInvoker;
 

@@ -808,7 +808,7 @@ cc_library {
     ],
 }
 
-cc_library {
+cc_library_static {
     name: "libbinder_rpc_single_threaded",
     defaults: [
         "libbinder_common_defaults",
@@ -823,7 +823,7 @@ cc_library {
     ],
 }
 
-cc_library {
+cc_library_static {
     name: "libbinder_rpc_single_threaded_no_kernel",
     defaults: [
         "libbinder_common_defaults",

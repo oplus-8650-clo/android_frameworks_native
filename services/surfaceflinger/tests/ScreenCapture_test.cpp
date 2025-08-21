@@ -1063,6 +1063,39 @@ TEST_F(ScreenCaptureTest, captureOffscreenNullSnapshot) {
     ScreenCapture::captureLayers(&mCapture, captureArgs);
 }
 
+TEST_F(ScreenCaptureTest, captureOffscreenCyclicalHierarchyFails) {
+    sp<SurfaceControl> layer1;
+    ASSERT_NO_FATAL_FAILURE(layer1 = createLayer("Layer1", 32, 32,
+                                                 ISurfaceComposerClient::eFXSurfaceBufferState,
+                                                 mBGSurfaceControl.get()));
+    ASSERT_NO_FATAL_FAILURE(fillBufferLayerColor(layer1, Color::RED, 32, 32));
+
+    sp<SurfaceControl> layer2;
+    ASSERT_NO_FATAL_FAILURE(layer2 = createLayer(String8("Layer2"), 32, 32, 0, layer1.get()));
+
+    sp<SurfaceControl> layer3;
+    ASSERT_NO_FATAL_FAILURE(layer3 = createLayer(String8("Layer3"), 32, 32, 0, layer2.get()));
+
+    Transaction().show(layer1).hide(mFGSurfaceControl).reparent(layer1, nullptr).apply();
+
+    {
+        // Validate that the red layer is not on screen
+        ScreenCapture::captureLayers(&mCapture, mCaptureArgs);
+        mCapture->expectColor(Rect(0, 0, mDisplayWidth, mDisplayHeight), {63, 63, 195, 255});
+    }
+
+    // Introduce cycle
+    Transaction().reparent(layer1, layer3).apply(true /* synchronous */);
+
+    LayerCaptureArgs captureArgs;
+    captureArgs.layerHandle = layer1->getHandle();
+
+    ScreenCaptureResults captureResults;
+    status_t result = ScreenCapture::captureLayers(captureArgs, captureResults);
+
+    ASSERT_EQ(BAD_VALUE, result);
+}
+
 // In the following tests we verify successful skipping of a parent layer,
 // so we use the same verification logic and only change how we mutate
 // the parent layer to verify that various properties are ignored.

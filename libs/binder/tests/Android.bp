@@ -431,6 +431,11 @@ cc_defaults {
         // libcrypto_static is not visible to this module
         "libcrypto",
     ],
+    exclude_shared_libs: [
+        // mixing a static libbinder with libbinder_ndk.so
+        // will present ODR issues
+        "libbinder_ndk",
+    ],
     static_libs: [
         "libbase",
         "libcutils",

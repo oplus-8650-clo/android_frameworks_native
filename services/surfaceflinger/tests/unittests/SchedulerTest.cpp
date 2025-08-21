@@ -922,7 +922,9 @@ TEST_F(SchedulerTest, nextFrameIntervalTest) {
                                              kMinimumSamplesForPrediction,
                                              kOutlierTolerancePercent);
     std::shared_ptr<RefreshRateSelector> vrrSelectorPtr =
-            std::make_shared<RefreshRateSelector>(makeModes(kMode), kMode->getId());
+            std::make_shared<RefreshRateSelector>(makeModes(kMode), kMode->getId(),
+                                                  RefreshRateSelector::Config{
+                                                          .enableFrameRateOverride = true});
     TestableScheduler scheduler{std::make_unique<android::mock::VsyncController>(),
                                 vrrTracker,
                                 vrrSelectorPtr,

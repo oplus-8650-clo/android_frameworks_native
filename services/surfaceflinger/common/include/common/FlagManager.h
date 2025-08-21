@@ -84,8 +84,8 @@ public:
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
     bool deprecate_vsync_sf() const;
-    bool detached_mirror() const;
     bool disable_synthetic_vsync_for_performance() const;
+    bool display_command_modeset() const;
     bool enable_layer_command_batching() const;
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
@@ -100,7 +100,6 @@ public:
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
     bool no_vsyncs_on_screen_off() const;
-    bool override_trusted_overlay() const;
     bool pacesetter_selection() const;
     bool parse_edid_version_and_input_type() const;
     bool protected_if_client() const;

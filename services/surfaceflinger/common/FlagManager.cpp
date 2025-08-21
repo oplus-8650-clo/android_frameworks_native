@@ -154,8 +154,8 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf);
-    DUMP_ACONFIG_FLAG(detached_mirror);
     DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
+    DUMP_ACONFIG_FLAG(display_command_modeset);
     DUMP_ACONFIG_FLAG(enable_layer_command_batching);
     DUMP_ACONFIG_FLAG(enable_small_area_detection);
     DUMP_ACONFIG_FLAG(flush_buffer_slots_to_uncache);
@@ -168,7 +168,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(hdcp_negotiation);
     DUMP_ACONFIG_FLAG(local_tonemap_screenshots);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
-    DUMP_ACONFIG_FLAG(override_trusted_overlay);
     DUMP_ACONFIG_FLAG(pacesetter_selection);
     DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type);
     DUMP_ACONFIG_FLAG(protected_if_client);
@@ -264,8 +263,8 @@ FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_
 FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf, "");
-FLAG_MANAGER_ACONFIG_FLAG(detached_mirror, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_synthetic_vsync_for_performance, "");
+FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
 FLAG_MANAGER_ACONFIG_FLAG(enable_layer_command_batching, "debug.sf.enable_layer_command_batching")
 FLAG_MANAGER_ACONFIG_FLAG(enable_small_area_detection, "")
 FLAG_MANAGER_ACONFIG_FLAG(flush_buffer_slots_to_uncache, "");
@@ -279,7 +278,6 @@ FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
 FLAG_MANAGER_ACONFIG_FLAG(local_tonemap_screenshots, "debug.sf.local_tonemap_screenshots");
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
-FLAG_MANAGER_ACONFIG_FLAG(override_trusted_overlay, "");
 FLAG_MANAGER_ACONFIG_FLAG(pacesetter_selection, "debug.sf.pacesetter_selection")
 FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type,
                           "debug.sf.parse_edid_version_and_input_type");
