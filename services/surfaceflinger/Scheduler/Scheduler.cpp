@@ -1496,7 +1496,6 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
                 if (id == *mPacesetterDisplayId) {
                     chosenModeDiffersForPacesetter = chosenModeDiffers;
                     if (chosenModeDiffers) {
-// QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
                         // Need a null pointer check for mPolicy since it's null during boot up
                         const auto& oldMode = mPolicy.modeOpt[id];
                         const auto& newMode = choiceOpt->get().mode;
@@ -1504,7 +1503,6 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
                                 (!oldMode ? "NA" : std::to_string(oldMode->fps.getIntValue())) +
                                 " to " + std::to_string(newMode.fps.getIntValue());
                         SFTRACE_NAME(str.c_str());
-// QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
                     }
                 }
             }
