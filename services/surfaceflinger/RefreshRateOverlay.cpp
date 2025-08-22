@@ -181,6 +181,17 @@ RefreshRateOverlay::RefreshRateOverlay(ConstructorTag, FpsRange fpsRange,
             .apply();
 }
 
+RefreshRateOverlay::~RefreshRateOverlay() {
+    for (const auto& pair : mBufferCache) {
+        for (const sp<GraphicBuffer>& buffer : pair.second) {
+            android::removeBufferFromLocalCache(buffer);
+        }
+    }
+
+    mBufferCache.clear();
+    mSurfaceControl.reset();
+}
+
 bool RefreshRateOverlay::initCheck() const {
     return mSurfaceControl != nullptr;
 }

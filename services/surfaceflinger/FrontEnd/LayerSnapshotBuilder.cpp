@@ -753,9 +753,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
                 snapshot.trustedOverlay = parentSnapshot.trustedOverlay;
                 break;
             case gui::TrustedOverlay::DISABLED:
-                snapshot.trustedOverlay = FlagManager::getInstance().override_trusted_overlay()
-                        ? requested.trustedOverlay
-                        : parentSnapshot.trustedOverlay;
+                snapshot.trustedOverlay = requested.trustedOverlay;
                 break;
             case gui::TrustedOverlay::ENABLED:
                 snapshot.trustedOverlay = requested.trustedOverlay;

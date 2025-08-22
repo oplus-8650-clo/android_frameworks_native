@@ -8265,7 +8265,11 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args) {
                     return base::unexpected<status_t>(status);
                 }
 
-                args.layers = getLayerSnapshotsForScreenshots(args.snapshotRequest);
+                auto layersResult = getLayerSnapshotsForScreenshots(args.snapshotRequest);
+                if (!layersResult.ok()) {
+                    return base::unexpected<status_t>(layersResult.error());
+                }
+                args.layers = std::move(layersResult.value());
                 args.hasProtectedLayer = layersHasProtectedLayer(args.layers);
                 const bool hasProtectedOrDisallowedSecureLayers = args.hasProtectedLayer ||
                         (!args.isSecure && layersHasSecureLayer(args.layers));
@@ -9478,8 +9482,8 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::addLayerSnapshotsToComp
     return layers;
 }
 
-std::vector<std::pair<Layer*, sp<LayerFE>>> SurfaceFlinger::getLayerSnapshotsForScreenshots(
-        const SnapshotRequestArgs& args) {
+base::expected<std::vector<std::pair<Layer*, sp<LayerFE>>>, status_t>
+SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args) {
     auto snapshotLambda = [&](const SnapshotRequestArgs& args) FTL_FAKE_GUARD(kMainThreadContext) {
         std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
         bool stopTraversal = false;
@@ -9539,6 +9543,9 @@ std::vector<std::pair<Layer*, sp<LayerFE>>> SurfaceFlinger::getLayerSnapshotsFor
                             .skipRoundCornersWhenProtected =
                                     !getRenderEngine().supportsProtectedContent()};
         if (args.rootLayerId) {
+            if (builderArgs.root.hasLayerCycle()) {
+                return base::unexpected(BAD_VALUE);
+            }
             builderArgs.parentCrop = args.parentCrop;
             // The layer may not exist if it was just created and a screenshot was requested
             // immediately after. In this case, the hierarchy will be empty so we will not render

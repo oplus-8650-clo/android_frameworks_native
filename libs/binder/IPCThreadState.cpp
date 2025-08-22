@@ -1107,9 +1107,6 @@ IPCThreadState::IPCThreadState()
     mHasExplicitIdentity = false;
     mIn.setDataCapacity(256);
     mOut.setDataCapacity(256);
-#ifdef BINDER_WITH_OBSERVERS
-    mBinderStatsQueue = mProcess->mBinderObserver->registerThread();
-#endif
 }
 
 IPCThreadState::~IPCThreadState()

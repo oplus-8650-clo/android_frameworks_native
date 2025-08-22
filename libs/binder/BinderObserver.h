@@ -54,25 +54,9 @@ public:
         int64_t startTimeNanos;
     };
 
-    std::shared_ptr<BinderStatsSpscQueue> registerThread() {
-        if (!mConfig->isEnabled()) {
-            return nullptr;
-        }
-        std::shared_ptr<BinderStatsSpscQueue> queue = std::make_shared<BinderStatsSpscQueue>();
-        mBinderStatsCollector.registerQueue(queue);
-        return queue;
-    }
-    void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue) {
-        if (!mConfig->isEnabled()) {
-            LOG_ALWAYS_FATAL_IF(queue != nullptr,
-                                "Non-null queue when BinderObserver is disabled.");
-            return;
-        }
-        mBinderStatsCollector.deregisterQueue(queue);
-    }
+    void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue);
     CallInfo onBeginTransaction(BBinder* binder, uint32_t code, uid_t callingUid);
-    void onEndTransaction(const std::shared_ptr<BinderStatsSpscQueue>& queue,
-                          const CallInfo& callInfo);
+    void onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& queue, const CallInfo& callInfo);
 
 private:
     // Add stats to the local queue, flush if queue is full.

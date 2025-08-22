@@ -7,7 +7,9 @@
       "path": "frameworks/native/services/inputflinger"
     }
   ],
-  "presubmit": [
+  // WM configuration allows us to run the following tests on cf and
+  // hw presubmit and postsubmit configurations
+  "wm": [
     {
       "name": "surfaceflinger_flag_check"
     },

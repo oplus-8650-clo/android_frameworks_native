@@ -50,10 +50,14 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
     };
 }
 
-void BinderObserver::onEndTransaction(const std::shared_ptr<BinderStatsSpscQueue>& queue,
+void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& queue,
                                       const CallInfo& callInfo) {
     if (!mConfig->isEnabled() || !callInfo.trackingInfo.isTracked()) {
         return;
+    }
+    if (queue == nullptr) {
+        queue = std::make_shared<BinderStatsSpscQueue>();
+        mBinderStatsCollector.registerQueue(queue);
     }
     BinderCallData observerData = {
             .interfaceDescriptor = callInfo.interfaceDescriptor,
@@ -63,6 +67,13 @@ void BinderObserver::onEndTransaction(const std::shared_ptr<BinderStatsSpscQueue
             .senderUid = callInfo.callingUid,
     };
     addStatMaybeFlush(queue, observerData);
+}
+
+void BinderObserver::deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue) {
+    if (queue != nullptr) {
+        mBinderStatsCollector.deregisterQueue(queue);
+        queue = nullptr;
+    }
 }
 
 bool BinderObserver::isFlushRequired(int64_t nowSec) {

@@ -301,6 +301,13 @@ auto RefreshRateSelector::createFrameRateModes(
                 continue;
             }
 
+            using fps_approx_ops::operator>;
+            // Exclude frame rates that are higher than the display peakFps. This may happen during
+            // early boot when the policy ranges are not yet in effect.
+            if (fps > peakFps) {
+                continue;
+            }
+
             const auto [existingIter, emplaceHappened] =
                     ratesMap.try_emplace(Key{fps, mode->getGroup()}, it);
             if (emplaceHappened) {

@@ -263,6 +263,7 @@ private:
             int32_t             mLastTransactionBinderFlags;
             CallRestriction     mCallRestriction;
 #ifdef BINDER_WITH_OBSERVERS
+            // This is used and managed by BinderObserver
             std::shared_ptr<BinderStatsSpscQueue> mBinderStatsQueue;
 #endif
 };

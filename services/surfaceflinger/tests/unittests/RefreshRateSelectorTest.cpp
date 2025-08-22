@@ -411,6 +411,29 @@ TEST_P(RefreshRateSelectorTest, unchangedPolicy) {
               selector.setDisplayManagerPolicy({kModeId90, {30_Hz, 90_Hz}}));
 }
 
+TEST_P(RefreshRateSelectorTest, createFrameRateModesWithinPeakFrameRate) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+
+    // Device with VRR config mode
+    auto selector = createSelector(kVrrMode_120, kModeId120);
+
+    constexpr FpsRange kLargeRange = {0_Hz, 100000_Hz};
+    constexpr FpsRanges kLargeRanges = {kLargeRange, kLargeRange};
+    const RefreshRateSelector::DisplayManagerPolicy kPolicy = {kModeId120, kLargeRanges,
+                                                               kLargeRanges};
+    EXPECT_EQ(SetPolicyResult::Changed, selector.setDisplayManagerPolicy(kPolicy));
+
+    const auto refreshRates = selector.rankRefreshRates(selector.getActiveMode().getGroup(),
+                                                        RefreshRateOrder::Descending);
+
+    for (auto scoredFrameRate : refreshRates) {
+        EXPECT_LE(scoredFrameRate.frameRateMode.fps, 120_Hz);
+    }
+}
+
 TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap) {
     auto selector = createSelector(kModes_60_90, kModeId60);
 
