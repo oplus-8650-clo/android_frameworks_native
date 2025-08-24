@@ -302,6 +302,7 @@ public:
 #endif
     bool mRequestingSid = false;
     bool mInheritRt = false;
+    bool mRecordingOn = false;
 
     // for below objects
     RpcMutex mLock;
@@ -314,7 +315,7 @@ public:
 
 // ---------------------------------------------------------------------------
 
-BBinder::BBinder() : mExtras(nullptr), mStability(0), mParceled(false), mRecordingOn(false) {}
+BBinder::BBinder() : mExtras(nullptr), mStability(0), mParceled(false) {}
 
 bool BBinder::isBinderAlive() const
 {
@@ -342,7 +343,7 @@ status_t BBinder::startRecordingTransactions(const Parcel& data) {
     }
     Extras* e = getOrCreateExtras();
     RpcMutexUniqueLock lock(e->mLock);
-    if (mRecordingOn) {
+    if (e->mRecordingOn) {
         ALOGI("Could not start Binder recording. Another is already in progress.");
         return INVALID_OPERATION;
     } else {
@@ -350,7 +351,7 @@ status_t BBinder::startRecordingTransactions(const Parcel& data) {
         if (readStatus != OK) {
             return readStatus;
         }
-        mRecordingOn = true;
+        e->mRecordingOn = true;
         ALOGI("Started Binder recording.");
         return NO_ERROR;
     }
@@ -372,9 +373,9 @@ status_t BBinder::stopRecordingTransactions() {
     }
     Extras* e = getOrCreateExtras();
     RpcMutexUniqueLock lock(e->mLock);
-    if (mRecordingOn) {
+    if (e->mRecordingOn) {
         e->mRecordingFd.reset();
-        mRecordingOn = false;
+        e->mRecordingOn = false;
         ALOGI("Stopped Binder recording.");
         return NO_ERROR;
     } else {
@@ -462,22 +463,24 @@ status_t BBinder::transact(
         }
     }
 
-    if (kEnableKernelIpc && kEnableRecording && mRecordingOn && code != START_RECORDING_TRANSACTION) [[unlikely]] {
+    if (kEnableKernelIpc && kEnableRecording && code != START_RECORDING_TRANSACTION) [[unlikely]] {
         Extras* e = mExtras.load(std::memory_order_acquire);
-        RpcMutexUniqueLock lock(e->mLock);
-        if (mRecordingOn) {
-            Parcel emptyReply;
-            timespec ts;
-            timespec_get(&ts, TIME_UTC);
-            auto transaction = android::binder::debug::RecordedTransaction::
-                    fromDetails(getInterfaceDescriptor(), code, flags, ts, data,
-                                reply ? *reply : emptyReply, err);
-            if (transaction) {
-                if (err = transaction->dumpToFile(e->mRecordingFd); err != NO_ERROR) {
-                    ALOGI("Failed to dump RecordedTransaction to file with error %d", err);
+        if (e && e->mRecordingOn) {
+            RpcMutexUniqueLock lock(e->mLock);
+            if (e->mRecordingOn) {
+                Parcel emptyReply;
+                timespec ts;
+                timespec_get(&ts, TIME_UTC);
+                auto transaction = android::binder::debug::RecordedTransaction::
+                        fromDetails(getInterfaceDescriptor(), code, flags, ts, data,
+                                    reply ? *reply : emptyReply, err);
+                if (transaction) {
+                    if (err = transaction->dumpToFile(e->mRecordingFd); err != NO_ERROR) {
+                        ALOGI("Failed to dump RecordedTransaction to file with error %d", err);
+                    }
+                } else {
+                    ALOGI("Failed to create RecordedTransaction object.");
                 }
-            } else {
-                ALOGI("Failed to create RecordedTransaction object.");
             }
         }
     }

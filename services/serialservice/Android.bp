@@ -71,6 +71,7 @@ rust_test {
     },
     test_suites: ["device-tests"],
     rustlibs: [
+        "libandroid_logger",
         "libserialservice",
         "libtempfile",
         "libtokio_test",

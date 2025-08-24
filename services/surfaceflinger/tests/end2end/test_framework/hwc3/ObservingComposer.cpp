@@ -52,9 +52,10 @@
 #include "test_framework/hwc3/delegators/Composer.h"
 #include "test_framework/hwc3/delegators/ComposerCallback.h"
 #include "test_framework/hwc3/delegators/ComposerClient.h"
+#include "test_framework/hwc3/events/BufferPendingDisplay.h"
+#include "test_framework/hwc3/events/BufferPendingRelease.h"
 #include "test_framework/hwc3/events/ClientDestroyed.h"
 #include "test_framework/hwc3/events/DisplayPresented.h"
-#include "test_framework/hwc3/events/PendingBufferSwap.h"
 #include "test_framework/hwc3/events/PowerMode.h"
 #include "test_framework/hwc3/events/VSync.h"
 #include "test_framework/hwc3/events/VSyncEnabled.h"
@@ -276,14 +277,23 @@ struct ComposerClientObserver final : public ComposerClientForwarder {
         const auto released = std::exchange(layerState.current, displayed);
 
         if (auto observer = mController.lock()) {
-            observer->callbacks().onPendingBufferSwap(events::PendingBufferSwap{
+            observer->onBufferPendingDisplay(events::BufferPendingDisplay{
                     .displayId = eventTemplate.displayId,
                     .layerId = layerId,
-                    .pendingDisplay = displayed,
-                    .pendingRelease = released,
+                    .bufferId = displayed,
                     .expectedPresentTime = eventTemplate.expectedPresentTime,
                     .receivedAt = eventTemplate.receivedAt,
             });
+
+            if (released) {
+                observer->onBufferPendingRelease(events::BufferPendingRelease{
+                        .displayId = eventTemplate.displayId,
+                        .layerId = layerId,
+                        .bufferId = *released,
+                        .expectedPresentTime = eventTemplate.expectedPresentTime,
+                        .receivedAt = eventTemplate.receivedAt,
+                });
+            }
         }
 
         LOG(VERBOSE) << "Displaying buffer " << toString(displayed);
@@ -298,11 +308,10 @@ struct ComposerClientObserver final : public ComposerClientForwarder {
 
         if (released) {
             if (auto observer = mController.lock()) {
-                observer->callbacks().onPendingBufferSwap(events::PendingBufferSwap{
+                observer->onBufferPendingRelease(events::BufferPendingRelease{
                         .displayId = eventTemplate.displayId,
                         .layerId = layerId,
-                        .pendingDisplay = displayed,
-                        .pendingRelease = released,
+                        .bufferId = *released,
                         .expectedPresentTime = eventTemplate.expectedPresentTime,
                         .receivedAt = eventTemplate.receivedAt,
                 });

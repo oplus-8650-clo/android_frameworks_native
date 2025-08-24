@@ -141,7 +141,6 @@ private:
     friend ::android::internal::Stability;
     int16_t mStability;
     bool mParceled;
-    bool mRecordingOn;
 
 #ifdef __LP64__
     int32_t mReserved1;
