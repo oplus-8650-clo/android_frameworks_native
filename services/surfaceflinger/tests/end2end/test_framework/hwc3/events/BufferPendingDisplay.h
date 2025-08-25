@@ -18,7 +18,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <optional>
 #include <string>
 
 #include <fmt/chrono.h>  // NOLINT(misc-include-cleaner)
@@ -31,8 +30,8 @@
 
 namespace android::surfaceflinger::tests::end2end::test_framework::hwc3::events {
 
-struct PendingBufferSwap final {
-    using AsyncConnector = core::AsyncFunctionStd<void(PendingBufferSwap)>;
+struct BufferPendingDisplay final {
+    using AsyncConnector = core::AsyncFunctionStd<void(BufferPendingDisplay)>;
 
     using DisplayId = core::DisplayConfiguration::Id;
     using LayerId = int64_t;
@@ -40,31 +39,29 @@ struct PendingBufferSwap final {
 
     DisplayId displayId{};
     LayerId layerId{};
-    std::optional<core::BufferId> pendingDisplay;
-    std::optional<core::BufferId> pendingRelease;
+    core::BufferId bufferId{};
     TimePoint expectedPresentTime;
     TimePoint receivedAt{std::chrono::steady_clock::now()};
 
-    friend auto operator==(const PendingBufferSwap&, const PendingBufferSwap&) -> bool = default;
+    friend auto operator==(const BufferPendingDisplay&, const BufferPendingDisplay&)
+            -> bool = default;
 };
 
-inline auto toString(const PendingBufferSwap& event) -> std::string {
+inline auto toString(const BufferPendingDisplay& event) -> std::string {
     const auto valueToString = [](const auto& value) { return toString(value); };
     return fmt::format(
-            "hwcPendingBufferSwap{{"
+            "hwcBufferPendingDisplay{{"
             " displayId: {},"
             " layerId: {},"
-            " pendingDisplay: {}"
-            " pendingRelease: {}"
+            " bufferId: {}"
             " expectedPresentTime: {}"
             " receivedAt: {}"
             " }}",
-            event.displayId, event.layerId, event.pendingDisplay.transform(valueToString),
-            event.pendingRelease.transform(valueToString),
+            event.displayId, event.layerId, event.bufferId,
             event.expectedPresentTime.time_since_epoch(), event.receivedAt.time_since_epoch());
 }
 
-inline auto format_as(const PendingBufferSwap& event) -> std::string {
+inline auto format_as(const BufferPendingDisplay& event) -> std::string {
     return toString(event);
 }
 

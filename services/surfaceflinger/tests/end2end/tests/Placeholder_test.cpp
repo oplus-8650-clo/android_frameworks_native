@@ -27,8 +27,9 @@
 #include "test_framework/core/TestService.h"
 #include "test_framework/hwc3/Hwc3Controller.h"
 #include "test_framework/hwc3/ObservingComposer.h"
+#include "test_framework/hwc3/events/BufferPendingDisplay.h"
+#include "test_framework/hwc3/events/BufferPendingRelease.h"
 #include "test_framework/hwc3/events/DisplayPresented.h"
-#include "test_framework/hwc3/events/PendingBufferSwap.h"
 #include "test_framework/hwc3/events/VSyncEnabled.h"
 #include "test_framework/surfaceflinger/DisplayEventReceiver.h"
 #include "test_framework/surfaceflinger/SFController.h"
@@ -76,8 +77,13 @@ TEST_F(Placeholder, Bringup) {
             [&](test_framework::hwc3::events::DisplayPresented event) {
                 LOG(INFO) << fmt::format("onDisplayPresented {}", event);
             })();
-    service->hwc().editCallbacks().onPendingBufferSwap.set(
-            [&](test_framework::hwc3::events::PendingBufferSwap event) {
+    service->hwc().editCallbacks().onBufferPendingDisplay.set(
+            [&](test_framework::hwc3::events::BufferPendingDisplay event) {
+                LOG(INFO) << fmt::format("onBufferPendingDisplay {}", event);
+            })();
+
+    service->hwc().editCallbacks().onBufferPendingRelease.set(
+            [&](test_framework::hwc3::events::BufferPendingRelease event) {
                 LOG(INFO) << fmt::format("onPendingBufferSwap {}", event);
             })();
 
