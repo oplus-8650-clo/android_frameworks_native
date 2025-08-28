@@ -199,7 +199,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     property_get("vendor.gpp.create_frc_extension", value, "0");
     intValue = atoi(value);
     if (!mQtiSurfaceGPPExtn && intValue == 1) {
-        mQtiSurfaceGPPExtn = std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
+        mQtiSurfaceGPPExtn = std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(
+            this, IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
     }
 }
 
@@ -1337,6 +1338,12 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
         mSlots[slot].requiresFreeOnReturn = false;
     }
 
+    /* QTI_BEGIN */
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setQueuedBufferSlot(slot);
+    }
+    /* QTI_END */
+
     if (mEnableFrameTimestamps) {
         mFrameEventHistory->applyDelta(output.frameTimestamps);
         // Update timestamps with the local acquire fence.
@@ -2472,6 +2479,9 @@ int Surface::setBufferCount(int bufferCount)
     ATRACE_CALL();
     SURF_LOGV("Surface::setBufferCount");
     Mutex::Autolock lock(mMutex);
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setBufferCount(bufferCount);
+    }
 
     status_t err = NO_ERROR;
     if (bufferCount == 0) {
@@ -3111,6 +3121,10 @@ status_t Surface::setFrameRate(float frameRate, int8_t compatibility,
                                                         changeFrameRateStrategy);
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setFrameRate(%.2f) returned %s", frameRate,
                  strerror(-err));
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setFrameRate(frameRate, compatibility,
+                                         changeFrameRateStrategy);
+    }
     return err;
 }
 
