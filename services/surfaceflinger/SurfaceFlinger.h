@@ -1755,6 +1755,9 @@ private:
     // TODO(b/431836223): Workaround to capture traces to disk and recover gracefully by forcing CE
     //  to rebuild layer stack instead of crashing.
     void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);
+
+    void setForcedClientCompositionLayerStacks(
+            compositionengine::CompositionRefreshArgs& refreshArgs) EXCLUDES(mStateLock);
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {

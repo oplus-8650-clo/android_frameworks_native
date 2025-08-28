@@ -284,6 +284,7 @@ public:
 
     // See mActiveModeOpt for thread safety.
     FrameRateMode getActiveMode() const EXCLUDES(mLock);
+    bool hasActiveMode() const EXCLUDES(mLock);
 
     // Returns a known frame rate that is the closest to frameRate
     Fps findClosestKnownFrameRate(Fps frameRate) const;

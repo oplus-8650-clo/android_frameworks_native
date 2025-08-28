@@ -176,9 +176,15 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generate(SkiaGpuContext* context, const u
     const float filterDepth = std::min(kMaxSurfaces - 1.0f, radius * kInputScale / 2.5f);
     const int filterPasses = std::min(kMaxSurfaces - 1, static_cast<int>(ceil(filterDepth)));
 
+    // Ensure that no (partial) pixels outside the blurRect are included in the blur.
+    SkIRect targetBlurRect;
+    blurRect.roundIn(&targetBlurRect);
+
     auto makeSurface = [&](float scale) -> sk_sp<SkSurface> {
-        const auto newW = ceil(static_cast<float>(blurRect.width() / scale));
-        const auto newH = ceil(static_cast<float>(blurRect.height() / scale));
+        const int newW =
+                std::max(1, static_cast<int>(static_cast<float>(targetBlurRect.width()) / scale));
+        const int newH =
+                std::max(1, static_cast<int>(static_cast<float>(targetBlurRect.height()) / scale));
         sk_sp<SkSurface> surface =
                 context->createRenderTarget(input->imageInfo().makeWH(newW, newH));
         LOG_ALWAYS_FATAL_IF(!surface, "%s: Failed to create surface for blurring!", __func__);

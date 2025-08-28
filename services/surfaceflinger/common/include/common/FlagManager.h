@@ -90,6 +90,7 @@ public:
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
     bool follower_arbitrary_refresh_rate_selection() const;
+    bool force_slower_follower_gpu_composition() const;
     bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;
     bool game_default_frame_rate() const;

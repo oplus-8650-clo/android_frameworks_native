@@ -893,9 +893,13 @@ void Output::updateCompositionState(const compositionengine::CompositionRefreshA
     auto* properties = getOverlaySupport();
 
     for (auto* layer : getOutputLayersOrderedByZ()) {
+        const ui::LayerStack outputLayerStack =
+                layer->getOutput().getState().layerFilter.layerStack;
+        const bool layerForceClientComposition =
+                refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack);
+
         layer->updateCompositionState(refreshArgs.updatingGeometryThisFrame,
-                                      refreshArgs.devOptForceClientComposition ||
-                                              forceClientComposition,
+                                      layerForceClientComposition || forceClientComposition,
                                       refreshArgs.internalDisplayRotationFlags,
                                       properties ? properties->lutProperties : std::nullopt);
 
@@ -1731,6 +1735,8 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
 
     mRenderSurface->onPresentDisplayCompleted();
 
+    const bool force_slower_follower_gpu_composition =
+            FlagManager::getInstance().force_slower_follower_gpu_composition();
     for (auto* layer : getOutputLayersOrderedByZ()) {
         // The layer buffer from the previous frame (if any) is released
         // by HWC only when the release fence from this frame (if any) is
@@ -1745,13 +1751,19 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
 
         // If the layer was client composited in the previous frame, we
         // need to merge with the previous client target acquire fence.
-        // Since we do not track that, always merge with the current
-        // client target acquire fence when it is available, even though
-        // this is suboptimal.
-        // TODO(b/121291683): Track previous frame client target acquire fence.
-        if (outputState.usesClientComposition) {
+        if (force_slower_follower_gpu_composition) {
             releaseFence =
-                    Fence::merge("LayerRelease", releaseFence, frame.clientTargetAcquireFence);
+                    Fence::merge("LayerRelease", releaseFence,
+                                 layer->getLayerFE().getAndClearLastClientTargetAcquireFence());
+            layer->getLayerFE().setLastClientTargetAcquireFence(frame.clientTargetAcquireFence);
+        } else {
+            // Since we do not track that, always merge with the current
+            // client target acquire fence when it is available, even though
+            // this is suboptimal.
+            if (outputState.usesClientComposition) {
+                releaseFence =
+                        Fence::merge("LayerRelease", releaseFence, frame.clientTargetAcquireFence);
+            }
         }
         layer->getLayerFE().setReleaseFence(releaseFence);
         layer->getLayerFE().setReleasedBuffer(layer->getLayerFE().getCompositionState()->buffer);
