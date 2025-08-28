@@ -6621,6 +6621,10 @@ void InputDispatcher::onAnrLocked(const std::shared_ptr<Connection>& connection)
      * most useful.
      */
     DispatchEntry& oldestEntry = *connection->waitQueue.front();
+    ATRACE_NAME_IF(ATRACE_ENABLED(),
+                   StringPrintf("onAnrLocked(inputChannel=%s, id=0x%" PRIx32 ")",
+                                connection->getInputChannelName().c_str(),
+                                oldestEntry.eventEntry->id));
     const nsecs_t currentWait = now() - oldestEntry.deliveryTime;
     std::string reason =
             android::base::StringPrintf("%s is not responding. Waited %" PRId64 "ms for %s",
