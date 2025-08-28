@@ -94,6 +94,14 @@ namespace {
         return false;
 #endif
     }
+
+    bool freezeUseFlushEagerly() {
+#if defined(LIBBINDER_FREEZE_USE_FLUSH_EAGERLY)
+        return true;
+#else
+        return false;
+#endif
+    }
 }
 
 // Static const and functions will be optimized out if not used,
@@ -800,9 +808,9 @@ void IPCThreadState::processPostWriteDerefs()
 {
     if (fixRecursiveDoubleDerefs()) {
         LOG_ALWAYS_FATAL_IF(mIsProcessingPostWriteDerefs,
-                    "processPostWriteDerefs is called recursively.");
-        mIsProcessingPostWriteDerefs = true;
+                            "processPostWriteDerefs is called recursively.");
     }
+    mIsProcessingPostWriteDerefs = true;
 
     for (size_t i = 0; i < mPostWriteWeakDerefs.size(); i++) {
         RefBase::weakref_type* refs = mPostWriteWeakDerefs[i];
@@ -816,9 +824,7 @@ void IPCThreadState::processPostWriteDerefs()
     }
     mPostWriteStrongDerefs.clear();
 
-    if (fixRecursiveDoubleDerefs()) {
-        mIsProcessingPostWriteDerefs = false;
-    }
+    mIsProcessingPostWriteDerefs = false;
 }
 
 void IPCThreadState::joinThreadPool(bool isMain)
@@ -1059,7 +1065,14 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (freezeUseFlushIfNeeded()) {
+    if (freezeUseFlushEagerly()) {
+        if (!mIsProcessingPostWriteDerefs) {
+            if (status_t res = flushCommands(); res != OK) {
+                LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+            }
+        }
+        return NO_ERROR;
+    } else if (freezeUseFlushIfNeeded()) {
         flushIfNeeded();
     } else if (status_t res = flushCommands(); res != OK) {
         LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
@@ -1079,7 +1092,14 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
     mOut.writeInt32((int32_t)handle);
     mOut.writePointer((uintptr_t)proxy);
 
-    if (freezeUseFlushIfNeeded()) {
+    if (freezeUseFlushEagerly()) {
+        if (!mIsProcessingPostWriteDerefs) {
+            if (status_t res = flushCommands(); res != OK) {
+                LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+            }
+        }
+        return NO_ERROR;
+    } else if (freezeUseFlushIfNeeded()) {
         flushIfNeeded();
     } else if (flush) {
         if (status_t res = flushCommands(); res != OK) {
