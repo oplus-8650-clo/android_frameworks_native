@@ -21,13 +21,6 @@ flag {
 } # adpf_gpu_sf
 
 flag {
-  name: "adpf_native_session_manager"
-  namespace: "game"
-  description: "Controls ADPF SessionManager being enabled in SF"
-  bug: "367803904"
-} # adpf_sessionmanager
-
-flag {
   name: "anchor_list"
   namespace: "core_graphics"
   description: "Use an anchor list for frame rate selection"
