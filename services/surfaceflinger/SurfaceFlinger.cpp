@@ -4076,17 +4076,30 @@ bool SurfaceFlinger::configureLocked() {
                 const auto [kernelIdleTimerController, idleTimerTimeoutMs] =
                         getKernelIdleTimerProperties(displayId);
 
+                const auto snapshotOpt =
+                        mPhysicalDisplays.get(displayId).transform(&PhysicalDisplay::snapshotRef);
+                LOG_ALWAYS_FATAL_IF(!snapshotOpt);
+
+                // Force `FrameRateOverride` to be enabled if the active mode has a VRR config.
+                bool isVrrConfigured = false;
+                const auto& snapshot = snapshotOpt->get();
+                if (const auto activeModeOpt = snapshot.displayModes().get(*activeModeIdOpt)) {
+                    if (activeModeOpt->get()->getVrrConfig().has_value()) {
+                        isVrrConfigured = true;
+                        ALOGD("Display %s: Active mode %d has VRR config. Forcing "
+                              "FrameRateOverride enabled.",
+                              to_string(displayId).c_str(), ftl::to_underlying(*activeModeIdOpt));
+                    }
+                }
+
                 using Config = scheduler::RefreshRateSelector::Config;
                 const Config config =
-                        {.enableFrameRateOverride = sysprop::enable_frame_rate_override(true),
+                        {.enableFrameRateOverride =
+                                 sysprop::enable_frame_rate_override(true) || isVrrConfigured,
                          .frameRateMultipleThreshold =
                                  base::GetIntProperty("debug.sf.frame_rate_multiple_threshold"s, 0),
                          .legacyIdleTimerTimeout = idleTimerTimeoutMs,
                          .kernelIdleTimerController = kernelIdleTimerController};
-
-                const auto snapshotOpt =
-                        mPhysicalDisplays.get(displayId).transform(&PhysicalDisplay::snapshotRef);
-                LOG_ALWAYS_FATAL_IF(!snapshotOpt);
 
                 mDisplayModeController.registerDisplay(*snapshotOpt, *activeModeIdOpt, config);
                 break;
