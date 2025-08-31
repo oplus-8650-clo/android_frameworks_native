@@ -1395,6 +1395,11 @@ const FrameRateMode& RefreshRateSelector::getActiveModeLocked() const {
     return *mActiveModeOpt;
 }
 
+bool RefreshRateSelector::hasActiveMode() const {
+    std::lock_guard lock(mLock);
+    return mActiveModeOpt.has_value();
+}
+
 void RefreshRateSelector::setActiveMode(DisplayModeId modeId, Fps renderFrameRate) {
     std::lock_guard lock(mLock);
 

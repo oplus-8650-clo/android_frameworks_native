@@ -123,7 +123,6 @@ void FlagManager::dump(std::string& result) const {
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(add_first_vsync_to_tracker);
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
-    DUMP_ACONFIG_FLAG(adpf_native_session_manager);
     DUMP_ACONFIG_FLAG(adpf_use_fmq_channel);
     DUMP_ACONFIG_FLAG(adpf_use_fmq_channel_fixed);
     DUMP_ACONFIG_FLAG(anchor_list);
@@ -160,6 +159,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(enable_small_area_detection);
     DUMP_ACONFIG_FLAG(flush_buffer_slots_to_uncache);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection);
+    DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition);
     DUMP_ACONFIG_FLAG(fp16_client_target);
     DUMP_ACONFIG_FLAG(frame_rate_category_mrr);
     DUMP_ACONFIG_FLAG(game_default_frame_rate);
@@ -270,6 +270,8 @@ FLAG_MANAGER_ACONFIG_FLAG(enable_small_area_detection, "")
 FLAG_MANAGER_ACONFIG_FLAG(flush_buffer_slots_to_uncache, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
                           "debug.sf.follower_arbitrary_refresh_rate_selection");
+FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition,
+                          "debug.sf.force_slower_follower_gpu_composition");
 FLAG_MANAGER_ACONFIG_FLAG(fp16_client_target, "debug.sf.fp16_client_target")
 FLAG_MANAGER_ACONFIG_FLAG(frame_rate_category_mrr, "debug.sf.frame_rate_category_mrr")
 FLAG_MANAGER_ACONFIG_FLAG(game_default_frame_rate, "")
@@ -300,7 +302,6 @@ FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(add_first_vsync_to_tracker, "")
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
-FLAG_MANAGER_ACONFIG_FLAG(adpf_native_session_manager, "");
 FLAG_MANAGER_ACONFIG_FLAG(anchor_list, "")
 FLAG_MANAGER_ACONFIG_FLAG(buffer_stuffing_fix, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,

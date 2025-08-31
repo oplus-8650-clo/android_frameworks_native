@@ -518,5 +518,35 @@ TEST_F(CompositionEnginePostCompositionTest, postCompositionReleasesAllFences) {
 
     mEngine.postComposition(mRefreshArgs);
 }
+
+TEST_F(CompositionEnginePostCompositionTest, postCompositionReleaseFenceFromLastClientAcquire) {
+    SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition, true);
+
+    EXPECT_CALL(*mLayer1FE, getReleaseFencePromiseStatus)
+            .WillOnce(Return(LayerFE::ReleaseFencePromiseStatus::FULFILLED));
+    EXPECT_CALL(*mLayer2FE, getReleaseFencePromiseStatus)
+            .WillOnce(Return(LayerFE::ReleaseFencePromiseStatus::INITIALIZED));
+    EXPECT_CALL(*mLayer3FE, getReleaseFencePromiseStatus)
+            .WillOnce(Return(LayerFE::ReleaseFencePromiseStatus::INITIALIZED));
+    mRefreshArgs.layers = {mLayer1FE, mLayer2FE};
+    mRefreshArgs.layersWithQueuedFrames = {mLayer3FE};
+
+    sp<Fence> layer2Fence = sp<Fence>::make();
+    sp<Fence> layer3Fence = sp<Fence>::make();
+    EXPECT_CALL(*mLayer1FE, getAndClearLastClientTargetAcquireFence()).Times(0);
+    EXPECT_CALL(*mLayer2FE, getAndClearLastClientTargetAcquireFence())
+            .WillOnce(Return(layer2Fence));
+    EXPECT_CALL(*mLayer3FE, getAndClearLastClientTargetAcquireFence())
+            .WillOnce(Return(layer3Fence));
+
+    FenceResult layer2FenceResult(layer2Fence);
+    FenceResult layer3FenceResult(layer3Fence);
+    EXPECT_CALL(*mLayer1FE, setReleaseFence(_)).Times(0);
+    EXPECT_CALL(*mLayer2FE, setReleaseFence(layer2FenceResult)).Times(1);
+    EXPECT_CALL(*mLayer3FE, setReleaseFence(layer3FenceResult)).Times(1);
+
+    mEngine.postComposition(mRefreshArgs);
+}
+
 } // namespace
 } // namespace android::compositionengine

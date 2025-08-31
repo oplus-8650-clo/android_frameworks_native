@@ -54,7 +54,6 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool add_first_vsync_to_tracker() const;
     bool adpf_gpu_sf() const;
-    bool adpf_native_session_manager() const;
     bool adpf_use_fmq_channel() const;
     bool adpf_use_fmq_channel_fixed() const;
     bool anchor_list() const;
@@ -90,6 +89,7 @@ public:
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
     bool follower_arbitrary_refresh_rate_selection() const;
+    bool force_slower_follower_gpu_composition() const;
     bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;
     bool game_default_frame_rate() const;

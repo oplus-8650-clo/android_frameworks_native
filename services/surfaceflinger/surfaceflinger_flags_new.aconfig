@@ -21,13 +21,6 @@ flag {
 } # adpf_gpu_sf
 
 flag {
-  name: "adpf_native_session_manager"
-  namespace: "game"
-  description: "Controls ADPF SessionManager being enabled in SF"
-  bug: "367803904"
-} # adpf_sessionmanager
-
-flag {
   name: "anchor_list"
   namespace: "core_graphics"
   description: "Use an anchor list for frame rate selection"
@@ -173,6 +166,13 @@ flag {
   description: "Enables selection of any refresh rate for the follower display instead of one matching the pacesetter."
   bug: "371584290"
 } # follower_arbitrary_refresh_rate_selection
+
+flag {
+  name: "force_slower_follower_gpu_composition"
+  namespace: "desktop_display"
+  description: "Force slower connected displays to be GPU composited."
+  bug: "389982803"
+} # force_slower_follower_gpu_composition
 
 flag {
   name: "force_compile_graphite_renderengine"

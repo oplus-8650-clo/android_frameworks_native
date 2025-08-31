@@ -284,6 +284,23 @@ perfetto::protos::LayerState TransactionProtoParser::toProto(
     if (layer.what & layer_state_t::eSystemContentPriorityChanged) {
         proto.set_system_content_priority(layer.systemContentPriority);
     }
+    if (layer.what & layer_state_t::eBoxShadowSettingsChanged) {
+        perfetto::protos::BoxShadowSettings* protoSettings = proto.mutable_box_shadow_settings();
+        for (const auto& boxShadow : layer.boxShadowSettings.boxShadows) {
+            perfetto::protos::BoxShadowSettings_BoxShadowParams* protoParams =
+                    protoSettings->add_box_shadows();
+            protoParams->set_blur_radius(boxShadow.blurRadius);
+            protoParams->set_spread_radius(boxShadow.spreadRadius);
+            protoParams->set_color(boxShadow.color);
+            protoParams->set_offset_x(boxShadow.offsetX);
+            protoParams->set_offset_y(boxShadow.offsetY);
+        }
+    }
+    if (layer.what & layer_state_t::eBorderSettingsChanged) {
+        perfetto::protos::BorderSettings* protoSettings = proto.mutable_border_settings();
+        protoSettings->set_stroke_width(layer.borderSettings.strokeWidth);
+        protoSettings->set_color(layer.borderSettings.color);
+    }
     return proto;
 }
 
@@ -611,6 +628,25 @@ void TransactionProtoParser::fromProto(const perfetto::protos::LayerState& proto
     }
     if (proto.what() & layer_state_t::eSystemContentPriorityChanged) {
         layer.systemContentPriority = proto.system_content_priority();
+    }
+    if ((proto.what() & layer_state_t::eBoxShadowSettingsChanged) &&
+        proto.has_box_shadow_settings()) {
+        const auto& protoSettings = proto.box_shadow_settings();
+        for (int i = 0; i < protoSettings.box_shadows_size(); i++) {
+            const auto& protoParams = protoSettings.box_shadows(i);
+            android::gui::BoxShadowSettings::BoxShadowParams params;
+            params.blurRadius = protoParams.blur_radius();
+            params.spreadRadius = protoParams.spread_radius();
+            params.color = protoParams.color();
+            params.offsetX = protoParams.offset_x();
+            params.offsetY = protoParams.offset_y();
+            layer.boxShadowSettings.boxShadows.push_back(params);
+        }
+    }
+    if ((proto.what() & layer_state_t::eBorderSettingsChanged) && proto.has_border_settings()) {
+        const auto& protoSettings = proto.border_settings();
+        layer.borderSettings.strokeWidth = protoSettings.stroke_width();
+        layer.borderSettings.color = protoSettings.color();
     }
 }
 

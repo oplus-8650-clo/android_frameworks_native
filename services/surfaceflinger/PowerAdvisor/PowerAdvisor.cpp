@@ -557,7 +557,7 @@ std::shared_ptr<SessionManager> PowerAdvisor::getSessionManager() {
 
 sp<IBinder> PowerAdvisor::getOrCreateSessionManagerForBinder(uid_t uid) {
     // Flag guards the creation of SessionManager
-    if (mSessionManager == nullptr && FlagManager::getInstance().adpf_native_session_manager()) {
+    if (mSessionManager == nullptr) {
         mSessionManager = ndk::SharedRefBase::make<SessionManager>(uid);
     }
     return AIBinder_toPlatformBinder(mSessionManager->asBinder().get());

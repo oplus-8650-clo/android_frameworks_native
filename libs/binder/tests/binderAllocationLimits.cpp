@@ -283,6 +283,22 @@ TEST(BinderAllocation, GetListOfStrings) {
             << "Expecting " << numStringAllocations << " string allocs";
 }
 
+TEST(BinderAllocation, WriteListOfStrings) {
+    sp<android::os::IServiceManager> sm =
+            android::interface_cast<android::os::IServiceManager>(GetRemoteBinder());
+    std::vector<std::string> ret;
+    ASSERT_TRUE(sm->listServices(android::IServiceManager::DUMP_FLAG_PRIORITY_ALL, &ret).isOk());
+    ASSERT_GT(ret.size(), 0u);
+
+    size_t mallocs = 0;
+    const auto on_malloc = OnMalloc([&](size_t /* bytes */) { mallocs++; });
+
+    Parcel p;
+    EXPECT_EQ(OK, p.writeUtf8VectorAsUtf16Vector(ret));
+
+    EXPECT_EQ(mallocs, 1u);
+}
+
 TEST(BinderAllocation, MakeScopeGuard) {
     const auto m = ScopeDisallowMalloc();
     {
