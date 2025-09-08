@@ -61,6 +61,8 @@ public:
     void addDeviceTypeAssociation(const std::string& inputPort, const std::string& type);
     void addInputUniqueIdAssociation(const std::string& inputUniqueId,
                                      const std::string& displayUniqueId);
+    void addDeviceDescriptorToDisplayUniqueIdAssociation(const std::string& inputDeviceDescriptor,
+                                                         const std::string& displayUniqueId);
     void addKeyboardLayoutAssociation(const std::string& inputPort,
                                       const KeyboardLayoutInfo& layoutInfo);
     void addVirtualDevice(const std::string& inputPort);

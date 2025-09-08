@@ -237,6 +237,18 @@ protected:
                                                         static_cast<Fps>(90_Hz).getPeriodNsecs()},
                                  /*group=*/2));
 
+    static inline const ftl::NonNull<DisplayModePtr> kVrrMode10TE120 = ftl::as_non_null(
+            createVrrDisplayMode(kModeId10, 120_Hz,
+                                 hal::VrrConfig{.minFrameIntervalNs =
+                                                        static_cast<Fps>(10_Hz).getPeriodNsecs()},
+                                 /*group=*/2));
+
+    static inline const ftl::NonNull<DisplayModePtr> kVrrMode1TE120 = ftl::as_non_null(
+            createVrrDisplayMode(kModeId1, 120_Hz,
+                                 hal::VrrConfig{.minFrameIntervalNs =
+                                                        static_cast<Fps>(1_Hz).getPeriodNsecs()},
+                                 /*group=*/3));
+
     static inline const ftl::NonNull<DisplayModePtr> kVrrMode120TE360 = ftl::as_non_null(
             createVrrDisplayMode(kModeId120, 360_Hz,
                                  hal::VrrConfig{
@@ -272,6 +284,10 @@ protected:
     static inline const DisplayModes kModes_60_120 = makeModes(kMode60, kMode120);
     static inline const DisplayModes kModes_1_5_10 = makeModes(kMode1, kMode5, kMode10);
     static inline const DisplayModes kModes_60_90_120 = makeModes(kMode60, kMode90, kMode120);
+    static inline const DisplayModes kModes_1_10_60_90_120 =
+            makeModes(kMode1, kMode10, kMode60, kMode90, kMode120);
+    static inline const DisplayModes kModes_1_10_60_90G1_120 =
+            makeModes(kMode1, kMode10, kMode60, kMode90_G1, kMode120);
 
     // VRR display modes
     static inline const DisplayModes kVrrMode_120 = makeModes(kVrrMode120TE240);
@@ -4602,19 +4618,39 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRates) {
         return;
     }
 
-    auto selector = createSelector(kModes_60_90, kModeId90);
+    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
+    auto selector = createSelector(kModes_1_10_60_90_120, kModeId90);
     const FpsRange range60 = {0_Hz, 60_Hz};
     EXPECT_EQ(SetPolicyResult::Changed,
               selector.setDisplayManagerPolicy(
                       {kModeId60, {range60, range60}, {range60, range60}}));
 
     // Irrespective of the policy we get the full range of possible frame rates
-    const std::vector<float> expected = {90.0f, 60.0f, 45.0f, 30.0f, 22.5f, 20.0f};
+    const std::vector<float> expected = {120.0f, 90.0f, 60.0f, 45.0f, 40.0f, 30.0f,
+                                         24.0f,  22.5f, 20.0f, 10.0f, 1.0f};
 
     const auto allSupportedFrameRates = selector.getSupportedFrameRates();
-    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
     for (size_t i = 0; i < expected.size(); i++) {
-        EXPECT_EQ(expected[i], allSupportedFrameRates[i])
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRRNonGroupMode) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
+    const auto selector = createSelector(kModes_1_10_60_90G1_120, kModeId90);
+
+    const std::vector<float> expected = {90.0f, 45.0f, 30.0f, 22.5f};
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
                 << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
     }
 }

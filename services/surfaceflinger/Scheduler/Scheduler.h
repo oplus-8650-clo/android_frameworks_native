@@ -52,6 +52,7 @@
 #include <scheduler/VsyncConfig.h>
 #include <ui/DisplayId.h>
 #include <ui/DisplayMap.h>
+#include <ui/StaticDisplayInfo.h>
 
 #include "DisplayHardware/DisplayMode.h"
 #include "EventThread.h"
@@ -99,7 +100,7 @@ public:
               Fps activeRefreshRate, TimeStats&);
     virtual ~Scheduler();
 
-    void startTimers();
+    void startTimers() REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     // Automatically selects a pacesetter display and designates if `pacesetterId` is not present,
     // otherwise promotes `pacesetterId` to pacesetter. Returns true if a new display was chosen as
@@ -128,7 +129,7 @@ public:
 
     // TODO: b/255635821 - Remove `defaultPacesetterId` parameter once the pacesetter_selection flag
     // is live.
-    void registerDisplay(PhysicalDisplayId, RefreshRateSelectorPtr,
+    void registerDisplay(PhysicalDisplayId, ui::DisplayConnectionType, RefreshRateSelectorPtr,
                          std::optional<PhysicalDisplayId> defaultPacesetterId)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
     void unregisterDisplay(PhysicalDisplayId, std::optional<PhysicalDisplayId> defaultPacesetterId)
@@ -291,13 +292,14 @@ public:
     void chooseRefreshRateForContent(const surfaceflinger::frontend::LayerHierarchy*,
                                      bool updateAttachedChoreographer) EXCLUDES(mDisplayLock);
 
-    void resetIdleTimer();
+    void resetAllIdleTimers() EXCLUDES(mDisplayLock);
 
     // Indicates that touch interaction is taking place.
     void onTouchHint();
 
     // Returns true if the pacesetter display designation was changed due to power mode change.
-    bool setDisplayPowerMode(PhysicalDisplayId, hal::PowerMode) REQUIRES(kMainThreadContext);
+    bool setDisplayPowerMode(PhysicalDisplayId, hal::PowerMode) REQUIRES(kMainThreadContext)
+            EXCLUDES(mPolicyLock);
 
     // TODO(b/255635821): Track this per display.
     void setActiveDisplayPowerModeForRefreshRateStats(hal::PowerMode) REQUIRES(kMainThreadContext);
@@ -434,9 +436,9 @@ private:
 
     // Update feature state machine to given state when corresponding timer resets or expires.
     void kernelIdleTimerCallback(PhysicalDisplayId, TimerState) EXCLUDES(mDisplayLock);
-    void idleTimerCallback(TimerState);
+    void idleTimerCallback(PhysicalDisplayId, TimerState);
     void touchTimerCallback(TimerState);
-    void displayPowerTimerCallback(TimerState);
+    void displayPowerTimerCallback(PhysicalDisplayId, TimerState);
 
     // VsyncSchedule delegate.
     void onHardwareVsyncRequest(PhysicalDisplayId, bool enable);
@@ -476,7 +478,8 @@ private:
     void demotePacesetterDisplay(PromotionParams) REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock, mPolicyLock);
 
-    void registerDisplayInternal(PhysicalDisplayId, RefreshRateSelectorPtr, VsyncSchedulePtr,
+    void registerDisplayInternal(PhysicalDisplayId, ui::DisplayConnectionType,
+                                 RefreshRateSelectorPtr, VsyncSchedulePtr,
                                  std::optional<PhysicalDisplayId> defaultPacesetterId)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
@@ -485,7 +488,8 @@ private:
     // Sets the S state of the policy to the T value under mPolicyLock, and chooses a display mode
     // that fulfills the new policy if the state changed. Returns the signals that were considered.
     template <typename S, typename T>
-    GlobalSignals applyPolicy(S Policy::*, T&&) EXCLUDES(mPolicyLock);
+    GlobalSignals applyPolicy(S Policy::*, T&&, std::optional<PhysicalDisplayId> = std::nullopt)
+            EXCLUDES(mPolicyLock);
 
     struct DisplayModeChoice {
         DisplayModeChoice(FrameRateMode mode, GlobalSignals consideredSignals)
@@ -516,7 +520,7 @@ private:
     DisplayModeChoiceMap chooseDisplayModes() const
             REQUIRES(mPolicyLock, mDisplayLock, kMainThreadContext);
 
-    GlobalSignals makeGlobalSignals() const REQUIRES(mPolicyLock);
+    GlobalSignals makeGlobalSignals(PhysicalDisplayId) const REQUIRES(mPolicyLock);
 
     bool updateFrameRateOverridesLocked(GlobalSignals, Fps displayRefreshRate)
             REQUIRES(mPolicyLock);
@@ -537,6 +541,10 @@ private:
     // Get frame interval
     Period getVsyncPeriod(uid_t) override EXCLUDES(mDisplayLock);
     void onExpectedPresentTimePosted(TimePoint expectedPresentTime) override EXCLUDES(mDisplayLock);
+
+    void startPowerTimer(PhysicalDisplayId) EXCLUDES(mPolicyLock) REQUIRES(kMainThreadContext);
+    void initializeIdleTimer(PhysicalDisplayId) REQUIRES(kMainThreadContext)
+            EXCLUDES(mDisplayLock, mPolicyLock);
 
     // Returns the display that should be promoted to pacesetter using the following priority:
     // 1. `mForcedPacesetterDisplayId`, if present
@@ -575,8 +583,10 @@ private:
 
     // Timer used to monitor touch events.
     ftl::Optional<OneShotTimer> mTouchTimer;
-    // Timer used to monitor display power mode.
-    ftl::Optional<OneShotTimer> mDisplayPowerTimer;
+    // Timers used to monitor display power mode.
+    ui::PhysicalDisplayMap<PhysicalDisplayId, std::unique_ptr<OneShotTimer>> mDisplayPowerTimers;
+
+    bool mShouldStartPowerTimers GUARDED_BY(kMainThreadContext) = false;
 
     // Injected delay prior to compositing, for simulating jank.
     float mPacesetterFrameDurationFractionToSkip GUARDED_BY(kMainThreadContext) = 0.f;
@@ -593,14 +603,17 @@ private:
     using FrameTargeterPtr = std::unique_ptr<FrameTargeter>;
 
     struct Display {
-        Display(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
-                VsyncSchedulePtr schedulePtr, FeatureFlags features)
+        Display(PhysicalDisplayId displayId, ui::DisplayConnectionType connectionType,
+                RefreshRateSelectorPtr selectorPtr, VsyncSchedulePtr schedulePtr,
+                FeatureFlags features)
               : displayId(displayId),
+                connectionType(connectionType),
                 selectorPtr(std::move(selectorPtr)),
                 schedulePtr(std::move(schedulePtr)),
                 targeterPtr(std::make_unique<FrameTargeter>(displayId, features)) {}
 
         const PhysicalDisplayId displayId;
+        const ui::DisplayConnectionType connectionType;
 
         // Effectively const except in move constructor.
         RefreshRateSelectorPtr selectorPtr;
@@ -665,10 +678,10 @@ private:
     struct Policy {
         // Policy for choosing the display mode.
         LayerHistory::Summary contentRequirements;
-        TimerState idleTimer = TimerState::Reset;
+        ui::PhysicalDisplayMap<PhysicalDisplayId, TimerState> idleTimers;
         TouchState touch = TouchState::Inactive;
-        TimerState displayPowerTimer = TimerState::Expired;
-        hal::PowerMode displayPowerMode = hal::PowerMode::ON;
+        ui::PhysicalDisplayMap<PhysicalDisplayId, TimerState> displayPowerTimers;
+        ui::PhysicalDisplayMap<PhysicalDisplayId, hal::PowerMode> displayPowerModes;
 
         // Chosen display mode.
         std::unordered_map<PhysicalDisplayId, ftl::Optional<FrameRateMode>> modeOpt;

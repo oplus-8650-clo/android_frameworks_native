@@ -21,8 +21,8 @@
 #include "TouchInputMapper.h"
 
 #include <algorithm>
-#include <cinttypes>
 #include <chrono>
+#include <cinttypes>
 #include <cmath>
 #include <cstddef>
 #include <sstream>
@@ -1943,13 +1943,13 @@ std::list<NotifyArgs> TouchInputMapper::dispatchTouches(nsecs_t when, nsecs_t re
                 mDownTime = when;
             }
 
-            out.push_back(
-                    dispatchMotion(when, readTime, policyFlags, resolveDisplayId(),
-                                   AMOTION_EVENT_ACTION_POINTER_DOWN, 0, 0, metaState, buttonState,
-                                   mCurrentCookedState.cookedPointerData.pointerProperties,
-                                   mCurrentCookedState.cookedPointerData.pointerCoords,
-                                   mCurrentCookedState.cookedPointerData.idToIndex,
-                                   dispatchedIdBits, downId));
+            out.push_back(dispatchMotion(when, readTime, policyFlags, resolveDisplayId(),
+                                         AMOTION_EVENT_ACTION_POINTER_DOWN, 0, 0, metaState,
+                                         buttonState,
+                                         mCurrentCookedState.cookedPointerData.pointerProperties,
+                                         mCurrentCookedState.cookedPointerData.pointerCoords,
+                                         mCurrentCookedState.cookedPointerData.idToIndex,
+                                         dispatchedIdBits, downId));
         }
     }
     return out;

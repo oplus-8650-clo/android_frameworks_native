@@ -428,7 +428,7 @@ std::optional<PnpId> getPnpId(uint16_t manufacturerId) {
 
 std::optional<DisplayIdentificationInfo> parseDisplayIdentificationData(
         uint8_t port, const DisplayIdentificationData& data,
-        android::ScreenPartStatus screenPartStatus) {
+        android::ScreenPartStatus screenPartStatus, bool useStableEdidIds) {
     if (data.empty()) {
         ALOGI("Display identification data is empty.");
         return {};
@@ -444,7 +444,7 @@ std::optional<DisplayIdentificationInfo> parseDisplayIdentificationData(
         return {};
     }
 
-    const auto displayId = FlagManager::getInstance().stable_edid_ids()
+    const auto displayId = useStableEdidIds
             ? generateEdidDisplayId(*edid)
             : PhysicalDisplayId::fromEdid(port, edid->manufacturerId, edid->modelHash);
     return DisplayIdentificationInfo{

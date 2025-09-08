@@ -1654,7 +1654,7 @@ void QtiSurfaceFlingerExtension::qtiScheduleCompositeImmed() {
         return;
     }
     mQtiFlinger->mMustComposite = true;
-    mQtiFlinger->mScheduler->resetIdleTimer();
+    mQtiFlinger->mScheduler->resetAllIdleTimers();
     qtiNotifyDisplayUpdateImminent();
     mQtiFlinger->mScheduler->qtiScheduleFrameImmed();
 }

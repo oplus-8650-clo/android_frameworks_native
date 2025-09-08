@@ -16,7 +16,7 @@
 
 package android.os;
 
-/** {@hide} */
+/** @hide */
 interface IInstalld {
     void createUserData(@nullable @utf8InCpp String uuid, int userId, int userSerial, int flags);
     void destroyUserData(@nullable @utf8InCpp String uuid, int userId, int flags);

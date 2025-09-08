@@ -41,7 +41,8 @@ public:
                 (PhysicalDisplayId, std::vector<FrameRateOverride>), (override));
     MOCK_METHOD(void, onModeAndFrameRateOverridesChanged,
                 (PhysicalDisplayId, const scheduler::FrameRateMode&,
-                 std::vector<FrameRateOverride> overrides, scheduler::VsyncConfigSet),
+                 std::vector<FrameRateOverride> overrides, std::vector<float> supportedRefreshRates,
+                 scheduler::VsyncConfigSet),
                 (override));
     MOCK_METHOD(void, dump, (std::string&), (const, override));
     MOCK_METHOD(void, setDuration,

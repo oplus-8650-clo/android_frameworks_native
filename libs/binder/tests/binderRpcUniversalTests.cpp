@@ -264,6 +264,16 @@ TEST_P(BinderRpc, SendLargeVector) {
     EXPECT_EQ(result, kTestValue);
 }
 
+TEST_P(BinderRpc, SendStringVector) {
+    auto proc = createRpcTestSocketServerProcess({});
+
+    const std::vector<std::string> kTestValue = {"a vector", "containing a few", "strings"};
+
+    std::vector<std::string> result;
+    EXPECT_OK(proc.rootIface->repeatStrings(kTestValue, &result));
+    EXPECT_EQ(result, kTestValue);
+}
+
 TEST_P(BinderRpc, RepeatTheirBinder) {
     auto proc = createRpcTestSocketServerProcess({});
 

@@ -1011,7 +1011,7 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
     });
 
     // TODO(b/364651864): Evaluate correctness of primaryRangeIsSingleRate.
-    if (!mIsVrrDevice.load() && policy->primaryRangeIsSingleRate()) {
+    if (!mIsVrrDisplay.load() && policy->primaryRangeIsSingleRate()) {
         // If we never scored any layers, then choose the rate from the primary
         // range instead of picking a random score from the app range.
         if (noLayerScore) {
@@ -1092,7 +1092,7 @@ auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequireme
 
     ALOGV("%s: %zu allLayers, %zu layers", __func__, allLayers.size(), layers.size());
 
-    const bool useAnchorList = FlagManager::getInstance().anchor_list() && mIsVrrDevice;
+    const bool useAnchorList = FlagManager::getInstance().anchor_list() && mIsVrrDisplay;
     std::vector<std::pair<Fps, float>> scoredFrameRates;
     if (!useAnchorList) {
         // We don't want to run lower than 30fps
@@ -1411,17 +1411,17 @@ void RefreshRateSelector::setActiveMode(DisplayModeId modeId, Fps renderFrameRat
     LOG_ALWAYS_FATAL_IF(!activeModeOpt);
 
     mActiveModeOpt.emplace(FrameRateMode{renderFrameRate, ftl::as_non_null(activeModeOpt->get())});
-    mIsVrrDevice = activeModeOpt->get()->getVrrConfig().has_value();
+    mIsVrrDisplay = activeModeOpt->get()->getVrrConfig().has_value();
 }
 
 RefreshRateSelector::RefreshRateSelector(DisplayModes modes, DisplayModeId activeModeId,
                                          Config config)
       : mKnownFrameRates(constructKnownFrameRates(modes)), mConfig(config) {
-    initializeIdleTimer(mConfig.legacyIdleTimerTimeout);
+    createIdleTimer(mConfig.legacyIdleTimerTimeout);
     FTL_FAKE_GUARD(kMainThreadContext, updateDisplayModes(std::move(modes), activeModeId));
 }
 
-void RefreshRateSelector::initializeIdleTimer(std::chrono::milliseconds timeout) {
+void RefreshRateSelector::createIdleTimer(std::chrono::milliseconds timeout) {
     if (timeout > 0ms) {
         mIdleTimer.emplace(
                 "IdleTimer", timeout,
@@ -1452,7 +1452,7 @@ void RefreshRateSelector::updateDisplayModes(DisplayModes modes, DisplayModeId a
     LOG_ALWAYS_FATAL_IF(!activeModeOpt);
     mActiveModeOpt = FrameRateMode{activeModeOpt->get()->getPeakFps(),
                                    ftl::as_non_null(activeModeOpt->get())};
-    mIsVrrDevice = activeModeOpt->get()->getVrrConfig().has_value();
+    mIsVrrDisplay = activeModeOpt->get()->getVrrConfig().has_value();
 
     const auto sortedModes = sortByRefreshRate(mDisplayModes);
     if (!FlagManager::getInstance().filter_refresh_rates_within_config_group()) {
@@ -1546,7 +1546,7 @@ auto RefreshRateSelector::setPolicy(const PolicyVariant& policy) -> SetPolicyRes
                 // create a new timer or reconfigure
                 const auto timeout = std::chrono::milliseconds{idleScreenConfigOpt->timeoutMillis};
                 if (!mIdleTimer) {
-                    initializeIdleTimer(timeout);
+                    createIdleTimer(timeout);
                     if (mIdleTimerStarted) {
                         mIdleTimer->start();
                     }
@@ -1651,8 +1651,8 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
             }
             return str;
         };
-        ALOGV("%s render rates: %s, isVrrDevice? %d", rangeName, stringifyModes().c_str(),
-              mIsVrrDevice.load());
+        ALOGV("%s render rates: %s, isVrrDisplay? %d", rangeName, stringifyModes().c_str(),
+              mIsVrrDisplay.load());
 
         return frameRateModes;
     };
@@ -1664,8 +1664,8 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
                                         "full frame rates");
 }
 
-bool RefreshRateSelector::isVrrDevice() const {
-    return mIsVrrDevice;
+bool RefreshRateSelector::isVrrDisplay() const {
+    return mIsVrrDisplay;
 }
 
 Fps RefreshRateSelector::findClosestKnownFrameRate(Fps frameRate) const {
@@ -1689,7 +1689,7 @@ Fps RefreshRateSelector::findClosestKnownFrameRate(Fps frameRate) const {
 
 std::vector<float> RefreshRateSelector::getSupportedFrameRates() const {
     std::scoped_lock lock(mLock);
-    const size_t frameRatesSize = FlagManager::getInstance().anchor_list() && mIsVrrDevice
+    const size_t frameRatesSize = FlagManager::getInstance().anchor_list() && mIsVrrDisplay
             ? mAllFrameRates.size()
             : std::min<size_t>(11, mAllFrameRates.size());
     std::vector<float> supportedFrameRates;
@@ -1707,7 +1707,11 @@ void RefreshRateSelector::setLayerFilter(LayerFilter layerFilter) {
 }
 
 FpsRange RefreshRateSelector::getSupportedFrameRateRangeLocked() const {
-    if (FlagManager::getInstance().anchor_list() && mIsVrrDevice) {
+    if ((FlagManager::getInstance().anchor_list() && mIsVrrDisplay) ||
+        FlagManager::getInstance().supported_refresh_rate_update()) {
+        // When supported_refresh_rate_update is enabled include all the modes below 20Fps for MRR,
+        // and for VRR results are capped with the kMinSupportedRefreshRate, these checks
+        // are enforced in createFrameRateModes, that's why the range here starts with 0.
         return {0_Hz, mMaxRefreshRateModeIt->second->getPeakFps()};
     }
 

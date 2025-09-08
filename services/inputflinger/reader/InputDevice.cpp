@@ -18,7 +18,6 @@
 
 #include "InputDevice.h"
 
-#include <algorithm>
 #include <string>
 
 #include <android/sysprop/InputProperties.sysprop.h>
@@ -199,7 +198,7 @@ void InputDevice::dump(std::string& dump, const std::string& eventHubDevStr) {
     }
 }
 
-void InputDevice::addEmptyEventHubDevice(int32_t eventHubId) {
+void InputDevice::addEmptyEventHubDevice(RawDeviceId eventHubId) {
     if (mDevices.find(eventHubId) != mDevices.end()) {
         return;
     }
@@ -210,7 +209,7 @@ void InputDevice::addEmptyEventHubDevice(int32_t eventHubId) {
 }
 
 [[nodiscard]] std::list<NotifyArgs> InputDevice::addEventHubDevice(
-        nsecs_t when, int32_t eventHubId, const InputReaderConfiguration& readerConfig) {
+        nsecs_t when, RawDeviceId eventHubId, const InputReaderConfiguration& readerConfig) {
     if (mDevices.find(eventHubId) != mDevices.end()) {
         return {};
     }
@@ -234,7 +233,7 @@ void InputDevice::addEmptyEventHubDevice(int32_t eventHubId) {
     return out;
 }
 
-void InputDevice::removeEventHubDevice(int32_t eventHubId) {
+void InputDevice::removeEventHubDevice(RawDeviceId eventHubId) {
     if (mController != nullptr && mController->getEventHubId() == eventHubId) {
         // Delete mController, since the corresponding eventhub device is going away
         mController = nullptr;
@@ -326,6 +325,7 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
             mAssociatedDisplayPort = std::nullopt;
             mAssociatedDisplayUniqueIdByPort = std::nullopt;
             mAssociatedViewport = std::nullopt;
+            mAssociatedDisplayUniqueIdByDescriptor = std::nullopt;
             // Find the display port that corresponds to the current input device descriptor
             const std::string& inputDeviceDescriptor = mIdentifier.descriptor;
             if (!inputDeviceDescriptor.empty()) {
@@ -797,7 +797,7 @@ bool InputDevice::setKernelWakeEnabled(bool enabled) {
     return success;
 }
 
-InputDeviceContext::InputDeviceContext(InputDevice& device, int32_t eventHubId)
+InputDeviceContext::InputDeviceContext(InputDevice& device, RawDeviceId eventHubId)
       : mDevice(device),
         mContext(device.getContext()),
         mEventHub(device.getContext()->getEventHub()),

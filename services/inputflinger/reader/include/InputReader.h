@@ -17,6 +17,7 @@
 #pragma once
 
 #include <android-base/thread_annotations.h>
+#include <input/Input.h>
 #include <utils/Condition.h>
 #include <utils/Mutex.h>
 
@@ -140,7 +141,7 @@ public:
 
 protected:
     // These members are protected so they can be instrumented by test cases.
-    virtual std::shared_ptr<InputDevice> createDeviceLocked(nsecs_t when, int32_t deviceId,
+    virtual std::shared_ptr<InputDevice> createDeviceLocked(nsecs_t when, RawDeviceId deviceId,
                                                             const InputDeviceIdentifier& identifier,
                                                             ftl::Flags<InputDeviceClass> classes)
             REQUIRES(mLock);
@@ -214,12 +215,12 @@ private:
 
     // An input device can represent a collection of EventHub devices. This map provides a way
     // to lookup the input device instance from the EventHub device id.
-    std::unordered_map<int32_t /*eventHubId*/, std::shared_ptr<InputDevice>> mDevices
+    std::unordered_map<RawDeviceId /*eventHubId*/, std::shared_ptr<InputDevice>> mDevices
             GUARDED_BY(mLock);
 
     // An input device contains one or more eventHubId, this map provides a way to lookup the
     // EventHubIds contained in the input device from the input device instance.
-    std::unordered_map<std::shared_ptr<InputDevice>, std::vector<int32_t> /*eventHubId*/>
+    std::unordered_map<std::shared_ptr<InputDevice>, std::vector<RawDeviceId> /*eventHubId*/>
             mDeviceToEventHubIdsMap GUARDED_BY(mLock);
 
     // true if tap-to-click on touchpad is currently disabled
@@ -237,9 +238,9 @@ private:
     [[nodiscard]] std::list<NotifyArgs> processEventsLocked(const RawEvent* rawEvents, size_t count)
             REQUIRES(mLock);
 
-    void addDeviceLocked(nsecs_t when, int32_t eventHubId) REQUIRES(mLock);
-    void removeDeviceLocked(nsecs_t when, int32_t eventHubId) REQUIRES(mLock);
-    [[nodiscard]] std::list<NotifyArgs> processEventsForDeviceLocked(int32_t eventHubId,
+    void addDeviceLocked(nsecs_t when, RawDeviceId eventHubId) REQUIRES(mLock);
+    void removeDeviceLocked(nsecs_t when, RawDeviceId eventHubId) REQUIRES(mLock);
+    [[nodiscard]] std::list<NotifyArgs> processEventsForDeviceLocked(RawDeviceId eventHubId,
                                                                      const RawEvent* rawEvents,
                                                                      size_t count) REQUIRES(mLock);
     [[nodiscard]] std::list<NotifyArgs> timeoutExpiredLocked(nsecs_t when) REQUIRES(mLock);

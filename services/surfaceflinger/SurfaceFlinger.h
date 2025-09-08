@@ -723,7 +723,7 @@ private:
     // ISchedulerCallback overrides:
     void requestHardwareVsync(PhysicalDisplayId, bool) override;
     void requestDisplayModes(std::vector<display::DisplayModeRequest>) override;
-    void kernelTimerChanged(bool expired) override;
+    void kernelTimerChanged(PhysicalDisplayId, bool expired) override;
     void onChoreographerAttached() override;
     void onExpectedPresentTimePosted(TimePoint expectedPresentTime, ftl::NonNull<DisplayModePtr>,
                                      Fps renderRate) override;
@@ -765,8 +765,12 @@ private:
     bool finalizeDisplayModeChange(PhysicalDisplayId) REQUIRES(kMainThreadContext)
             REQUIRES(mStateLock);
 
+    // TODO: Remove once `modeset_state_machine` flag is cleaned up.
     void dropModeRequest(PhysicalDisplayId) REQUIRES(kMainThreadContext);
     void applyActiveMode(PhysicalDisplayId) REQUIRES(kMainThreadContext);
+
+    void dropModeRequest(display::DisplayModeRequest&&) REQUIRES(kMainThreadContext);
+    void applyActiveMode(display::DisplayModeRequest&&) REQUIRES(kMainThreadContext);
 
     // Called on the main thread in response to setPowerMode()
     void setPhysicalDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
@@ -1024,7 +1028,7 @@ private:
         Gpu,
     };
     base::expected<ScreenshotStrategy, status_t> setScreenshotSnapshotsAndDisplayState(
-            ScreenshotArgs& args);
+            ScreenshotArgs& args, ui::PixelFormat requestedPixelFormat);
 
     void captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat,
                              const sp<IScreenCaptureListener>&);
@@ -1325,6 +1329,7 @@ private:
 
     void appendSfConfigString(std::string& result) const;
     void listLayers(std::string& result) const REQUIRES(kMainThreadContext);
+    void captureRenderDocFrame(std::string& result);
     void dumpStats(const DumpArgs& args, std::string& result) const
             REQUIRES(mStateLock, kMainThreadContext);
     void clearStats(const DumpArgs& args, std::string& result) REQUIRES(kMainThreadContext);

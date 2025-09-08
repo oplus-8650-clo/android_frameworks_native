@@ -124,7 +124,8 @@ private:
     void dispatchModeChangedWithFrameRateOverrides(
             nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId, nsecs_t vsyncPeriod,
             nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
-            std::vector<FrameRateOverride> overrides) override;
+            std::vector<FrameRateOverride> overrides,
+            std::vector<SupportedRefreshRate> supportedRefreshRates) override;
     void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
                              nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
                              nsecs_t presentationDeadline) override;

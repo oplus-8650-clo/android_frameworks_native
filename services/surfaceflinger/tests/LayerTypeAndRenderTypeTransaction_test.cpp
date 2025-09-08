@@ -1009,122 +1009,103 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetBorderSettings) {
 }
 
 TEST_P(LayerTypeAndRenderTypeTransactionTest, SetBoxShadowSettings) {
+    const uint32_t parentSize = 720;
     sp<SurfaceControl> parent;
-    sp<SurfaceControl> child;
-    const uint32_t size = 64;
-    const uint32_t parentSize = size * 3;
     ASSERT_NO_FATAL_FAILURE(parent = createLayer("parent", parentSize, parentSize));
     ASSERT_NO_FATAL_FAILURE(fillLayerColor(parent, Color::WHITE, parentSize, parentSize));
-    ASSERT_NO_FATAL_FAILURE(child = createLayer("child", size, size));
-    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child, Color::GREEN, size, size));
 
-    Transaction()
-            .setCrop(parent, Rect(0, 0, parentSize, parentSize))
-            .reparent(child, parent)
-            .setPosition(child, size, size)
-            .setCornerRadius(child, 20.0f)
-            .apply(true);
+    float ystep = 350;
+    float xstep = 350;
 
-    {
-        gui::BoxShadowSettings settings;
-        gui::BoxShadowSettings::BoxShadowParams boxShadow;
-        boxShadow.blurRadius = 20.0f;
-        boxShadow.spreadRadius = 20.0f;
-        boxShadow.color = 0xff000000;
-        boxShadow.offsetX = 0;
-        boxShadow.offsetY = 0;
-        settings.boxShadows.push_back(boxShadow);
+    float yinitial = 100;
 
-        Transaction().setBoxShadowSettings(child, settings).apply(true);
+    float yoffset = yinitial;
+    float xoffset = 100;
 
-        auto shot = getScreenCapture();
+    Transaction tx;
+    tx.setCrop(parent, Rect(0, 0, parentSize, parentSize));
 
-        shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
-                                               "testdata/SetBoxShadowSettings_LargeBlur.png");
-    }
+    // layer 1
+    sp<SurfaceControl> child1;
+    ASSERT_NO_FATAL_FAILURE(child1 = createLayer("Child1_Standard", 250, 150));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child1, Color::WHITE, 250, 150));
+    gui::BoxShadowSettings settings1;
+    gui::BoxShadowSettings::BoxShadowParams boxShadow1;
+    boxShadow1.spreadRadius = 0.0f;
+    boxShadow1.blurRadius = 25.0f;
+    boxShadow1.offsetX = 15.0f;
+    boxShadow1.offsetY = 15.0f;
+    boxShadow1.color = 0xff000000;
+    settings1.boxShadows.push_back(boxShadow1);
+    tx.reparent(child1, parent)
+            .setPosition(child1, xoffset, yoffset)
+            .setCornerRadius(child1, 24.0f)
+            .setBoxShadowSettings(child1, settings1);
 
-    {
-        gui::BoxShadowSettings settings;
-        gui::BoxShadowSettings::BoxShadowParams boxShadow;
-        boxShadow.blurRadius = 5.0f;
-        boxShadow.spreadRadius = 20.0f;
-        boxShadow.color = 0xff0088ff;
-        boxShadow.offsetX = 20;
-        boxShadow.offsetY = -20;
-        settings.boxShadows.push_back(boxShadow);
+    yoffset += ystep;
 
-        Transaction().setBoxShadowSettings(child, settings).apply(true);
+    // layer 2
+    sp<SurfaceControl> child2;
+    ASSERT_NO_FATAL_FAILURE(child2 = createLayer("child2", 200, 120));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child2, Color::WHITE, 200, 120));
+    gui::BoxShadowSettings settings2;
+    gui::BoxShadowSettings::BoxShadowParams boxShadow2;
+    boxShadow2.spreadRadius = 0.0f;
+    boxShadow2.blurRadius = 60.0f;
+    boxShadow2.offsetX = 0.0f;
+    boxShadow2.offsetY = 10.0f;
+    boxShadow2.color = 0xff000000;
+    settings2.boxShadows.push_back(boxShadow2);
+    tx.reparent(child2, parent)
+            .setPosition(child2, xoffset, yoffset)
+            .setCornerRadius(child2, 20.0f)
+            .setBoxShadowSettings(child2, settings2);
 
-        auto shot = getScreenCapture();
+    yoffset = yinitial;
+    xoffset += xstep;
 
-        shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
-                                               "testdata/SetBoxShadowSettings_SmallBlur.png");
-    }
+    // layer 3
+    sp<SurfaceControl> child3;
+    ASSERT_NO_FATAL_FAILURE(child3 = createLayer("child3", 250, 150));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child3, Color::WHITE, 250, 150));
+    gui::BoxShadowSettings settings3;
+    gui::BoxShadowSettings::BoxShadowParams boxShadow3;
+    boxShadow3.spreadRadius = 0.0f;
+    boxShadow3.blurRadius = 15.0f;
+    boxShadow3.offsetX = 0.0f;
+    boxShadow3.offsetY = 0.0f;
+    boxShadow3.color = 0xff000000;
+    settings3.boxShadows.push_back(boxShadow3);
+    tx.reparent(child3, parent)
+            .setPosition(child3, xoffset, yoffset)
+            .setCornerRadius(child3, 4.0f)
+            .setBoxShadowSettings(child3, settings3);
 
-    {
-        gui::BoxShadowSettings settings;
-        gui::BoxShadowSettings::BoxShadowParams boxShadow;
-        boxShadow.blurRadius = 5.0f;
-        boxShadow.spreadRadius = 10.0f;
-        boxShadow.color = 0xffff8888;
-        boxShadow.offsetX = 20;
-        boxShadow.offsetY = -20;
-        settings.boxShadows.push_back(boxShadow);
+    yoffset += ystep;
 
-        boxShadow.blurRadius = 5.0f;
-        boxShadow.spreadRadius = 10.0f;
-        boxShadow.color = 0xff8888ff;
-        boxShadow.offsetX = -20;
-        boxShadow.offsetY = 20;
-        settings.boxShadows.push_back(boxShadow);
+    // layer 4
+    sp<SurfaceControl> child4;
+    ASSERT_NO_FATAL_FAILURE(child4 = createLayer("child4", 100, 100));
+    ASSERT_NO_FATAL_FAILURE(fillLayerColor(child4, Color::WHITE, 100, 100));
+    gui::BoxShadowSettings settings4;
+    gui::BoxShadowSettings::BoxShadowParams boxShadow4;
+    boxShadow4.spreadRadius = 0.0f;
+    boxShadow4.blurRadius = 10.0f;
+    boxShadow4.offsetX = 0.0f;
+    boxShadow4.offsetY = 0.0f;
+    boxShadow4.color = 0xff000000;
+    settings4.boxShadows.push_back(boxShadow4);
+    tx.reparent(child4, parent)
+            .setPosition(child4, xoffset, yoffset)
+            .setCornerRadius(child4, 50.0f)
+            .setBoxShadowSettings(child4, settings4);
 
-        Transaction().setBoxShadowSettings(child, settings).apply(true);
+    // apply and screenshot
+    tx.apply(true);
 
-        auto shot = getScreenCapture();
-
-        shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
-                                               "testdata/SetBoxShadowSettings_Multiple.png");
-    }
-
-    {
-        gui::BoxShadowSettings settings;
-        gui::BoxShadowSettings::BoxShadowParams boxShadow;
-        boxShadow.blurRadius = 5.0f;
-        boxShadow.spreadRadius = 20.0f;
-        boxShadow.color = 0xff8888ff;
-        boxShadow.offsetX = 20;
-        boxShadow.offsetY = -20;
-        settings.boxShadows.push_back(boxShadow);
-
-        Transaction().setBoxShadowSettings(child, settings).setAlpha(child, 0.2f).apply(true);
-
-        auto shot = getScreenCapture();
-
-        shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
-                                               "testdata/SetBoxShadowSettings_LayerAlpha.png");
-    }
-
-    {
-        gui::BoxShadowSettings settings;
-        gui::BoxShadowSettings::BoxShadowParams boxShadow;
-        boxShadow.blurRadius = 5.0f;
-        boxShadow.spreadRadius = 5.0f;
-        boxShadow.color = 0xff8888ff;
-        boxShadow.offsetX = 10;
-        boxShadow.offsetY = 10;
-        settings.boxShadows.push_back(boxShadow);
-
-        Transaction()
-                .setBoxShadowSettings(child, settings)
-                .setCornerRadius(child, 0)
-                .setAlpha(child, 1.0)
-                .apply(true);
-
-        auto shot = getScreenCapture();
-
-        shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
-                                               "testdata/SetBoxShadowSettings_Square.png");
-    }
+    auto shot = getScreenCapture();
+    shot->expectBufferMatchesImageFromFile(Rect(0, 0, parentSize, parentSize),
+                                           "testdata/SetBoxShadowSettings.png");
 }
 
 TEST_P(LayerTypeAndRenderTypeTransactionTest, CropElevationShadowByParent) {

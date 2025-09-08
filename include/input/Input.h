@@ -27,6 +27,7 @@
 #include <android/os/IInputConstants.h>
 #include <android/os/MotionEventFlag.h>
 #endif
+#include <android-base/result.h>
 #include <android/os/PointerCaptureMode.h>
 #include <android/os/PointerIconType.h>
 #include <ftl/flags.h>
@@ -1018,8 +1019,8 @@ public:
 
     static std::string actionToString(int32_t action);
 
-    static std::tuple<int32_t /*action*/, std::vector<PointerProperties>,
-                      std::vector<PointerCoords>>
+    static base::Result<std::tuple<int32_t /*action*/, std::vector<PointerProperties>,
+                                   std::vector<PointerCoords>>>
     split(int32_t action, ftl::Flags<MotionFlag> flags, int32_t historySize,
           const std::vector<PointerProperties>&, const std::vector<PointerCoords>&,
           std::bitset<MAX_POINTER_ID + 1> splitPointerIds);

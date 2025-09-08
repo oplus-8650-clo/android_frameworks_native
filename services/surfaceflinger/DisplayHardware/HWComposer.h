@@ -602,6 +602,7 @@ private:
     std::vector<HWCDisplayMode> getModesFromDisplayConfigurations(uint64_t hwcDisplayId,
                                                                   int32_t maxFrameIntervalNs) const;
     std::vector<HWCDisplayMode> getModesFromLegacyDisplayConfigs(uint64_t hwcDisplayId) const;
+    ui::DisplayConnectionType getHwcDisplayConnectionType(uint64_t hwcDisplayId) const;
 
     int32_t getAttribute(hal::HWDisplayId hwcDisplayId, hal::HWConfigId configId,
                          hal::Attribute attribute) const;

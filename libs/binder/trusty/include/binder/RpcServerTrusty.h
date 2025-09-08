@@ -56,6 +56,7 @@ public:
     static sp<RpcServerTrusty> make(
             tipc_hset* handleSet, std::string&& portName, std::shared_ptr<const PortAcl>&& portAcl,
             size_t msgMaxSize,
+            size_t msgQueueLen,
             std::unique_ptr<RpcTransportCtxFactory> rpcTransportCtxFactory = nullptr);
 
     [[nodiscard]] bool setProtocolVersion(uint32_t version) {
@@ -87,7 +88,8 @@ private:
 
     friend sp<RpcServerTrusty>;
     explicit RpcServerTrusty(std::unique_ptr<RpcTransportCtx> ctx, std::string&& portName,
-                             std::shared_ptr<const PortAcl>&& portAcl, size_t msgMaxSize);
+                             std::shared_ptr<const PortAcl>&& portAcl, size_t msgMaxSize,
+                             size_t msgQueueLen);
 
     // Internal helper that creates the RpcServer.
     // This is used both from here and Rust.

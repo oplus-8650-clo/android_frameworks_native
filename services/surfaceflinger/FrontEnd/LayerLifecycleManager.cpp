@@ -445,15 +445,22 @@ void LayerLifecycleManager::updateDisplayMirrorLayers(RequestedLayerState& rootL
     }
 }
 
-bool LayerLifecycleManager::isLayerSecure(uint32_t layerId) const {
+base::expected<bool, status_t> LayerLifecycleManager::isLayerSecure(
+        uint32_t layerId, std::unordered_set<uint32_t>& visited) const {
     if (layerId == UNASSIGNED_LAYER_ID) {
         return false;
+    }
+
+    auto const [it, newVisit] = visited.insert(layerId);
+    if (!newVisit) {
+        ALOGV("Cycle detected at layer ID %d", layerId);
+        return base::unexpected(BAD_VALUE);
     }
 
     if (getLayerFromId(layerId)->flags & layer_state_t::eLayerSecure) {
         return true;
     }
-    return isLayerSecure(getLayerFromId(layerId)->parentId);
+    return isLayerSecure(getLayerFromId(layerId)->parentId, visited);
 }
 
 } // namespace android::surfaceflinger::frontend

@@ -504,6 +504,12 @@ struct CompositionEnginePostCompositionTest : public CompositionEngineTest {
 };
 
 TEST_F(CompositionEnginePostCompositionTest, postCompositionReleasesAllFences) {
+    if (FlagManager::getInstance().force_slower_follower_gpu_composition()) {
+        // No point in sending a real fence since Fence::merge() will clobber it to a NO_FENCE
+        // anyways.
+        EXPECT_CALL(*mLayer3FE, getAndClearLastClientTargetAcquireFence())
+                .WillOnce(Return(Fence::NO_FENCE));
+    }
     EXPECT_CALL(*mLayer1FE, getReleaseFencePromiseStatus)
             .WillOnce(Return(LayerFE::ReleaseFencePromiseStatus::FULFILLED));
     EXPECT_CALL(*mLayer2FE, getReleaseFencePromiseStatus)

@@ -100,7 +100,8 @@ std::optional<Edid> parseEdid(const DisplayIdentificationData&);
 std::optional<PnpId> getPnpId(uint16_t manufacturerId);
 
 std::optional<DisplayIdentificationInfo> parseDisplayIdentificationData(
-        uint8_t port, const DisplayIdentificationData&, android::ScreenPartStatus screenPartStatus);
+        uint8_t port, const DisplayIdentificationData&, android::ScreenPartStatus screenPartStatus,
+        bool useStableEdidIds = true);
 
 PhysicalDisplayId resolveDisplayIdCollision(PhysicalDisplayId id, uint8_t port);
 

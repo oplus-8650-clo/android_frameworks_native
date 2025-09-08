@@ -110,7 +110,7 @@ struct QueuedTransactionState {
         }
     }
 
-    // TODO(b/185535769): Remove FrameHint. Instead, reset the idle timer (of the relevant physical
+    // TODO: b/430651973 - Remove FrameHint. Instead, reset the idle timer (of the relevant physical
     // display) on the main thread if commit leads to composite. Then, RefreshRateOverlay should be
     // able to setFrameRate once, rather than for each transaction.
     bool isFrameActive() const {

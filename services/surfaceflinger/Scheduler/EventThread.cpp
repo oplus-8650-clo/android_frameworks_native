@@ -105,6 +105,11 @@ std::string toString(const DisplayEventReceiver::Event& event) {
                                 to_string(event.header.displayId).c_str(), event.modeChange.modeId,
                                 event.modeChange.appVsyncOffset,
                                 event.modeChange.presentationDeadline);
+        case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
+            return StringPrintf("supportedRefreshRatesChanged{displayId=%s, "
+                                "supportedRefreshRate=%f",
+                                to_string(event.header.displayId).c_str(),
+                                event.supportedRefreshRate.refreshRate);
         case DisplayEventType::DISPLAY_EVENT_HDCP_LEVELS_CHANGE:
             return StringPrintf("HdcpLevelsChange{displayId=%s, connectedLevel=%d, maxLevel=%d}",
                                 to_string(event.header.displayId).c_str(),
@@ -184,6 +189,19 @@ DisplayEventReceiver::Event makeFrameRateOverrideEvent(PhysicalDisplayId display
                             .timestamp = systemTime(),
                     },
             .frameRateOverride = frameRateOverride,
+    };
+}
+
+DisplayEventReceiver::Event makeSupportedRefreshRateEvent(PhysicalDisplayId displayId,
+                                                          float refreshRate) {
+    return DisplayEventReceiver::Event{
+            .header =
+                    DisplayEventReceiver::Event::Header{
+                            .type = DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE,
+                            .displayId = displayId,
+                            .timestamp = systemTime(),
+                    },
+            .supportedRefreshRate = {refreshRate},
     };
 }
 
@@ -284,9 +302,11 @@ status_t EventThreadConnection::postEvent(const DisplayEventReceiver::Event& eve
     };
 
     if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
-        event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH) {
+        event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH ||
+        event.header.type == DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE) {
         mPendingEvents.emplace_back(event);
-        if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE) {
+        if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
+            event.header.type == DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE) {
             return status_t(NO_ERROR);
         }
 
@@ -501,11 +521,17 @@ void EventThread::onHotplugConnectionError(int32_t errorCode) {
 void EventThread::onModeAndFrameRateOverridesChanged(PhysicalDisplayId displayId,
                                                      const scheduler::FrameRateMode& mode,
                                                      std::vector<FrameRateOverride> overrides,
+                                                     std::vector<float> supportedRefreshRates,
                                                      scheduler::VsyncConfigSet config) {
     std::lock_guard<std::mutex> lock(mMutex);
 
     for (auto frameRateOverride : overrides) {
         mPendingEvents.push_back(makeFrameRateOverrideEvent(displayId, frameRateOverride));
+    }
+    if (FlagManager::getInstance().supported_refresh_rate_update()) {
+        for (float refreshRate : supportedRefreshRates) {
+            mPendingEvents.push_back(makeSupportedRefreshRateEvent(displayId, refreshRate));
+        }
     }
     mPendingEvents.push_back(
             makeModeChanged(mode, config,
@@ -679,6 +705,8 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
             return true;
 
         case DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE:
+            [[fallthrough]];
+        case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
             [[fallthrough]];
         case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE:
             return connection->mEventRegistration.test(

@@ -190,10 +190,15 @@ struct DisplayIdGetter<PhysicalDisplayIdType<PhysicalDisplay>> {
                                                        ? LEGACY_DISPLAY_TYPE_PRIMARY
                                                        : LEGACY_DISPLAY_TYPE_EXTERNAL);
         }
+
+        const bool useStableEdidIds =
+                PhysicalDisplay::CONNECTION_TYPE == ui::DisplayConnectionType::External &&
+                FlagManager::getInstance().stable_edid_ids();
         const auto info =
                 display::parseDisplayIdentificationData(PhysicalDisplay::PORT,
                                                         PhysicalDisplay::GET_IDENTIFICATION_DATA(),
-                                                        android::ScreenPartStatus::UNSUPPORTED);
+                                                        android::ScreenPartStatus::UNSUPPORTED,
+                                                        useStableEdidIds);
         return info ? info->id : PhysicalDisplayId::fromPort(PhysicalDisplay::PORT);
     }
 };
@@ -547,8 +552,7 @@ struct SecondaryDisplay {
     static constexpr HWDisplayId HWC_DISPLAY_ID = hwDisplayId;
     static constexpr HasIdentificationData HAS_IDENTIFICATION_DATA = hasIdentificationData;
     static constexpr auto GET_IDENTIFICATION_DATA =
-            connectionType == ui::DisplayConnectionType::Internal ? getInternalEdid
-                                                                  : getExternalEdid;
+            connectionType == ui::DisplayConnectionType::Internal ? getOuterEdid : getExternalEdid;
 };
 
 template <Secure secure>

@@ -165,6 +165,7 @@ bool DisplayEventDispatcher::processPendingEvents(nsecs_t* outTimestamp,
     while ((n = mReceiver.getEvents(buf, EVENT_BUFFER_SIZE)) > 0) {
         ALOGV("dispatcher %p ~ Read %d events.", this, int(n));
         mFrameRateOverrides.reserve(n);
+        mSupportedRefreshRates.reserve(n);
         for (ssize_t i = 0; i < n; i++) {
             const DisplayEventReceiver::Event& ev = buf[i];
             switch (ev.header.type) {
@@ -209,13 +210,17 @@ bool DisplayEventDispatcher::processPendingEvents(nsecs_t* outTimestamp,
                                                               ev.modeChange.vsyncPeriod,
                                                               ev.modeChange.appVsyncOffset,
                                                               ev.modeChange.presentationDeadline,
-                                                              std::move(mFrameRateOverrides));
+                                                              std::move(mFrameRateOverrides),
+                                                              std::move(mSupportedRefreshRates));
                     break;
                 case DisplayEventType::DISPLAY_EVENT_NULL:
                     dispatchNullEvent(ev.header.timestamp, ev.header.displayId);
                     break;
                 case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE:
                     mFrameRateOverrides.emplace_back(ev.frameRateOverride);
+                    break;
+                case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
+                    mSupportedRefreshRates.emplace_back(ev.supportedRefreshRate);
                     break;
                 case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH:
                     LOG_ALWAYS_FATAL_IF(flags::unify_refresh_rate_callbacks(),

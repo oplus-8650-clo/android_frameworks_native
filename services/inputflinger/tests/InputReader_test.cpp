@@ -60,6 +60,7 @@ using std::chrono_literals::operator""s;
 
 // Arbitrary display properties.
 static constexpr ui::LogicalDisplayId DISPLAY_ID = ui::LogicalDisplayId::DEFAULT;
+static constexpr ui::LogicalDisplayId INVALID_DISPLAY_ID = ui::LogicalDisplayId::INVALID;
 static const std::string DISPLAY_UNIQUE_ID = "local:1";
 static constexpr ui::LogicalDisplayId SECONDARY_DISPLAY_ID =
         ui::LogicalDisplayId{DISPLAY_ID.val() + 1};
@@ -2628,12 +2629,13 @@ TEST_F(ExternalStylusIntegrationTest, UnfusedExternalStylus) {
 class InputDeviceTest : public testing::Test {
 protected:
     static const char* DEVICE_NAME;
+    static const char* DEVICE_DESCRIPTOR;
     static const char* DEVICE_LOCATION;
     static const int32_t DEVICE_ID;
     static const int32_t DEVICE_GENERATION;
     static const int32_t DEVICE_CONTROLLER_NUMBER;
     static const ftl::Flags<InputDeviceClass> DEVICE_CLASSES;
-    static const int32_t EVENTHUB_ID;
+    static const RawDeviceId EVENTHUB_ID;
     static const std::string DEVICE_BLUETOOTH_ADDRESS;
 
     std::shared_ptr<FakeEventHub> mFakeEventHub;
@@ -2650,6 +2652,7 @@ protected:
                                                             *mFakeListener);
         InputDeviceIdentifier identifier;
         identifier.name = DEVICE_NAME;
+        identifier.descriptor = DEVICE_DESCRIPTOR;
         identifier.location = DEVICE_LOCATION;
         identifier.bluetoothAddress = DEVICE_BLUETOOTH_ADDRESS;
         mDevice = std::make_shared<InputDevice>(mReader->getContext(), DEVICE_ID, DEVICE_GENERATION,
@@ -2666,18 +2669,20 @@ protected:
 };
 
 const char* InputDeviceTest::DEVICE_NAME = "device";
+const char* InputDeviceTest::DEVICE_DESCRIPTOR = "device_descriptor";
 const char* InputDeviceTest::DEVICE_LOCATION = "USB1";
 const int32_t InputDeviceTest::DEVICE_ID = END_RESERVED_ID + 1000;
 const int32_t InputDeviceTest::DEVICE_GENERATION = 2;
 const int32_t InputDeviceTest::DEVICE_CONTROLLER_NUMBER = 0;
 const ftl::Flags<InputDeviceClass> InputDeviceTest::DEVICE_CLASSES =
         InputDeviceClass::KEYBOARD | InputDeviceClass::TOUCH | InputDeviceClass::JOYSTICK;
-const int32_t InputDeviceTest::EVENTHUB_ID = 1;
+const RawDeviceId InputDeviceTest::EVENTHUB_ID = 1;
 const std::string InputDeviceTest::DEVICE_BLUETOOTH_ADDRESS = "11:AA:22:BB:33:CC";
 
 TEST_F(InputDeviceTest, ImmutableProperties) {
     ASSERT_EQ(DEVICE_ID, mDevice->getId());
     ASSERT_STREQ(DEVICE_NAME, mDevice->getName().c_str());
+    ASSERT_STREQ(DEVICE_DESCRIPTOR, mDevice->getDescriptor().c_str());
     ASSERT_EQ(ftl::Flags<InputDeviceClass>(0), mDevice->getClasses());
 }
 
@@ -2979,7 +2984,6 @@ TEST_F(InputDeviceTest, Configure_AssignsDisplayUniqueId) {
     ASSERT_FALSE(mDevice->isEnabled());
 
     // Device should be enabled when a display is found.
-
     DisplayViewport secondViewport =
             createViewport(SECONDARY_DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
                            /* isActive= */ true, DISPLAY_UNIQUE_ID, NO_PORT,
@@ -3001,7 +3005,8 @@ TEST_F(InputDeviceTest, Configure_AssignsDisplayUniqueId) {
     ASSERT_FALSE(mDevice->isEnabled());
 }
 
-TEST_F(InputDeviceTest, Configure_UniqueId_CorrectlyMatches) {
+TEST_F(InputDeviceTest, Configure_DeviceLocationAndDisplayUniqueId_CorrectlyMatches) {
+    // First enable device
     mFakePolicy->clearViewports();
     mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
                                         AINPUT_SOURCE_KEYBOARD);
@@ -3009,6 +3014,7 @@ TEST_F(InputDeviceTest, Configure_UniqueId_CorrectlyMatches) {
             mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
                                /*changes=*/{});
 
+    // Associate the device to a display using the device location and the display unique id.
     mFakePolicy->addInputUniqueIdAssociation(DEVICE_LOCATION, DISPLAY_UNIQUE_ID);
 
     DisplayViewport secondViewport =
@@ -3022,6 +3028,47 @@ TEST_F(InputDeviceTest, Configure_UniqueId_CorrectlyMatches) {
     ASSERT_EQ(DISPLAY_UNIQUE_ID, mDevice->getAssociatedDisplayUniqueIdByPort());
     ASSERT_GT(mDevice->getGeneration(), initialGeneration);
     ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
+
+    // Verify the device and display unique id association is cleared after applying some new
+    // policy.
+    InputReaderConfiguration config;
+    unused = mDevice->configure(ARBITRARY_TIME, config,
+                                InputReaderConfiguration::Change::DISPLAY_INFO);
+    ASSERT_EQ(std::nullopt, mDevice->getAssociatedDisplayUniqueIdByPort());
+    ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), INVALID_DISPLAY_ID);
+}
+
+TEST_F(InputDeviceTest, Configure_DeviceDescriptorAndDisplayUniqueId_CorrectlyMatches) {
+    // First enable device
+    mFakePolicy->clearViewports();
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    // Associate the device to a display using the device descriptor and the display unique id.
+    mFakePolicy->addDeviceDescriptorToDisplayUniqueIdAssociation(mDevice->getDescriptor(),
+                                                                 DISPLAY_UNIQUE_ID);
+
+    DisplayViewport secondViewport =
+            createViewport(SECONDARY_DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
+                           /*isActive=*/true, DISPLAY_UNIQUE_ID, NO_PORT, ViewportType::INTERNAL);
+    mFakePolicy->addDisplayViewport(secondViewport);
+    const auto initialGeneration = mDevice->getGeneration();
+    unused = mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                                InputReaderConfiguration::Change::DISPLAY_INFO);
+    ASSERT_EQ(DISPLAY_UNIQUE_ID, mDevice->getAssociatedDisplayUniqueIdByDescriptor());
+    ASSERT_GT(mDevice->getGeneration(), initialGeneration);
+    ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
+
+    // Verify the device and display unique id association is cleared after applying some new
+    // policy.
+    InputReaderConfiguration config;
+    unused = mDevice->configure(ARBITRARY_TIME, config,
+                                InputReaderConfiguration::Change::DISPLAY_INFO);
+    ASSERT_EQ(std::nullopt, mDevice->getAssociatedDisplayUniqueIdByDescriptor());
+    ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), INVALID_DISPLAY_ID);
 }
 
 /**
@@ -8565,7 +8612,7 @@ protected:
     static const int32_t DEVICE_GENERATION;
     static const int32_t DEVICE_CONTROLLER_NUMBER;
     static const ftl::Flags<InputDeviceClass> DEVICE_CLASSES;
-    static const int32_t EVENTHUB_ID;
+    static const RawDeviceId EVENTHUB_ID;
 
     std::shared_ptr<FakeEventHub> mFakeEventHub;
     sp<FakeInputReaderPolicy> mFakePolicy;
@@ -8619,7 +8666,7 @@ const int32_t PeripheralControllerTest::DEVICE_GENERATION = 2;
 const int32_t PeripheralControllerTest::DEVICE_CONTROLLER_NUMBER = 0;
 const ftl::Flags<InputDeviceClass> PeripheralControllerTest::DEVICE_CLASSES =
         ftl::Flags<InputDeviceClass>(0); // not needed for current tests
-const int32_t PeripheralControllerTest::EVENTHUB_ID = 1;
+const RawDeviceId PeripheralControllerTest::EVENTHUB_ID = 1;
 
 // --- BatteryControllerTest ---
 class BatteryControllerTest : public PeripheralControllerTest {

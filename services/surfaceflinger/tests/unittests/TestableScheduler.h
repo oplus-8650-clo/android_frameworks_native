@@ -52,8 +52,8 @@ public:
                               Feature::kSmallDirtyContentDetection,
                       factory, selectorPtr->getActiveMode().fps, timeStats) {
         const auto displayId = selectorPtr->getActiveMode().modePtr->getPhysicalDisplayId();
-        registerDisplay(displayId, std::move(selectorPtr), std::move(controller),
-                        std::move(tracker), displayId);
+        registerDisplay(displayId, ui::DisplayConnectionType::Internal, std::move(selectorPtr),
+                        std::move(controller), std::move(tracker), displayId);
 
         ON_CALL(*this, postMessage).WillByDefault([](sp<MessageHandler>&& handler) {
             // Execute task to prevent broken promise exception on destruction.
@@ -82,23 +82,25 @@ public:
     auto refreshRateSelector() { return pacesetterSelectorPtr(); }
 
     void registerDisplay(
-            PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
+            PhysicalDisplayId displayId, ui::DisplayConnectionType connectionType,
+            RefreshRateSelectorPtr selectorPtr,
             std::optional<PhysicalDisplayId> defaultPacesetterId = {},
             std::shared_ptr<VSyncTracker> vsyncTracker = std::make_shared<mock::VSyncTracker>()) {
         if (!FlagManager::getInstance().pacesetter_selection() && !defaultPacesetterId) {
             defaultPacesetterId = displayId;
         }
-        registerDisplay(displayId, std::move(selectorPtr),
+        registerDisplay(displayId, connectionType, std::move(selectorPtr),
                         std::make_unique<mock::VsyncController>(), vsyncTracker,
                         defaultPacesetterId);
     }
 
-    void registerDisplay(PhysicalDisplayId displayId, RefreshRateSelectorPtr selectorPtr,
+    void registerDisplay(PhysicalDisplayId displayId, ui::DisplayConnectionType connectionType,
+                         RefreshRateSelectorPtr selectorPtr,
                          std::unique_ptr<VsyncController> controller,
                          std::shared_ptr<VSyncTracker> tracker,
                          std::optional<PhysicalDisplayId> defaultPacesetterId) {
         ftl::FakeGuard guard(kMainThreadContext);
-        Scheduler::registerDisplayInternal(displayId, std::move(selectorPtr),
+        Scheduler::registerDisplayInternal(displayId, connectionType, std::move(selectorPtr),
                                            std::shared_ptr<VsyncSchedule>(
                                                    new VsyncSchedule(displayId, std::move(tracker),
                                                                      std::make_shared<
@@ -176,10 +178,21 @@ public:
         return mPolicy.touch == Scheduler::TouchState::Active;
     }
 
-    void setTouchStateAndIdleTimerPolicy(GlobalSignals globalSignals) {
+    void setTouchStateAndIdleTimerPolicy(PhysicalDisplayId displayId, GlobalSignals globalSignals) {
         std::lock_guard<std::mutex> lock(mPolicyLock);
         mPolicy.touch = globalSignals.touch ? TouchState::Active : TouchState::Inactive;
-        mPolicy.idleTimer = globalSignals.idle ? TimerState::Expired : TimerState::Reset;
+        mPolicy.idleTimers.emplace_or_replace(displayId,
+                                              globalSignals.idle ? TimerState::Expired
+                                                                 : TimerState::Reset);
+    }
+
+    void setPowerTimerPolicy(PhysicalDisplayId displayId, TimerState state) {
+        std::lock_guard<std::mutex> lock(mPolicyLock);
+        mPolicy.displayPowerTimers.emplace_or_replace(displayId, state);
+        mDisplayPowerTimers.try_emplace(displayId,
+                                        std::make_unique<OneShotTimer>(
+                                                "FakeDisplayPowerTimer",
+                                                std::chrono::milliseconds(0), [] {}, [] {}));
     }
 
     using Scheduler::TimerState;

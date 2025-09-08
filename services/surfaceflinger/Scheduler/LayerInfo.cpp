@@ -190,7 +190,7 @@ bool LayerInfo::isLayerActive(nsecs_t threshold) const {
 }
 
 bool LayerInfo::isVrrDisplay() const {
-    return mLayerProps->refreshRateSelector && mLayerProps->refreshRateSelector->isVrrDevice();
+    return mLayerProps->refreshRateSelector && mLayerProps->refreshRateSelector->isVrrDisplay();
 }
 
 bool LayerInfo::isAnimating(nsecs_t now) const {

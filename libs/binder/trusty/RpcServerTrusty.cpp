@@ -33,7 +33,8 @@ namespace android {
 
 sp<RpcServerTrusty> RpcServerTrusty::make(
         tipc_hset* handleSet, std::string&& portName, std::shared_ptr<const PortAcl>&& portAcl,
-        size_t msgMaxSize, std::unique_ptr<RpcTransportCtxFactory> rpcTransportCtxFactory) {
+        size_t msgMaxSize, size_t msgQueueLen,
+        std::unique_ptr<RpcTransportCtxFactory> rpcTransportCtxFactory) {
     // Default is without TLS.
     if (rpcTransportCtxFactory == nullptr)
         rpcTransportCtxFactory = RpcTransportCtxFactoryTipcTrusty::make();
@@ -44,7 +45,7 @@ sp<RpcServerTrusty> RpcServerTrusty::make(
     }
 
     auto srv = sp<RpcServerTrusty>::make(std::move(ctx), std::move(portName), std::move(portAcl),
-                                         msgMaxSize);
+                                         msgMaxSize, msgQueueLen);
     if (srv == nullptr) {
         ALOGE("Failed to create RpcServerTrusty: can't create server object");
         return nullptr;
@@ -59,13 +60,14 @@ sp<RpcServerTrusty> RpcServerTrusty::make(
 }
 
 RpcServerTrusty::RpcServerTrusty(std::unique_ptr<RpcTransportCtx> ctx, std::string&& portName,
-                                 std::shared_ptr<const PortAcl>&& portAcl, size_t msgMaxSize)
+                                 std::shared_ptr<const PortAcl>&& portAcl, size_t msgMaxSize,
+                                 size_t msgQueueLen)
       : mRpcServer(makeRpcServer(std::move(ctx))),
         mPortName(std::move(portName)),
         mPortAcl(std::move(portAcl)) {
     mTipcPort.name = mPortName.c_str();
     mTipcPort.msg_max_size = msgMaxSize;
-    mTipcPort.msg_queue_len = 16;
+    mTipcPort.msg_queue_len = msgQueueLen;
     mTipcPort.priv = this;
 
     if (mPortAcl) {

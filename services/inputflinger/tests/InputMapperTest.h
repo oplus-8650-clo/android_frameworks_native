@@ -38,7 +38,7 @@ namespace android {
 
 class InputMapperUnitTest : public testing::Test {
 protected:
-    static constexpr int32_t EVENTHUB_ID = 1;
+    static constexpr RawDeviceId EVENTHUB_ID = 1;
     static constexpr int32_t DEVICE_ID = END_RESERVED_ID + 1000;
     virtual void SetUp() override { SetUp(/*bus=*/0, /*isExternal=*/false); }
     virtual void SetUp(int bus, bool isExternal);
@@ -83,7 +83,7 @@ protected:
     static constexpr int32_t DEVICE_GENERATION = 2;
     static constexpr int32_t DEVICE_CONTROLLER_NUMBER = 0;
     static const ftl::Flags<InputDeviceClass> DEVICE_CLASSES;
-    static constexpr int32_t EVENTHUB_ID = 1;
+    static constexpr RawDeviceId EVENTHUB_ID = 1;
 
     std::shared_ptr<FakeEventHub> mFakeEventHub;
     sp<FakeInputReaderPolicy> mFakePolicy;

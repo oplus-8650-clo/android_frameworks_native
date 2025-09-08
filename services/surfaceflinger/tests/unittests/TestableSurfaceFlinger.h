@@ -1165,7 +1165,8 @@ public:
 
                 if (mFlinger.scheduler() && mSchedulerRegistration) {
                     mFlinger.scheduler()
-                            ->registerDisplay(*physicalId, mCreationArgs.refreshRateSelector,
+                            ->registerDisplay(*physicalId, *mConnectionType,
+                                              mCreationArgs.refreshRateSelector,
                                               std::move(controller), std::move(tracker),
                                               mFlinger.flinger()->getDefaultPacesetterDisplay());
                 }

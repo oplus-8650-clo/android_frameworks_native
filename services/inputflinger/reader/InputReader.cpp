@@ -263,7 +263,7 @@ std::list<NotifyArgs> InputReader::processEventsLocked(const RawEvent* rawEvents
         int32_t type = rawEvent->type;
         size_t batchSize = 1;
         if (type < EventHubInterface::FIRST_SYNTHETIC_EVENT) {
-            int32_t deviceId = rawEvent->deviceId;
+            RawDeviceId deviceId = rawEvent->deviceId;
             while (batchSize < count) {
                 if (rawEvent[batchSize].type >= EventHubInterface::FIRST_SYNTHETIC_EVENT ||
                     rawEvent[batchSize].deviceId != deviceId) {
@@ -292,7 +292,7 @@ std::list<NotifyArgs> InputReader::processEventsLocked(const RawEvent* rawEvents
     return out;
 }
 
-void InputReader::addDeviceLocked(nsecs_t when, int32_t eventHubId) {
+void InputReader::addDeviceLocked(nsecs_t when, RawDeviceId eventHubId) {
     if (mDevices.find(eventHubId) != mDevices.end()) {
         ALOGW("Ignoring spurious device added event for eventHubId %d.", eventHubId);
         return;
@@ -319,7 +319,7 @@ void InputReader::addDeviceLocked(nsecs_t when, int32_t eventHubId) {
     // Add device to device to EventHub ids map.
     const auto mapIt = mDeviceToEventHubIdsMap.find(device);
     if (mapIt == mDeviceToEventHubIdsMap.end()) {
-        std::vector<int32_t> ids = {eventHubId};
+        std::vector<RawDeviceId> ids = {eventHubId};
         mDeviceToEventHubIdsMap.emplace(device, ids);
     } else {
         mapIt->second.push_back(eventHubId);
@@ -338,7 +338,7 @@ void InputReader::addDeviceLocked(nsecs_t when, int32_t eventHubId) {
     }
 }
 
-void InputReader::removeDeviceLocked(nsecs_t when, int32_t eventHubId) {
+void InputReader::removeDeviceLocked(nsecs_t when, RawDeviceId eventHubId) {
     auto deviceIt = mDevices.find(eventHubId);
     if (deviceIt == mDevices.end()) {
         ALOGW("Ignoring spurious device removed event for eventHubId %d.", eventHubId);
@@ -350,8 +350,8 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t eventHubId) {
     // Erase device from device to EventHub ids map.
     auto mapIt = mDeviceToEventHubIdsMap.find(device);
     if (mapIt != mDeviceToEventHubIdsMap.end()) {
-        std::vector<int32_t>& eventHubIds = mapIt->second;
-        std::erase_if(eventHubIds, [eventHubId](int32_t eId) { return eId == eventHubId; });
+        std::vector<RawDeviceId>& eventHubIds = mapIt->second;
+        std::erase_if(eventHubIds, [eventHubId](RawDeviceId eId) { return eId == eventHubId; });
         if (eventHubIds.size() == 0) {
             mDeviceToEventHubIdsMap.erase(mapIt);
         }
@@ -383,7 +383,7 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t eventHubId) {
 }
 
 std::shared_ptr<InputDevice> InputReader::createDeviceLocked(
-        nsecs_t when, int32_t eventHubId, const InputDeviceIdentifier& identifier,
+        nsecs_t when, RawDeviceId eventHubId, const InputDeviceIdentifier& identifier,
         ftl::Flags<InputDeviceClass> classes) {
     auto deviceIt =
             std::find_if(mDevices.begin(), mDevices.end(), [identifier, classes](auto& devicePair) {
@@ -406,7 +406,7 @@ std::shared_ptr<InputDevice> InputReader::createDeviceLocked(
     return device;
 }
 
-std::list<NotifyArgs> InputReader::processEventsForDeviceLocked(int32_t eventHubId,
+std::list<NotifyArgs> InputReader::processEventsForDeviceLocked(RawDeviceId eventHubId,
                                                                 const RawEvent* rawEvents,
                                                                 size_t count) {
     auto deviceIt = mDevices.find(eventHubId);

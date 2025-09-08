@@ -354,6 +354,11 @@ public:
         *out = bytes;
         return Status::ok();
     }
+    Status repeatStrings(const std::vector<std::string>& strings,
+                         std::vector<std::string>* out) override {
+        *out = strings;
+        return Status::ok();
+    }
     static sp<IBinder> mHeldBinder;
     Status holdBinder(const sp<IBinder>& binder) override {
         mHeldBinder = binder;

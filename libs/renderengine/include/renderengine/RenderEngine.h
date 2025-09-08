@@ -278,8 +278,9 @@ public:
 
     virtual void setEnableTracing(bool /*tracingEnabled*/) {}
 
-    virtual void setViewportAndProjection(Rect viewPort, Rect sourceCrop) = 0;
+    virtual void rdocCaptureNextFrame() {};
 
+    virtual void setViewportAndProjection(Rect viewPort, Rect sourceCrop) = 0;
 protected:
     RenderEngine() : RenderEngine(Threaded::No) {}
 
