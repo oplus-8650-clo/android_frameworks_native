@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,17 @@
  * limitations under the License.
  */
 
-package android.os;
+#ifndef RENDERDOC_CC
+// RenderDoc uses an anonymous struct for its API so can't forward declare.
+typedef void* RENDERDOC_API_1_1_2;
+#endif
 
-/** @hide */
-parcelable CreateAppDataResult {
-    long ceDataInode;
-    long deDataInode;
-    int exceptionCode;
-    @utf8InCpp String exceptionMessage;
-}
+struct RenderDocUtils {
+    void startFrameCapture();
+    void endFrameCapture();
+
+private:
+    bool ensureLoaded();
+    [[maybe_unused]]
+    RENDERDOC_API_1_1_2* mApi;
+};

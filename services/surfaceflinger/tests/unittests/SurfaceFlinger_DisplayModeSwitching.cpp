@@ -42,24 +42,7 @@ namespace {
 using android::hardware::graphics::composer::V2_4::Error;
 using android::hardware::graphics::composer::V2_4::VsyncPeriodChangeTimeline;
 
-MATCHER_P2(ModeSettledTo, dmc, modeId, "") {
-    const auto displayId = arg->getPhysicalId();
-
-    if (const auto desiredOpt = dmc->getDesiredMode(displayId)) {
-        *result_listener << "Unsettled desired mode "
-                         << ftl::to_underlying(desiredOpt->mode.modePtr->getId());
-        return false;
-    }
-
-    if (dmc->getActiveMode(displayId).modePtr->getId() != modeId) {
-        *result_listener << "Settled to unexpected active mode " << ftl::to_underlying(modeId);
-        return false;
-    }
-
-    return true;
-}
-
-MATCHER_P2(ModeSwitchingTo, flinger, modeId, "") {
+MATCHER_P2(HasDesiredMode, flinger, modeId, "") {
     const auto displayId = arg->getPhysicalId();
     auto& dmc = flinger->mutableDisplayModeController();
 
@@ -83,7 +66,56 @@ MATCHER_P2(ModeSwitchingTo, flinger, modeId, "") {
     return true;
 }
 
-class DisplayModeSwitchingTest : public DisplayTransactionTest {
+MATCHER_P2(HasPendingMode, flinger, modeId, "") {
+    const auto displayId = arg->getPhysicalId();
+    auto& dmc = flinger->mutableDisplayModeController();
+
+    ftl::FakeGuard guard(kMainThreadContext);
+
+    if (!dmc.getPendingMode(displayId)) {
+        *result_listener << "No pending mode";
+        return false;
+    }
+
+    if (dmc.getPendingMode(displayId)->mode.modePtr->getId() != modeId) {
+        *result_listener << "Unexpected pending mode " << ftl::to_underlying(modeId);
+        return false;
+    }
+
+    return true;
+}
+
+MATCHER_P2(HasActiveMode, dmc, modeId, "") {
+    const auto displayId = arg->getPhysicalId();
+
+    if (const auto desiredOpt = dmc->getDesiredMode(displayId)) {
+        *result_listener << "Unsettled desired mode "
+                         << ftl::to_underlying(desiredOpt->mode.modePtr->getId());
+        return false;
+    }
+
+    ftl::FakeGuard guard(kMainThreadContext);
+
+    if (FlagManager::getInstance().modeset_state_machine()) {
+        if (const auto pendingOpt = dmc->getPendingMode(displayId)) {
+            *result_listener << "Unsettled pending mode "
+                             << ftl::to_underlying(pendingOpt->mode.modePtr->getId());
+            return false;
+        }
+    }
+
+    if (dmc->getActiveMode(displayId).modePtr->getId() != modeId) {
+        *result_listener << "Settled to unexpected active mode " << ftl::to_underlying(modeId);
+        return false;
+    }
+
+    return true;
+}
+
+class DisplayModeSwitchingTest : public DisplayTransactionTest,
+                                 public testing::WithParamInterface<bool> {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, GetParam());
+
 public:
     void SetUp() override {
         injectFakeBufferQueueFactory();
@@ -178,26 +210,23 @@ protected:
     static inline const DisplayModePtr kMode90 = createDisplayMode(kModeId90, 90_Hz, 1);
     static inline const DisplayModePtr kMode120 = createDisplayMode(kModeId120, 120_Hz, 2);
 
-    static constexpr ui::Size kResolution4K{3840, 2160};
-    static constexpr ui::Size kResolution8K{7680, 4320};
-
     static inline const DisplayModePtr kMode90_4K =
-            createDisplayMode(kModeId90_4K, 90_Hz, 3, kResolution4K);
+            createDisplayMode(kModeId90_4K, 90_Hz, 3, mock::kResolution4K);
     static inline const DisplayModePtr kMode60_8K =
-            createDisplayMode(kModeId60_8K, 60_Hz, 4, kResolution8K);
+            createDisplayMode(kModeId60_8K, 60_Hz, 4, mock::kResolution8K);
 
     static inline const DisplayModes kModes =
             makeModes(kMode60, kMode90, kMode120, kMode90_4K, kMode60_8K);
 
     void setupChangeRefreshRateTests(bool allowGroupSwitching = false) {
-        EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60));
+        EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60));
 
         EXPECT_EQ(NO_ERROR,
                   mFlinger.setDesiredDisplayModeSpecs(
                           mDisplay->getDisplayToken().promote(),
                           mock::createDisplayModeSpecs(kModeId90, 120_Hz, allowGroupSwitching)));
 
-        EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
+        EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId90));
 
         // Verify that next commit will call setActiveConfigWithConstraints in HWC
         const VsyncPeriodChangeTimeline timeline{.refreshRequired = true};
@@ -206,13 +235,13 @@ protected:
         mFlinger.commit();
         Mock::VerifyAndClearExpectations(mComposer);
 
-        EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
+        EXPECT_THAT(mDisplay, HasPendingMode(&mFlinger, kModeId90));
     }
 
     void setupChangeRefreshRateOnTwoDisplays(sp<DisplayDevice> innerDisplay,
                                              sp<DisplayDevice> outerDisplay) {
-        EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-        EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+        EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+        EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
         EXPECT_EQ(NO_ERROR,
                   mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
@@ -223,8 +252,8 @@ protected:
                                                       mock::createDisplayModeSpecs(kModeId60, 60_Hz,
                                                                                    true)));
 
-        EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-        EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+        EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId90));
+        EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId60));
 
         // Verify that next commit will call setActiveConfigWithConstraints in HWC
         // and complete the mode change.
@@ -257,7 +286,7 @@ void DisplayModeSwitchingTest::setupScheduler(
                             TestableSurfaceFlinger::SchedulerCallbackImpl::kNoOp);
 }
 
-TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired) {
+TEST_P(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateTests());
 
@@ -269,10 +298,10 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired) {
     mFlinger.commit();
     Mock::VerifyAndClearExpectations(mAppEventThread);
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithoutRefreshRequired) {
+TEST_P(DisplayModeSwitchingTest, changeRefreshRateWithoutRefreshRequired) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateTests(true));
 
@@ -281,10 +310,10 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithoutRefreshRequired) {
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired_unifyRefreshRateCallbacks) {
+TEST_P(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired_unifyRefreshRateCallbacks) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateTests());
 
@@ -295,15 +324,15 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithRefreshRequired_unifyRefre
                                                    scheduler::FrameRateMode{90_Hz,
                                                                             ftl::as_non_null(
                                                                                     kMode90)},
-                                                   _, _));
+                                                   _, _, _));
 
     mFlinger.commit();
     Mock::VerifyAndClearExpectations(mAppEventThread);
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90));
 }
 
-TEST_F(DisplayModeSwitchingTest,
+TEST_P(DisplayModeSwitchingTest,
        changeRefreshRateWithoutRefreshRequired_unifyRefreshRateCallbacks) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateTests(true));
@@ -313,14 +342,14 @@ TEST_F(DisplayModeSwitchingTest,
                                                    scheduler::FrameRateMode{90_Hz,
                                                                             ftl::as_non_null(
                                                                                     kMode90)},
-                                                   _, _));
+                                                   _, _, _));
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeRefreshRateOnTwoDisplaysWithoutRefreshRequired) {
+TEST_P(DisplayModeSwitchingTest, changeRefreshRateOnTwoDisplaysWithoutRefreshRequired) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateOnTwoDisplays(innerDisplay, outerDisplay));
@@ -329,29 +358,29 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateOnTwoDisplaysWithoutRefreshReq
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 }
 
-TEST_F(DisplayModeSwitchingTest,
+TEST_P(DisplayModeSwitchingTest,
        changeRefreshRateOnTwoDisplaysWithoutRefreshRequired_unifyRefreshRateCallbacks) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
     EXPECT_NO_FATAL_FAILURE(setupChangeRefreshRateOnTwoDisplays(innerDisplay, outerDisplay));
 
-    EXPECT_CALL(*mAppEventThread, onModeAndFrameRateOverridesChanged(_, _, _, _)).Times(2);
+    EXPECT_CALL(*mAppEventThread, onModeAndFrameRateOverridesChanged(_, _, _, _, _)).Times(2);
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 }
 
-TEST_F(DisplayModeSwitchingTest, twoConsecutiveSetDesiredDisplayModeSpecs) {
+TEST_P(DisplayModeSwitchingTest, twoConsecutiveSetDesiredDisplayModeSpecs) {
     // Test that if we call setDesiredDisplayModeSpecs while a previous mode change
     // is still being processed the later call will be respected.
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(mDisplay->getDisplayToken().promote(),
@@ -367,30 +396,30 @@ TEST_F(DisplayModeSwitchingTest, twoConsecutiveSetDesiredDisplayModeSpecs) {
                                                   mock::createDisplayModeSpecs(kModeId120,
                                                                                180_Hz)));
 
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId120));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId120));
 
     EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId120);
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId120));
+    EXPECT_THAT(mDisplay, HasPendingMode(&mFlinger, kModeId120));
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId120));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
+TEST_P(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
     SET_FLAG_FOR_TEST(flags::synced_resolution_switch, false);
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(mDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId90_4K,
                                                                                120_Hz)));
 
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId90_4K));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId90_4K));
 
     // Verify that next commit will call setActiveConfigWithConstraints in HWC
     // and complete the mode change.
@@ -401,8 +430,8 @@ TEST_F(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
 
     // Override expectations set up by PrimaryDisplayVariant.
     EXPECT_CALL(*mConsumer,
-                setDefaultBufferSize(static_cast<uint32_t>(kResolution4K.getWidth()),
-                                     static_cast<uint32_t>(kResolution4K.getHeight())))
+                setDefaultBufferSize(static_cast<uint32_t>(mock::kResolution4K.getWidth()),
+                                     static_cast<uint32_t>(mock::kResolution4K.getHeight())))
             .WillOnce(Return(NO_ERROR));
     EXPECT_CALL(*mConsumer, consumerConnect(_, false)).WillOnce(Return(NO_ERROR));
     EXPECT_CALL(*mComposer, setClientTargetSlotCount(_)).WillOnce(Return(hal::Error::NONE));
@@ -414,13 +443,13 @@ TEST_F(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90_4K));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90_4K));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeResolutionSynced) {
+TEST_P(DisplayModeSwitchingTest, changeResolutionSynced) {
     SET_FLAG_FOR_TEST(flags::synced_resolution_switch, true);
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60));
 
     // PrimaryDisplayVariant has a 4K size, so switch to 8K.
     EXPECT_EQ(NO_ERROR,
@@ -428,47 +457,47 @@ TEST_F(DisplayModeSwitchingTest, changeResolutionSynced) {
                                                   mock::createDisplayModeSpecs(kModeId60_8K,
                                                                                60_Hz)));
 
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId60_8K));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId60_8K));
 
     // The mode should not be set until the commit that resizes the display.
     mFlinger.commit();
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId60_8K));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId60_8K));
     mFlinger.commit();
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId60_8K));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId60_8K));
 
     // Set the display size to match the resolution.
     DisplayState state;
     state.what = DisplayState::eDisplaySizeChanged;
     state.token = mDisplay->getDisplayToken().promote();
-    state.width = static_cast<uint32_t>(kResolution8K.width);
-    state.height = static_cast<uint32_t>(kResolution8K.height);
+    state.width = static_cast<uint32_t>(mock::kResolution8K.width);
+    state.height = static_cast<uint32_t>(mock::kResolution8K.height);
 
     // The next commit should set the mode and resize the framebuffer.
     const VsyncPeriodChangeTimeline timeline{.refreshRequired = false};
-    EXPECT_CALL(*mDisplaySurface, resizeBuffers(kResolution8K));
+    EXPECT_CALL(*mDisplaySurface, resizeBuffers(mock::kResolution8K));
     EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId60_8K);
 
     constexpr bool kModeset = true;
     mFlinger.setDisplayStateLocked(state);
     mFlinger.configureAndCommit(kModeset);
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60_8K));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60_8K));
 }
 
-TEST_F(DisplayModeSwitchingTest, innerXorOuterDisplay) {
+TEST_P(DisplayModeSwitchingTest, innerXorOuterDisplay) {
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
 
     EXPECT_TRUE(innerDisplay->isPoweredOn());
     EXPECT_FALSE(outerDisplay->isPoweredOn());
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::OFF);
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
@@ -478,8 +507,8 @@ TEST_F(DisplayModeSwitchingTest, innerXorOuterDisplay) {
               mFlinger.setDesiredDisplayModeSpecs(outerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId60, 120_Hz)));
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId60));
 
     const VsyncPeriodChangeTimeline timeline{.refreshRequired = true};
     EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId90);
@@ -487,52 +516,52 @@ TEST_F(DisplayModeSwitchingTest, innerXorOuterDisplay) {
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasPendingMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasPendingMode(&mFlinger, kModeId60));
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::OFF);
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId60, 120_Hz)));
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId60));
     EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId60);
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasPendingMode(&mFlinger, kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 }
 
-TEST_F(DisplayModeSwitchingTest, innerAndOuterDisplay) {
+TEST_P(DisplayModeSwitchingTest, innerAndOuterDisplay) {
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
 
     EXPECT_TRUE(innerDisplay->isPoweredOn());
     EXPECT_FALSE(outerDisplay->isPoweredOn());
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::ON);
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
@@ -542,8 +571,8 @@ TEST_F(DisplayModeSwitchingTest, innerAndOuterDisplay) {
               mFlinger.setDesiredDisplayModeSpecs(outerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId60, 120_Hz)));
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId60));
 
     const VsyncPeriodChangeTimeline timeline{.refreshRequired = true};
     EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId90);
@@ -551,24 +580,24 @@ TEST_F(DisplayModeSwitchingTest, innerAndOuterDisplay) {
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasPendingMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasPendingMode(&mFlinger, kModeId60));
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 }
 
-TEST_F(DisplayModeSwitchingTest, powerOffDuringModeSet) {
+TEST_P(DisplayModeSwitchingTest, powerOffDuringModeSet) {
     EXPECT_TRUE(mDisplay->isPoweredOn());
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId60));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(mDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId90, 120_Hz)));
 
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
+    EXPECT_THAT(mDisplay, HasDesiredMode(&mFlinger, kModeId90));
 
     // Power off the display before the mode has been set.
     mFlinger.setPhysicalDisplayPowerMode(mDisplay, hal::PowerMode::OFF);
@@ -580,27 +609,27 @@ TEST_F(DisplayModeSwitchingTest, powerOffDuringModeSet) {
 
     // Powering off should not abort the mode set.
     EXPECT_FALSE(mDisplay->isPoweredOn());
-    EXPECT_THAT(mDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
+    EXPECT_THAT(mDisplay, HasPendingMode(&mFlinger, kModeId90));
 
     mFlinger.commit();
 
-    EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(mDisplay, HasActiveMode(&dmc(), kModeId90));
 }
 
-TEST_F(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
+TEST_P(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
 
     EXPECT_TRUE(innerDisplay->isPoweredOn());
     EXPECT_FALSE(outerDisplay->isPoweredOn());
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::ON);
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     // Manually designate the inner display as the pacesetter to prevent pacesetter change when the
     // outer display is powered off. A pacesetter change cancels the refresh rate change on the
@@ -615,8 +644,8 @@ TEST_F(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
               mFlinger.setDesiredDisplayModeSpecs(outerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId60, 120_Hz)));
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId60));
 
     // Power off the outer display before the mode has been set.
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::OFF);
@@ -628,13 +657,13 @@ TEST_F(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
     mFlinger.commit();
 
     // Powering off the inactive display should not abort the mode set.
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasPendingMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasPendingMode(&mFlinger, kModeId60));
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::OFF);
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::ON);
@@ -644,21 +673,22 @@ TEST_F(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
                                                   mock::createDisplayModeSpecs(kModeId120,
                                                                                120_Hz)));
 
+    EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId120));
+
     EXPECT_SET_ACTIVE_CONFIG(kOuterDisplayHwcId, kModeId120);
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasPendingMode(&mFlinger, kModeId120));
 
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 }
 
-TEST_F(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
-    SET_FLAG_FOR_TEST(flags::connected_display, true);
+TEST_P(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
     SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
 
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
@@ -669,14 +699,14 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
     ASSERT_EQ(mFlinger.scheduler()->getDisplayPowerMode(innerDisplay->getPhysicalId()),
               hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     mFlinger.setPhysicalDisplayPowerMode(innerDisplay, hal::PowerMode::ON);
     mFlinger.setPhysicalDisplayPowerMode(outerDisplay, hal::PowerMode::ON);
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId120));
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
@@ -686,14 +716,14 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
               mFlinger.setDesiredDisplayModeSpecs(outerDisplay->getDisplayToken().promote(),
                                                   mock::createDisplayModeSpecs(kModeId60, 120_Hz)));
 
-    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+    EXPECT_THAT(innerDisplay, HasDesiredMode(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, HasDesiredMode(&mFlinger, kModeId60));
 
     mFlinger.commit();
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId60));
 
     mFlinger.commit();
 
@@ -711,11 +741,13 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
     mFlinger.commit();
     mFlinger.commit();
 
-    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
-    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(innerDisplay, HasActiveMode(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, HasActiveMode(&dmc(), kModeId90));
 
     EXPECT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), outerDisplay->getPhysicalId());
 }
+
+INSTANTIATE_TEST_SUITE_P(WithModesetFSM, DisplayModeSwitchingTest, testing::Bool());
 
 } // namespace
 } // namespace android

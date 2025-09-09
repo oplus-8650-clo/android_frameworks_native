@@ -357,7 +357,9 @@ void RegionSamplingThread::captureSample() {
                            .debugName = "RegionSampling"};
 
     std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
-    mFlinger.setScreenshotSnapshotsAndDisplayState(screenshotArgs);
+    mFlinger.setScreenshotSnapshotsAndDisplayState(screenshotArgs,
+                                                   static_cast<ui::PixelFormat>(
+                                                           buffer->getPixelFormat()));
     FenceResult fenceResult = mFlinger.captureScreenshot(screenshotArgs, buffer, nullptr).get();
     if (fenceResult.ok()) {
         fenceResult.value()->waitForever(LOG_TAG);

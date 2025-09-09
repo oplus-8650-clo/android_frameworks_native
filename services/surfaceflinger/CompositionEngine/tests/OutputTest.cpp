@@ -3409,6 +3409,13 @@ TEST_F(OutputPostFramebufferTest, ifEnabledMustFlipThenPresentThenSendPresentCom
 }
 
 TEST_F(OutputPostFramebufferTest, releaseFencesAreSetInLayerFE) {
+    // Fence::merge() always happens with this flag on, which returns a different Fence instance
+    // even if one of the fence is a NO_FENCE. The checks in this test is for the specific instance.
+    // Therefore, disable the flag and re-write it with a looser check when we clean up the flag.
+    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::
+                              force_slower_follower_gpu_composition,
+                      false);
+
     // Simulate getting release fences from each layer, and ensure they are passed to the
     // front-end layer interface for each layer correctly.
     mOutput.mState.isEnabled = true;

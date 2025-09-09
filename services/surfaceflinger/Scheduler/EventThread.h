@@ -119,6 +119,7 @@ public:
     virtual void onModeAndFrameRateOverridesChanged(PhysicalDisplayId,
                                                     const scheduler::FrameRateMode&,
                                                     std::vector<FrameRateOverride>,
+                                                    std::vector<float> supportedRefreshRates,
                                                     scheduler::VsyncConfigSet) = 0;
 
     // called when SF changes the active mode or updates the WorkDuration
@@ -194,6 +195,7 @@ public:
 
     void onModeAndFrameRateOverridesChanged(PhysicalDisplayId, const scheduler::FrameRateMode&,
                                             std::vector<FrameRateOverride>,
+                                            std::vector<float> supportedRefreshRates,
                                             scheduler::VsyncConfigSet) override;
 
     void onModeChanged(const scheduler::FrameRateMode&, scheduler::VsyncConfigSet) override;

@@ -418,7 +418,7 @@ extern std::string getInputDeviceConfigurationFilePathByDeviceIdentifier(
 extern std::string getInputDeviceConfigurationFilePathByName(
         const std::string& name, InputDeviceConfigurationFileType type);
 
-enum ReservedInputDeviceId : int32_t {
+enum ReservedInputDeviceId : RawDeviceId {
     // Device id representing an invalid device
     INVALID_INPUT_DEVICE_ID = android::os::IInputConstants::INVALID_INPUT_DEVICE_ID,
     // Device id of a special "virtual" keyboard that is always present.

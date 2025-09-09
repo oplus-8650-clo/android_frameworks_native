@@ -20,6 +20,7 @@
 
 namespace android {
 using FrameRateOverride = DisplayEventReceiver::Event::FrameRateOverride;
+using SupportedRefreshRate = DisplayEventReceiver::Event::SupportedRefreshRate;
 
 class DisplayEventDispatcher : public LooperCallback {
 public:
@@ -50,6 +51,7 @@ private:
     nsecs_t mLastScheduleVsyncTime;
 
     std::vector<FrameRateOverride> mFrameRateOverrides;
+    std::vector<SupportedRefreshRate> mSupportedRefreshRates;
 
     virtual void dispatchVsync(nsecs_t timestamp, PhysicalDisplayId displayId, uint32_t count,
                                VsyncEventData vsyncEventData) = 0;
@@ -61,7 +63,8 @@ private:
     virtual void dispatchModeChangedWithFrameRateOverrides(
             nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId, nsecs_t renderPeriod,
             nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
-            std::vector<FrameRateOverride> overrides) = 0;
+            std::vector<FrameRateOverride> overrides,
+            std::vector<SupportedRefreshRate> supportedRefreshRates) = 0;
     virtual void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
                                      nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
                                      nsecs_t presentationDeadline) = 0;

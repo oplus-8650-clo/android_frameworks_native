@@ -1063,7 +1063,7 @@ TEST_F(ScreenCaptureTest, captureOffscreenNullSnapshot) {
     ScreenCapture::captureLayers(&mCapture, captureArgs);
 }
 
-TEST_F(ScreenCaptureTest, captureOffscreenCyclicalHierarchyFails) {
+TEST_F(ScreenCaptureTest, captureOffscreenCyclicalHierarchyInChildrenFails) {
     sp<SurfaceControl> layer1;
     ASSERT_NO_FATAL_FAILURE(layer1 = createLayer("Layer1", 32, 32,
                                                  ISurfaceComposerClient::eFXSurfaceBufferState,
@@ -1089,6 +1089,30 @@ TEST_F(ScreenCaptureTest, captureOffscreenCyclicalHierarchyFails) {
 
     LayerCaptureArgs captureArgs;
     captureArgs.layerHandle = layer1->getHandle();
+
+    ScreenCaptureResults captureResults;
+    status_t result = ScreenCapture::captureLayers(captureArgs, captureResults);
+
+    ASSERT_EQ(BAD_VALUE, result);
+}
+
+TEST_F(ScreenCaptureTest, captureCyclicalHierarchyInParentsFails) {
+    sp<SurfaceControl> layer1;
+    ASSERT_NO_FATAL_FAILURE(layer1 = createLayer("Layer1", 32, 32,
+                                                 ISurfaceComposerClient::eFXSurfaceBufferState,
+                                                 mBGSurfaceControl.get()));
+    sp<SurfaceControl> layer2;
+    ASSERT_NO_FATAL_FAILURE(layer2 = createLayer(String8("Layer2"), 32, 32, 0, layer1.get()));
+
+    sp<SurfaceControl> layer3;
+    ASSERT_NO_FATAL_FAILURE(layer3 = createLayer(String8("Layer3"), 32, 32, 0, layer2.get()));
+    ASSERT_NO_FATAL_FAILURE(fillBufferLayerColor(layer3, Color::RED, 32, 32));
+
+    // Introduce cycle
+    Transaction().reparent(layer1, layer2).apply(true /* synchronous */);
+
+    LayerCaptureArgs captureArgs;
+    captureArgs.layerHandle = layer3->getHandle();
 
     ScreenCaptureResults captureResults;
     status_t result = ScreenCapture::captureLayers(captureArgs, captureResults);

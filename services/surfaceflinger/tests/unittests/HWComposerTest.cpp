@@ -76,10 +76,15 @@ struct HWComposerTest : testing::Test {
     impl::HWComposer mHwc{std::unique_ptr<Hwc2::Composer>(mHal)};
 
     void expectHotplugConnect(hal::HWDisplayId hwcDisplayId, uint8_t port = 255,
+                              IComposerClient::DisplayConnectionType connectionType =
+                                      IComposerClient::DisplayConnectionType::EXTERNAL,
                               const display::DisplayIdentificationData& data = getExternalEdid()) {
         EXPECT_CALL(*mHal, getDisplayIdentificationData(hwcDisplayId, _, _, _))
                 .WillOnce(DoAll(SetArgPointee<1>(port), SetArgPointee<2>(data),
                                 Return(HalError::NONE)));
+
+        EXPECT_CALL(*mHal, getDisplayConnectionType(hwcDisplayId, _))
+                .WillOnce(DoAll(SetArgPointee<1>(connectionType), Return(V2_4::Error::NONE)));
 
         EXPECT_CALL(*mHal, setClientTargetSlotCount(_));
         EXPECT_CALL(*mHal, setVsyncEnabled(hwcDisplayId, Hwc2::IComposerClient::Vsync::DISABLE));
@@ -376,7 +381,7 @@ TEST_F(HWComposerTest, onVsyncInvalid) {
 TEST_F(HWComposerTest, propagateHotplugReconnectStatus) {
     constexpr hal::HWDisplayId kHwcDisplayId = 1;
     constexpr uint8_t kPort = 0;
-    expectHotplugConnect(kHwcDisplayId, kPort, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId, kPort);
 
     const auto info1 = mHwc.onHotplug(kHwcDisplayId, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
@@ -385,6 +390,9 @@ TEST_F(HWComposerTest, propagateHotplugReconnectStatus) {
     // Emit another hotplug event on the same display, but with a different EDID. This should
     // trigger a hotplug reconnect. Display identification data should not be fetched.
     EXPECT_CALL(*mHal, getDisplayIdentificationData(kHwcDisplayId, _, _, _)).Times(0);
+    EXPECT_CALL(*mHal, getDisplayConnectionType(kHwcDisplayId, _))
+            .WillOnce(DoAll(SetArgPointee<1>(IComposerClient::DisplayConnectionType::EXTERNAL),
+                            Return(V2_4::Error::NONE)));
     const auto info2 = mHwc.onHotplug(kHwcDisplayId, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info2);
 
@@ -401,7 +409,7 @@ TEST_F(HWComposerTest, displayIdConflictResolution) {
     // First display is assigned a display ID with no issues.
     constexpr hal::HWDisplayId kHwcDisplayId1 = 1;
     constexpr uint8_t kPort1 = 1;
-    expectHotplugConnect(kHwcDisplayId1, kPort1, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId1, kPort1);
 
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
@@ -413,7 +421,7 @@ TEST_F(HWComposerTest, displayIdConflictResolution) {
     // Second display's ID has to be modified due to conflict.
     constexpr hal::HWDisplayId kHwcDisplayId2 = 2;
     constexpr uint8_t kPort2 = 2;
-    expectHotplugConnect(kHwcDisplayId2, kPort2, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId2, kPort2);
 
     const auto info2 = mHwc.onHotplug(kHwcDisplayId2, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info2);
@@ -436,7 +444,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionWithInvertedPortBits) {
     // First display is assigned a display ID with no issues.
     constexpr hal::HWDisplayId kHwcDisplayId1 = 1;
     constexpr uint8_t kPort1 = 1;
-    expectHotplugConnect(kHwcDisplayId1, kPort1, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId1, kPort1);
 
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
@@ -450,7 +458,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionWithInvertedPortBits) {
     // the port ID.
     constexpr hal::HWDisplayId kHwcDisplayId2 = 2;
     constexpr uint8_t kPort2 = 181;
-    expectHotplugConnect(kHwcDisplayId2, kPort2, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId2, kPort2);
 
     const auto info2 = mHwc.onHotplug(kHwcDisplayId2, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info2);
@@ -474,7 +482,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionFails) {
     // First display is assigned a display ID with no issues.
     constexpr hal::HWDisplayId kHwcDisplayId1 = 1;
     constexpr uint8_t kPort1 = 1;
-    expectHotplugConnect(kHwcDisplayId1, kPort1, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId1, kPort1);
 
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
@@ -487,7 +495,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionFails) {
     // port value 74, which is the inverted value of 181.
     constexpr hal::HWDisplayId kHwcDisplayId2 = 2;
     constexpr uint8_t kPort2 = 74;
-    expectHotplugConnect(kHwcDisplayId2, kPort2, getExternalEdid());
+    expectHotplugConnect(kHwcDisplayId2, kPort2);
 
     const auto info2 = mHwc.onHotplug(kHwcDisplayId2, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info2);
@@ -508,6 +516,9 @@ TEST_F(HWComposerTest, displayIdConflictResolutionFails) {
     EXPECT_CALL(*mHal, getDisplayIdentificationData(kHwcDisplayId3, _, _, _))
             .WillOnce(DoAll(SetArgPointee<1>(kPort3), SetArgPointee<2>(getExternalEdid()),
                             Return(HalError::NONE)));
+    EXPECT_CALL(*mHal, getDisplayConnectionType(kHwcDisplayId3, _))
+            .WillOnce(DoAll(SetArgPointee<1>(IComposerClient::DisplayConnectionType::EXTERNAL),
+                            Return(V2_4::Error::NONE)));
 
     // Creation of the display should fail, since a display with an ID seeded with 74 in its 8 LSBs
     // already exists.

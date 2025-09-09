@@ -233,6 +233,16 @@ flag {
 } # local_tonemap_screenshots
 
 flag {
+  name: "modeset_state_machine"
+  namespace: "core_graphics"
+  description: "Prevent data races causing modeset failures and deadlocks"
+  bug: "434757601"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # modeset_state_machine
+
+flag {
   name: "monitor_buffer_fences"
   namespace: "core_graphics"
   description: "Monitors fences for each buffer"
@@ -341,6 +351,16 @@ flag {
     bug: "403312802"
     is_fixed_read_only: true
 } # stop_layer
+
+flag {
+    name: "supported_refresh_rate_update"
+    namespace: "core_graphics"
+    description: "Update the supported refresh rate list"
+    bug: "431061528"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+} # supported_refresh_rate_update
 
 flag {
   name: "synced_resolution_switch"

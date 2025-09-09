@@ -14,7 +14,7 @@ public:
     void init(SkiaGpuContext* context);
     void cleanup();
     void drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
-                        const android::gui::BoxShadowSettings& settings);
+                        const android::gui::BoxShadowSettings& settings, bool shouldDrawFpkRect);
 
 private:
     static constexpr std::array<int, 8> kSupportedBlurRadius = {8, 12, 14, 16, 24, 28, 48, 64};

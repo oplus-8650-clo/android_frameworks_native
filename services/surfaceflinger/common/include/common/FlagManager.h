@@ -71,6 +71,7 @@ public:
     bool refresh_rate_overlay_on_external_display() const;
     bool reset_model_flushes_fence() const;
     bool resync_on_tx() const;
+    bool supported_refresh_rate_update() const;
     bool unify_refresh_rate_callbacks() const;
     bool vsync_predictor_predicts_within_threshold() const;
 
@@ -99,6 +100,7 @@ public:
     bool idle_screen_refresh_rate_timeout() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
+    bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
     bool pacesetter_selection() const;
     bool parse_edid_version_and_input_type() const;

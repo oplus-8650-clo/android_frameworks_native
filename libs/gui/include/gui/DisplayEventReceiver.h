@@ -61,6 +61,7 @@ enum class DisplayEventType : uint32_t {
     // TODO(b/399482301) Cleanup the DISPLAY_EVENT_MODE_CHANGE event
     // with flag cleanup.
     DISPLAY_EVENT_MODE_CHANGE = fourcc('m', 'o', 'd', 'e'),
+    DISPLAY_EVENT_SUPPORTED_REFRESH_RATE = fourcc('s', 'r', 'r', 'e'),
     DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE = fourcc('m', 'o', 'f', 'r'),
     DISPLAY_EVENT_MODE_REJECTION = fourcc('r', 'e', 'j', 'e'),
     DISPLAY_EVENT_NULL = fourcc('n', 'u', 'l', 'l'),
@@ -104,6 +105,10 @@ public:
             nsecs_t presentationDeadline __attribute__((aligned(8)));
         };
 
+        struct SupportedRefreshRate {
+            float refreshRate __attribute__((aligned(8)));
+        };
+
         struct ModeRejection {
             int32_t modeId;
         };
@@ -127,6 +132,7 @@ public:
             VSync vsync;
             Hotplug hotplug;
             ModeChange modeChange;
+            SupportedRefreshRate supportedRefreshRate;
             FrameRateOverride frameRateOverride;
             HdcpLevelsChange hdcpLevelsChange;
             ModeRejection modeRejection;

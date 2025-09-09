@@ -147,7 +147,8 @@ void BoxShadowUtils::cleanup() {
 }
 
 void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
-                                    const android::gui::BoxShadowSettings& settings) {
+                                    const android::gui::BoxShadowSettings& settings,
+                                    bool shouldDrawFpkRect) {
     for (const gui::BoxShadowSettings::BoxShadowParams& box : settings.boxShadows) {
         SkRect boxRect = rect;
         boxRect.outset(box.spreadRadius, box.spreadRadius);
@@ -176,6 +177,23 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
 
         sk_sp<SkShader> shader = mBlurImages[blurRadiusIndex];
         drawNineSlice(canvas, shader, boxRect, box.color, cornerScale);
+    }
+
+    if (shouldDrawFpkRect) {
+        SFTRACE_NAME("FPKOptimization");
+        // This optimization is just for Ganesh and can be removed once graphite is
+        // enabled.
+        // On a device with ARM Mali-G710 MP7 with 4 chrome windows open this
+        // reduces GPU work period from 16ms to 10ms.
+        SkRect killRect = rect;
+        float inset = (1.0f - kSin45Deg) * cornerRadius;
+        killRect.inset(inset, inset);
+
+        SkPaint paint;
+        paint.setAntiAlias(false);
+        paint.setColor(0);
+        paint.setBlendMode(SkBlendMode::kSrc);
+        canvas->drawRect(killRect, paint);
     }
 }
 

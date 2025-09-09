@@ -44,6 +44,7 @@
 #include <com_android_input_flags.h>
 #include <cutils/properties.h>
 #include <ftl/enum.h>
+#include <input/Input.h>
 #include <input/InputEventLabels.h>
 #include <input/KeyCharacterMap.h>
 #include <input/KeyLayoutMap.h>
@@ -1011,25 +1012,25 @@ void EventHub::addDeviceInotify() {
                         strerror(errno));
 }
 
-InputDeviceIdentifier EventHub::getDeviceIdentifier(int32_t deviceId) const {
+InputDeviceIdentifier EventHub::getDeviceIdentifier(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     return device != nullptr ? device->identifier : InputDeviceIdentifier();
 }
 
-ftl::Flags<InputDeviceClass> EventHub::getDeviceClasses(int32_t deviceId) const {
+ftl::Flags<InputDeviceClass> EventHub::getDeviceClasses(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     return device != nullptr ? device->classes : ftl::Flags<InputDeviceClass>(0);
 }
 
-int32_t EventHub::getDeviceControllerNumber(int32_t deviceId) const {
+int32_t EventHub::getDeviceControllerNumber(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     return device != nullptr ? device->controllerNumber : 0;
 }
 
-std::optional<PropertyMap> EventHub::getConfiguration(int32_t deviceId) const {
+std::optional<PropertyMap> EventHub::getConfiguration(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || device->configuration == nullptr) {
@@ -1038,7 +1039,8 @@ std::optional<PropertyMap> EventHub::getConfiguration(int32_t deviceId) const {
     return *device->configuration;
 }
 
-std::optional<RawAbsoluteAxisInfo> EventHub::getAbsoluteAxisInfo(int32_t deviceId, int axis) const {
+std::optional<RawAbsoluteAxisInfo> EventHub::getAbsoluteAxisInfo(RawDeviceId deviceId,
+                                                                 int axis) const {
     if (axis < 0 || axis > ABS_MAX) {
         return std::nullopt;
     }
@@ -1059,7 +1061,7 @@ std::optional<RawAbsoluteAxisInfo> EventHub::getAbsoluteAxisInfo(int32_t deviceI
     return it->second.info;
 }
 
-bool EventHub::hasRelativeAxis(int32_t deviceId, int axis) const {
+bool EventHub::hasRelativeAxis(RawDeviceId deviceId, int axis) const {
     if (axis >= 0 && axis <= REL_MAX) {
         std::scoped_lock _l(mLock);
         Device* device = getDeviceLocked(deviceId);
@@ -1068,7 +1070,7 @@ bool EventHub::hasRelativeAxis(int32_t deviceId, int axis) const {
     return false;
 }
 
-bool EventHub::hasInputProperty(int32_t deviceId, int property) const {
+bool EventHub::hasInputProperty(RawDeviceId deviceId, int property) const {
     std::scoped_lock _l(mLock);
 
     Device* device = getDeviceLocked(deviceId);
@@ -1077,7 +1079,7 @@ bool EventHub::hasInputProperty(int32_t deviceId, int property) const {
             : false;
 }
 
-bool EventHub::hasMscEvent(int32_t deviceId, int mscEvent) const {
+bool EventHub::hasMscEvent(RawDeviceId deviceId, int mscEvent) const {
     std::scoped_lock _l(mLock);
 
     Device* device = getDeviceLocked(deviceId);
@@ -1086,7 +1088,7 @@ bool EventHub::hasMscEvent(int32_t deviceId, int mscEvent) const {
             : false;
 }
 
-int32_t EventHub::getScanCodeState(int32_t deviceId, int32_t scanCode) const {
+int32_t EventHub::getScanCodeState(RawDeviceId deviceId, int32_t scanCode) const {
     if (scanCode < 0 || scanCode > KEY_MAX) {
         return AKEY_STATE_UNKNOWN;
     }
@@ -1098,7 +1100,7 @@ int32_t EventHub::getScanCodeState(int32_t deviceId, int32_t scanCode) const {
     return device->keyState.test(scanCode) ? AKEY_STATE_DOWN : AKEY_STATE_UP;
 }
 
-int32_t EventHub::getKeyCodeState(int32_t deviceId, int32_t keyCode) const {
+int32_t EventHub::getKeyCodeState(RawDeviceId deviceId, int32_t keyCode) const {
     std::scoped_lock _l(mLock);
     const Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || !device->hasValidFd() || !device->keyMap.haveKeyLayout()) {
@@ -1117,7 +1119,7 @@ int32_t EventHub::getKeyCodeState(int32_t deviceId, int32_t keyCode) const {
             : AKEY_STATE_UP;
 }
 
-int32_t EventHub::getKeyCodeForKeyLocation(int32_t deviceId, int32_t locationKeyCode) const {
+int32_t EventHub::getKeyCodeForKeyLocation(RawDeviceId deviceId, int32_t locationKeyCode) const {
     std::scoped_lock _l(mLock);
 
     Device* device = getDeviceLocked(deviceId);
@@ -1157,7 +1159,7 @@ int32_t EventHub::getKeyCodeForKeyLocation(int32_t deviceId, int32_t locationKey
     return device->getKeyCharacterMap()->applyKeyRemapping(outKeyCode);
 }
 
-int32_t EventHub::getSwitchState(int32_t deviceId, int32_t sw) const {
+int32_t EventHub::getSwitchState(RawDeviceId deviceId, int32_t sw) const {
     if (sw < 0 || sw > SW_MAX) {
         return AKEY_STATE_UNKNOWN;
     }
@@ -1169,7 +1171,7 @@ int32_t EventHub::getSwitchState(int32_t deviceId, int32_t sw) const {
     return device->swState.test(sw) ? AKEY_STATE_DOWN : AKEY_STATE_UP;
 }
 
-std::optional<int32_t> EventHub::getAbsoluteAxisValue(int32_t deviceId, int32_t axis) const {
+std::optional<int32_t> EventHub::getAbsoluteAxisValue(RawDeviceId deviceId, int32_t axis) const {
     if (axis < 0 || axis > ABS_MAX) {
         return std::nullopt;
     }
@@ -1185,12 +1187,18 @@ std::optional<int32_t> EventHub::getAbsoluteAxisValue(int32_t deviceId, int32_t 
     return it->second.value;
 }
 
-base::Result<std::vector<int32_t>> EventHub::getMtSlotValues(int32_t deviceId, int32_t axis,
+base::Result<std::vector<int32_t>> EventHub::getMtSlotValues(RawDeviceId deviceId, int32_t axis,
                                                              size_t slotCount) const {
     std::scoped_lock _l(mLock);
     const Device* device = getDeviceLocked(deviceId);
-    if (device == nullptr || !device->hasValidFd() || !device->absBitmask.test(axis)) {
-        return base::ResultError("device problem or axis not supported", NAME_NOT_FOUND);
+    if (device == nullptr) {
+        return base::Error() << "device ID " << deviceId << " not found";
+    }
+    if (!device->hasValidFd()) {
+        return base::Error() << "invalid FD";
+    }
+    if (!device->absBitmask.test(axis)) {
+        return base::Error() << "axis not supported";
     }
     std::vector<int32_t> outValues(slotCount + 1);
     outValues[0] = axis;
@@ -1201,7 +1209,7 @@ base::Result<std::vector<int32_t>> EventHub::getMtSlotValues(int32_t deviceId, i
     return std::move(outValues);
 }
 
-bool EventHub::markSupportedKeyCodes(int32_t deviceId, const std::vector<int32_t>& keyCodes,
+bool EventHub::markSupportedKeyCodes(RawDeviceId deviceId, const std::vector<int32_t>& keyCodes,
                                      uint8_t* outFlags) const {
     std::scoped_lock _l(mLock);
 
@@ -1217,7 +1225,7 @@ bool EventHub::markSupportedKeyCodes(int32_t deviceId, const std::vector<int32_t
     return false;
 }
 
-void EventHub::setKeyRemapping(int32_t deviceId,
+void EventHub::setKeyRemapping(RawDeviceId deviceId,
                                const std::map<int32_t, int32_t>& keyRemapping) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
@@ -1230,8 +1238,9 @@ void EventHub::setKeyRemapping(int32_t deviceId,
     }
 }
 
-status_t EventHub::mapKey(int32_t deviceId, int32_t scanCode, int32_t usageCode, int32_t metaState,
-                          int32_t* outKeycode, int32_t* outMetaState, uint32_t* outFlags) const {
+status_t EventHub::mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageCode,
+                          int32_t metaState, int32_t* outKeycode, int32_t* outMetaState,
+                          uint32_t* outFlags) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     status_t status = NAME_NOT_FOUND;
@@ -1277,7 +1286,7 @@ status_t EventHub::mapKey(int32_t deviceId, int32_t scanCode, int32_t usageCode,
     return status;
 }
 
-status_t EventHub::mapAxis(int32_t deviceId, int32_t scanCode, AxisInfo* outAxisInfo) const {
+status_t EventHub::mapAxis(RawDeviceId deviceId, int32_t scanCode, AxisInfo* outAxisInfo) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
 
@@ -1292,7 +1301,7 @@ status_t EventHub::mapAxis(int32_t deviceId, int32_t scanCode, AxisInfo* outAxis
     return NO_ERROR;
 }
 
-base::Result<std::pair<InputDeviceSensorType, int32_t>> EventHub::mapSensor(int32_t deviceId,
+base::Result<std::pair<InputDeviceSensorType, int32_t>> EventHub::mapSensor(RawDeviceId deviceId,
                                                                             int32_t absCode) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
@@ -1306,7 +1315,7 @@ base::Result<std::pair<InputDeviceSensorType, int32_t>> EventHub::mapSensor(int3
 // Gets the battery info map from battery ID to RawBatteryInfo of the miscellaneous device
 // associated with the device ID. Returns an empty map if no miscellaneous device found.
 const std::unordered_map<int32_t, RawBatteryInfo>& EventHub::getBatteryInfoLocked(
-        int32_t deviceId) const {
+        RawDeviceId deviceId) const {
     static const std::unordered_map<int32_t, RawBatteryInfo> EMPTY_BATTERY_INFO = {};
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || !device->associatedDevice) {
@@ -1315,7 +1324,7 @@ const std::unordered_map<int32_t, RawBatteryInfo>& EventHub::getBatteryInfoLocke
     return device->associatedDevice->batteryInfos;
 }
 
-std::vector<int32_t> EventHub::getRawBatteryIds(int32_t deviceId) const {
+std::vector<int32_t> EventHub::getRawBatteryIds(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     std::vector<int32_t> batteryIds;
 
@@ -1326,7 +1335,7 @@ std::vector<int32_t> EventHub::getRawBatteryIds(int32_t deviceId) const {
     return batteryIds;
 }
 
-std::optional<RawBatteryInfo> EventHub::getRawBatteryInfo(int32_t deviceId,
+std::optional<RawBatteryInfo> EventHub::getRawBatteryInfo(RawDeviceId deviceId,
                                                           int32_t batteryId) const {
     std::scoped_lock _l(mLock);
 
@@ -1343,7 +1352,7 @@ std::optional<RawBatteryInfo> EventHub::getRawBatteryInfo(int32_t deviceId,
 // Gets the light info map from light ID to RawLightInfo of the miscellaneous device associated
 // with the device ID. Returns an empty map if no miscellaneous device found.
 const std::unordered_map<int32_t, RawLightInfo>& EventHub::getLightInfoLocked(
-        int32_t deviceId) const {
+        RawDeviceId deviceId) const {
     static const std::unordered_map<int32_t, RawLightInfo> EMPTY_LIGHT_INFO = {};
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || !device->associatedDevice) {
@@ -1352,7 +1361,7 @@ const std::unordered_map<int32_t, RawLightInfo>& EventHub::getLightInfoLocked(
     return device->associatedDevice->lightInfos;
 }
 
-std::vector<int32_t> EventHub::getRawLightIds(int32_t deviceId) const {
+std::vector<int32_t> EventHub::getRawLightIds(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     std::vector<int32_t> lightIds;
 
@@ -1363,7 +1372,7 @@ std::vector<int32_t> EventHub::getRawLightIds(int32_t deviceId) const {
     return lightIds;
 }
 
-std::optional<RawLightInfo> EventHub::getRawLightInfo(int32_t deviceId, int32_t lightId) const {
+std::optional<RawLightInfo> EventHub::getRawLightInfo(RawDeviceId deviceId, int32_t lightId) const {
     std::scoped_lock _l(mLock);
 
     const auto infos = getLightInfoLocked(deviceId);
@@ -1376,7 +1385,7 @@ std::optional<RawLightInfo> EventHub::getRawLightInfo(int32_t deviceId, int32_t 
     return std::nullopt;
 }
 
-std::optional<int32_t> EventHub::getLightBrightness(int32_t deviceId, int32_t lightId) const {
+std::optional<int32_t> EventHub::getLightBrightness(RawDeviceId deviceId, int32_t lightId) const {
     std::scoped_lock _l(mLock);
 
     const auto infos = getLightInfoLocked(deviceId);
@@ -1393,7 +1402,7 @@ std::optional<int32_t> EventHub::getLightBrightness(int32_t deviceId, int32_t li
 }
 
 std::optional<std::unordered_map<LightColor, int32_t>> EventHub::getLightIntensities(
-        int32_t deviceId, int32_t lightId) const {
+        RawDeviceId deviceId, int32_t lightId) const {
     std::scoped_lock _l(mLock);
 
     const auto infos = getLightInfoLocked(deviceId);
@@ -1432,7 +1441,7 @@ std::optional<std::unordered_map<LightColor, int32_t>> EventHub::getLightIntensi
     return intensities;
 }
 
-void EventHub::setLightBrightness(int32_t deviceId, int32_t lightId, int32_t brightness) {
+void EventHub::setLightBrightness(RawDeviceId deviceId, int32_t lightId, int32_t brightness) {
     std::scoped_lock _l(mLock);
 
     const auto infos = getLightInfoLocked(deviceId);
@@ -1449,7 +1458,7 @@ void EventHub::setLightBrightness(int32_t deviceId, int32_t lightId, int32_t bri
     }
 }
 
-void EventHub::setLightIntensities(int32_t deviceId, int32_t lightId,
+void EventHub::setLightIntensities(RawDeviceId deviceId, int32_t lightId,
                                    std::unordered_map<LightColor, int32_t> intensities) {
     std::scoped_lock _l(mLock);
 
@@ -1489,7 +1498,7 @@ void EventHub::setLightIntensities(int32_t deviceId, int32_t lightId,
     }
 }
 
-std::optional<RawLayoutInfo> EventHub::getRawLayoutInfo(int32_t deviceId) const {
+std::optional<RawLayoutInfo> EventHub::getRawLayoutInfo(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || !device->associatedDevice) {
@@ -1504,7 +1513,7 @@ void EventHub::setExcludedDevices(const std::vector<std::string>& devices) {
     mExcludedDevices = devices;
 }
 
-bool EventHub::hasScanCode(int32_t deviceId, int32_t scanCode) const {
+bool EventHub::hasScanCode(RawDeviceId deviceId, int32_t scanCode) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr && scanCode >= 0 && scanCode <= KEY_MAX) {
@@ -1513,7 +1522,7 @@ bool EventHub::hasScanCode(int32_t deviceId, int32_t scanCode) const {
     return false;
 }
 
-bool EventHub::hasKeyCode(int32_t deviceId, int32_t keyCode) const {
+bool EventHub::hasKeyCode(RawDeviceId deviceId, int32_t keyCode) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr) {
@@ -1522,7 +1531,7 @@ bool EventHub::hasKeyCode(int32_t deviceId, int32_t keyCode) const {
     return false;
 }
 
-bool EventHub::hasLed(int32_t deviceId, int32_t led) const {
+bool EventHub::hasLed(RawDeviceId deviceId, int32_t led) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     int32_t sc;
@@ -1532,7 +1541,7 @@ bool EventHub::hasLed(int32_t deviceId, int32_t led) const {
     return false;
 }
 
-void EventHub::setLedState(int32_t deviceId, int32_t led, bool on) {
+void EventHub::setLedState(RawDeviceId deviceId, int32_t led, bool on) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr && device->hasValidFd()) {
@@ -1540,7 +1549,7 @@ void EventHub::setLedState(int32_t deviceId, int32_t led, bool on) {
     }
 }
 
-void EventHub::getVirtualKeyDefinitions(int32_t deviceId,
+void EventHub::getVirtualKeyDefinitions(RawDeviceId deviceId,
                                         std::vector<VirtualKeyDefinition>& outVirtualKeys) const {
     outVirtualKeys.clear();
 
@@ -1553,7 +1562,7 @@ void EventHub::getVirtualKeyDefinitions(int32_t deviceId,
     }
 }
 
-const std::shared_ptr<KeyCharacterMap> EventHub::getKeyCharacterMap(int32_t deviceId) const {
+const std::shared_ptr<KeyCharacterMap> EventHub::getKeyCharacterMap(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr) {
@@ -1563,7 +1572,8 @@ const std::shared_ptr<KeyCharacterMap> EventHub::getKeyCharacterMap(int32_t devi
 }
 
 // If provided map is null, it will reset key character map to default KCM.
-bool EventHub::setKeyboardLayoutOverlay(int32_t deviceId, std::shared_ptr<KeyCharacterMap> map) {
+bool EventHub::setKeyboardLayoutOverlay(RawDeviceId deviceId,
+                                        std::shared_ptr<KeyCharacterMap> map) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr || device->keyMap.keyCharacterMap == nullptr) {
@@ -1688,7 +1698,7 @@ std::string EventHub::AssociatedDevice::dump() const {
                         batteryInfos.size(), lightInfos.size());
 }
 
-void EventHub::vibrate(int32_t deviceId, const VibrationElement& element) {
+void EventHub::vibrate(RawDeviceId deviceId, const VibrationElement& element) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr && device->hasValidFd()) {
@@ -1723,7 +1733,7 @@ void EventHub::vibrate(int32_t deviceId, const VibrationElement& element) {
     }
 }
 
-void EventHub::cancelVibrate(int32_t deviceId) {
+void EventHub::cancelVibrate(RawDeviceId deviceId) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device != nullptr && device->hasValidFd()) {
@@ -1745,7 +1755,7 @@ void EventHub::cancelVibrate(int32_t deviceId) {
     }
 }
 
-std::vector<int32_t> EventHub::getVibratorIds(int32_t deviceId) const {
+std::vector<int32_t> EventHub::getVibratorIds(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     std::vector<int32_t> vibrators;
     Device* device = getDeviceLocked(deviceId);
@@ -1775,7 +1785,7 @@ bool EventHub::hasDeviceWithDescriptorLocked(const std::string& descriptor) cons
     return false;
 }
 
-EventHub::Device* EventHub::getDeviceLocked(int32_t deviceId) const {
+EventHub::Device* EventHub::getDeviceLocked(RawDeviceId deviceId) const {
     if (deviceId == ReservedInputDeviceId::BUILT_IN_KEYBOARD_ID) {
         deviceId = mBuiltInKeyboardId;
     }
@@ -1815,7 +1825,7 @@ EventHub::Device* EventHub::getDeviceByFdLocked(int fd) const {
     return nullptr;
 }
 
-std::optional<int32_t> EventHub::getBatteryCapacity(int32_t deviceId, int32_t batteryId) const {
+std::optional<int32_t> EventHub::getBatteryCapacity(RawDeviceId deviceId, int32_t batteryId) const {
     std::filesystem::path batteryPath;
     {
         // Do not read the sysfs node to get the battery state while holding
@@ -1856,7 +1866,7 @@ std::optional<int32_t> EventHub::getBatteryCapacity(int32_t deviceId, int32_t ba
     return std::nullopt;
 }
 
-std::optional<int32_t> EventHub::getBatteryStatus(int32_t deviceId, int32_t batteryId) const {
+std::optional<int32_t> EventHub::getBatteryStatus(RawDeviceId deviceId, int32_t batteryId) const {
     std::filesystem::path batteryPath;
     {
         // Do not read the sysfs node to get the battery state while holding
@@ -1996,7 +2006,7 @@ std::vector<RawEvent> EventHub::getEvents(int timeoutMillis) {
                 } else if ((readSize % sizeof(struct input_event)) != 0) {
                     ALOGE("could not get event (wrong size: %d)", readSize);
                 } else {
-                    const int32_t deviceId = device->id == mBuiltInKeyboardId ? 0 : device->id;
+                    const RawDeviceId deviceId = device->id == mBuiltInKeyboardId ? 0 : device->id;
 
                     const size_t count = size_t(readSize) / sizeof(struct input_event);
                     for (size_t i = 0; i < count; i++) {
@@ -2118,7 +2128,7 @@ void EventHub::handleDeviceChangesLocked(std::vector<RawEvent>& events, nsecs_t 
             // each before moving on to the next. This is to avoid notifying all device
             // removals and additions in one batch, which could cause additional unnecessary
             // device added/removed notifications for merged InputDevices from InputReader.
-            const int32_t deviceId = mDeviceIdsToReopen.back();
+            const RawDeviceId deviceId = mDeviceIdsToReopen.back();
             mDeviceIdsToReopen.erase(mDeviceIdsToReopen.end() - 1);
             if (auto it = mDevices.find(deviceId); it != mDevices.end()) {
                 ALOGI("Reopening input device: id=%d, name=%s", it->second->id,
@@ -2133,7 +2143,7 @@ void EventHub::handleDeviceChangesLocked(std::vector<RawEvent>& events, nsecs_t 
         for (auto it = mClosingDevices.begin(); it != mClosingDevices.end();) {
             std::unique_ptr<Device> device = std::move(*it);
             ALOGV("Reporting device closed: id=%d, name=%s\n", device->id, device->path.c_str());
-            const int32_t deviceId = (device->id == mBuiltInKeyboardId)
+            const RawDeviceId deviceId = (device->id == mBuiltInKeyboardId)
                     ? ReservedInputDeviceId::BUILT_IN_KEYBOARD_ID
                     : device->id;
             events.push_back({
@@ -2156,7 +2166,7 @@ void EventHub::handleDeviceChangesLocked(std::vector<RawEvent>& events, nsecs_t 
             std::unique_ptr<Device> device = std::move(*mOpeningDevices.rbegin());
             mOpeningDevices.pop_back();
             ALOGV("Reporting device opened: id=%d, name=%s\n", device->id, device->path.c_str());
-            const int32_t deviceId = device->id == mBuiltInKeyboardId ? 0 : device->id;
+            const RawDeviceId deviceId = device->id == mBuiltInKeyboardId ? 0 : device->id;
             events.push_back({
                     .when = now,
                     .deviceId = deviceId,
@@ -2187,7 +2197,7 @@ void EventHub::handleDeviceChangesLocked(std::vector<RawEvent>& events, nsecs_t 
     } while (!mDeviceIdsToReopen.empty());
 }
 
-std::vector<TouchVideoFrame> EventHub::getVideoFrames(int32_t deviceId) {
+std::vector<TouchVideoFrame> EventHub::getVideoFrames(RawDeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     Device* device = getDeviceLocked(deviceId);
@@ -2429,7 +2439,7 @@ void EventHub::openDeviceLocked(const std::string& devicePath) {
     }
 
     // Allocate device.  (The device object takes ownership of the fd at this point.)
-    int32_t deviceId = mNextDeviceId++;
+    RawDeviceId deviceId = mNextDeviceId++;
     std::unique_ptr<Device> device =
             std::make_unique<Device>(fd, deviceId, devicePath, identifier, configuration);
 
@@ -2694,7 +2704,7 @@ bool EventHub::tryAddVideoDeviceLocked(EventHub::Device& device,
     return true;
 }
 
-bool EventHub::isDeviceEnabled(int32_t deviceId) const {
+bool EventHub::isDeviceEnabled(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr) {
@@ -2704,7 +2714,7 @@ bool EventHub::isDeviceEnabled(int32_t deviceId) const {
     return device->enabled;
 }
 
-status_t EventHub::enableDevice(int32_t deviceId) {
+status_t EventHub::enableDevice(RawDeviceId deviceId) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr) {
@@ -2726,7 +2736,7 @@ status_t EventHub::enableDevice(int32_t deviceId) {
     return registerDeviceForEpollLocked(*device);
 }
 
-status_t EventHub::disableDevice(int32_t deviceId) {
+status_t EventHub::disableDevice(RawDeviceId deviceId) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr) {
@@ -2741,7 +2751,7 @@ status_t EventHub::disableDevice(int32_t deviceId) {
     return device->disable();
 }
 
-std::filesystem::path EventHub::getSysfsRootPath(int32_t deviceId) const {
+std::filesystem::path EventHub::getSysfsRootPath(RawDeviceId deviceId) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr) {
@@ -3019,7 +3029,7 @@ void EventHub::requestReopenDevices() {
     mNeedToReopenDevices = true;
 }
 
-bool EventHub::setKernelWakeEnabled(int32_t deviceId, bool enabled) {
+bool EventHub::setKernelWakeEnabled(RawDeviceId deviceId, bool enabled) {
     std::scoped_lock _l(mLock);
     std::string enabledStr = enabled ? "enabled" : "disabled";
     Device* device = getDeviceLocked(deviceId);

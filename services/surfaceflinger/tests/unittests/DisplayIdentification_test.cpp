@@ -43,6 +43,16 @@ const unsigned char kInternalEdid[] =
         "\x41\x4d\x53\x55\x4e\x47\x0a\x20\x20\x20\x20\x20\x00\x00\x00\xfe"
         "\x00\x31\x32\x31\x41\x54\x31\x31\x2d\x38\x30\x31\x0a\x20\x00\x45";
 
+const unsigned char kOuterEdid[] =
+        "\x00\xff\xff\xff\xff\xff\xff\x00\x4c\xa3\x39\x30\xd2\x02\x96\x49"
+        "\x00\x15\x01\x03\x80\x1a\x10\x78\x0a\xd3\xe5\x95\x5c\x60\x90\x27"
+        "\x19\x50\x54\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01"
+        "\x01\x01\x01\x01\x01\x01\x9e\x1b\x00\xa0\x50\x20\x12\x30\x10\x30"
+        "\x13\x00\x05\xa3\x10\x00\x00\x19\x00\x00\x00\x0f\x00\x00\x00\x00"
+        "\x00\x00\x00\x00\x00\x23\x87\x02\x64\x00\x00\x00\x00\xfe\x00\x53"
+        "\x41\x4d\x53\x55\x4e\x47\x0a\x20\x20\x20\x20\x20\x00\x00\x00\xfe"
+        "\x00\x31\x32\x31\x41\x54\x31\x31\x2d\x38\x30\x31\x0a\x20\x00\x9C";
+
 const unsigned char kExternalEdid[] =
         "\x00\xff\xff\xff\xff\xff\xff\x00\x22\xf0\x6c\x28\x01\x01\x01\x01"
         "\x02\x16\x01\x04\xb5\x40\x28\x78\xe2\x8d\x85\xad\x4f\x35\xb1\x25"
@@ -174,6 +184,11 @@ const DisplayIdentificationData& getInternalEdid() {
     return data;
 }
 
+const DisplayIdentificationData& getOuterEdid() {
+    static const DisplayIdentificationData data = asDisplayIdentificationData(kOuterEdid);
+    return data;
+}
+
 const DisplayIdentificationData& getExternalEdid() {
     static const DisplayIdentificationData data = asDisplayIdentificationData(kExternalEdid);
     return data;
@@ -214,6 +229,7 @@ TEST(DisplayIdentificationTest, isEdid) {
     EXPECT_FALSE(isEdid({}));
 
     EXPECT_TRUE(isEdid(getInternalEdid()));
+    EXPECT_TRUE(isEdid(getOuterEdid()));
     EXPECT_TRUE(isEdid(getExternalEdid()));
     EXPECT_TRUE(isEdid(getExternalEedid()));
     EXPECT_TRUE(isEdid(getPanasonicTvEdid()));
@@ -234,6 +250,28 @@ TEST(DisplayIdentificationTest, parseEdid) {
     EXPECT_EQ(12610, edid->productId);
     EXPECT_TRUE(edid->hashedBlockZeroSerialNumberOpt.has_value());
     EXPECT_EQ(ftl::stable_hash("12345678"), edid->hashedBlockZeroSerialNumberOpt.value());
+    EXPECT_FALSE(edid->hashedDescriptorBlockSerialNumberOpt.has_value());
+    EXPECT_EQ(21, edid->manufactureOrModelYear);
+    EXPECT_EQ(0, edid->manufactureWeek);
+    EXPECT_EQ(26, edid->physicalSizeInCm.width);
+    EXPECT_EQ(16, edid->physicalSizeInCm.height);
+    EXPECT_FALSE(edid->cea861Block);
+    EXPECT_EQ(1280, edid->preferredDetailedTimingDescriptor->pixelSizeCount.width);
+    EXPECT_EQ(800, edid->preferredDetailedTimingDescriptor->pixelSizeCount.height);
+    EXPECT_EQ(261, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.width);
+    EXPECT_EQ(163, edid->preferredDetailedTimingDescriptor->physicalSizeInMm.height);
+
+    edid = parseEdid(getOuterEdid());
+    ASSERT_TRUE(edid);
+    EXPECT_EQ(0x4ca3u, edid->manufacturerId);
+    EXPECT_STREQ("SEC", edid->pnpId.data());
+    // ASCII text should be used as fallback if display name and serial number are missing.
+    EXPECT_EQ(hash("121AT11-801"), edid->modelHash);
+    EXPECT_EQ(hash("121AT11-801"), 626564263);
+    EXPECT_TRUE(edid->displayName.empty());
+    EXPECT_EQ(12345, edid->productId);
+    EXPECT_TRUE(edid->hashedBlockZeroSerialNumberOpt.has_value());
+    EXPECT_EQ(ftl::stable_hash("1234567890"), edid->hashedBlockZeroSerialNumberOpt.value());
     EXPECT_FALSE(edid->hashedDescriptorBlockSerialNumberOpt.has_value());
     EXPECT_EQ(21, edid->manufactureOrModelYear);
     EXPECT_EQ(0, edid->manufactureWeek);
@@ -449,25 +487,50 @@ TEST(DisplayIdentificationTest, getPnpId) {
     EXPECT_STREQ("SAM", getPnpId(0x4c2du).value_or(PnpId{}).data());
 }
 
-TEST(DisplayIdentificationTest, parseDisplayIdentificationData) {
+TEST(DisplayIdentificationTest, parseDisplayIdentificationDataWithPortBasedIds) {
     const auto primaryInfo = parseDisplayIdentificationData(0, getInternalEdid(),
-                                                            android::ScreenPartStatus::UNSUPPORTED);
+                                                            android::ScreenPartStatus::UNSUPPORTED,
+                                                            /*useStableEdidIds=*/false);
     ASSERT_TRUE(primaryInfo);
 
     const auto secondaryInfo =
             parseDisplayIdentificationData(1, getExternalEdid(),
-                                           android::ScreenPartStatus::UNSUPPORTED);
+                                           android::ScreenPartStatus::UNSUPPORTED,
+                                           /*useStableEdidIds=*/false);
     ASSERT_TRUE(secondaryInfo);
 
-    const auto tertiaryInfo =
-            parseDisplayIdentificationData(2, getExternalEedid(),
-                                           android::ScreenPartStatus::UNSUPPORTED);
+    const auto tertiaryInfo = parseDisplayIdentificationData(2, getExternalEedid(),
+                                                             android::ScreenPartStatus::UNSUPPORTED,
+                                                             /*useStableEdidIds=*/false);
     ASSERT_TRUE(tertiaryInfo);
 
     // Display IDs should be unique.
     EXPECT_EQ(4633257497453176576, primaryInfo->id.value);
     EXPECT_EQ(4621520285560261121, secondaryInfo->id.value);
     EXPECT_EQ(4633127902230889474, tertiaryInfo->id.value);
+}
+
+TEST(DisplayIdentificationTest, parseDisplayIdentificationDataWithStableEdidIds) {
+    const auto primaryInfo = parseDisplayIdentificationData(0, getInternalEdid(),
+                                                            android::ScreenPartStatus::UNSUPPORTED,
+                                                            /*useStableEdidIds=*/true);
+    ASSERT_TRUE(primaryInfo);
+
+    const auto secondaryInfo =
+            parseDisplayIdentificationData(1, getExternalEdid(),
+                                           android::ScreenPartStatus::UNSUPPORTED,
+                                           /*useStableEdidIds=*/true);
+    ASSERT_TRUE(secondaryInfo);
+
+    const auto tertiaryInfo = parseDisplayIdentificationData(2, getExternalEedid(),
+                                                             android::ScreenPartStatus::UNSUPPORTED,
+                                                             /*useStableEdidIds=*/true);
+    ASSERT_TRUE(tertiaryInfo);
+
+    // Display IDs should be unique.
+    EXPECT_EQ(12535292641168014882u, primaryInfo->id.value);
+    EXPECT_EQ(4067182673952280501u, secondaryInfo->id.value);
+    EXPECT_EQ(14712168404707886855u, tertiaryInfo->id.value);
 }
 
 TEST(DisplayIdentificationTest, resolveDisplayIdCollision) {

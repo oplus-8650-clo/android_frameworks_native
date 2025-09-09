@@ -55,7 +55,7 @@ std::unique_ptr<RenderEngine> RenderEngine::create(const RenderEngineCreationArg
         }
     }
 
-    if (args.threaded != Threaded::No) {
+    if (args.threaded != Threaded::Yes) {
         ALOGE("Non-threaded RenderEngine not supported, please update or "
               "remove " PROPERTY_DEBUG_RENDERENGINE_BACKEND " to use a supported backend");
     }

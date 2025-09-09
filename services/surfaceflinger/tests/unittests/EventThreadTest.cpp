@@ -143,7 +143,8 @@ protected:
     void expectUidFrameRateMappingEventReceivedByConnection(
             PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride>,
             DisplayEventType expectedEventType =
-                    DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH);
+                    DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH,
+            std::vector<float> supportedRefreshRates = {});
 
     void onVSyncEvent(nsecs_t timestamp, nsecs_t expectedPresentationTime,
                       nsecs_t deadlineTimestamp) {
@@ -394,7 +395,7 @@ void EventThreadTest::expectConfigChangedEventReceivedByConnection(
 
 void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
         PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride> expectedOverrides,
-        DisplayEventType expectedEventType) {
+        DisplayEventType expectedEventType, std::vector<float> expectedSupportedRefreshRates) {
     for (const auto [uid, frameRateHz] : expectedOverrides) {
         auto args = mConnectionEventCallRecorder.waitForCall();
         ASSERT_TRUE(args.has_value());
@@ -403,6 +404,15 @@ void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
         EXPECT_EQ(expectedDisplayId, event.header.displayId);
         EXPECT_EQ(uid, event.frameRateOverride.uid);
         EXPECT_EQ(frameRateHz, event.frameRateOverride.frameRateHz);
+    }
+
+    for (const float refreshRate : expectedSupportedRefreshRates) {
+        auto args = mConnectionEventCallRecorder.waitForCall();
+        ASSERT_TRUE(args.has_value());
+        const auto& event = std::get<0>(args.value());
+        EXPECT_EQ(DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE, event.header.type);
+        EXPECT_EQ(expectedDisplayId, event.header.displayId);
+        EXPECT_EQ(refreshRate, event.supportedRefreshRate.refreshRate);
     }
 
     auto args = mConnectionEventCallRecorder.waitForCall();
@@ -920,6 +930,8 @@ TEST_F(EventThreadTest, postHcpLevelsChanged) {
 
 TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
     SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
+    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
+
     setupEventThread();
     const std::vector<FrameRateOverride> overrides = {
             {.uid = 1, .frameRateHz = 20},
@@ -933,11 +945,13 @@ TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
                               .build();
     const Fps fps = mode->getPeakFps() / 2;
 
+    const std::vector<float> supportedRefreshRates = {20.f, 30.f, 60.f};
+
     mThread->onModeAndFrameRateOverridesChanged(EXTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
-                                                overrides, mOffsets);
+                                                overrides, supportedRefreshRates, mOffsets);
     expectUidFrameRateMappingEventReceivedByConnection(
             EXTERNAL_DISPLAY_ID, overrides,
-            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE);
+            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE, supportedRefreshRates);
 }
 
 } // namespace

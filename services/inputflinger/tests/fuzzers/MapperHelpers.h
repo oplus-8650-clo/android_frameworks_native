@@ -417,7 +417,7 @@ void configureAndResetDevice(Fdp& fdp, InputDevice& device) {
 
 template <class Fdp, class T, typename... Args>
 T& getMapperForDevice(Fdp& fdp, InputDevice& device, Args... args) {
-    int32_t eventhubId = fdp.template ConsumeIntegral<int32_t>();
+    RawDeviceId eventhubId = fdp.template ConsumeIntegral<int32_t>();
     // ensure a device entry exists for this eventHubId
     device.addEmptyEventHubDevice(eventhubId);
     configureAndResetDevice(fdp, device);
