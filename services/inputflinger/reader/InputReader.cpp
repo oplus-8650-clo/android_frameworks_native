@@ -21,6 +21,7 @@
 #include <android-base/stringprintf.h>
 #include <com_android_input_flags.h>
 #include <errno.h>
+#include <input/Input.h>
 #include <input/Keyboard.h>
 #include <input/VirtualKeyMap.h>
 #include <inttypes.h>
@@ -398,7 +399,7 @@ std::shared_ptr<InputDevice> InputReader::createDeviceLocked(
     if (deviceIt != mDevices.end()) {
         device = deviceIt->second;
     } else {
-        int32_t deviceId = (eventHubId < END_RESERVED_ID) ? eventHubId : nextInputDeviceIdLocked();
+        DeviceId deviceId = (eventHubId < END_RESERVED_ID) ? eventHubId : nextInputDeviceIdLocked();
         device = std::make_shared<InputDevice>(&mContext, deviceId, bumpGenerationLocked(),
                                                identifier);
     }
@@ -424,7 +425,7 @@ std::list<NotifyArgs> InputReader::processEventsForDeviceLocked(RawDeviceId even
     return device->process(rawEvents, count);
 }
 
-InputDevice* InputReader::findInputDeviceLocked(int32_t deviceId) const {
+InputDevice* InputReader::findInputDeviceLocked(DeviceId deviceId) const {
     auto deviceIt =
             std::find_if(mDevices.begin(), mDevices.end(), [deviceId](const auto& devicePair) {
                 return devicePair.second->getId() == deviceId;
@@ -446,7 +447,7 @@ std::list<NotifyArgs> InputReader::timeoutExpiredLocked(nsecs_t when) {
     return out;
 }
 
-int32_t InputReader::nextInputDeviceIdLocked() {
+DeviceId InputReader::nextInputDeviceIdLocked() {
     return ++mNextInputDeviceId;
 }
 
@@ -572,25 +573,25 @@ std::vector<InputDeviceInfo> InputReader::getInputDevicesLocked() const {
     return outInputDevices;
 }
 
-int32_t InputReader::getKeyCodeState(int32_t deviceId, uint32_t sourceMask, int32_t keyCode) {
+int32_t InputReader::getKeyCodeState(DeviceId deviceId, uint32_t sourceMask, int32_t keyCode) {
     std::scoped_lock _l(mLock);
 
     return getStateLocked(deviceId, sourceMask, keyCode, &InputDevice::getKeyCodeState);
 }
 
-int32_t InputReader::getScanCodeState(int32_t deviceId, uint32_t sourceMask, int32_t scanCode) {
+int32_t InputReader::getScanCodeState(DeviceId deviceId, uint32_t sourceMask, int32_t scanCode) {
     std::scoped_lock _l(mLock);
 
     return getStateLocked(deviceId, sourceMask, scanCode, &InputDevice::getScanCodeState);
 }
 
-int32_t InputReader::getSwitchState(int32_t deviceId, uint32_t sourceMask, int32_t switchCode) {
+int32_t InputReader::getSwitchState(DeviceId deviceId, uint32_t sourceMask, int32_t switchCode) {
     std::scoped_lock _l(mLock);
 
     return getStateLocked(deviceId, sourceMask, switchCode, &InputDevice::getSwitchState);
 }
 
-int32_t InputReader::getStateLocked(int32_t deviceId, uint32_t sourceMask, int32_t code,
+int32_t InputReader::getStateLocked(DeviceId deviceId, uint32_t sourceMask, int32_t code,
                                     GetStateFunc getStateFunc) {
     int32_t result = AKEY_STATE_UNKNOWN;
     if (deviceId >= 0) {
@@ -616,7 +617,7 @@ int32_t InputReader::getStateLocked(int32_t deviceId, uint32_t sourceMask, int32
     return result;
 }
 
-void InputReader::toggleCapsLockState(int32_t deviceId) {
+void InputReader::toggleCapsLockState(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
     if (mKeyboardClassifier->getKeyboardType(deviceId) == KeyboardType::ALPHABETIC) {
         updateLedMetaStateLocked(mLedMetaState ^ AMETA_CAPS_LOCK_ON);
@@ -628,7 +629,7 @@ void InputReader::resetLockedModifierState() {
     updateLedMetaStateLocked(0);
 }
 
-bool InputReader::hasKeys(int32_t deviceId, uint32_t sourceMask,
+bool InputReader::hasKeys(DeviceId deviceId, uint32_t sourceMask,
                           const std::vector<int32_t>& keyCodes, uint8_t* outFlags) {
     std::scoped_lock _l(mLock);
 
@@ -636,7 +637,7 @@ bool InputReader::hasKeys(int32_t deviceId, uint32_t sourceMask,
     return markSupportedKeyCodesLocked(deviceId, sourceMask, keyCodes, outFlags);
 }
 
-bool InputReader::markSupportedKeyCodesLocked(int32_t deviceId, uint32_t sourceMask,
+bool InputReader::markSupportedKeyCodesLocked(DeviceId deviceId, uint32_t sourceMask,
                                               const std::vector<int32_t>& keyCodes,
                                               uint8_t* outFlags) {
     bool result = false;
@@ -656,7 +657,7 @@ bool InputReader::markSupportedKeyCodesLocked(int32_t deviceId, uint32_t sourceM
     return result;
 }
 
-int32_t InputReader::getKeyCodeForKeyLocation(int32_t deviceId, int32_t locationKeyCode) const {
+int32_t InputReader::getKeyCodeForKeyLocation(DeviceId deviceId, int32_t locationKeyCode) const {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -681,7 +682,7 @@ void InputReader::requestRefreshConfiguration(ConfigurationChanges changes) {
     }
 }
 
-void InputReader::vibrate(int32_t deviceId, const VibrationSequence& sequence, ssize_t repeat,
+void InputReader::vibrate(DeviceId deviceId, const VibrationSequence& sequence, ssize_t repeat,
                           int32_t token) {
     std::scoped_lock _l(mLock);
 
@@ -691,7 +692,7 @@ void InputReader::vibrate(int32_t deviceId, const VibrationSequence& sequence, s
     }
 }
 
-void InputReader::cancelVibrate(int32_t deviceId, int32_t token) {
+void InputReader::cancelVibrate(DeviceId deviceId, int32_t token) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -700,7 +701,7 @@ void InputReader::cancelVibrate(int32_t deviceId, int32_t token) {
     }
 }
 
-bool InputReader::isVibrating(int32_t deviceId) {
+bool InputReader::isVibrating(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -710,7 +711,7 @@ bool InputReader::isVibrating(int32_t deviceId) {
     return false;
 }
 
-std::vector<int32_t> InputReader::getVibratorIds(int32_t deviceId) {
+std::vector<int32_t> InputReader::getVibratorIds(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -720,7 +721,7 @@ std::vector<int32_t> InputReader::getVibratorIds(int32_t deviceId) {
     return {};
 }
 
-void InputReader::disableSensor(int32_t deviceId, InputDeviceSensorType sensorType) {
+void InputReader::disableSensor(DeviceId deviceId, InputDeviceSensorType sensorType) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -729,7 +730,7 @@ void InputReader::disableSensor(int32_t deviceId, InputDeviceSensorType sensorTy
     }
 }
 
-bool InputReader::enableSensor(int32_t deviceId, InputDeviceSensorType sensorType,
+bool InputReader::enableSensor(DeviceId deviceId, InputDeviceSensorType sensorType,
                                std::chrono::microseconds samplingPeriod,
                                std::chrono::microseconds maxBatchReportLatency) {
     std::scoped_lock _l(mLock);
@@ -741,7 +742,7 @@ bool InputReader::enableSensor(int32_t deviceId, InputDeviceSensorType sensorTyp
     return false;
 }
 
-void InputReader::flushSensor(int32_t deviceId, InputDeviceSensorType sensorType) {
+void InputReader::flushSensor(DeviceId deviceId, InputDeviceSensorType sensorType) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -750,7 +751,7 @@ void InputReader::flushSensor(int32_t deviceId, InputDeviceSensorType sensorType
     }
 }
 
-std::optional<int32_t> InputReader::getBatteryCapacity(int32_t deviceId) {
+std::optional<int32_t> InputReader::getBatteryCapacity(DeviceId deviceId) {
     std::optional<int32_t> eventHubId;
     {
         // Do not query the battery state while holding the lock. For some peripheral devices,
@@ -773,7 +774,7 @@ std::optional<int32_t> InputReader::getBatteryCapacity(int32_t deviceId) {
     return mEventHub->getBatteryCapacity(*eventHubId, batteryIds.front());
 }
 
-std::optional<int32_t> InputReader::getBatteryStatus(int32_t deviceId) {
+std::optional<int32_t> InputReader::getBatteryStatus(DeviceId deviceId) {
     std::optional<int32_t> eventHubId;
     {
         // Do not query the battery state while holding the lock. For some peripheral devices,
@@ -796,7 +797,7 @@ std::optional<int32_t> InputReader::getBatteryStatus(int32_t deviceId) {
     return mEventHub->getBatteryStatus(*eventHubId, batteryIds.front());
 }
 
-std::optional<std::string> InputReader::getBatteryDevicePath(int32_t deviceId) {
+std::optional<std::string> InputReader::getBatteryDevicePath(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -818,7 +819,7 @@ std::optional<std::string> InputReader::getBatteryDevicePath(int32_t deviceId) {
     return batteryInfo->path;
 }
 
-std::vector<InputDeviceLightInfo> InputReader::getLights(int32_t deviceId) {
+std::vector<InputDeviceLightInfo> InputReader::getLights(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -829,7 +830,7 @@ std::vector<InputDeviceLightInfo> InputReader::getLights(int32_t deviceId) {
     return device->getDeviceInfo().getLights();
 }
 
-std::vector<InputDeviceSensorInfo> InputReader::getSensors(int32_t deviceId) {
+std::vector<InputDeviceSensorInfo> InputReader::getSensors(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -840,7 +841,7 @@ std::vector<InputDeviceSensorInfo> InputReader::getSensors(int32_t deviceId) {
     return device->getDeviceInfo().getSensors();
 }
 
-std::optional<HardwareProperties> InputReader::getTouchpadHardwareProperties(int32_t deviceId) {
+std::optional<HardwareProperties> InputReader::getTouchpadHardwareProperties(DeviceId deviceId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -852,7 +853,7 @@ std::optional<HardwareProperties> InputReader::getTouchpadHardwareProperties(int
     return device->getTouchpadHardwareProperties();
 }
 
-bool InputReader::setLightColor(int32_t deviceId, int32_t lightId, int32_t color) {
+bool InputReader::setLightColor(DeviceId deviceId, int32_t lightId, int32_t color) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -862,7 +863,7 @@ bool InputReader::setLightColor(int32_t deviceId, int32_t lightId, int32_t color
     return false;
 }
 
-bool InputReader::setLightPlayerId(int32_t deviceId, int32_t lightId, int32_t playerId) {
+bool InputReader::setLightPlayerId(DeviceId deviceId, int32_t lightId, int32_t playerId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -872,7 +873,7 @@ bool InputReader::setLightPlayerId(int32_t deviceId, int32_t lightId, int32_t pl
     return false;
 }
 
-std::optional<int32_t> InputReader::getLightColor(int32_t deviceId, int32_t lightId) {
+std::optional<int32_t> InputReader::getLightColor(DeviceId deviceId, int32_t lightId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -882,7 +883,7 @@ std::optional<int32_t> InputReader::getLightColor(int32_t deviceId, int32_t ligh
     return std::nullopt;
 }
 
-std::optional<int32_t> InputReader::getLightPlayerId(int32_t deviceId, int32_t lightId) {
+std::optional<int32_t> InputReader::getLightPlayerId(DeviceId deviceId, int32_t lightId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -892,7 +893,7 @@ std::optional<int32_t> InputReader::getLightPlayerId(int32_t deviceId, int32_t l
     return std::nullopt;
 }
 
-std::optional<std::string> InputReader::getBluetoothAddress(int32_t deviceId) const {
+std::optional<std::string> InputReader::getBluetoothAddress(DeviceId deviceId) const {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -902,7 +903,7 @@ std::optional<std::string> InputReader::getBluetoothAddress(int32_t deviceId) co
     return std::nullopt;
 }
 
-bool InputReader::canDispatchToDisplay(int32_t deviceId, ui::LogicalDisplayId displayId) {
+bool InputReader::canDispatchToDisplay(DeviceId deviceId, ui::LogicalDisplayId displayId) {
     std::scoped_lock _l(mLock);
 
     InputDevice* device = findInputDeviceLocked(deviceId);
@@ -925,7 +926,7 @@ bool InputReader::canDispatchToDisplay(int32_t deviceId, ui::LogicalDisplayId di
     return *associatedDisplayId == displayId;
 }
 
-std::filesystem::path InputReader::getSysfsRootPath(int32_t deviceId) const {
+std::filesystem::path InputReader::getSysfsRootPath(DeviceId deviceId) const {
     std::scoped_lock _l(mLock);
 
     const InputDevice* device = findInputDeviceLocked(deviceId);
@@ -951,7 +952,7 @@ void InputReader::notifyMouseCursorFadedOnTyping() {
     mPreventingTouchpadTaps = true;
 }
 
-bool InputReader::setKernelWakeEnabled(int32_t deviceId, bool enabled) {
+bool InputReader::setKernelWakeEnabled(DeviceId deviceId, bool enabled) {
     std::scoped_lock _l(mLock);
     if (!com::android::input::flags::set_input_device_kernel_wake()){
         return false;

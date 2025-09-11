@@ -64,6 +64,7 @@ public:
     bool filter_refresh_rates_within_config_group() const;
     bool frontend_caching_v0() const;
     bool graphite_renderengine_preview_rollout() const;
+    bool graphite_renderengine_desktop_rollout() const;
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
     bool offload_gpu_composition() const;
@@ -90,6 +91,7 @@ public:
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
     bool follower_arbitrary_refresh_rate_selection() const;
+    bool follower_display_backpressure() const;
     bool force_slower_follower_gpu_composition() const;
     bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;

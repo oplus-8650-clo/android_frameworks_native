@@ -21,7 +21,7 @@
 #include <android-base/result.h>
 #include <com_android_input_flags.h>
 #include <flag_macros.h>
-#include <gestures/GestureConverter.h>
+#include <gestures/UncapturedGestureConverter.h>
 #include <gtest/gtest.h>
 #include <input/InputVerifier.h>
 
@@ -57,12 +57,12 @@ using testing::ElementsAre;
 using testing::IsEmpty;
 using testing::VariantWith;
 
-class GestureConverterTest : public testing::Test {
+class UncapturedGestureConverterTest : public testing::Test {
 protected:
     static constexpr int32_t DEVICE_ID = END_RESERVED_ID + 1000;
     static constexpr int32_t EVENTHUB_ID = 1;
 
-    GestureConverterTest() {
+    UncapturedGestureConverterTest() {
         mFakeEventHub = std::make_unique<FakeEventHub>();
         mFakePolicy = sp<FakeInputReaderPolicy>::make();
         mFakeListener = std::make_unique<TestInputListener>();
@@ -95,9 +95,9 @@ protected:
     std::shared_ptr<InputDevice> mDevice;
 };
 
-TEST_F(GestureConverterTest, Move) {
+TEST_F(UncapturedGestureConverterTest, Move) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture moveGesture(kGestureMove, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, -5, 10);
@@ -126,9 +126,9 @@ TEST_F(GestureConverterTest, Move) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Move_Rotated) {
+TEST_F(UncapturedGestureConverterTest, Move_Rotated) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setOrientation(ui::ROTATION_90);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
@@ -149,9 +149,9 @@ TEST_F(GestureConverterTest, Move_Rotated) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ButtonsChange) {
+TEST_F(UncapturedGestureConverterTest, ButtonsChange) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     // Press left and right buttons at once
@@ -211,9 +211,9 @@ TEST_F(GestureConverterTest, ButtonsChange) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ButtonDownAfterMoveExitsHover) {
+TEST_F(UncapturedGestureConverterTest, ButtonDownAfterMoveExitsHover) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture moveGesture(kGestureMove, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, -5, 10);
@@ -231,9 +231,9 @@ TEST_F(GestureConverterTest, ButtonDownAfterMoveExitsHover) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT))));
 }
 
-TEST_F(GestureConverterTest, DragWithButton) {
+TEST_F(UncapturedGestureConverterTest, DragWithButton) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     // Press the button
@@ -284,10 +284,10 @@ TEST_F(GestureConverterTest, DragWithButton) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Scroll) {
+TEST_F(UncapturedGestureConverterTest, Scroll) {
     const nsecs_t downTime = 12345;
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 0, -10);
@@ -345,10 +345,10 @@ TEST_F(GestureConverterTest, Scroll) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Scroll_Rotated) {
+TEST_F(UncapturedGestureConverterTest, Scroll_Rotated) {
     const nsecs_t downTime = 12345;
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setOrientation(ui::ROTATION_90);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
@@ -401,9 +401,9 @@ TEST_F(GestureConverterTest, Scroll_Rotated) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Scroll_ClearsClassificationAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, Scroll_ClearsClassificationAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 0, -10);
@@ -425,9 +425,9 @@ TEST_F(GestureConverterTest, Scroll_ClearsClassificationAfterGesture) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Scroll_ClearsScrollDistanceAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, Scroll_ClearsScrollDistanceAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 0, -10);
@@ -450,9 +450,9 @@ TEST_F(GestureConverterTest, Scroll_ClearsScrollDistanceAfterGesture) {
     EXPECT_THAT(std::get<NotifyMotionArgs>(args.front()), WithGestureScrollDistance(0, 0, EPSILON));
 }
 
-TEST_F(GestureConverterTest, Scroll_ClearsFakeFingerPositionOnSubsequentScrollGestures) {
+TEST_F(UncapturedGestureConverterTest, Scroll_ClearsFakeFingerPositionOnSubsequentScrollGestures) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 15, -10);
@@ -487,9 +487,9 @@ TEST_F(GestureConverterTest, Scroll_ClearsFakeFingerPositionOnSubsequentScrollGe
                                           WithGestureScrollDistance(-2, -14, EPSILON)))));
 }
 
-TEST_F(GestureConverterTest, ThreeFingerSwipe_ClearsClassificationAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, ThreeFingerSwipe_ClearsClassificationAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dx=*/0,
@@ -508,9 +508,9 @@ TEST_F(GestureConverterTest, ThreeFingerSwipe_ClearsClassificationAfterGesture) 
                         WithMotionClassification(MotionClassification::NONE))));
 }
 
-TEST_F(GestureConverterTest, ThreeFingerSwipe_ClearsGestureAxesAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, ThreeFingerSwipe_ClearsGestureAxesAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dx=*/5,
@@ -531,13 +531,13 @@ TEST_F(GestureConverterTest, ThreeFingerSwipe_ClearsGestureAxesAfterGesture) {
                 AllOf(WithGestureOffset(0, 0, EPSILON), WithGestureSwipeFingerCount(0)));
 }
 
-TEST_F(GestureConverterTest, ThreeFingerSwipe_Vertical) {
+TEST_F(UncapturedGestureConverterTest, ThreeFingerSwipe_Vertical) {
     // The gestures library will "lock" a swipe into the dimension it starts in. For example, if you
     // start swiping up and then start moving left or right, it'll return gesture events with only Y
     // deltas until you lift your fingers and start swiping again. That's why each of these tests
     // only checks movement in one dimension.
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* dx= */ 0,
@@ -641,9 +641,9 @@ TEST_F(GestureConverterTest, ThreeFingerSwipe_Vertical) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ThreeFingerSwipe_Rotated) {
+TEST_F(UncapturedGestureConverterTest, ThreeFingerSwipe_Rotated) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setOrientation(ui::ROTATION_90);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
@@ -727,9 +727,9 @@ TEST_F(GestureConverterTest, ThreeFingerSwipe_Rotated) {
                 Each(VariantWith<NotifyMotionArgs>(WithDisplayId(ui::LogicalDisplayId::DEFAULT))));
 }
 
-TEST_F(GestureConverterTest, FourFingerSwipe_Horizontal) {
+TEST_F(UncapturedGestureConverterTest, FourFingerSwipe_Horizontal) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureFourFingerSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME,
@@ -853,9 +853,9 @@ TEST_F(GestureConverterTest, FourFingerSwipe_Horizontal) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, DisablingSystemGestures_IgnoresMultiFingerSwipe) {
+TEST_F(UncapturedGestureConverterTest, DisablingSystemGestures_IgnoresMultiFingerSwipe) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     std::list<NotifyArgs> args = converter.setEnableSystemGestures(ARBITRARY_TIME, false);
@@ -892,9 +892,9 @@ TEST_F(GestureConverterTest, DisablingSystemGestures_IgnoresMultiFingerSwipe) {
                         WithMotionClassification(MotionClassification::MULTI_FINGER_SWIPE))));
 }
 
-TEST_F(GestureConverterTest, DisablingSystemGestures_EndsOngoingMultiFingerSwipe) {
+TEST_F(UncapturedGestureConverterTest, DisablingSystemGestures_EndsOngoingMultiFingerSwipe) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dx=*/0,
@@ -954,9 +954,9 @@ TEST_F(GestureConverterTest, DisablingSystemGestures_EndsOngoingMultiFingerSwipe
                               WithRelativeMotion(-5, 10), WithButtonState(0)))));
 }
 
-TEST_F(GestureConverterTest, Pinch_Inwards) {
+TEST_F(UncapturedGestureConverterTest, Pinch_Inwards) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGesturePinch, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* dz= */ 1,
@@ -1021,9 +1021,9 @@ TEST_F(GestureConverterTest, Pinch_Inwards) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Pinch_Outwards) {
+TEST_F(UncapturedGestureConverterTest, Pinch_Outwards) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGesturePinch, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* dz= */ 1,
@@ -1088,9 +1088,9 @@ TEST_F(GestureConverterTest, Pinch_Outwards) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, Pinch_ClearsClassificationAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, Pinch_ClearsClassificationAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGesturePinch, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dz=*/1,
@@ -1113,9 +1113,9 @@ TEST_F(GestureConverterTest, Pinch_ClearsClassificationAfterGesture) {
                         WithMotionClassification(MotionClassification::NONE))));
 }
 
-TEST_F(GestureConverterTest, Pinch_ClearsScaleFactorAfterGesture) {
+TEST_F(UncapturedGestureConverterTest, Pinch_ClearsScaleFactorAfterGesture) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGesturePinch, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dz=*/1,
@@ -1140,9 +1140,9 @@ TEST_F(GestureConverterTest, Pinch_ClearsScaleFactorAfterGesture) {
     EXPECT_THAT(std::get<NotifyMotionArgs>(args.front()), WithGesturePinchScaleFactor(0, EPSILON));
 }
 
-TEST_F(GestureConverterTest, ResetWithButtonPressed) {
+TEST_F(UncapturedGestureConverterTest, ResetWithButtonPressed) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture downGesture(kGestureButtonsChange, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME,
@@ -1172,9 +1172,9 @@ TEST_F(GestureConverterTest, ResetWithButtonPressed) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ResetDuringScroll) {
+TEST_F(UncapturedGestureConverterTest, ResetDuringScroll) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 0, -10);
@@ -1200,9 +1200,9 @@ TEST_F(GestureConverterTest, ResetDuringScroll) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ResetDuringThreeFingerSwipe) {
+TEST_F(UncapturedGestureConverterTest, ResetDuringThreeFingerSwipe) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGestureSwipe, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dx=*/0,
@@ -1242,9 +1242,9 @@ TEST_F(GestureConverterTest, ResetDuringThreeFingerSwipe) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ResetDuringPinch) {
+TEST_F(UncapturedGestureConverterTest, ResetDuringPinch) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture startGesture(kGesturePinch, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /*dz=*/1,
@@ -1275,9 +1275,9 @@ TEST_F(GestureConverterTest, ResetDuringPinch) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, FlingTapDown) {
+TEST_F(UncapturedGestureConverterTest, FlingTapDown) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture tapDownGesture(kGestureFling, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME,
@@ -1292,9 +1292,9 @@ TEST_F(GestureConverterTest, FlingTapDown) {
                       WithDisplayId(ui::LogicalDisplayId::DEFAULT)));
 }
 
-TEST_F(GestureConverterTest, FlingTapDownAfterScrollStopsFling) {
+TEST_F(UncapturedGestureConverterTest, FlingTapDownAfterScrollStopsFling) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture scrollGesture(kGestureScroll, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, 0, -10);
@@ -1323,10 +1323,10 @@ TEST_F(GestureConverterTest, FlingTapDownAfterScrollStopsFling) {
                               WithMotionClassification(MotionClassification::TWO_FINGER_SWIPE)))));
 }
 
-TEST_F(GestureConverterTest, Tap) {
+TEST_F(UncapturedGestureConverterTest, Tap) {
     // Tap should produce button press/release events
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture flingGesture(kGestureFling, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* vx= */ 0,
@@ -1370,9 +1370,9 @@ TEST_F(GestureConverterTest, Tap) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F(GestureConverterTest, ThreeFingerTap_TriggersShortcut) {
+TEST_F(UncapturedGestureConverterTest, ThreeFingerTap_TriggersShortcut) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
     converter.setThreeFingerTapShortcutEnabled(true);
 
@@ -1391,10 +1391,10 @@ TEST_F(GestureConverterTest, ThreeFingerTap_TriggersShortcut) {
     mFakePolicy->assertTouchpadThreeFingerTapNotified();
 }
 
-TEST_F(GestureConverterTest, Click) {
+TEST_F(UncapturedGestureConverterTest, Click) {
     // Click should produce button press/release events
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture flingGesture(kGestureFling, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* vx= */ 0,
@@ -1450,7 +1450,7 @@ TEST_F(GestureConverterTest, Click) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabled,
+TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, TapWithTapToClickDisabled,
                   REQUIRES_FLAGS_DISABLED(TOUCHPAD_PALM_REJECTION_V2)) {
     nsecs_t currentTime = ARBITRARY_GESTURE_TIME;
 
@@ -1458,7 +1458,7 @@ TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabled,
     mReader->getContext()->setPreventingTouchpadTaps(true);
 
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture flingGesture(kGestureFling, currentTime, currentTime, /* vx= */ 0,
@@ -1479,7 +1479,7 @@ TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabled,
     ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
 }
 
-TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabledWithDelay,
+TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, TapWithTapToClickDisabledWithDelay,
                   REQUIRES_FLAGS_ENABLED(TOUCHPAD_PALM_REJECTION_V2)) {
     nsecs_t currentTime = ARBITRARY_GESTURE_TIME;
 
@@ -1487,7 +1487,7 @@ TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabledWithDelay,
     mReader->getContext()->setPreventingTouchpadTaps(true);
 
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture flingGesture(kGestureFling, currentTime, currentTime, /* vx= */ 0,
@@ -1563,12 +1563,12 @@ TEST_F_WITH_FLAGS(GestureConverterTest, TapWithTapToClickDisabledWithDelay,
     ASSERT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithRelativeMotion(0.f, 0.f))));
 }
 
-TEST_F(GestureConverterTest, ClickWithTapToClickDisabled) {
+TEST_F(UncapturedGestureConverterTest, ClickWithTapToClickDisabled) {
     // Click should still produce button press/release events
     mReader->getContext()->setPreventingTouchpadTaps(true);
 
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture flingGesture(kGestureFling, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, /* vx= */ 0,
@@ -1632,12 +1632,12 @@ TEST_F(GestureConverterTest, ClickWithTapToClickDisabled) {
     ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
 }
 
-TEST_F(GestureConverterTest, MoveEnablesTapToClick) {
+TEST_F(UncapturedGestureConverterTest, MoveEnablesTapToClick) {
     // initially disable tap-to-click
     mReader->getContext()->setPreventingTouchpadTaps(true);
 
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     Gesture moveGesture(kGestureMove, ARBITRARY_GESTURE_TIME, ARBITRARY_GESTURE_TIME, -5, 10);
@@ -1649,11 +1649,11 @@ TEST_F(GestureConverterTest, MoveEnablesTapToClick) {
     ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
 }
 
-TEST_F_WITH_FLAGS(GestureConverterTest, KeypressCancelsHoverMove,
+TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, KeypressCancelsHoverMove,
                   REQUIRES_FLAGS_ENABLED(TOUCHPAD_PALM_REJECTION_V2)) {
     const nsecs_t gestureStartTime = 1000;
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    GestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
 
     // Start a move gesture at gestureStartTime
@@ -1699,11 +1699,11 @@ TEST_F_WITH_FLAGS(GestureConverterTest, KeypressCancelsHoverMove,
  * particular test case), and one that ends it.
  */
 class GestureConverterConsistencyTest
-      : public GestureConverterTest,
+      : public UncapturedGestureConverterTest,
         public testing::WithParamInterface<std::tuple<Gesture, Gesture, Gesture>> {
 protected:
     GestureConverterConsistencyTest()
-          : GestureConverterTest(),
+          : UncapturedGestureConverterTest(),
             mParamStartGesture(std::get<0>(GetParam())),
             mParamContinueGesture(std::get<1>(GetParam())),
             mParamEndGesture(std::get<2>(GetParam())),
@@ -1742,7 +1742,7 @@ protected:
     Gesture mParamEndGesture;
 
     InputDeviceContext mDeviceContext;
-    GestureConverter mConverter;
+    UncapturedGestureConverter mConverter;
     std::unique_ptr<InputVerifier> mVerifier;
 };
 

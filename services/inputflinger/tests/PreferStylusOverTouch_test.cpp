@@ -19,10 +19,10 @@
 
 namespace android {
 
-constexpr int32_t TOUCH_DEVICE_ID = 3;
-constexpr int32_t SECOND_TOUCH_DEVICE_ID = 4;
-constexpr int32_t STYLUS_DEVICE_ID = 5;
-constexpr int32_t SECOND_STYLUS_DEVICE_ID = 6;
+constexpr DeviceId TOUCH_DEVICE_ID = 3;
+constexpr DeviceId SECOND_TOUCH_DEVICE_ID = 4;
+constexpr DeviceId STYLUS_DEVICE_ID = 5;
+constexpr DeviceId SECOND_STYLUS_DEVICE_ID = 6;
 
 constexpr int DOWN = AMOTION_EVENT_ACTION_DOWN;
 constexpr int MOVE = AMOTION_EVENT_ACTION_MOVE;
@@ -43,7 +43,8 @@ static NotifyMotionArgs generateMotionArgs(nsecs_t downTime, nsecs_t eventTime, 
     PointerProperties pointerProperties[pointerCount];
     PointerCoords pointerCoords[pointerCount];
 
-    const int32_t deviceId = isFromSource(source, TOUCHSCREEN) ? TOUCH_DEVICE_ID : STYLUS_DEVICE_ID;
+    const DeviceId deviceId =
+            isFromSource(source, TOUCHSCREEN) ? TOUCH_DEVICE_ID : STYLUS_DEVICE_ID;
     const ToolType toolType =
             isFromSource(source, TOUCHSCREEN) ? ToolType::FINGER : ToolType::STYLUS;
     for (size_t i = 0; i < pointerCount; i++) {

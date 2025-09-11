@@ -354,7 +354,7 @@ public:
      * Returns BAD_VALUE if seq is 0.
      * Other errors probably indicate that the channel is broken.
      */
-    status_t publishKeyEvent(uint32_t seq, int32_t eventId, int32_t deviceId, int32_t source,
+    status_t publishKeyEvent(uint32_t seq, int32_t eventId, DeviceId deviceId, int32_t source,
                              ui::LogicalDisplayId displayId, std::array<uint8_t, 32> hmac,
                              int32_t action, int32_t flags, int32_t keyCode, int32_t scanCode,
                              int32_t metaState, int32_t repeatCount, nsecs_t downTime,
@@ -369,7 +369,7 @@ public:
      * or if the verifier is enabled and the event failed verification upon publishing.
      * Other errors probably indicate that the channel is broken.
      */
-    status_t publishMotionEvent(uint32_t seq, int32_t eventId, int32_t deviceId, int32_t source,
+    status_t publishMotionEvent(uint32_t seq, int32_t eventId, DeviceId deviceId, int32_t source,
                                 ui::LogicalDisplayId displayId, std::array<uint8_t, 32> hmac,
                                 int32_t action, int32_t actionButton, int32_t flags,
                                 int32_t metaState, int32_t buttonState,

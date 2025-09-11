@@ -21,6 +21,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <input/BlockingQueue.h>
+#include <input/Input.h>
 #include <input/InputConsumerNoResampling.h>
 #include <input/InputTransport.h>
 
@@ -56,7 +57,7 @@ struct PublishMotionArgs {
     const nsecs_t downTime;
     const uint32_t seq;
     int32_t eventId;
-    const int32_t deviceId = 1;
+    const DeviceId deviceId = 1;
     const uint32_t source = AINPUT_SOURCE_TOUCHSCREEN;
     const ui::LogicalDisplayId displayId = ui::LogicalDisplayId::DEFAULT;
     const int32_t actionButton = 0;
@@ -486,7 +487,7 @@ void InputPublisherAndConsumerNoResamplingTest::publishAndConsumeKeyEvent() {
 
     const uint32_t seq = mSeq++;
     int32_t eventId = InputEvent::nextId();
-    constexpr int32_t deviceId = 1;
+    constexpr DeviceId deviceId = 1;
     constexpr uint32_t source = AINPUT_SOURCE_KEYBOARD;
     constexpr ui::LogicalDisplayId displayId = ui::LogicalDisplayId::DEFAULT;
     constexpr std::array<uint8_t, 32> hmac = {31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21,

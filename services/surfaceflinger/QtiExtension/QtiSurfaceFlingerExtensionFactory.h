@@ -9,11 +9,12 @@
 #include "QtiNullExtension.h"
 #include "QtiNullDisplaySurfaceExtension.h"
 
+class LegacyVirtualDisplaySurface;
 namespace android::surfaceflingerextension {
 
 QtiSurfaceFlingerExtensionIntf* qtiCreateSurfaceFlingerExtension(SurfaceFlinger* flinger);
 QtiDisplaySurfaceExtensionIntf* qtiCreateDisplaySurfaceExtension(bool isVirtual,
-                                                                 VirtualDisplaySurface* vds,
+                                                                 LegacyVirtualDisplaySurface* vds,
                                                                  bool secure, uint64_t sinkUsage,
                                                                  FramebufferSurface* fbs);
 

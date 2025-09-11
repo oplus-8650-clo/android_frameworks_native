@@ -20,6 +20,7 @@
 #include "InputDeviceMetricsSource.h"
 
 #include <android-base/stringprintf.h>
+#include <input/Input.h>
 #include <input/PrintTools.h>
 
 namespace android {
@@ -102,7 +103,7 @@ class : public InputDeviceMetricsLogger {
     }
 } sStatsdLogger;
 
-bool isIgnoredInputDeviceId(int32_t deviceId) {
+bool isIgnoredInputDeviceId(DeviceId deviceId) {
     switch (deviceId) {
         case INVALID_INPUT_DEVICE_ID:
         case VIRTUAL_KEYBOARD_ID:

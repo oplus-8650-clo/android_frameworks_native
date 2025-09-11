@@ -37,10 +37,6 @@ DisplayTransactionTest::DisplayTransactionTest(bool withMockScheduler) {
     mFlinger.mutableSupportsWideColor() = false;
     mFlinger.mutableDisplayColorSetting() = DisplayColorSetting::kUnmanaged;
 
-    mFlinger.setCreateBufferQueueFunction([](auto, auto, auto) {
-        ADD_FAILURE() << "Unexpected request to create a buffer queue.";
-    });
-
     mFlinger.setCreateNativeWindowSurface([](auto) {
         ADD_FAILURE() << "Unexpected request to create a native window surface.";
         return nullptr;
@@ -85,19 +81,6 @@ void DisplayTransactionTest::injectMockComposer(int virtualDisplayCount) {
     mFlinger.enableHalVirtualDisplays(true);
 
     Mock::VerifyAndClear(mComposer);
-}
-
-void DisplayTransactionTest::injectFakeBufferQueueFactory() {
-    // This setup is only expected once per test.
-    ASSERT_TRUE(mConsumer == nullptr && mProducer == nullptr);
-
-    mConsumer = sp<mock::GraphicBufferConsumer>::make();
-    mProducer = sp<mock::GraphicBufferProducer>::make();
-
-    mFlinger.setCreateBufferQueueFunction([this](auto outProducer, auto outConsumer, bool) {
-        *outProducer = mProducer;
-        *outConsumer = mConsumer;
-    });
 }
 
 void DisplayTransactionTest::injectFakeNativeWindowSurfaceFactory() {

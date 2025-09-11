@@ -667,7 +667,7 @@ cc_test {
         "libtrusty",
     ],
 
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     require_root: true,
 }
 
@@ -968,8 +968,8 @@ cc_test_host {
     static_libs: [
         "libgmock",
     ],
-    target_required: [
-        "binderHostDeviceTestService",
+    device_first_data: [
+        ":binderHostDeviceTestService",
     ],
     test_suites: ["general-tests"],
     target: {

@@ -32,6 +32,7 @@
 #include "InterfaceMocks.h"
 #include "TestConstants.h"
 #include "TestInputListener.h"
+#include "input/Input.h"
 #include "input/PropertyMap.h"
 
 namespace android {
@@ -39,7 +40,7 @@ namespace android {
 class InputMapperUnitTest : public testing::Test {
 protected:
     static constexpr RawDeviceId EVENTHUB_ID = 1;
-    static constexpr int32_t DEVICE_ID = END_RESERVED_ID + 1000;
+    static constexpr DeviceId DEVICE_ID = END_RESERVED_ID + 1000;
     virtual void SetUp() override { SetUp(/*bus=*/0, /*isExternal=*/false); }
     virtual void SetUp(int bus, bool isExternal);
 
@@ -79,7 +80,7 @@ class InputMapperTest : public testing::Test {
 protected:
     static const char* DEVICE_NAME;
     static const char* DEVICE_LOCATION;
-    static constexpr int32_t DEVICE_ID = END_RESERVED_ID + 1000;
+    static constexpr DeviceId DEVICE_ID = END_RESERVED_ID + 1000;
     static constexpr int32_t DEVICE_GENERATION = 2;
     static constexpr int32_t DEVICE_CONTROLLER_NUMBER = 0;
     static const ftl::Flags<InputDeviceClass> DEVICE_CLASSES;

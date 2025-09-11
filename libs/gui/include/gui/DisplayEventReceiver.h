@@ -211,6 +211,7 @@ private:
     sp<IDisplayEventConnection> mEventConnection;
     std::unique_ptr<gui::BitTube> mDataChannel;
     std::optional<status_t> mInitError;
+    bool mSurfaceflingerAlive;
 };
 
 inline bool operator==(DisplayEventReceiver::Event::FrameRateOverride lhs,

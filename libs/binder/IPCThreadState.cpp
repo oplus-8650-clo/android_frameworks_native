@@ -686,9 +686,15 @@ status_t IPCThreadState::flushCommands() {
     return NO_ERROR;
 }
 
-bool IPCThreadState::flushIfNeeded()
-{
+bool IPCThreadState::flushIfNeeded() {
+    return flushIfNeeded(nullptr);
+}
+
+bool IPCThreadState::flushIfNeeded(status_t* outRes) {
     if (mIsLooper || mServingStackPointer != nullptr || mIsFlushing) {
+        if (outRes != nullptr) {
+            *outRes = OK;
+        }
         return false;
     }
     mIsFlushing = true;
@@ -696,7 +702,10 @@ bool IPCThreadState::flushIfNeeded()
     // there's no guarantee that this thread will call back into the kernel driver any time
     // soon. Therefore, flush pending commands such as BC_FREE_BUFFER, to prevent them from getting
     // stuck in this thread's out buffer.
-    flushCommands();
+    status_t res = flushCommands();
+    if (outRes != nullptr) {
+        *outRes = res;
+    }
     mIsFlushing = false;
     return true;
 }
@@ -1073,7 +1082,11 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
         }
         return NO_ERROR;
     } else if (freezeUseFlushIfNeeded()) {
-        flushIfNeeded();
+        status_t res;
+        if (flushIfNeeded(&res) && res != OK) {
+            LOG_ALWAYS_FATAL("flushIfNeeded failed. %s(%d): %s", __func__, handle,
+                             statusToString(res).c_str());
+        }
     } else if (status_t res = flushCommands(); res != OK) {
         LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
     }
@@ -1081,8 +1094,7 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
     return NO_ERROR;
 }
 
-status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy,
-                                                         bool flush) {
+status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy) {
     static bool isSupported =
             ProcessState::isDriverFeatureEnabled(ProcessState::DriverFeature::FREEZE_NOTIFICATION);
     if (!isSupported) {
@@ -1100,11 +1112,13 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
         }
         return NO_ERROR;
     } else if (freezeUseFlushIfNeeded()) {
-        flushIfNeeded();
-    } else if (flush) {
-        if (status_t res = flushCommands(); res != OK) {
-            LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
+        status_t res;
+        if (flushIfNeeded(&res) && res != OK) {
+            LOG_ALWAYS_FATAL("flushIfNeeded failed. %s(%d): %s", __func__, handle,
+                             statusToString(res).c_str());
         }
+    } else if (status_t res = flushCommands(); res != OK) {
+        LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
     }
 
     return NO_ERROR;

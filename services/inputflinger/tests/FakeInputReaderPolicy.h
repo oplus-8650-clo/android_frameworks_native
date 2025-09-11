@@ -28,6 +28,7 @@
 #include <android/os/PointerCaptureMode.h>
 
 #include "input/DisplayViewport.h"
+#include "input/Input.h"
 #include "input/InputDevice.h"
 
 namespace android {
@@ -45,7 +46,7 @@ public:
 
     void assertInputDevicesChanged();
     void assertInputDevicesNotChanged();
-    void assertStylusGestureNotified(int32_t deviceId);
+    void assertStylusGestureNotified(DeviceId deviceId);
     void assertStylusGestureNotNotified();
     void assertTouchpadHardwareStateNotified();
     void assertTouchpadThreeFingerTapNotified();
@@ -67,8 +68,8 @@ public:
                                       const KeyboardLayoutInfo& layoutInfo);
     void addVirtualDevice(const std::string& inputPort);
     void removeVirtualDevice(const std::string& inputPort);
-    void addDisabledDevice(int32_t deviceId);
-    void removeDisabledDevice(int32_t deviceId);
+    void addDisabledDevice(DeviceId deviceId);
+    void removeDisabledDevice(DeviceId deviceId);
     const InputReaderConfiguration& getReaderConfiguration() const;
     const std::vector<InputDeviceInfo> getInputDevices() const;
     TouchAffineTransformation getTouchAffineTransformation(const std::string& inputDeviceDescriptor,
@@ -89,15 +90,15 @@ private:
     void getReaderConfiguration(InputReaderConfiguration* outConfig) override;
     void notifyInputDevicesChanged(const std::vector<InputDeviceInfo>& inputDevices) override;
     void notifyTouchpadHardwareState(const SelfContainedHardwareState& schs,
-                                     int32_t deviceId) override;
-    void notifyTouchpadGestureInfo(GestureType type, int32_t deviceId) override;
+                                     DeviceId deviceId) override;
+    void notifyTouchpadGestureInfo(GestureType type, DeviceId deviceId) override;
     void notifyTouchpadThreeFingerTap() override;
     std::shared_ptr<KeyCharacterMap> getKeyboardLayoutOverlay(
             const InputDeviceIdentifier&, const std::optional<KeyboardLayoutInfo>) override;
     std::string getDeviceAlias(const InputDeviceIdentifier&) override;
     void waitForInputDevices(std::function<void(bool)> processDevicesChanged,
                              std::chrono::milliseconds timeout);
-    void notifyStylusGestureStarted(int32_t deviceId, nsecs_t eventTime) override;
+    void notifyStylusGestureStarted(DeviceId deviceId, nsecs_t eventTime) override;
 
     mutable std::mutex mLock;
     std::condition_variable mDevicesChangedCondition;

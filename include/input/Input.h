@@ -1301,8 +1301,9 @@ public:
 enum class PointerCaptureMode : int32_t {
     UNCAPTURED = static_cast<int32_t>(::android::os::PointerCaptureMode::UNCAPTURED),
     ABSOLUTE = static_cast<int32_t>(::android::os::PointerCaptureMode::ABSOLUTE),
+    RELATIVE = static_cast<int32_t>(::android::os::PointerCaptureMode::RELATIVE),
     ftl_first = UNCAPTURED,
-    ftl_last = ABSOLUTE,
+    ftl_last = RELATIVE,
 };
 
 /*

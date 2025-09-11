@@ -51,7 +51,7 @@ struct TracedKeyEvent {
     int32_t id;
     nsecs_t eventTime;
     uint32_t policyFlags;
-    int32_t deviceId;
+    DeviceId deviceId;
     uint32_t source;
     ui::LogicalDisplayId displayId = ui::LogicalDisplayId::INVALID;
     int32_t action;
@@ -71,7 +71,7 @@ struct TracedMotionEvent {
     int32_t id;
     nsecs_t eventTime;
     uint32_t policyFlags;
-    int32_t deviceId;
+    DeviceId deviceId;
     uint32_t source;
     ui::LogicalDisplayId displayId = ui::LogicalDisplayId::INVALID;
     int32_t action;

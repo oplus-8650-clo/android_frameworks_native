@@ -1757,6 +1757,9 @@ private:
     std::future<void> offloadGpuCompositedDisplays(
             compositionengine::CompositionRefreshArgs offloadedRefreshArgs,
             std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers);
+    void prepareLayersForComposition(compositionengine::CompositionRefreshArgs& refreshArgs,
+                                     bool kCursorOnly,
+                                     const std::vector<std::pair<Layer*, LayerFE*>>& layers);
     // TODO(b/431836223): Workaround to capture traces to disk and recover gracefully by forcing CE
     //  to rebuild layer stack instead of crashing.
     void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);

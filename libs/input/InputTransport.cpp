@@ -25,6 +25,7 @@
 #include <utils/Trace.h>
 
 #include <com_android_input_flags.h>
+#include <input/Input.h>
 #include <input/InputTransport.h>
 #include <input/PrintTools.h>
 #include <input/TraceTools.h>
@@ -541,7 +542,7 @@ InputPublisher::InputPublisher(const std::shared_ptr<InputChannel>& channel)
 InputPublisher::~InputPublisher() {
 }
 
-status_t InputPublisher::publishKeyEvent(uint32_t seq, int32_t eventId, int32_t deviceId,
+status_t InputPublisher::publishKeyEvent(uint32_t seq, int32_t eventId, DeviceId deviceId,
                                          int32_t source, ui::LogicalDisplayId displayId,
                                          std::array<uint8_t, 32> hmac, int32_t action,
                                          int32_t flags, int32_t keyCode, int32_t scanCode,
@@ -584,7 +585,7 @@ status_t InputPublisher::publishKeyEvent(uint32_t seq, int32_t eventId, int32_t 
 }
 
 status_t InputPublisher::publishMotionEvent(
-        uint32_t seq, int32_t eventId, int32_t deviceId, int32_t source,
+        uint32_t seq, int32_t eventId, DeviceId deviceId, int32_t source,
         ui::LogicalDisplayId displayId, std::array<uint8_t, 32> hmac, int32_t action,
         int32_t actionButton, int32_t flags, int32_t metaState, int32_t buttonState,
         MotionClassification classification, const ui::Transform& transform, float xPrecision,

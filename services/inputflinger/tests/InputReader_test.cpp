@@ -1024,7 +1024,7 @@ TEST_F(InputReaderTest, DeviceReset_GenerateIdWithInputReaderSource) {
 }
 
 TEST_F(InputReaderTest, Device_CanDispatchToDisplay) {
-    constexpr int32_t deviceId = END_RESERVED_ID + 1000;
+    constexpr DeviceId deviceId = END_RESERVED_ID + 1000;
     constexpr ftl::Flags<InputDeviceClass> deviceClass = InputDeviceClass::KEYBOARD;
     constexpr int32_t eventHubId = 1;
     const char* DEVICE_LOCATION = "USB1";
@@ -1482,6 +1482,9 @@ protected:
     constexpr static auto EVENT_HAPPENED_TIMEOUT = 2000ms;
     constexpr static auto EVENT_DID_NOT_HAPPEN_TIMEOUT = 30ms;
 
+    const std::string UNIQUE_ID = "local:0";
+    const std::string INPUT_PORT = "uinput/input0";
+
     void SetUp() override {
 #if !defined(__ANDROID__)
         GTEST_SKIP();
@@ -1699,8 +1702,6 @@ TEST_F(InputReaderIntegrationTest, SendsGearDownAndUpToInputListener) {
 
 class BaseTouchIntegrationTest : public InputReaderIntegrationTest {
 protected:
-    const std::string UNIQUE_ID = "local:0";
-
     void SetUp() override {
 #if !defined(__ANDROID__)
         GTEST_SKIP();
@@ -1749,7 +1750,6 @@ class TouchIntegrationTest : public BaseTouchIntegrationTest,
                              public testing::WithParamInterface<TouchIntegrationTestDisplays> {
 protected:
     static constexpr std::optional<uint8_t> DISPLAY_PORT = 0;
-    const std::string INPUT_PORT = "uinput_touch/input0";
 
     void SetUp() override {
 #if !defined(__ANDROID__)
@@ -2625,13 +2625,68 @@ TEST_F(ExternalStylusIntegrationTest, UnfusedExternalStylus) {
     ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyKeyWasNotCalled());
 }
 
+// --- TouchNavigationIntegrationTest ---
+
+// Verify the behavior of a touch navigation touchpad.
+using TouchNavigationIntegrationTest = InputReaderIntegrationTest;
+
+TEST_F(TouchNavigationIntegrationTest, DoesNotRequireAssociatedDisplay) {
+    // There are no configured displays.
+    mFakePolicy->addDeviceTypeAssociation(INPUT_PORT, "touchNavigation");
+    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DEVICE_TYPE);
+
+    auto device = createUinputDevice<UinputTouchScreen>(Rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
+                                                        INPUT_PORT);
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+    const auto info = waitForDevice(device->getName());
+    ASSERT_TRUE(info.has_value());
+    ASSERT_TRUE(isFromSource(info->getSources(),
+                             AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD));
+
+    device->sendTrackingId(FIRST_TRACKING_ID);
+    device->sendDown(Point(1, 1));
+    device->sendSync();
+    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyMotionWasCalled(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
+                  WithDisplayId(ui::LogicalDisplayId::INVALID),
+                  WithSource(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD))));
+}
+
+TEST_F(TouchNavigationIntegrationTest, DisplayAssociationChange) {
+    // There are initially no configured displays.
+    mFakePolicy->addDeviceTypeAssociation(INPUT_PORT, "touchNavigation");
+    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DEVICE_TYPE);
+
+    auto device = createUinputDevice<UinputTouchScreen>(Rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
+                                                        INPUT_PORT);
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+    const auto info = waitForDevice(device->getName());
+    ASSERT_TRUE(info.has_value());
+
+    // Add a display association.
+    DisplayViewport viewport =
+            createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
+                           /*isActive=*/true, UNIQUE_ID, NO_PORT, ViewportType::INTERNAL);
+    mFakePolicy->addDisplayViewport(viewport);
+    mFakePolicy->addInputUniqueIdAssociation(INPUT_PORT, UNIQUE_ID);
+    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DISPLAY_INFO);
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+
+    device->sendTrackingId(FIRST_TRACKING_ID);
+    device->sendDown(Point(1, 1));
+    device->sendSync();
+    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyMotionWasCalled(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN), WithDisplayId(DISPLAY_ID),
+                  WithSource(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD))));
+}
+
 // --- InputDeviceTest ---
 class InputDeviceTest : public testing::Test {
 protected:
     static const char* DEVICE_NAME;
     static const char* DEVICE_DESCRIPTOR;
     static const char* DEVICE_LOCATION;
-    static const int32_t DEVICE_ID;
+    static const DeviceId DEVICE_ID;
     static const int32_t DEVICE_GENERATION;
     static const int32_t DEVICE_CONTROLLER_NUMBER;
     static const ftl::Flags<InputDeviceClass> DEVICE_CLASSES;
@@ -2671,7 +2726,7 @@ protected:
 const char* InputDeviceTest::DEVICE_NAME = "device";
 const char* InputDeviceTest::DEVICE_DESCRIPTOR = "device_descriptor";
 const char* InputDeviceTest::DEVICE_LOCATION = "USB1";
-const int32_t InputDeviceTest::DEVICE_ID = END_RESERVED_ID + 1000;
+const DeviceId InputDeviceTest::DEVICE_ID = END_RESERVED_ID + 1000;
 const int32_t InputDeviceTest::DEVICE_GENERATION = 2;
 const int32_t InputDeviceTest::DEVICE_CONTROLLER_NUMBER = 0;
 const ftl::Flags<InputDeviceClass> InputDeviceTest::DEVICE_CLASSES =
@@ -5183,6 +5238,42 @@ TEST_F(SingleTouchInputMapperTest, WhenDeviceTypeIsChangedToTouchNavigation_upda
 
     // Check whether device type update was successful.
     ASSERT_EQ(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD, mDevice->getSources());
+}
+
+TEST_F(SingleTouchInputMapperTest,
+       WhenDeviceTypeIsChangedToTouchNavigation_displayViewportIsNotRequired) {
+    // Initialize the device without setting device source to touch navigation and without a
+    // display.
+    addConfigurationProperty("touch.deviceType", "touchScreen");
+    prepareButtons();
+    prepareAxes(POSITION);
+    SingleTouchInputMapper& mapper = constructAndAddMapper<SingleTouchInputMapper>();
+
+    // Ensure that the device is created as a touchscreen, not touch navigation.
+    ASSERT_EQ(AINPUT_SOURCE_TOUCHSCREEN, mapper.getSources());
+
+    // Add device type association after the device was created.
+    mFakePolicy->addDeviceTypeAssociation(DEVICE_LOCATION, "touchNavigation");
+
+    // Send update to the mapper.
+    std::list<NotifyArgs> unused2 =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               InputReaderConfiguration::Change::DEVICE_TYPE);
+
+    // Check whether device type update was successful.
+    ASSERT_EQ(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD, mDevice->getSources());
+
+    const int32_t x = 900;
+    const int32_t y = 75;
+    std::list<NotifyArgs> args;
+    args += processDown(mapper, x, y);
+    args += processSync(mapper);
+
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
+                              WithCoords(x - RAW_X_MIN, y - RAW_Y_MIN),
+                              WithDisplayId(ui::LogicalDisplayId::INVALID)))));
 }
 
 TEST_F(SingleTouchInputMapperTest, HoverEventsOutsidePhysicalFrameAreIgnored) {

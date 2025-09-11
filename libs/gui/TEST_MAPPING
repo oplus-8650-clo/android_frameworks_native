@@ -15,7 +15,7 @@
       "path": "frameworks/base/tests/ChoreographerTests"
     }
   ],
-  "presubmit": [
+  "wm": [
     {
       "name": "libgui_test",
       "options": [
