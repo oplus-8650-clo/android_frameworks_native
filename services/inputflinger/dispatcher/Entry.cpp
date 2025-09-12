@@ -24,6 +24,7 @@
 #include <android-base/stringprintf.h>
 #include <cutils/atomic.h>
 #include <ftl/enum.h>
+#include <input/Input.h>
 #include <inttypes.h>
 
 using android::base::StringPrintf;
@@ -70,7 +71,7 @@ EventEntry::EventEntry(int32_t id, Type type, nsecs_t eventTime, uint32_t policy
 
 // --- DeviceResetEntry ---
 
-DeviceResetEntry::DeviceResetEntry(int32_t id, nsecs_t eventTime, int32_t deviceId)
+DeviceResetEntry::DeviceResetEntry(int32_t id, nsecs_t eventTime, DeviceId deviceId)
       : EventEntry(id, Type::DEVICE_RESET, eventTime, 0), deviceId(deviceId) {}
 
 std::string DeviceResetEntry::getDescription() const {
@@ -123,7 +124,7 @@ std::string DragEntry::getDescription() const {
 // --- KeyEntry ---
 
 KeyEntry::KeyEntry(int32_t id, std::shared_ptr<InjectionState> injectionState, nsecs_t eventTime,
-                   int32_t deviceId, uint32_t source, ui::LogicalDisplayId displayId,
+                   DeviceId deviceId, uint32_t source, ui::LogicalDisplayId displayId,
                    uint32_t policyFlags, int32_t action, int32_t flags, int32_t keyCode,
                    int32_t scanCode, int32_t metaState, int32_t repeatCount, nsecs_t downTime)
       : EventEntry(id, Type::KEY, eventTime, policyFlags),
@@ -177,7 +178,7 @@ std::string TouchModeEntry::getDescription() const {
 // --- MotionEntry ---
 
 MotionEntry::MotionEntry(int32_t id, std::shared_ptr<InjectionState> injectionState,
-                         nsecs_t eventTime, int32_t deviceId, uint32_t source,
+                         nsecs_t eventTime, DeviceId deviceId, uint32_t source,
                          ui::LogicalDisplayId displayId, uint32_t policyFlags, int32_t action,
                          int32_t actionButton, ftl::Flags<MotionFlag> flags, int32_t metaState,
                          int32_t buttonState, MotionClassification classification, float xPrecision,
@@ -238,7 +239,7 @@ std::ostream& operator<<(std::ostream& out, const MotionEntry& motionEntry) {
 
 // --- SensorEntry ---
 
-SensorEntry::SensorEntry(int32_t id, nsecs_t eventTime, int32_t deviceId, uint32_t source,
+SensorEntry::SensorEntry(int32_t id, nsecs_t eventTime, DeviceId deviceId, uint32_t source,
                          uint32_t policyFlags, nsecs_t hwTimestamp,
                          InputDeviceSensorType sensorType, InputDeviceSensorAccuracy accuracy,
                          bool accuracyChanged, std::vector<float> values)

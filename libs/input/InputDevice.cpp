@@ -25,6 +25,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <ftl/enum.h>
+#include <input/Input.h>
 #include <input/InputDevice.h>
 #include <input/InputEventLabels.h>
 
@@ -242,7 +243,7 @@ InputDeviceInfo& InputDeviceInfo::operator=(const InputDeviceInfo& other) {
 InputDeviceInfo::~InputDeviceInfo() {
 }
 
-void InputDeviceInfo::initialize(int32_t id, int32_t generation, int32_t controllerNumber,
+void InputDeviceInfo::initialize(DeviceId id, int32_t generation, int32_t controllerNumber,
                                  const InputDeviceIdentifier& identifier, const std::string& alias,
                                  bool isExternal, bool isVirtualDevice, bool hasMic,
                                  ui::LogicalDisplayId associatedDisplayId,

@@ -32,6 +32,7 @@
 #include <ui/GraphicBuffer.h>
 #include <utils/Errors.h>
 
+#include <sys/types.h>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
@@ -39,7 +40,7 @@
 
 #include "mock/DisplayHardware/MockHWComposer.h"
 
-#include "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.h"
+#include "DisplayHardware/VirtualDisplay/VirtualDisplaySurface.h"
 
 using namespace std::literals::chrono_literals;
 using namespace testing;
@@ -83,7 +84,7 @@ private:
     std::vector<BufferItem> mItems;
 };
 
-class VirtualDisplaySurface2Test : public Test {
+class VirtualDisplaySurfaceTest : public Test {
 public:
     void SetUp() override {
         std::tie(mSinkConsumer, mSinkSurface) =
@@ -94,9 +95,8 @@ public:
     void SetUpForGpu() {
         ASSERT_TRUE(std::holds_alternative<GpuVirtualDisplayId>(mDisplayId))
                 << "mDisplayId should be member-initialized to GPU";
-        mVirtualDisplay =
-                sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId, "GpuTestVirtualDisplay", kUid,
-                                                 mSinkSurface);
+        mVirtualDisplay = sp<VirtualDisplaySurface>::make(mHwc, mDisplayId, "GpuTestVirtualDisplay",
+                                                          kUid, mSinkSurface);
 
         mRenderSurface = mVirtualDisplay->getCompositionSurface();
         mRenderSurfaceListener = sp<StubSurfaceListener>::make();
@@ -105,10 +105,8 @@ public:
 
     void SetUpForHwc() {
         mDisplayId = HalVirtualDisplayId(55555);
-        mVirtualDisplay =
-                sp<VirtualDisplaySurface2>::make(mHwc, mDisplayId, "HwcTestVirtualDisplay", kUid,
-                                                 mSinkSurface);
-
+        mVirtualDisplay = sp<VirtualDisplaySurface>::make(mHwc, mDisplayId, "HwcTestVirtualDisplay",
+                                                          kUid, mSinkSurface);
         mRenderSurface = mVirtualDisplay->getCompositionSurface();
         mRenderSurfaceListener = sp<StubSurfaceListener>::make();
         ASSERT_EQ(NO_ERROR, mRenderSurface->connect(NATIVE_WINDOW_API_CPU, mRenderSurfaceListener));
@@ -135,12 +133,12 @@ protected:
     sp<Surface> mSinkSurface;
 
     VirtualDisplayIdVariant mDisplayId = GpuVirtualDisplayId(11111);
-    sp<VirtualDisplaySurface2> mVirtualDisplay;
+    sp<VirtualDisplaySurface> mVirtualDisplay;
     sp<Surface> mRenderSurface;
     sp<SurfaceListener> mRenderSurfaceListener;
 };
 
-TEST_F(VirtualDisplaySurface2Test, Gpu_Composition) {
+TEST_F(VirtualDisplaySurfaceTest, Gpu_Composition) {
     SetUpForGpu();
 
     sp<HoldingFrameAvailableListener> sinkListener =
@@ -149,7 +147,7 @@ TEST_F(VirtualDisplaySurface2Test, Gpu_Composition) {
 
     for (size_t i = 0; i < kNumFramesForTest; ++i) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Gpu));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Gpu));
 
         DoFakeGpuRender();
 
@@ -161,7 +159,7 @@ TEST_F(VirtualDisplaySurface2Test, Gpu_Composition) {
     }
 }
 
-TEST_F(VirtualDisplaySurface2Test, Hwc_Composition) {
+TEST_F(VirtualDisplaySurfaceTest, Hwc_Composition) {
     SetUpForHwc();
 
     HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
@@ -180,7 +178,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_Composition) {
         mSinkConsumer->setFrameAvailableListener(sinkListener);
 
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Hwc));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Hwc));
 
         EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
         mVirtualDisplay->onFrameCommitted();
@@ -190,7 +188,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_Composition) {
     }
 }
 
-TEST_F(VirtualDisplaySurface2Test, Mixed_Composition) {
+TEST_F(VirtualDisplaySurfaceTest, Mixed_Composition) {
     SetUpForHwc();
 
     HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
@@ -212,8 +210,7 @@ TEST_F(VirtualDisplaySurface2Test, Mixed_Composition) {
 
     for (size_t i = 0; i < kNumFramesForTest; ++i) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK,
-                  mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Mixed));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Mixed));
 
         DoFakeGpuRender();
 
@@ -225,7 +222,7 @@ TEST_F(VirtualDisplaySurface2Test, Mixed_Composition) {
     }
 }
 
-TEST_F(VirtualDisplaySurface2Test, Hwc_BufferDetails) {
+TEST_F(VirtualDisplaySurfaceTest, Hwc_BufferDetails) {
     SetUpForHwc();
 
     HalVirtualDisplayId virtualDisplayId = std::get<HalVirtualDisplayId>(mDisplayId);
@@ -239,7 +236,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_BufferDetails) {
     mSinkConsumer->setFrameAvailableListener(sinkListener);
 
     EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-    EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Hwc));
+    EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Hwc));
 
     DoFakeGpuRender();
 
@@ -254,7 +251,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_BufferDetails) {
     EXPECT_TRUE(buffer->usage & (GRALLOC_USAGE_HW_COMPOSER));
 }
 
-TEST_F(VirtualDisplaySurface2Test, Gpu_BufferReuse) {
+TEST_F(VirtualDisplaySurfaceTest, Gpu_BufferReuse) {
     SetUpForGpu();
 
     sp<HoldingFrameAvailableListener> sinkListener =
@@ -266,7 +263,7 @@ TEST_F(VirtualDisplaySurface2Test, Gpu_BufferReuse) {
 
     for (size_t i = 0; i < kNumFramesForTest; ++i) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Gpu));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Gpu));
 
         uint64_t renderBufferId;
         DoFakeGpuRender(&renderBufferId);
@@ -288,7 +285,7 @@ TEST_F(VirtualDisplaySurface2Test, Gpu_BufferReuse) {
     EXPECT_EQ(sinkBufferIds, renderBufferIds);
 }
 
-TEST_F(VirtualDisplaySurface2Test, Hwc_BufferReuse) {
+TEST_F(VirtualDisplaySurfaceTest, Hwc_BufferReuse) {
     SetUpForHwc();
 
     sp<HoldingFrameAvailableListener> sinkListener =
@@ -313,7 +310,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_BufferReuse) {
 
     for (size_t i = 0; i < kNumFramesForTest; ++i) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Hwc));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Hwc));
 
         EXPECT_EQ(OK, mVirtualDisplay->advanceFrame(1.0f));
         mVirtualDisplay->onFrameCommitted();
@@ -331,7 +328,7 @@ TEST_F(VirtualDisplaySurface2Test, Hwc_BufferReuse) {
     EXPECT_EQ(sinkBufferIds, setOutputBuffers);
 }
 
-TEST_F(VirtualDisplaySurface2Test, Mixed_BufferReuse) {
+TEST_F(VirtualDisplaySurfaceTest, Mixed_BufferReuse) {
     SetUpForHwc();
 
     sp<HoldingFrameAvailableListener> sinkListener =
@@ -360,8 +357,7 @@ TEST_F(VirtualDisplaySurface2Test, Mixed_BufferReuse) {
 
     for (size_t i = 0; i < kNumFramesForTest; ++i) {
         EXPECT_EQ(OK, mVirtualDisplay->beginFrame(/*mustRecompose*/ true));
-        EXPECT_EQ(OK,
-                  mVirtualDisplay->prepareFrame(VirtualDisplaySurface2::CompositionType::Mixed));
+        EXPECT_EQ(OK, mVirtualDisplay->prepareFrame(VirtualDisplaySurface::CompositionType::Mixed));
 
         uint64_t renderBufferId;
         DoFakeGpuRender(&renderBufferId);

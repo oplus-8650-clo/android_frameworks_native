@@ -202,7 +202,7 @@ inline WithDisplayIdMatcher WithDisplayId(ui::LogicalDisplayId displayId) {
 class WithDeviceIdMatcher {
 public:
     using is_gtest_matcher = void;
-    explicit WithDeviceIdMatcher(int32_t deviceId) : mDeviceId(deviceId) {}
+    explicit WithDeviceIdMatcher(DeviceId deviceId) : mDeviceId(deviceId) {}
 
     bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream*) const {
         return mDeviceId == args.deviceId;
@@ -225,10 +225,10 @@ public:
     void DescribeNegationTo(std::ostream* os) const { *os << "wrong device id"; }
 
 private:
-    const int32_t mDeviceId;
+    const DeviceId mDeviceId;
 };
 
-inline WithDeviceIdMatcher WithDeviceId(int32_t deviceId) {
+inline WithDeviceIdMatcher WithDeviceId(DeviceId deviceId) {
     return WithDeviceIdMatcher(deviceId);
 }
 

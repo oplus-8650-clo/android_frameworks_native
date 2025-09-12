@@ -50,12 +50,12 @@ class InputMapper;
 /* Represents the state of a single input device. */
 class InputDevice {
 public:
-    InputDevice(InputReaderContext* context, int32_t id, int32_t generation,
+    InputDevice(InputReaderContext* context, DeviceId id, int32_t generation,
                 const InputDeviceIdentifier& identifier);
     virtual ~InputDevice();
 
     inline InputReaderContext* getContext() { return mContext; }
-    inline int32_t getId() const { return mId; }
+    inline DeviceId getId() const { return mId; }
     inline int32_t getControllerNumber() const { return mControllerNumber; }
     inline virtual int32_t getGeneration() const { return mGeneration; }
     inline const std::string getName() const { return mIdentifier.name; }
@@ -194,7 +194,7 @@ public:
 
 private:
     InputReaderContext* mContext;
-    int32_t mId;
+    DeviceId mId;
     int32_t mGeneration;
     int32_t mControllerNumber;
     InputDeviceIdentifier mIdentifier;
@@ -307,7 +307,7 @@ public:
     virtual ~InputDeviceContext();
 
     inline InputReaderContext* getContext() { return mContext; }
-    inline int32_t getId() { return mDeviceId; }
+    inline DeviceId getId() { return mDeviceId; }
     inline RawDeviceId getEventHubId() { return mId; }
 
     inline ftl::Flags<InputDeviceClass> getDeviceClasses() const {
@@ -498,7 +498,7 @@ private:
     InputReaderContext* mContext;
     EventHubInterface* mEventHub;
     RawDeviceId mId;
-    int32_t mDeviceId;
+    DeviceId mDeviceId;
 };
 
 } // namespace android

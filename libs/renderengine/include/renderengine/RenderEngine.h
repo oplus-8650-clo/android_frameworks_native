@@ -47,6 +47,14 @@
     "debug.renderengine.graphite_preview_optin"
 
 /**
+ * Allows opting desktop devices into a rollout of RenderEngine on Graphite.
+ *
+ * Only applicable within SurfaceFlinger, and if relevant aconfig flags are enabled.
+ */
+#define PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_DESKTOP_OPTIN \
+    "debug.renderengine.graphite_desktop_optin"
+
+/**
  * Turns on recording of skia commands in SkiaGL version of the RE. This property
  * defines number of milliseconds for the recording to take place. A non zero value
  * turns on the recording.

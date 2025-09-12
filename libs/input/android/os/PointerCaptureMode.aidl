@@ -30,6 +30,11 @@ enum PointerCaptureMode {
      * Mice still report relative movements.
      */
     ABSOLUTE = 1,
+    /**
+     * The pointer is captured in relative mode, in which touchpads report relative movements, just
+     * like mice.
+     */
+    RELATIVE = 2,
 
     // When adding new modes:
     // * use consecutive integer values

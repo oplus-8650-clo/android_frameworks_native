@@ -180,8 +180,7 @@ public:
     LIBBINDER_EXPORTED status_t requestDeathNotification(int32_t handle, BpBinder* proxy);
     LIBBINDER_EXPORTED status_t clearDeathNotification(int32_t handle, BpBinder* proxy);
     [[nodiscard]] status_t addFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
-    [[nodiscard]] status_t removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy,
-                                                           bool flush);
+    [[nodiscard]] status_t removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
 
     // Call this to disable switching threads to background scheduling when
     // receiving incoming IPC calls.  This is specifically here for the
@@ -229,6 +228,7 @@ private:
 
     void processPendingDerefs();
     void processPostWriteDerefs();
+    [[nodiscard]] bool flushIfNeeded(status_t* res);
 
     void clearCaller();
 

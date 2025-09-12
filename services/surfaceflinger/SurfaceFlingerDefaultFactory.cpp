@@ -76,12 +76,6 @@ sp<GraphicBuffer> DefaultFactory::createGraphicBuffer(uint32_t width, uint32_t h
     return sp<GraphicBuffer>::make(width, height, format, layerCount, usage, requestorName);
 }
 
-void DefaultFactory::createBufferQueue(sp<IGraphicBufferProducer>* outProducer,
-                                       sp<IGraphicBufferConsumer>* outConsumer,
-                                       bool consumerIsSurfaceFlinger) {
-    BufferQueue::createBufferQueue(outProducer, outConsumer, consumerIsSurfaceFlinger);
-}
-
 std::unique_ptr<surfaceflinger::NativeWindowSurface> DefaultFactory::createNativeWindowSurface(
         const sp<IGraphicBufferProducer>& producer) {
     return surfaceflinger::impl::createNativeWindowSurface(producer);

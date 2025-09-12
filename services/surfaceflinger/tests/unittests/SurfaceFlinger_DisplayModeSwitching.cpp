@@ -118,12 +118,9 @@ class DisplayModeSwitchingTest : public DisplayTransactionTest,
 
 public:
     void SetUp() override {
-        injectFakeBufferQueueFactory();
         injectFakeNativeWindowSurfaceFactory();
 
         PrimaryDisplayVariant::setupHwcHotplugCallExpectations(this);
-        PrimaryDisplayVariant::setupFramebufferConsumerBufferQueueCallExpectations(this);
-        PrimaryDisplayVariant::setupFramebufferProducerBufferQueueCallExpectations(this);
         PrimaryDisplayVariant::setupNativeWindowSurfaceCreationCallExpectations(this);
         PrimaryDisplayVariant::setupHwcGetActiveConfigCallExpectations(this);
 
@@ -429,11 +426,6 @@ TEST_P(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
     EXPECT_CALL(*mAppEventThread, onHotplugReceived(mDisplayId, true));
 
     // Override expectations set up by PrimaryDisplayVariant.
-    EXPECT_CALL(*mConsumer,
-                setDefaultBufferSize(static_cast<uint32_t>(mock::kResolution4K.getWidth()),
-                                     static_cast<uint32_t>(mock::kResolution4K.getHeight())))
-            .WillOnce(Return(NO_ERROR));
-    EXPECT_CALL(*mConsumer, consumerConnect(_, false)).WillOnce(Return(NO_ERROR));
     EXPECT_CALL(*mComposer, setClientTargetSlotCount(_)).WillOnce(Return(hal::Error::NONE));
 
     // Create a new native surface to be used by the recreated display.

@@ -36,7 +36,7 @@ use ffi::{
 use std::fmt::{self, Debug, Formatter};
 use std::mem::{forget, ManuallyDrop};
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
-use std::ptr::{self, null, null_mut, NonNull};
+use std::ptr::{self, null_mut, NonNull};
 use std::{ffi::c_void, rc::Rc};
 
 /// Wrapper around a C `AHardwareBuffer_Desc`.
@@ -297,7 +297,7 @@ impl HardwareBuffer {
         rect: Option<&ARect>,
     ) -> Result<HardwareBufferGuard<'a>, StatusCode> {
         let fence = if let Some(fence) = fence { fence.as_raw_fd() } else { -1 };
-        let rect = rect.map(ptr::from_ref).unwrap_or(null());
+        let rect = rect.map(ptr::from_ref).unwrap_or_default();
         let mut address = null_mut();
         // SAFETY: The `AHardwareBuffer` pointer we wrap is always valid, and the buffer address out
         // pointer is valid because it comes from a reference. Our caller promises that writes have
@@ -335,7 +335,7 @@ impl HardwareBuffer {
         rect: Option<&ARect>,
     ) -> Result<Vec<PlaneGuard<'a>>, StatusCode> {
         let fence = if let Some(fence) = fence { fence.as_raw_fd() } else { -1 };
-        let rect = rect.map(ptr::from_ref).unwrap_or(null());
+        let rect = rect.map(ptr::from_ref).unwrap_or_default();
         let mut planes = AHardwareBuffer_Planes {
             planeCount: 0,
             planes: [const { AHardwareBuffer_Plane { data: null_mut(), pixelStride: 0, rowStride: 0 } };
@@ -391,7 +391,7 @@ impl HardwareBuffer {
         rect: Option<&ARect>,
     ) -> Result<LockedBufferInfo<'a>, StatusCode> {
         let fence = if let Some(fence) = fence { fence.as_raw_fd() } else { -1 };
-        let rect = rect.map(ptr::from_ref).unwrap_or(null());
+        let rect = rect.map(ptr::from_ref).unwrap_or_default();
         let mut address = null_mut();
         let mut bytes_per_pixel = 0;
         let mut stride = 0;

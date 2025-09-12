@@ -6,13 +6,14 @@
 #include "QtiDisplaySurfaceExtensionIntf.h"
 
 namespace android {
+class LegacyVirtualDisplaySurface;
 
 namespace surfaceflingerextension {
 
 class QtiVirtualDisplaySurfaceExtension : public QtiDisplaySurfaceExtensionIntf {
 public:
     QtiVirtualDisplaySurfaceExtension() {}
-    QtiVirtualDisplaySurfaceExtension(VirtualDisplaySurface* vds, bool secure, uint64_t sinkUsage);
+    QtiVirtualDisplaySurfaceExtension(LegacyVirtualDisplaySurface* vds, bool secure, uint64_t sinkUsage);
     ~QtiVirtualDisplaySurfaceExtension() = default;
 
     int getClientTargetCurrentSlot() override;
@@ -24,7 +25,7 @@ public:
     uint64_t qtiExcludeVideoFromScratchBuffer(std::string source, uint64_t usage) override;
 
 private:
-    VirtualDisplaySurface* mQtiVDS = nullptr;
+    LegacyVirtualDisplaySurface* mQtiVDS = nullptr;
 
     bool mQtiSecure = false;
     uint64_t mQtiSinkUsage = 0;

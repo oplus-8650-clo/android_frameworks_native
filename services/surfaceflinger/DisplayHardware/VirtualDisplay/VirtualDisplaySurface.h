@@ -84,12 +84,12 @@ class Surface;
  * We try to reuse buffers dequeued from the Sink BQ as often as possible to avoid having to send
  * new buffers over IPC to the application too frequently.
  */
-class VirtualDisplaySurface2 : public compositionengine::DisplaySurface {
+class VirtualDisplaySurface : public compositionengine::DisplaySurface {
 public:
-    VirtualDisplaySurface2(HWComposer& hwComposer, VirtualDisplayIdVariant displayId,
-                           const std::string& name, uid_t creatorUid,
-                           const sp<Surface>& sinkSurface);
-    virtual ~VirtualDisplaySurface2() override;
+    VirtualDisplaySurface(HWComposer& hwComposer, VirtualDisplayIdVariant displayId,
+                          const std::string& name, uid_t creatorUid,
+                          const sp<Surface>& sinkSurface);
+    virtual ~VirtualDisplaySurface() override;
 
     void onFirstRef() override;
 

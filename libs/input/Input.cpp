@@ -402,7 +402,7 @@ std::optional<int> KeyEvent::getKeyCodeFromLabel(const char* label) {
     return InputEventLookup::getKeyCodeByLabel(label);
 }
 
-void KeyEvent::initialize(int32_t id, int32_t deviceId, uint32_t source,
+void KeyEvent::initialize(int32_t id, DeviceId deviceId, uint32_t source,
                           ui::LogicalDisplayId displayId, std::array<uint8_t, 32> hmac,
                           int32_t action, int32_t flags, int32_t keyCode, int32_t scanCode,
                           int32_t metaState, int32_t repeatCount, nsecs_t downTime,
@@ -581,7 +581,7 @@ bool PointerCoords::operator==(const PointerCoords& other) const {
 
 // --- MotionEvent ---
 
-void MotionEvent::initialize(int32_t id, int32_t deviceId, uint32_t source,
+void MotionEvent::initialize(int32_t id, DeviceId deviceId, uint32_t source,
                              ui::LogicalDisplayId displayId, std::array<uint8_t, 32> hmac,
                              int32_t action, int32_t actionButton, ftl::Flags<MotionFlag> flags,
                              int32_t edgeFlags, int32_t metaState, int32_t buttonState,

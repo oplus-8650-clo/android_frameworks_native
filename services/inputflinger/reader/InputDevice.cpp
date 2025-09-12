@@ -40,7 +40,7 @@
 
 namespace android {
 
-InputDevice::InputDevice(InputReaderContext* context, int32_t id, int32_t generation,
+InputDevice::InputDevice(InputReaderContext* context, DeviceId id, int32_t generation,
                          const InputDeviceIdentifier& identifier)
       : mContext(context),
         mId(id),

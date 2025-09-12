@@ -50,7 +50,7 @@ struct CancelationOptions {
     std::optional<int32_t> keyCode = std::nullopt;
 
     // The specific device id of events to cancel, or nullopt to cancel events from any device.
-    std::optional<int32_t> deviceId = std::nullopt;
+    std::optional<DeviceId> deviceId = std::nullopt;
 
     // The specific display id of events to cancel, or nullopt to cancel events on any display.
     std::optional<ui::LogicalDisplayId> displayId = std::nullopt;
@@ -68,7 +68,7 @@ struct CancelationOptions {
                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode), reason(reason), windowHandle(windowHandle), traceTracker(traceTracker) {}
     explicit CancelationOptions(Mode mode, const char* reason,
-                                const sp<gui::WindowInfoHandle>& windowHandle, int32_t deviceId,
+                                const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode),
             reason(reason),
@@ -76,7 +76,7 @@ struct CancelationOptions {
             deviceId(deviceId),
             traceTracker(traceTracker) {}
     explicit CancelationOptions(Mode mode, const char* reason,
-                                const sp<gui::WindowInfoHandle>& windowHandle, int32_t deviceId,
+                                const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
                                 ui::LogicalDisplayId displayId,
                                 std::bitset<MAX_POINTER_ID + 1> pointerIds,
                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)

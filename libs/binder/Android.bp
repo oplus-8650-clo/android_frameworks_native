@@ -248,7 +248,6 @@ cc_defaults {
 
     defaults: [
         "libbinder_defer_bc_request_freeze_notification_flag_default",
-        "libbinder_no_flush_on_last_ref_flag_default",
     ],
 
     srcs: [
@@ -560,14 +559,6 @@ cc_defaults {
     name: "libbinder_defer_bc_request_freeze_notification_flag_default",
     cflags: select(release_flag("RELEASE_LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"), {
         true: ["-DLIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION"],
-        default: [],
-    }),
-}
-
-cc_defaults {
-    name: "libbinder_no_flush_on_last_ref_flag_default",
-    cflags: select(release_flag("RELEASE_LIBBINDER_NO_FLUSH_ON_LAST_REF"), {
-        true: ["-DLIBBINDER_NO_FLUSH_ON_LAST_REF"],
         default: [],
     }),
 }

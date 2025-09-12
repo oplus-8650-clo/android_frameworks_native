@@ -5,13 +5,14 @@
 #include "QtiVirtualDisplaySurfaceExtension.h"
 #include "QtiFramebufferSurfaceExtension.h"
 #include "QtiNullDisplaySurfaceExtension.h"
+#include "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.h"
 
 #include <android-base/properties.h>
 #include <log/log.h>
 
 namespace android::surfaceflingerextension {
 
-QtiVirtualDisplaySurfaceExtension::QtiVirtualDisplaySurfaceExtension(VirtualDisplaySurface* vds,
+QtiVirtualDisplaySurfaceExtension::QtiVirtualDisplaySurfaceExtension(LegacyVirtualDisplaySurface* vds,
                                                                      bool secure,
                                                                      uint64_t sinkUsage)
       : mQtiVDS(vds) {

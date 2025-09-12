@@ -66,13 +66,14 @@ filegroup {
         "mapper/accumulator/MultiTouchMotionAccumulator.cpp",
         "mapper/accumulator/SingleTouchMotionAccumulator.cpp",
         "mapper/accumulator/TouchButtonAccumulator.cpp",
-        "mapper/gestures/GestureConverter.cpp",
         "mapper/gestures/GesturesLogcatAdapter.cpp",
         "mapper/gestures/HardwareProperties.cpp",
         "mapper/gestures/HardwareStateConverter.cpp",
         "mapper/gestures/Logging.cpp",
         "mapper/gestures/PropertyProvider.cpp",
+        "mapper/gestures/RelativeModeGestureConverter.cpp",
         "mapper/gestures/TimerProvider.cpp",
+        "mapper/gestures/UncapturedGestureConverter.cpp",
     ],
 }
 
