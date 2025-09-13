@@ -54,6 +54,7 @@
 #include <utils/String8.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <future>
@@ -2936,5 +2937,179 @@ TEST_F(SurfaceTest, DisconnectWhileDequeued_ReconnectDoesNotAffectLeakedBuffers)
 
     ASSERT_EQ(OK, anw->cancelBuffer(anw, bufferA, fenceA));
     ASSERT_EQ(nullptr, wpBufferA.promote());
+}
+
+// TEST_F(SurfaceTest, DiscardDetach_DoesNotDeadlock) {
+//     constexpr size_t kLotsOfBuffers = 512;
+//     auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+//     consumer->setName(String8("DetachDeadlockTest"));
+
+//     sp<SurfaceListener> surfaceListener = sp<StubSurfaceListener>::make();
+//     ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, surfaceListener));
+
+//     //
+//     // Set up a large number of buffers to increase the likelihood that a deadlock might get caught:
+//     //
+//     ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(kLotsOfBuffers));
+
+//     std::vector<std::tuple<sp<GraphicBuffer>, sp<Fence>>> buffers(kLotsOfBuffers);
+//     for (size_t i = 0; i < kLotsOfBuffers; i++) {
+//         auto& [buffer, fence] = buffers[i];
+//         ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+//     }
+
+//     BufferItem item;
+//     for (auto& [buffer, fence] : buffers) {
+//         ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+//         ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+//         ASSERT_EQ(OK, consumer->releaseBuffer(item));
+//     }
+
+//     //
+//     // Do work in two threads simultaneously (as simultaneously as humanly possible). The cv helps
+//     // thread us not get caught in synchronous thread creation.
+//     //
+//     std::condition_variable cv;
+//     auto surfaceThread = std::jthread([&] {
+//         std::mutex m;
+//         std::unique_lock l(m);
+//         cv.wait(l);
+//         sp<GraphicBuffer> buffer;
+//         sp<Fence> fence;
+//         status_t ret = surface->detachNextBuffer(&buffer, &fence);
+//         ASSERT_TRUE(ret == OK || ret == NO_MEMORY);
+//     });
+//     auto consumerThread = std::jthread([&] {
+//         std::mutex m;
+//         std::unique_lock l(m);
+//         cv.wait(l);
+//         ASSERT_EQ(OK, consumer->discardFreeBuffers());
+//     });
+
+//     std::this_thread::sleep_for(2s);
+//     cv.notify_all();
+// }
+
+// TEST_F(SurfaceTest, DisconnectDetach_DoesNotDeadlock) {
+//     constexpr size_t kLotsOfBuffers = 512;
+//     auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+//     consumer->setName(String8("DisconnectDeadlockTest"));
+
+//     sp<SurfaceListener> surfaceListener = sp<StubSurfaceListener>::make();
+//     ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, surfaceListener));
+
+//     //
+//     // Set up a large number of buffers to increase the likelihood that a deadlock might get caught:
+//     //
+//     ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(kLotsOfBuffers));
+
+//     std::vector<std::tuple<sp<GraphicBuffer>, sp<Fence>>> buffers(kLotsOfBuffers);
+//     for (size_t i = 0; i < kLotsOfBuffers; i++) {
+//         auto& [buffer, fence] = buffers[i];
+//         ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+//     }
+
+//     BufferItem item;
+//     for (auto& [buffer, fence] : buffers) {
+//         ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+//         ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+//         ASSERT_EQ(OK, consumer->releaseBuffer(item));
+//     }
+
+//     //
+//     // Do work in two threads simultaneously (as simultaneously as humanly possible). The cv helps
+//     // thread us not get caught in synchronous thread creation.
+//     //
+//     std::condition_variable cv;
+//     auto surfaceThread = std::jthread([&] {
+//         std::mutex m;
+//         std::unique_lock l(m);
+//         cv.wait(l);
+//         sp<GraphicBuffer> buffer;
+//         sp<Fence> fence;
+//         ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+//     });
+//     auto consumerThread = std::jthread([&] {
+//         std::mutex m;
+//         std::unique_lock l(m);
+//         cv.wait(l);
+//         ASSERT_EQ(OK, consumer->discardFreeBuffers());
+//     });
+
+//     // Give some time for the threads to be ready.
+//     std::this_thread::sleep_for(2s);
+//     cv.notify_all();
+// }
+
+TEST_F(SurfaceTest, DisconnectWithBadApi) {
+    const android_dataspace kDataspace = HAL_DATASPACE_V0_SRGB_LINEAR;
+    const int kFormat = PIXEL_FORMAT_RGB_565;
+
+    // This test ensures that the internal surface state isn't disrupted in the weird case that the
+    // wrong api is set--the underlying IGBP will still be connected with no state changes within
+    // itself.
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    ANativeWindow* anw = static_cast<ANativeWindow*>(surface.get());
+
+    consumer->setName(String8("DisconnectWithBadApi"));
+
+    struct NotifyingListener : public StubSurfaceListener {
+        virtual bool needsReleaseNotify() override { return true; }
+        virtual void onBufferReleased() override { mReleasedCount++; }
+
+        uint32_t mReleasedCount = 0;
+    };
+
+    sp<NotifyingListener> surfaceListener = sp<NotifyingListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, surfaceListener));
+
+    //
+    // Prepare two buffers, one we'll acquire and one we won't.
+    //
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    //
+    // Set some values that should be cleared by a correct disconnect
+    //
+    ASSERT_EQ(NO_ERROR, native_window_set_buffers_data_space(anw, kDataspace));
+    ASSERT_EQ(NO_ERROR, native_window_set_buffers_format(anw, kFormat));
+
+    //
+    // This disconnect will fail, leaving everything the same and functional.
+    //
+    ASSERT_EQ(BAD_VALUE, surface->disconnect(NATIVE_WINDOW_API_CAMERA));
+
+    int value;
+    ASSERT_EQ(NO_ERROR, anw->query(anw, NATIVE_WINDOW_DATASPACE, &value));
+    EXPECT_EQ(kDataspace, value);
+    ASSERT_EQ(NO_ERROR, anw->query(anw, NATIVE_WINDOW_FORMAT, &value));
+    EXPECT_EQ(kFormat, value);
+
+    BufferItem item;
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+
+    ASSERT_EQ(1u, surfaceListener->mReleasedCount);
+
+    //
+    // This disconnect will succeed, cleaning up the state.
+    //
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+    ASSERT_EQ(NO_ERROR, anw->query(anw, NATIVE_WINDOW_DATASPACE, &value));
+    EXPECT_NE(kDataspace, value);
+    ASSERT_EQ(NO_ERROR, anw->query(anw, NATIVE_WINDOW_FORMAT, &value));
+    EXPECT_NE(kFormat, value);
+
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(IGraphicBufferConsumer::STALE_BUFFER_SLOT, consumer->releaseBuffer(item));
+    ASSERT_EQ(1u, surfaceListener->mReleasedCount);
 }
 } // namespace android

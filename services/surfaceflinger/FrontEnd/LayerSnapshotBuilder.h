@@ -124,9 +124,9 @@ private:
     static gui::CornerRadii getClippedClientRadii(const gui::CornerRadii& requestedRadii,
                                                   const FloatRect& layerCropRect,
                                                   const FloatRect& layerBounds);
-    static bool doesChildOverlapParentCornerRegion(const FloatRect& childCropRect,
-                                                   const FloatRect& parentCropRect,
-                                                   const gui::CornerRadii& parentRadii);
+    static bool childOverlapsParentCornerRegion(const FloatRect& childCropRect,
+                                                const FloatRect& parentCropRect,
+                                                const gui::CornerRadii& parentRadii);
     static void updateBoundsForEdgeExtension(LayerSnapshot& snapshot);
     void updateLayerBounds(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                            const LayerSnapshot& parentSnapshot, uint32_t displayRotationFlags);

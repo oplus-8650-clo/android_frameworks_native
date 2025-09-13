@@ -65,15 +65,9 @@ private:
             nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
             std::vector<FrameRateOverride> overrides,
             std::vector<SupportedRefreshRate> supportedRefreshRates) = 0;
-    virtual void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
-                                     nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
-                                     nsecs_t presentationDeadline) = 0;
     // AChoreographer-specific hook for processing null-events so that looper
     // can be properly poked.
     virtual void dispatchNullEvent(nsecs_t timestamp, PhysicalDisplayId displayId) = 0;
-
-    virtual void dispatchFrameRateOverrides(nsecs_t timestamp, PhysicalDisplayId displayId,
-                                            std::vector<FrameRateOverride> overrides) = 0;
 
     virtual void dispatchHdcpLevelsChanged(PhysicalDisplayId displayId, int32_t connectedLevel,
                                            int32_t maxLevel) = 0;

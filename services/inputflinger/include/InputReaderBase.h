@@ -367,6 +367,8 @@ public:
 
     /* Get the Bluetooth address of an input device, if known. */
     virtual std::optional<std::string> getBluetoothAddress(DeviceId deviceId) const = 0;
+    /* Get the physical location path ("phys" ID) for an input device, if it is available. */
+    virtual std::optional<std::string> getPhysicalLocationPath(DeviceId deviceId) const = 0;
 
     /* Gets the sysfs root path for this device. Returns an empty path if there is none. */
     virtual std::filesystem::path getSysfsRootPath(DeviceId deviceId) const = 0;

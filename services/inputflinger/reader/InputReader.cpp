@@ -903,6 +903,16 @@ std::optional<std::string> InputReader::getBluetoothAddress(DeviceId deviceId) c
     return std::nullopt;
 }
 
+std::optional<std::string> InputReader::getPhysicalLocationPath(DeviceId deviceId) const {
+    std::scoped_lock _l(mLock);
+
+    InputDevice* device = findInputDeviceLocked(deviceId);
+    if (device) {
+        return device->getLocation();
+    }
+    return std::nullopt;
+}
+
 bool InputReader::canDispatchToDisplay(DeviceId deviceId, ui::LogicalDisplayId displayId) {
     std::scoped_lock _l(mLock);
 

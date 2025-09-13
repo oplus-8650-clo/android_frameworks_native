@@ -321,6 +321,7 @@ SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
                                    BlurAlgorithm blurAlgorithm)
       : RenderEngine(threaded),
         mRuntimeEffectManager(RuntimeEffectManager(blurAlgorithm)),
+        mBoxShadowUtils(mRuntimeEffectManager),
         mDefaultPixelFormat(pixelFormat) {
     // Note: do not introduce further switching on flags here, or within individual blur filters.
     // BlurAlgorithm should be the only determining factor.
@@ -365,8 +366,6 @@ void SkiaRenderEngine::finishRenderingAndAbandonContexts() {
     if (mBlurFilter) {
         delete mBlurFilter;
     }
-
-    mBoxShadowUtils.cleanup();
 
     // Leftover textures may hold refs to backend-specific Skia contexts, which must be released
     // before ~SkiaGpuContext is called.
@@ -472,8 +471,6 @@ void SkiaRenderEngine::ensureContextsCreated() {
     }
 
     std::tie(mContext, mProtectedContext) = createContexts();
-
-    mBoxShadowUtils.init(getActiveContext());
 }
 
 void SkiaRenderEngine::mapExternalTextureBuffer(const sp<GraphicBuffer>& buffer,
@@ -1076,6 +1073,20 @@ void SkiaRenderEngine::drawLayersInternal(
                     originalBounds.isRect() && !originalClip.isEmpty() ? originalClip
                                                                        : originalBounds;
 
+            if (!layer.boxShadowSettings.boxShadows.empty()) {
+                LOG_ALWAYS_FATAL_IF(layer.disableBlending,
+                                    "Cannot disableBlending with a box shadow");
+
+                float cornerRadius =
+                        roundf(preferredOriginalBounds.radii(SkRRect::kUpperLeft_Corner).fX);
+                const bool opaqueContent =
+                        (!layer.source.buffer.buffer || layer.source.buffer.isOpaque) &&
+                        layer.alpha == 1.0f;
+                mBoxShadowUtils.drawBoxShadows(canvas, preferredOriginalBounds.rect(), cornerRadius,
+                                               layer.boxShadowSettings,
+                                               opaqueContent && supportsForwardPixelKill());
+            }
+
             // Similar to shadows, do the rendering before the clip is applied because even when the
             // layer is occluded it should have an outline.
             if (layer.borderSettings.strokeWidth > 0) {
@@ -1092,18 +1103,6 @@ void SkiaRenderEngine::drawLayersInternal(
                 paint.setColor(layer.borderSettings.color);
                 paint.setStyle(SkPaint::kFill_Style);
                 canvas->drawDRRect(outlineRect, preferredOriginalBounds, paint);
-            }
-
-            if (!layer.boxShadowSettings.boxShadows.empty()) {
-                SFTRACE_NAME("BoxShadows");
-                LOG_ALWAYS_FATAL_IF(layer.disableBlending,
-                                    "Cannot disableBlending with a box shadow");
-
-                float cornerRadius =
-                        roundf(preferredOriginalBounds.radii(SkRRect::kUpperLeft_Corner).fX);
-
-                mBoxShadowUtils.drawBoxShadows(canvas, preferredOriginalBounds.rect(), cornerRadius,
-                                               layer.boxShadowSettings, supportsForwardPixelKill());
             }
         }
 

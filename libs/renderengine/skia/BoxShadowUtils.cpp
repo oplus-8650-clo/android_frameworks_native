@@ -1,183 +1,122 @@
-
 #include "BoxShadowUtils.h"
 
 #include <common/trace.h>
-#include <include/core/SkBlurTypes.h>
-#include <include/core/SkCanvas.h>
-#include <include/core/SkColor.h>
-#include <include/core/SkColorFilter.h>
-#include <include/core/SkImage.h>
-#include <include/core/SkImageInfo.h>
-#include <include/core/SkMaskFilter.h>
-#include <include/core/SkPaint.h>
-#include <include/core/SkRRect.h>
-#include <include/core/SkRect.h>
-#include <include/core/SkShader.h>
-#include <include/core/SkSurface.h>
-#include <include/core/SkVertices.h>
-#include <ui/BlurRegion.h>
 
 namespace android::renderengine::skia {
 
-namespace {
+const SkString kEffectSource_BoxShadowEffect(R"(
+uniform vec4  u_rectBounds;     // l, t, r, b
+uniform float u_cornerRadius;
 
-const float kSigmaFactor = 3.0;
-const float kSin45Deg = 0.7071067811f;
+uniform vec4  u_keyShadowColor;
+uniform vec2  u_keyOffset;
+uniform float u_keyBlurRadius;
+uniform float u_keySpreadRadius;
 
-sk_sp<SkImage> makeBlurredRRect(SkiaGpuContext* context, float sigma, float cornerRadius) {
-    float kernelRadius = kSigmaFactor * sigma;
-    float size = kernelRadius + cornerRadius + cornerRadius + kernelRadius;
+uniform vec4  u_ambientShadowColor;
+uniform vec2  u_ambientOffset;
+uniform float u_ambientBlurRadius;
+uniform float u_ambientSpreadRadius;
 
-    SkRect rrectBounds = SkRect::MakeXYWH(kernelRadius, kernelRadius, size - 2 * kernelRadius,
-                                          size - 2 * kernelRadius);
-    SkRRect rrectToBlur = SkRRect::MakeRectXY(rrectBounds, cornerRadius, cornerRadius);
-
-    SkImageInfo info = SkImageInfo::Make(size, size, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-
-    sk_sp<SkSurface> surface = context->createRenderTarget(info);
-    LOG_ALWAYS_FATAL_IF(surface == nullptr,
-                        "Failed to create render target for box shadow texture!");
-
-    SkCanvas* canvas = surface->getCanvas();
-    canvas->clear(SK_ColorTRANSPARENT);
-
-    SkPaint blurPaint;
-    blurPaint.setAntiAlias(true);
-    blurPaint.setColor(SK_ColorWHITE);
-    blurPaint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, sigma));
-
-    canvas->drawRRect(rrectToBlur, blurPaint);
-    return surface->makeImageSnapshot()->withDefaultMipmaps();
+float sdRoundRect(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
-void drawNineSlice(SkCanvas* canvas, const sk_sp<SkShader> shader, const SkRect& dest,
-                   const SkColor& color, float cornerScale) {
-    int kVertexCount = 16;
-    // 8 quads * 6 indices per quad
-    int kImageIndexCount = 8 * 6;
-
-    SkVertices::Builder builder(SkVertices::kTriangles_VertexMode, kVertexCount, kImageIndexCount,
-                                SkVertices::kHasTexCoords_BuilderFlag);
-
-    SkImage* image = shader->isAImage(nullptr, (SkTileMode*)nullptr);
-    float s = static_cast<float>(image->width());
-
-    // Corner source size.
-    float c = s / 2.0f;
-
-    // Clamp corner dest size to prevent corners from overlapping.
-    float dstCornerSize = c * cornerScale;
-    float xc = std::min(dstCornerSize, 0.5f * (dest.fRight - dest.fLeft));
-    float yc = std::min(dstCornerSize, 0.5f * (dest.fBottom - dest.fTop));
-
-    // Dest coordinates
-    float dx[] = {dest.fLeft, dest.fLeft + xc, dest.fRight - xc, dest.fRight};
-    float dy[] = {dest.fTop, dest.fTop + yc, dest.fBottom - yc, dest.fBottom};
-
-    // Source coordinates adjusted to take into account dest center tile expansion.
-    float sx[] = {0.0f, c, c, s};
-    float sy[] = {0.0f, c, c, s};
-
-    SkPoint* posPtr = builder.positions();
-    SkPoint* texPtr = builder.texCoords();
-
-    // Populate the 16 vertices
-    for (int j = 0; j < 4; ++j) {
-        for (int i = 0; i < 4; ++i) {
-            int v_idx = j * 4 + i;
-            posPtr[v_idx] = {dx[i], dy[j]};
-            texPtr[v_idx] = {sx[i], sy[j]};
-        }
-    }
-
-    uint16_t* indicesPtr = builder.indices();
-    int indicesOffset = 0;
-
-    // Add indices for the 8 image patches
-    for (int j = 0; j < 3; ++j) {
-        for (int i = 0; i < 3; ++i) {
-            if (i == 1 && j == 1) continue; // skip center
-
-            uint16_t v00 = j * 4 + i;
-            uint16_t v01 = j * 4 + (i + 1);
-            uint16_t v10 = (j + 1) * 4 + i;
-            uint16_t v11 = (j + 1) * 4 + (i + 1);
-
-            indicesPtr[indicesOffset + 0] = v00;
-            indicesPtr[indicesOffset + 1] = v01;
-            indicesPtr[indicesOffset + 2] = v10;
-
-            indicesPtr[indicesOffset + 3] = v01;
-            indicesPtr[indicesOffset + 4] = v11;
-            indicesPtr[indicesOffset + 5] = v10;
-            indicesOffset += 6;
-        }
-    }
-
-    sk_sp<SkVertices> skirtVerts = builder.detach();
-
-    SkPaint skirtPaint;
-    skirtPaint.setColorFilter(SkColorFilters::Blend(color, SkBlendMode::kSrcIn));
-    skirtPaint.setShader(shader);
-    skirtPaint.setAntiAlias(false);
-    canvas->drawVertices(skirtVerts, /*ignored*/ SkBlendMode::kSrcOver, skirtPaint);
+// Accurate approximation of erf
+// This can be further approximated and probably
+// nooone would notice the reduced visual quality.
+float erf(float x) {
+    return sign(x)*sqrt(1.0-exp2(-1.78776*x*x));
 }
 
-} // namespace
-
-void BoxShadowUtils::init(SkiaGpuContext* context) {
-    int memorySize = 0;
-    for (int i = 0; i < kSupportedBlurRadius.size(); i++) {
-        float blurRadius = kSupportedBlurRadius[i];
-        float sigma = convertBlurUserRadiusToSigma(blurRadius);
-        sk_sp<SkImage> image = makeBlurredRRect(context, sigma, kDefaultCornerRadius);
-        SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kLinear);
-        mBlurImages[i] = image->makeShader(sampling);
-
-        memorySize += image->width() * image->height() * 4;
-    }
-
-    ALOGI("[BoxShadowUtils] Shadow memory size: %d MB", memorySize / (1024 * 1024));
+// Gaussian blur in 1D looks good enough.
+float shadow(float x, float blurRadius)
+{
+    float sigma = 0.57735 * blurRadius + 0.5;
+    return 0.5*(1.0 - erf(x/(sigma*1.414213)));
 }
 
-void BoxShadowUtils::cleanup() {
-    for (int i = 0; i < kSupportedBlurRadius.size(); i++) {
-        mBlurImages[i] = nullptr;
-    }
+half4 main(vec2 fragCoord) {
+    vec2 rectSize = u_rectBounds.zw - u_rectBounds.xy;
+    vec2 halfDims = rectSize * 0.5;
+    vec2 rectCenter = u_rectBounds.xy + halfDims;
+
+    // Ambient Shadow Calculation
+    vec2 ambientHalfDims = halfDims + u_ambientSpreadRadius;
+    vec2 ambientP = fragCoord - rectCenter - u_ambientOffset;
+    float ambientDist = sdRoundRect(ambientP, ambientHalfDims, u_cornerRadius + u_ambientSpreadRadius);
+    float ambientIntensity = shadow(ambientDist, u_ambientBlurRadius);
+    vec4 ambientColor = u_ambientShadowColor * ambientIntensity;
+
+    // Key Shadow Calculation
+    vec2 keyHalfDims = halfDims + u_keySpreadRadius;
+    vec2 keyP = fragCoord - rectCenter - u_keyOffset;
+    float keyDist = sdRoundRect(keyP, keyHalfDims, u_cornerRadius + u_keySpreadRadius);
+    float keyIntensity = shadow(keyDist, u_keyBlurRadius);
+    vec4 keyColor = u_keyShadowColor * keyIntensity;
+
+    // Blend the two shadow colors (standard src-over)
+    return keyColor + ambientColor * (1.0 - keyColor.a);
 }
+)");
+
+BoxShadowUtils::BoxShadowUtils(RuntimeEffectManager& manager) : mManager(manager) {}
 
 void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
                                     const android::gui::BoxShadowSettings& settings,
                                     bool shouldDrawFpkRect) {
-    for (const gui::BoxShadowSettings::BoxShadowParams& box : settings.boxShadows) {
-        SkRect boxRect = rect;
-        boxRect.outset(box.spreadRadius, box.spreadRadius);
-        boxRect.offset(box.offsetX, box.offsetY);
+    SFTRACE_CALL();
 
-        float desiredCornerRadius = std::max(4.0f, cornerRadius + box.spreadRadius);
-        float cornerScale = desiredCornerRadius / kDefaultCornerRadius;
-
-        float optimalBlurRadius = kDefaultCornerRadius * (box.blurRadius / desiredCornerRadius);
-
-        int blurRadiusIndex = 0;
-        float minError = std::abs(optimalBlurRadius - kSupportedBlurRadius[0]);
-        for (int i = 1; i < kSupportedBlurRadius.size(); i++) {
-            float err = std::abs(optimalBlurRadius - kSupportedBlurRadius[i]);
-            if (err <= minError) {
-                blurRadiusIndex = i;
-                minError = err;
-            }
-        }
-
-        float effectiveBlurRadius = kSupportedBlurRadius[blurRadiusIndex];
-        float sigma = convertBlurUserRadiusToSigma(effectiveBlurRadius);
-
-        float kernelRadius = sigma * kSigmaFactor * cornerScale;
-        boxRect.outset(kernelRadius, kernelRadius);
-
-        sk_sp<SkShader> shader = mBlurImages[blurRadiusIndex];
-        drawNineSlice(canvas, shader, boxRect, box.color, cornerScale);
+    if (settings.boxShadows.size() == 0) {
+        return;
     }
+
+    sk_sp<SkRuntimeEffect> effect = mManager.mKnownEffects[kBoxShadowEffect];
+
+    android::gui::BoxShadowSettings::BoxShadowParams keyParams = settings.boxShadows[0];
+    android::gui::BoxShadowSettings::BoxShadowParams ambientParams;
+    if (settings.boxShadows.size() > 1) {
+        ambientParams = settings.boxShadows[1];
+    }
+
+    // Calculate the total bounding box needed to draw both shadows.
+    SkRect keyShadowRect = rect.makeOutset(keyParams.spreadRadius, keyParams.spreadRadius)
+                                   .makeOffset(keyParams.offsetX, keyParams.offsetY);
+
+    float keyOutset = convertBlurUserRadiusToSigma(keyParams.blurRadius) * 3.0f;
+    SkRect keyDrawRect = keyShadowRect.makeOutset(keyOutset, keyOutset);
+
+    SkRect ambientShadowRect =
+            rect.makeOutset(ambientParams.spreadRadius, ambientParams.spreadRadius)
+                    .makeOffset(ambientParams.offsetX, ambientParams.offsetY);
+    float ambientOutset = convertBlurUserRadiusToSigma(ambientParams.blurRadius) * 3.0f;
+    SkRect ambientDrawRect = ambientShadowRect.makeOutset(ambientOutset, ambientOutset);
+
+    SkRect unionDrawRect = keyDrawRect;
+    unionDrawRect.join(ambientDrawRect);
+
+    // Set up the shader
+    SkRuntimeShaderBuilder builder(effect);
+    builder.uniform("u_rectBounds") = SkV4{rect.fLeft, rect.fTop, rect.fRight, rect.fBottom};
+    builder.uniform("u_cornerRadius") = cornerRadius;
+
+    builder.uniform("u_keyShadowColor") = SkColor4f::FromColor(keyParams.color);
+    builder.uniform("u_keyOffset") = SkV2{keyParams.offsetX, keyParams.offsetY};
+    builder.uniform("u_keyBlurRadius") = keyParams.blurRadius;
+    builder.uniform("u_keySpreadRadius") = keyParams.spreadRadius;
+
+    builder.uniform("u_ambientShadowColor") = SkColor4f::FromColor(ambientParams.color);
+    builder.uniform("u_ambientOffset") = SkV2{ambientParams.offsetX, ambientParams.offsetY};
+    builder.uniform("u_ambientBlurRadius") = ambientParams.blurRadius;
+    builder.uniform("u_ambientSpreadRadius") = ambientParams.spreadRadius;
+
+    SkPaint shadowPaint;
+    shadowPaint.setAntiAlias(false);
+    shadowPaint.setShader(builder.makeShader());
+
+    // Draw the combined shadow in a single draw call.
+    canvas->drawRect(unionDrawRect, shadowPaint);
 
     if (shouldDrawFpkRect) {
         SFTRACE_NAME("FPKOptimization");
@@ -185,6 +124,7 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
         // enabled.
         // On a device with ARM Mali-G710 MP7 with 4 chrome windows open this
         // reduces GPU work period from 16ms to 10ms.
+        float kSin45Deg = 0.70710678118f;
         SkRect killRect = rect;
         float inset = (1.0f - kSin45Deg) * cornerRadius;
         killRect.inset(inset, inset);

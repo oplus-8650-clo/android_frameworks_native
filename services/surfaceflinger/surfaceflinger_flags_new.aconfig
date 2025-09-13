@@ -392,14 +392,14 @@ flag {
 } # true_hdr_screenshots
 
 flag {
-    name: "unify_refresh_rate_callbacks"
+    name: "use_at_least_60_for_min_vote"
     namespace: "core_graphics"
-    description: "Unifies mode changed and FrameRateOverride callbacks"
-    bug: "399482301"
+    description: "Chooses the lowest >= 60 render rate when all voters want Min frame rate"
+    bug: "441896528"
     metadata {
         purpose: PURPOSE_BUGFIX
     }
-} # unify_refresh_rate_callbacks
+} # use_at_least_60_for_min_vote
 
 flag {
   name: "vsync_predictor_predicts_within_threshold"

@@ -91,7 +91,6 @@
                         "maxViewports": 1,
                         "maxViewportDimensions": [ 4096, 4096 ],
                         "viewportBoundsRange": [ -8192, 8191 ],
-                        "minMemoryMapAlignment": 4096,
                         "minTexelBufferOffsetAlignment": 256,
                         "minUniformBufferOffsetAlignment": 256,
                         "minStorageBufferOffsetAlignment": 256,

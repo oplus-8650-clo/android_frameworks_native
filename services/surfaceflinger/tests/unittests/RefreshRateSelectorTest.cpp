@@ -1411,7 +1411,6 @@ TEST_P(RefreshRateSelectorTest, getMinRefreshRatesByPolicy) {
     const auto refreshRates = selector.rankRefreshRates(selector.getActiveMode().getGroup(),
                                                         RefreshRateOrder::Ascending);
 
-    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
     const auto expectedRefreshRates =
             std::vector<FrameRateMode>{{30_Hz, kMode30}, {60_Hz, kMode60}, {90_Hz, kMode90}};
     ASSERT_EQ(expectedRefreshRates.size(), refreshRates.size());
@@ -4287,6 +4286,37 @@ TEST_P(RefreshRateSelectorTest, noLowerFrameRateOnMinVote) {
               selector.setDisplayManagerPolicy(
                       {DisplayModeId(kModeId60), kCappedAt60, kCappedAt60}));
     EXPECT_FRAME_RATE_MODE(kMode60, 60_Hz, selector.getBestScoredFrameRate(layers).frameRateMode);
+}
+
+TEST_P(RefreshRateSelectorTest, minVotePreferredFps_useAtLeast60True) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::use_at_least_60_for_min_vote, true);
+
+    auto selector = createSelector(kVrrMode_120, kModeId120);
+
+    std::vector<LayerRequirement> layers = {{.weight = 1.f}};
+    layers[0].name = "Test layer";
+    layers[0].vote = LayerVoteType::Min;
+    EXPECT_FRAME_RATE_MODE(kVrrMode120TE240, 60_Hz,
+                           selector.getBestScoredFrameRate(layers).frameRateMode);
+}
+
+TEST_P(RefreshRateSelectorTest, minVotePreferredFps_useAtLeast60False) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+
+    SET_FLAG_FOR_TEST(flags::use_at_least_60_for_min_vote, false);
+    auto selector = createSelector(kVrrMode_120, kModeId120);
+
+    std::vector<LayerRequirement> layers = {{.weight = 1.f}};
+    layers[0].name = "Test layer";
+    layers[0].vote = LayerVoteType::Min;
+    EXPECT_FRAME_RATE_MODE(kVrrMode120TE240, 120_Hz,
+                           selector.getBestScoredFrameRate(layers).frameRateMode);
 }
 
 TEST_P(RefreshRateSelectorTest, frameRateIsCappedByPolicy) {

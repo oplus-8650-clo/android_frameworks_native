@@ -2288,41 +2288,50 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
 int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     ATRACE_CALL();
     SURF_LOGV("Surface::disconnect");
+    int err = mGraphicBufferProducer->disconnect(api, mode);
+    if (err == BAD_VALUE) {
+        SURF_LOGE("Surface failed to disconnect with error %d (%s). Likely the wrong API was "
+                  "requested (%d). Not cleaning up internals.",
+                  err, statusToString(err).c_str(), api);
+        return err;
+    }
+
+    // In this case the surface is either already disconnected or the process is dead.
+    SURF_LOGE_IF(err != NO_ERROR,
+                 "Surface failed to disconnect. Cleaning up internals anyway. Error %d (%s).", err,
+                 statusToString(err).c_str());
+
     Mutex::Autolock lock(mMutex);
     mRemovedBuffers.clear();
     mSharedBufferSlot = BufferItem::INVALID_BUFFER_SLOT;
     mSharedBufferHasBeenQueued = false;
     clearBuffersForDisconnectLocked();
-    int err = mGraphicBufferProducer->disconnect(api, mode);
-    if (!err) {
-        mReqFormat = 0;
-        mReqWidth = 0;
-        mReqHeight = 0;
-        mReqUsage = 0;
-        mCrop.clear();
-        mDataSpace = Dataspace::UNKNOWN;
-        mScalingMode = NATIVE_WINDOW_SCALING_MODE_FREEZE;
-        mTransform = 0;
-        mStickyTransform = 0;
-        mAutoPrerotation = false;
-        mEnableFrameTimestamps = false;
-        mMaxBufferCount = NUM_BUFFER_SLOTS;
+    mReqFormat = 0;
+    mReqWidth = 0;
+    mReqHeight = 0;
+    mReqUsage = 0;
+    mCrop.clear();
+    mDataSpace = Dataspace::UNKNOWN;
+    mScalingMode = NATIVE_WINDOW_SCALING_MODE_FREEZE;
+    mTransform = 0;
+    mStickyTransform = 0;
+    mAutoPrerotation = false;
+    mEnableFrameTimestamps = false;
+    mMaxBufferCount = NUM_BUFFER_SLOTS;
 
-        if (api == NATIVE_WINDOW_API_CPU) {
-            mConnectedToCpu = false;
-        }
-
-        std::scoped_lock _dl(mDebugMutex);
-        // Keep the old name in case we get subsequent calls, for logging.
-        mDebugName = mDebugName + "-DISCONNECTED";
-        mId = 0;
-        mIsConnected = false;
+    if (api == NATIVE_WINDOW_API_CPU) {
+        mConnectedToCpu = false;
     }
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->Disconnect(api, &mGraphicBufferProducer);
     }
 
+    std::scoped_lock _dl(mDebugMutex);
+    // Keep the old name in case we get subsequent calls, for logging.
+    mDebugName = mDebugName + "-DISCONNECTED";
+    mId = 0;
+    mIsConnected = false;
 
 #if !defined(NO_BINDER)
     if (mSurfaceDeathListener != nullptr) {
@@ -2343,17 +2352,17 @@ int Surface::detachNextBuffer(sp<GraphicBuffer>* outBuffer,
         return BAD_VALUE;
     }
 
-    Mutex::Autolock lock(mMutex);
-    if (mReportRemovedBuffers) {
-        mRemovedBuffers.clear();
-    }
-
     sp<GraphicBuffer> buffer(nullptr);
     sp<Fence> fence(nullptr);
     status_t result = mGraphicBufferProducer->detachNextBuffer(
             &buffer, &fence);
     if (result != NO_ERROR) {
         return result;
+    }
+
+    Mutex::Autolock lock(mMutex);
+    if (mReportRemovedBuffers) {
+        mRemovedBuffers.clear();
     }
 
     *outBuffer = buffer;

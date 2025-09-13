@@ -26,6 +26,7 @@
 #include <cmath>
 #include <deque>
 #include <map>
+#include <ranges>
 #include <set>
 
 #include <android-base/properties.h>
@@ -1298,33 +1299,68 @@ const DisplayModePtr& RefreshRateSelector::getMaxRefreshRateByPolicyLocked(int a
     return max->get();
 }
 
+auto RefreshRateSelector::getMaxFpsForMode(std::optional<int> anchorGroupOpt) const
+        -> PreferredFpsForMode {
+    // find the highest frame rate for each display mode
+    PreferredFpsForMode maxRenderRateForMode;
+
+    // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
+    //  use a lower frame rate when we want Ascending frame rates.
+    for (const auto& frameRateMode : mPrimaryFrameRates) {
+        if (anchorGroupOpt && frameRateMode.modePtr->getGroup() != anchorGroupOpt) {
+            continue;
+        }
+
+        const auto [iter, _] =
+                maxRenderRateForMode.try_emplace(frameRateMode.modePtr->getId(), frameRateMode.fps);
+        using fps_approx_ops::operator<;
+        if (iter->second < frameRateMode.fps) {
+            iter->second = frameRateMode.fps;
+        }
+    }
+
+    return maxRenderRateForMode;
+}
+
+auto RefreshRateSelector::getPreferredFpsForMode(std::optional<int> anchorGroupOpt,
+                                                 RefreshRateOrder refreshRateOrder) const
+        -> PreferredFpsForMode {
+    using namespace fps_approx_ops;
+
+    const bool ascending = (refreshRateOrder == RefreshRateOrder::Ascending);
+    if (!ascending) return {};
+
+    if (!FlagManager::getInstance().use_at_least_60_for_min_vote()) {
+        return getMaxFpsForMode(anchorGroupOpt);
+    }
+
+    // find the lowest >=60  frame rate for each display mode
+    PreferredFpsForMode preferredFpsForMode;
+    for (const auto& frameRateMode : mPrimaryFrameRates | std::views::reverse) {
+        if (anchorGroupOpt && frameRateMode.modePtr->getGroup() != anchorGroupOpt) {
+            continue;
+        }
+
+        const auto [iter, _] =
+                preferredFpsForMode.try_emplace(frameRateMode.modePtr->getId(), frameRateMode.fps);
+        if (frameRateMode.fps >= 60_Hz && frameRateMode.fps < iter->second) {
+            iter->second = frameRateMode.fps;
+        }
+    }
+
+    return preferredFpsForMode;
+}
+
 auto RefreshRateSelector::rankFrameRates(std::optional<int> anchorGroupOpt,
                                          RefreshRateOrder refreshRateOrder,
                                          std::optional<DisplayModeId> preferredDisplayModeOpt,
                                          const RankFrameRatesPredicate& predicate) const
         -> FrameRateRanking {
-    using fps_approx_ops::operator<;
     const char* const whence = __func__;
 
-    // find the highest frame rate for each display mode
-    ftl::SmallMap<DisplayModeId, Fps, 8> maxRenderRateForMode;
+    using namespace fps_approx_ops;
     const bool ascending = (refreshRateOrder == RefreshRateOrder::Ascending);
-    if (ascending) {
-        // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
-        //  use a lower frame rate when we want Ascending frame rates.
-        for (const auto& frameRateMode : mPrimaryFrameRates) {
-            if (anchorGroupOpt && frameRateMode.modePtr->getGroup() != anchorGroupOpt) {
-                continue;
-            }
-
-            const auto [iter, _] = maxRenderRateForMode.try_emplace(frameRateMode.modePtr->getId(),
-                                                                    frameRateMode.fps);
-            if (iter->second < frameRateMode.fps) {
-                iter->second = frameRateMode.fps;
-            }
-        }
-    }
-
+    const auto preferredFpsForMode = getPreferredFpsForMode(anchorGroupOpt, refreshRateOrder);
     std::deque<ScoredFrameRate> ranking;
     const auto rankFrameRate = [&](const FrameRateMode& frameRateMode) REQUIRES(mLock) {
         const auto& modePtr = frameRateMode.modePtr;
@@ -1333,12 +1369,18 @@ auto RefreshRateSelector::rankFrameRates(std::optional<int> anchorGroupOpt,
             return;
         }
 
-        const bool ascending = (refreshRateOrder == RefreshRateOrder::Ascending);
         const auto id = modePtr->getId();
-        if (ascending && frameRateMode.fps < *maxRenderRateForMode.get(id)) {
-            // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
-            //  use a lower frame rate when we want Ascending frame rates.
-            return;
+        const auto fpsOpt = preferredFpsForMode.get(id);
+        // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
+        //  use a lower frame rate when we want Ascending frame rates.
+        if (FlagManager::getInstance().use_at_least_60_for_min_vote()) {
+            if (fpsOpt && frameRateMode.fps != *fpsOpt) {
+                return;
+            }
+        } else {
+            if (ascending && frameRateMode.fps < *fpsOpt) {
+                return;
+            }
         }
 
         float score = calculateDistanceScoreFromMaxLocked(frameRateMode.fps);

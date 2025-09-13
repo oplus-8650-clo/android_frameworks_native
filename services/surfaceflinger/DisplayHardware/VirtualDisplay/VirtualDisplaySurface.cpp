@@ -91,8 +91,7 @@ void VirtualDisplaySurface::onFirstRef() {
     ATRACE_CALL();
     std::scoped_lock _l(mMutex);
 
-    std::tie(mRendererConsumer, mRendererSurface) =
-            BufferItemConsumer::create(GRALLOC_USAGE_HW_RENDER);
+    std::tie(mRendererConsumer, mRendererSurface) = BufferItemConsumer::create(getRendererUsage());
     mRendererListener =
             sp<RenderConsumerListener>::make(sp<VirtualDisplaySurface>::fromExisting(this));
     mRendererConsumer->setFrameAvailableListener(mRendererListener);
@@ -130,15 +129,9 @@ void VirtualDisplaySurface::prepareSurfacesLocked() {
     mSinkUsage = data.usage;
     mSinkDataSpace = data.dataSpace;
 
-    // If we might be rendering to the HAL, this buffer could be used in HWComposer::setClientTarget
-    // in Mixed mode.
-    uint64_t rendererUsage = isHalDisplay() ? (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER)
-                                            : GRALLOC_USAGE_HW_RENDER;
-
     // Since the renderer can be used for GPU compositing at any point, make sure we are generating
     // buffers we can send over to the app.
-    rendererUsage |= mSinkUsage;
-    mRendererConsumer->setConsumerUsageBits(rendererUsage);
+    mRendererConsumer->setConsumerUsageBits(getRendererUsage() | mSinkUsage);
 
     if (isHalDisplay()) {
         std::tie(mOutputConsumer, mOutputSurface) =
@@ -378,6 +371,13 @@ void VirtualDisplaySurface::resizeBuffers(const ui::Size& newSize) {
     } else {
         applyResizeLocked(newSize);
     }
+}
+
+uint64_t VirtualDisplaySurface::getRendererUsage() const {
+    // If we might be rendering to the HAL, this buffer could be used in HWComposer::setClientTarget
+    // in Mixed mode.
+    return isHalDisplay() ? (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER)
+                          : GRALLOC_USAGE_HW_RENDER;
 }
 
 void VirtualDisplaySurface::applyResizeLocked(const ui::Size& newSize) {

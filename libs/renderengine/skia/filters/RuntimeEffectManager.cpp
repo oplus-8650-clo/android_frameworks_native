@@ -23,6 +23,7 @@
 #include <android-base/stringprintf.h>
 #include <common/trace.h>
 #include <ftl/concat.h>
+#include <ftl/enum.h>
 #include <log/log.h>
 #include <math/mat4.h>
 #include <shaders/shaders.h>
@@ -135,6 +136,9 @@ void RuntimeEffectManager::createAndStoreKnownEffects() {
 }
 
 void RuntimeEffectManager::dump(std::string& result) {
+    StringAppendF(&result, "RenderEngine chosen blur algorithm: %s\n",
+                  ftl::enum_string(getChosenBlurAlgorithm()).c_str());
+
     // LinearEffects are ordered (by hash value) when dumped to reduce churn when iterating on the
     // set of precompiled effects.
     std::vector<shaders::LinearEffect> orderedLinearEffects;

@@ -122,16 +122,8 @@ public:
                                                     std::vector<float> supportedRefreshRates,
                                                     scheduler::VsyncConfigSet) = 0;
 
-    // called when SF changes the active mode or updates the WorkDuration
-    // and apps needs to be notified about the change
-    virtual void onModeChanged(const scheduler::FrameRateMode&, scheduler::VsyncConfigSet) = 0;
-
     // called when SF rejects the mode change request
     virtual void onModeRejected(PhysicalDisplayId displayId, DisplayModeId modeId) = 0;
-
-    // called when SF updates the Frame Rate Override list
-    virtual void onFrameRateOverridesChanged(PhysicalDisplayId displayId,
-                                             std::vector<FrameRateOverride> overrides) = 0;
 
     virtual void dump(std::string& result) const = 0;
 
@@ -198,12 +190,7 @@ public:
                                             std::vector<float> supportedRefreshRates,
                                             scheduler::VsyncConfigSet) override;
 
-    void onModeChanged(const scheduler::FrameRateMode&, scheduler::VsyncConfigSet) override;
-
     void onModeRejected(PhysicalDisplayId displayId, DisplayModeId modeId) override;
-
-    void onFrameRateOverridesChanged(PhysicalDisplayId displayId,
-                                     std::vector<FrameRateOverride> overrides) override;
 
     void dump(std::string& result) const override;
 
