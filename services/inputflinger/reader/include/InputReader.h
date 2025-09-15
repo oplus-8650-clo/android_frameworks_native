@@ -129,6 +129,8 @@ public:
 
     std::optional<std::string> getBluetoothAddress(DeviceId deviceId) const override;
 
+    std::optional<std::string> getPhysicalLocationPath(DeviceId deviceId) const override;
+
     std::filesystem::path getSysfsRootPath(DeviceId deviceId) const override;
 
     void sysfsNodeChanged(const std::string& sysfsNodePath) override;

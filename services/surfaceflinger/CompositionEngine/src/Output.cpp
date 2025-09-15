@@ -1755,6 +1755,13 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
             releaseFence =
                     Fence::merge("LayerRelease", releaseFence,
                                  layer->getLayerFE().getAndClearLastClientTargetAcquireFence());
+
+            // If there's no present fence nor last composition acquire fence, then return the
+            // current acquire fence rather than a NO_FENCE which would release immediately.
+            if (releaseFence == Fence::NO_FENCE) {
+                releaseFence = frame.clientTargetAcquireFence;
+            }
+
             layer->getLayerFE().setLastClientTargetAcquireFence(frame.clientTargetAcquireFence);
         } else {
             // Since we do not track that, always merge with the current

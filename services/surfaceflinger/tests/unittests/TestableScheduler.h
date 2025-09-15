@@ -28,6 +28,7 @@
 #include "Scheduler/VSyncTracker.h"
 #include "Scheduler/VsyncController.h"
 #include "Scheduler/VsyncSchedule.h"
+#include "fake/FakeClock.h"
 #include "mock/MockVSyncDispatch.h"
 #include "mock/MockVSyncTracker.h"
 #include "mock/MockVsyncController.h"
@@ -65,10 +66,11 @@ public:
     MOCK_METHOD(void, scheduleFrame, (Duration), (override));
     MOCK_METHOD(void, postMessage, (sp<MessageHandler>&&), (override));
 
-    void doFrameSignal(ICompositor& compositor, VsyncId vsyncId) {
+    void doFrameSignal(ICompositor& compositor, VsyncId vsyncId,
+                       TimePoint expectedVsyncTime = TimePoint()) {
         ftl::FakeGuard guard1(kMainThreadContext);
         ftl::FakeGuard guard2(mDisplayLock);
-        Scheduler::onFrameSignal(compositor, vsyncId, TimePoint());
+        Scheduler::onFrameSignal(compositor, vsyncId, expectedVsyncTime);
     }
 
     void setEventThread(Cycle cycle, std::unique_ptr<EventThread> eventThreadPtr) {
@@ -225,6 +227,18 @@ public:
             const surfaceflinger::frontend::LayerHierarchy& layerHierarchy,
             Fps displayRefreshRate) {
         Scheduler::updateAttachedChoreographers(layerHierarchy, displayRefreshRate);
+    }
+
+    fake::FakeClock* injectFakeClock() {
+        std::unique_ptr<fake::FakeClock> fakeClock = std::make_unique<fake::FakeClock>();
+        fake::FakeClock* fakeClockPtr = fakeClock.get();
+        mClock = std::move(fakeClock);
+        return fakeClockPtr;
+    }
+
+    static void setPresentFenceForFrameTargeter(FrameTargeter* target, sp<Fence> presentFence,
+                                                FenceTimePtr presentFenceTime) {
+        target->setPresentFence(presentFence, presentFenceTime);
     }
 
     using Scheduler::onHardwareVsyncRequest;

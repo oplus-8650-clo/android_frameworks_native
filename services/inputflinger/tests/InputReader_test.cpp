@@ -3148,6 +3148,12 @@ TEST_F(InputDeviceTest, GetBluetoothAddress) {
     ASSERT_EQ(DEVICE_BLUETOOTH_ADDRESS, *address);
 }
 
+TEST_F(InputDeviceTest, GetPhysicalLocationPath) {
+    const auto& phys = mReader->getPhysicalLocationPath(DEVICE_ID);
+    ASSERT_TRUE(phys);
+    ASSERT_EQ(DEVICE_LOCATION, *phys);
+}
+
 TEST_F(InputDeviceTest, KernelBufferOverflowResetsMappers) {
     mFakePolicy->clearViewports();
     FakeInputMapper& mapper =

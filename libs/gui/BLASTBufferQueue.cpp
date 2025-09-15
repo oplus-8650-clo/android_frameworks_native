@@ -81,6 +81,14 @@ inline const char* boolToString(bool b) {
     return b ? "true" : "false";
 }
 
+timespec timespecFromNanos(nsecs_t duration) {
+    timespec result;
+    int64_t nsecPerSec = 1'000'000'000;
+    result.tv_sec = duration / nsecPerSec;
+    result.tv_nsec = duration % nsecPerSec;
+    return result;
+}
+
 } // namespace
 
 namespace android {
@@ -1506,29 +1514,17 @@ BufferReleaseReader::BufferReleaseReader(
 
 status_t BufferReleaseReader::readBlocking(ReleaseCallbackId& outId, sp<Fence>& outFence,
                                            uint32_t& outMaxAcquiredBufferCount, nsecs_t timeout) {
-    // TODO(b/363290953) epoll_wait only has millisecond timeout precision. If timeout is less than
-    // 1ms, then we round timeout up to 1ms. Otherwise, we round timeout to the nearest
-    // millisecond. Once epoll_pwait2 can be used in libgui, we can specify timeout with nanosecond
-    // precision.
-    int timeoutMs = -1;
-    if (timeout == 0) {
-        timeoutMs = 0;
-    } else if (timeout > 0) {
-        const int nsPerMs = 1000000;
-        if (timeout < nsPerMs) {
-            timeoutMs = 1;
-        } else {
-            timeoutMs = static_cast<int>(
-                    std::chrono::round<std::chrono::milliseconds>(std::chrono::nanoseconds{timeout})
-                            .count());
-        }
+    std::optional<timespec> timespec;
+    if (timeout >= 0) {
+        timespec = timespecFromNanos(timeout);
     }
 
     epoll_event event{};
     int eventCount;
     do {
-        eventCount = epoll_wait(mEpollFd.get(), &event, 1 /*maxevents*/, timeoutMs);
-    } while (eventCount == -1 && errno != EINTR);
+        eventCount = epoll_pwait2(mEpollFd.get(), &event, 1 /*maxevents*/,
+                                  timespec ? &(*timespec) : nullptr, nullptr /*sigmask*/);
+    } while (eventCount == -1 && errno == EINTR);
 
     if (eventCount == -1) {
         ALOGE("epoll_wait error while waiting for buffer release. errno=%d message='%s'", errno,

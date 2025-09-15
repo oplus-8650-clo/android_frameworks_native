@@ -357,16 +357,6 @@ void Choreographer::dispatchModeChangedWithFrameRateOverrides(nsecs_t, PhysicalD
             "dispatchModeChangedWithFrameRateOverrides was called but was never registered");
 }
 
-void Choreographer::dispatchModeChanged(nsecs_t, PhysicalDisplayId, int32_t, nsecs_t, nsecs_t,
-                                        nsecs_t) {
-    LOG_ALWAYS_FATAL("dispatchModeChanged was called but was never registered");
-}
-
-void Choreographer::dispatchFrameRateOverrides(nsecs_t, PhysicalDisplayId,
-                                               std::vector<FrameRateOverride>) {
-    LOG_ALWAYS_FATAL("dispatchFrameRateOverrides was called but was never registered");
-}
-
 void Choreographer::dispatchNullEvent(nsecs_t, PhysicalDisplayId) {
     ALOGV("choreographer %p ~ received null event.", this);
     handleRefreshRateUpdates();

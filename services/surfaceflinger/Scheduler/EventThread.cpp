@@ -99,12 +99,6 @@ std::string toString(const DisplayEventReceiver::Event& event) {
                                 to_string(event.header.displayId).c_str(), event.modeChange.modeId,
                                 event.modeChange.appVsyncOffset,
                                 event.modeChange.presentationDeadline);
-        case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE:
-            return StringPrintf("ModeChanged{displayId=%s, modeId=%u, appVsyncOffset=%" PRId64
-                                ", presentationDeadline=%" PRId64 "}",
-                                to_string(event.header.displayId).c_str(), event.modeChange.modeId,
-                                event.modeChange.appVsyncOffset,
-                                event.modeChange.presentationDeadline);
         case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
             return StringPrintf("supportedRefreshRatesChanged{displayId=%s, "
                                 "supportedRefreshRate=%f",
@@ -123,9 +117,6 @@ std::string toString(const DisplayEventReceiver::Event& event) {
             return StringPrintf("FrameRateOverride{displayId=%s, frameRateHz=%f}",
                                 to_string(event.header.displayId).c_str(),
                                 event.frameRateOverride.frameRateHz);
-        case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH:
-            return StringPrintf("FrameRateOverrideFlush{displayId=%s}",
-                                to_string(event.header.displayId).c_str());
         case DisplayEventType::DISPLAY_EVENT_NULL:
             return "NULL";
     }
@@ -165,11 +156,11 @@ DisplayEventReceiver::Event makeVSync(PhysicalDisplayId displayId, nsecs_t times
     return event;
 }
 
-DisplayEventReceiver::Event makeModeChanged(
-        const scheduler::FrameRateMode& mode, scheduler::VsyncConfigSet config,
-        DisplayEventType eventType = DisplayEventType::DISPLAY_EVENT_MODE_CHANGE) {
+DisplayEventReceiver::Event makeModeChanged(const scheduler::FrameRateMode& mode,
+                                            scheduler::VsyncConfigSet config) {
     DisplayEventReceiver::Event event;
-    event.header = {eventType, mode.modePtr->getPhysicalDisplayId(), systemTime()};
+    event.header = {DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE,
+                    mode.modePtr->getPhysicalDisplayId(), systemTime()};
     event.modeChange.modeId = ftl::to_underlying(mode.modePtr->getId());
     event.modeChange.vsyncPeriod = mode.fps.getPeriodNsecs();
     event.modeChange.appVsyncOffset = config.late.appOffset;
@@ -203,15 +194,6 @@ DisplayEventReceiver::Event makeSupportedRefreshRateEvent(PhysicalDisplayId disp
                     },
             .supportedRefreshRate = {refreshRate},
     };
-}
-
-DisplayEventReceiver::Event makeFrameRateOverrideFlushEvent(PhysicalDisplayId displayId) {
-    return DisplayEventReceiver::Event{
-            .header = DisplayEventReceiver::Event::Header{
-                    .type = DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH,
-                    .displayId = displayId,
-                    .timestamp = systemTime(),
-            }};
 }
 
 DisplayEventReceiver::Event makeHdcpLevelsChange(PhysicalDisplayId displayId,
@@ -302,7 +284,6 @@ status_t EventThreadConnection::postEvent(const DisplayEventReceiver::Event& eve
     };
 
     if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
-        event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH ||
         event.header.type == DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE) {
         mPendingEvents.emplace_back(event);
         if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
@@ -316,14 +297,10 @@ status_t EventThreadConnection::postEvent(const DisplayEventReceiver::Event& eve
         return toStatus(size);
     }
 
-    if (FlagManager::getInstance().unify_refresh_rate_callbacks()) {
-        mPendingEvents.emplace_back(event);
-        const auto size = DisplayEventReceiver::sendEvents(&mChannel, mPendingEvents.data(),
-                                                           mPendingEvents.size());
-        mPendingEvents.clear();
-        return toStatus(size);
-    }
-    auto size = DisplayEventReceiver::sendEvents(&mChannel, &event, 1);
+    mPendingEvents.emplace_back(event);
+    const auto size = DisplayEventReceiver::sendEvents(&mChannel, mPendingEvents.data(),
+                                                       mPendingEvents.size());
+    mPendingEvents.clear();
     return toStatus(size);
 }
 
@@ -533,29 +510,7 @@ void EventThread::onModeAndFrameRateOverridesChanged(PhysicalDisplayId displayId
             mPendingEvents.push_back(makeSupportedRefreshRateEvent(displayId, refreshRate));
         }
     }
-    mPendingEvents.push_back(
-            makeModeChanged(mode, config,
-                            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE));
-
-    mCondition.notify_all();
-}
-
-void EventThread::onModeChanged(const scheduler::FrameRateMode& mode,
-                                scheduler::VsyncConfigSet config) {
-    std::lock_guard<std::mutex> lock(mMutex);
-
     mPendingEvents.push_back(makeModeChanged(mode, config));
-    mCondition.notify_all();
-}
-
-void EventThread::onFrameRateOverridesChanged(PhysicalDisplayId displayId,
-                                              std::vector<FrameRateOverride> overrides) {
-    std::lock_guard<std::mutex> lock(mMutex);
-
-    for (auto frameRateOverride : overrides) {
-        mPendingEvents.push_back(makeFrameRateOverrideEvent(displayId, frameRateOverride));
-    }
-    mPendingEvents.push_back(makeFrameRateOverrideFlushEvent(displayId));
 
     mCondition.notify_all();
 }
@@ -707,8 +662,6 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
         case DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE:
             [[fallthrough]];
         case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
-            [[fallthrough]];
-        case DisplayEventType::DISPLAY_EVENT_MODE_CHANGE:
             return connection->mEventRegistration.test(
                     gui::ISurfaceComposer::EventRegistration::modeChanged);
 
@@ -743,8 +696,6 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
             }
 
         case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE:
-            [[fallthrough]];
-        case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH:
             return connection->mEventRegistration.test(
                     gui::ISurfaceComposer::EventRegistration::frameRateOverride);
         case DisplayEventType::DISPLAY_EVENT_NULL:

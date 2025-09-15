@@ -3579,6 +3579,75 @@ TEST_F(OutputPostFramebufferTest, setReleaseFencesIncludeLastClientTargetAcquire
     mOutput.presentFrameAndReleaseLayers(kFlushEvenWhenDisabled);
 }
 
+TEST_F(OutputPostFramebufferTest, setReleaseFencesNoLayerOrLastAcquiredFence) {
+    SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition, true);
+    mOutput.mState.isEnabled = true;
+    mOutput.mState.usesClientComposition = true;
+
+    Output::FrameFences frameFences;
+    frameFences.layerFences.emplace(&mLayer1.hwc2Layer, sp<Fence>::make());
+    frameFences.layerFences.emplace(&mLayer2.hwc2Layer, sp<Fence>::make());
+    frameFences.layerFences.emplace(&mLayer3.hwc2Layer, sp<Fence>::make());
+    sp<Fence> targetAcquireFence = sp<Fence>::make();
+    frameFences.clientTargetAcquireFence = targetAcquireFence;
+
+    // Set up layerfe buffers
+    LayerFECompositionState layer1State;
+    layer1State.buffer = sp<GraphicBuffer>::make();
+    LayerFECompositionState layer2State;
+    layer2State.buffer = sp<GraphicBuffer>::make();
+    LayerFECompositionState layer3State;
+    layer3State.buffer = nullptr;
+
+    EXPECT_CALL(*mLayer1.layerFE, getAndClearLastClientTargetAcquireFence())
+            .WillOnce(Return(Fence::NO_FENCE));
+    EXPECT_CALL(*mLayer2.layerFE, getAndClearLastClientTargetAcquireFence())
+            .WillOnce(Return(Fence::NO_FENCE));
+    EXPECT_CALL(*mLayer3.layerFE, getAndClearLastClientTargetAcquireFence())
+            .WillOnce(Return(Fence::NO_FENCE));
+
+    EXPECT_CALL(*mLayer1.layerFE, setLastClientTargetAcquireFence(FenceResult(targetAcquireFence)))
+            .Times(1);
+    EXPECT_CALL(*mLayer2.layerFE, setLastClientTargetAcquireFence(FenceResult(targetAcquireFence)))
+            .Times(1);
+    EXPECT_CALL(*mLayer3.layerFE, setLastClientTargetAcquireFence(FenceResult(targetAcquireFence)))
+            .Times(1);
+
+    EXPECT_CALL(mOutput, presentFrame()).WillOnce(Return(frameFences));
+    EXPECT_CALL(*mRenderSurface, onPresentDisplayCompleted());
+
+    EXPECT_CALL(*mLayer1.layerFE, getCompositionState()).WillOnce(Return(&layer1State));
+    EXPECT_CALL(*mLayer2.layerFE, getCompositionState()).WillOnce(Return(&layer2State));
+    EXPECT_CALL(*mLayer3.layerFE, getCompositionState()).WillOnce(Return(&layer3State));
+
+    // If there's no present fence nor last composition acquire fence, use the current target
+    // acquire fence as the release fence instead of just sending a NO_FENCE which would lead to
+    // immediate release.
+    EXPECT_CALL(*mLayer1.layerFE, setReleaseFence)
+            .WillOnce([&targetAcquireFence](FenceResult fenceResult) {
+                EXPECT_EQ(FenceResult(targetAcquireFence), fenceResult);
+            });
+    EXPECT_CALL(*mLayer2.layerFE, setReleaseFence)
+            .WillOnce([&targetAcquireFence](FenceResult fenceResult) {
+                EXPECT_EQ(FenceResult(targetAcquireFence), fenceResult);
+            });
+    EXPECT_CALL(*mLayer3.layerFE, setReleaseFence)
+            .WillOnce([&targetAcquireFence](FenceResult fenceResult) {
+                EXPECT_EQ(FenceResult(targetAcquireFence), fenceResult);
+            });
+    EXPECT_CALL(*mLayer1.layerFE, setReleasedBuffer(_)).WillOnce([&](sp<GraphicBuffer> buffer) {
+        EXPECT_EQ(layer1State.buffer, buffer);
+    });
+    EXPECT_CALL(*mLayer2.layerFE, setReleasedBuffer(_)).WillOnce([&](sp<GraphicBuffer> buffer) {
+        EXPECT_EQ(layer2State.buffer, buffer);
+    });
+    EXPECT_CALL(*mLayer3.layerFE, setReleasedBuffer(_)).WillOnce([&](sp<GraphicBuffer> buffer) {
+        EXPECT_EQ(layer3State.buffer, buffer);
+    });
+    constexpr bool kFlushEvenWhenDisabled = false;
+    mOutput.presentFrameAndReleaseLayers(kFlushEvenWhenDisabled);
+}
+
 TEST_F(OutputPostFramebufferTest, setReleasedLayersSentPresentFence) {
     mOutput.mState.isEnabled = true;
     mOutput.mState.usesClientComposition = true;

@@ -29,6 +29,7 @@
 #include <vector>
 
 #include <lib/tipc/tipc_srv.h>
+#include <uapi/trusty_peer_id.h>
 
 namespace android {
 
@@ -68,10 +69,18 @@ public:
     }
     void setRootObject(const sp<IBinder>& binder) { mRpcServer->setRootObject(binder); }
     void setRootObjectWeak(const wp<IBinder>& binder) { mRpcServer->setRootObjectWeak(binder); }
+    /*
+     * Assumes the peer (passed via the const void*, size_t pair) is specified
+     * by a UUID. Deprecated. Use the version below that takes a trusty_peer_id.
+     */
+    void setPerSessionRootObject(std::function<sp<IBinder>(wp<RpcSession> session, const void* peer,
+                                                           size_t peer_len)>&& create_session);
     void setPerSessionRootObject(
-            std::function<sp<IBinder>(wp<RpcSession> session, const void*, size_t)>&& object) {
-        mRpcServer->setPerSessionRootObject(std::move(object));
+            std::function<sp<IBinder>(wp<RpcSession> session, const trusty_peer_id& peer,
+                                      size_t peer_len)>&& create_session) {
+        setPerSessionRootObjectInternal(mRpcServer.get(), std::move(create_session));
     }
+
     sp<IBinder> getRootObject() { return mRpcServer->getRootObject(); }
 
     /**
@@ -111,24 +120,17 @@ private:
         return rpcServer;
     }
 
+    static void setPerSessionRootObjectInternal(
+            RpcServer* server,
+            std::function<sp<IBinder>(wp<RpcSession> session, const trusty_peer_id& peer,
+                                      size_t peer_len)>&& create_session);
+
     friend struct ::ARpcServerTrusty;
-    friend ::ARpcServerTrusty* ::ARpcServerTrusty_newPerSession(::AIBinder* (*)(const void*, size_t,
-                                                                                char*),
-                                                                char*, void (*)(char*));
+    friend ::ARpcServerTrusty* ::ARpcServerTrusty_newPerSession(
+            ::AIBinder* (*)(const trusty_peer_id*, size_t, void*), void*, void (*)(void*));
     friend void ::ARpcServerTrusty_delete(::ARpcServerTrusty*);
-    /**
-     * @brief Handle the binder RPC connection.
-     *
-     * @param rstr  - RpcServer object
-     * @param chan - handle to the connection
-     * @param clientId - identifier of the client as tagged data
-     * @param clientIdLen - length of the client identifier
-     * @param ctx_p - connection context
-     * @return int - error code
-     */
-    friend int ::ARpcServerTrusty_handleConnect(struct ARpcServerTrusty* rstr, handle_t chan,
-                                                const void* clientId, size_t clientIdLen,
-                                                void** ctx_p);
+    friend int ::ARpcServerTrusty_handleConnect(::ARpcServerTrusty*, handle_t,
+                                                const trusty_peer_id*, size_t, void**);
     friend int ::ARpcServerTrusty_handleMessage(void*);
     friend void ::ARpcServerTrusty_handleDisconnect(void*);
     friend void ::ARpcServerTrusty_handleChannelCleanup(void*);
@@ -144,8 +146,8 @@ private:
     static void handleDisconnect(const tipc_port* port, handle_t chan, void* ctx);
     static void handleChannelCleanup(void* ctx);
 
-    static int handleConnectInternal(RpcServer* rpcServer, handle_t chan, const void* addrData,
-                                     size_t addrDataLen, void** ctx_p);
+    static int handleConnectInternal(RpcServer* rpcServer, handle_t chan,
+                                     const trusty_peer_id& peer, size_t peer_len, void** ctx_p);
     static int handleMessageInternal(void* ctx);
     static void handleDisconnectInternal(void* ctx);
 

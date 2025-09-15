@@ -104,18 +104,17 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
     const auto getNextTask = [this]() -> std::optional<Work> {
         std::scoped_lock lock(mThreadMutex);
         if (!mFunctionCalls.empty()) {
-            Work task = mFunctionCalls.front();
+            Work& task = mFunctionCalls.front();
+            auto optionalTask = std::make_optional<Work>(std::move(task));
             mFunctionCalls.pop();
-            return std::make_optional<Work>(task);
+            return optionalTask;
         }
         return std::nullopt;
     };
 
     // process any tasks until shutdown
     while (mRunning) {
-        const auto task = getNextTask();
-
-        if (task) {
+        if (const auto task = getNextTask(); task) {
             (*task)(*mRenderEngine);
         }
 

@@ -54,6 +54,7 @@
 #include <ui/DisplayMap.h>
 #include <ui/StaticDisplayInfo.h>
 
+#include "../Clock.h"
 #include "DisplayHardware/DisplayMode.h"
 #include "EventThread.h"
 #include "FrameRateOverrideMappings.h"
@@ -712,6 +713,8 @@ private:
 
     // Cache thermal Fps, and limit to the given level
     float mQtiThermalFps = 90.0f;
+
+    std::unique_ptr<android::Clock> mClock = std::make_unique<SteadyClock>();
 };
 
 } // namespace scheduler

@@ -133,18 +133,14 @@ protected:
     void expectVsyncEventDataFrameTimelinesValidLength(VsyncEventData vsyncEventData);
     void expectHotplugEventReceivedByConnection(PhysicalDisplayId expectedDisplayId,
                                                 bool expectedConnected);
-    void expectConfigChangedEventReceivedByConnection(PhysicalDisplayId expectedDisplayId,
-                                                      int32_t expectedConfigId,
-                                                      nsecs_t expectedVsyncPeriod,
-                                                      nsecs_t expectedAppOffset,
-                                                      nsecs_t expectedPresentationDeadline);
+    void expectConfigChangedEventReceivedByConnection(
+            PhysicalDisplayId expectedDisplayId, int32_t expectedConfigId,
+            nsecs_t expectedVsyncPeriod, nsecs_t expectedAppOffset,
+            nsecs_t expectedPresentationDeadline,
+            const std::vector<FrameRateOverride>& expectedOverrides = {},
+            const std::vector<float>& expectedSupportedRefreshRates = {});
     void expectThrottleVsyncReceived(nsecs_t expectedTimestamp, uid_t);
     void expectOnExpectedPresentTimePosted(nsecs_t expectedPresentTime);
-    void expectUidFrameRateMappingEventReceivedByConnection(
-            PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride>,
-            DisplayEventType expectedEventType =
-                    DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE_FLUSH,
-            std::vector<float> supportedRefreshRates = {});
 
     void onVSyncEvent(nsecs_t timestamp, nsecs_t expectedPresentationTime,
                       nsecs_t deadlineTimestamp) {
@@ -381,21 +377,9 @@ void EventThreadTest::expectHotplugEventReceivedByConnection(PhysicalDisplayId e
 
 void EventThreadTest::expectConfigChangedEventReceivedByConnection(
         PhysicalDisplayId expectedDisplayId, int32_t expectedConfigId, nsecs_t expectedVsyncPeriod,
-        nsecs_t expectedAppOffset, nsecs_t expectedPresentationDeadline) {
-    auto args = mConnectionEventCallRecorder.waitForCall();
-    ASSERT_TRUE(args.has_value());
-    const auto& event = std::get<0>(args.value());
-    EXPECT_EQ(DisplayEventType::DISPLAY_EVENT_MODE_CHANGE, event.header.type);
-    EXPECT_EQ(expectedDisplayId, event.header.displayId);
-    EXPECT_EQ(expectedConfigId, event.modeChange.modeId);
-    EXPECT_EQ(expectedVsyncPeriod, event.modeChange.vsyncPeriod);
-    EXPECT_EQ(expectedAppOffset, event.modeChange.appVsyncOffset);
-    EXPECT_EQ(expectedPresentationDeadline, event.modeChange.presentationDeadline);
-}
-
-void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
-        PhysicalDisplayId expectedDisplayId, std::vector<FrameRateOverride> expectedOverrides,
-        DisplayEventType expectedEventType, std::vector<float> expectedSupportedRefreshRates) {
+        nsecs_t expectedAppOffset, nsecs_t expectedPresentationDeadline,
+        const std::vector<FrameRateOverride>& expectedOverrides,
+        const std::vector<float>& expectedSupportedRefreshRates) {
     for (const auto [uid, frameRateHz] : expectedOverrides) {
         auto args = mConnectionEventCallRecorder.waitForCall();
         ASSERT_TRUE(args.has_value());
@@ -418,8 +402,12 @@ void EventThreadTest::expectUidFrameRateMappingEventReceivedByConnection(
     auto args = mConnectionEventCallRecorder.waitForCall();
     ASSERT_TRUE(args.has_value());
     const auto& event = std::get<0>(args.value());
-    EXPECT_EQ(expectedEventType, event.header.type);
+    EXPECT_EQ(DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE, event.header.type);
     EXPECT_EQ(expectedDisplayId, event.header.displayId);
+    EXPECT_EQ(expectedConfigId, event.modeChange.modeId);
+    EXPECT_EQ(expectedVsyncPeriod, event.modeChange.vsyncPeriod);
+    EXPECT_EQ(expectedAppOffset, event.modeChange.appVsyncOffset);
+    EXPECT_EQ(expectedPresentationDeadline, event.modeChange.presentationDeadline);
 }
 
 namespace {
@@ -787,7 +775,9 @@ TEST_F(EventThreadTest, postConfigChangedPrimary) {
                               .build();
     const Fps fps = mode->getPeakFps() / 2;
 
-    mThread->onModeChanged({fps, ftl::as_non_null(mode)}, mOffsets);
+    mThread->onModeAndFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                /*overrides*/ {}, /*supportedRefreshRates*/ {},
+                                                mOffsets);
     expectConfigChangedEventReceivedByConnection(INTERNAL_DISPLAY_ID, 7, fps.getPeriodNsecs(),
                                                  APP_OFFSET_LATE,
                                                  /*presentationDeadline*/ 34333332);
@@ -803,7 +793,9 @@ TEST_F(EventThreadTest, postConfigChangedExternal) {
                               .build();
     const Fps fps = mode->getPeakFps() / 2;
 
-    mThread->onModeChanged({fps, ftl::as_non_null(mode)}, mOffsets);
+    mThread->onModeAndFrameRateOverridesChanged(EXTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                /*overrides*/ {}, /*supportedRefreshRates*/ {},
+                                                mOffsets);
     expectConfigChangedEventReceivedByConnection(EXTERNAL_DISPLAY_ID, 5, fps.getPeriodNsecs(),
                                                  APP_OFFSET_LATE,
                                                  /*presentationDeadline*/ 34333332);
@@ -818,7 +810,10 @@ TEST_F(EventThreadTest, postConfigChangedPrimary64bit) {
                               .setVsyncPeriod(16666666)
                               .build();
     const Fps fps = mode->getPeakFps() / 2;
-    mThread->onModeChanged({fps, ftl::as_non_null(mode)}, mOffsets);
+
+    mThread->onModeAndFrameRateOverridesChanged(DISPLAY_ID_64BIT, {fps, ftl::as_non_null(mode)},
+                                                /*overrides*/ {}, /*supportedRefreshRates*/ {},
+                                                mOffsets);
     expectConfigChangedEventReceivedByConnection(DISPLAY_ID_64BIT, 7, fps.getPeriodNsecs(),
                                                  APP_OFFSET_LATE,
                                                  /*presentationDeadline*/ 34333332);
@@ -838,7 +833,9 @@ TEST_F(EventThreadTest, suppressConfigChanged) {
                               .build();
     const Fps fps = mode->getPeakFps() / 2;
 
-    mThread->onModeChanged({fps, ftl::as_non_null(mode)}, mOffsets);
+    mThread->onModeAndFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                /*overrides*/ {}, /*supportedRefreshRates*/ {},
+                                                mOffsets);
     expectConfigChangedEventReceivedByConnection(INTERNAL_DISPLAY_ID, 9, fps.getPeriodNsecs(),
                                                  APP_OFFSET_LATE,
                                                  /*presentationDeadline*/ 34333332);
@@ -856,8 +853,18 @@ TEST_F(EventThreadTest, postUidFrameRateMapping) {
             {.uid = 5, .frameRateHz = 60},
     };
 
-    mThread->onFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, overrides);
-    expectUidFrameRateMappingEventReceivedByConnection(INTERNAL_DISPLAY_ID, overrides);
+    const auto mode = DisplayMode::Builder(hal::HWConfigId(0))
+                              .setPhysicalDisplayId(INTERNAL_DISPLAY_ID)
+                              .setId(DisplayModeId(9))
+                              .setVsyncPeriod(16666666)
+                              .build();
+    const Fps fps = mode->getPeakFps() / 2;
+
+    mThread->onModeAndFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                overrides, /*supportedRefreshRates*/ {}, mOffsets);
+    expectConfigChangedEventReceivedByConnection(INTERNAL_DISPLAY_ID, 9, fps.getPeriodNsecs(),
+                                                 APP_OFFSET_LATE, /*presentationDeadline*/ 34333332,
+                                                 overrides, /*supportedRefreshRates*/ {});
 }
 
 TEST_F(EventThreadTest, suppressUidFrameRateMapping) {
@@ -869,12 +876,22 @@ TEST_F(EventThreadTest, suppressUidFrameRateMapping) {
             {.uid = 5, .frameRateHz = 60},
     };
 
+    const auto mode = DisplayMode::Builder(hal::HWConfigId(0))
+                              .setPhysicalDisplayId(INTERNAL_DISPLAY_ID)
+                              .setId(DisplayModeId(9))
+                              .setVsyncPeriod(16666666)
+                              .build();
+    const Fps fps = mode->getPeakFps() / 2;
+
     ConnectionEventRecorder suppressConnectionEventRecorder{0};
     sp<MockEventThreadConnection> suppressConnection =
             createConnection(suppressConnectionEventRecorder);
 
-    mThread->onFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, overrides);
-    expectUidFrameRateMappingEventReceivedByConnection(INTERNAL_DISPLAY_ID, overrides);
+    mThread->onModeAndFrameRateOverridesChanged(INTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
+                                                overrides, /*supportedRefreshRates*/ {}, mOffsets);
+    expectConfigChangedEventReceivedByConnection(INTERNAL_DISPLAY_ID, 9, fps.getPeriodNsecs(),
+                                                 APP_OFFSET_LATE, /*presentationDeadline*/ 34333332,
+                                                 overrides, /*supportedRefreshRates*/ {});
 
     auto args = suppressConnectionEventRecorder.waitForCall();
     ASSERT_FALSE(args.has_value());
@@ -929,7 +946,6 @@ TEST_F(EventThreadTest, postHcpLevelsChanged) {
 }
 
 TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
     SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
 
     setupEventThread();
@@ -949,9 +965,9 @@ TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
 
     mThread->onModeAndFrameRateOverridesChanged(EXTERNAL_DISPLAY_ID, {fps, ftl::as_non_null(mode)},
                                                 overrides, supportedRefreshRates, mOffsets);
-    expectUidFrameRateMappingEventReceivedByConnection(
-            EXTERNAL_DISPLAY_ID, overrides,
-            DisplayEventType::DISPLAY_EVENT_MODE_AND_FRAME_RATE_CHANGE, supportedRefreshRates);
+    expectConfigChangedEventReceivedByConnection(EXTERNAL_DISPLAY_ID, 5, fps.getPeriodNsecs(),
+                                                 APP_OFFSET_LATE, /*presentationDeadline*/ 34333332,
+                                                 overrides, supportedRefreshRates);
 }
 
 } // namespace
