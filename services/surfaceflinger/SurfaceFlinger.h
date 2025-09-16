@@ -90,6 +90,7 @@
 #include "DisplayHardware/HWComposer.h"
 #include "DisplayIdGenerator.h"
 #include "Effects/Daltonizer.h"
+#include "FrontEnd/Caching/MergeableHierarchyManager.h"
 #include "FrontEnd/DisplayInfo.h"
 #include "FrontEnd/LayerCreationArgs.h"
 #include "FrontEnd/LayerLifecycleManager.h"
@@ -139,11 +140,11 @@ class FlagManager;
 class FpsReporter;
 class TunnelModeEnabledReporter;
 class HdrLayerInfoReporter;
-class IGraphicBufferProducer;
 class Layer;
 class MessageBase;
 class RefreshRateOverlay;
 class RegionSamplingThread;
+class Surface;
 class TimeStats;
 class FrameTracer;
 class ScreenCapturer;
@@ -663,10 +664,10 @@ private:
             const sp<IBinder>& displayToken,
             std::optional<aidl::android::hardware::graphics::common::DisplayDecorationSupport>*
                     outSupport) const;
-    status_t setFrameRate(const sp<IGraphicBufferProducer>& surface, float frameRate,
-                          int8_t compatibility, int8_t changeFrameRateStrategy);
+    status_t setFrameRate(const sp<Surface>& surface, float frameRate, int8_t compatibility,
+                          int8_t changeFrameRateStrategy);
 
-    status_t setFrameTimelineInfo(const sp<IGraphicBufferProducer>& surface,
+    status_t setFrameTimelineInfo(const sp<Surface>& surface,
                                   const gui::FrameTimelineInfo& frameTimelineInfo);
 
     status_t setGameModeFrameRateOverride(uid_t uid, float frameRate);
@@ -1222,7 +1223,7 @@ private:
             const DisplayDeviceState& state,
             const sp<compositionengine::DisplaySurface>& displaySurface,
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-            const sp<IGraphicBufferProducer>& producer,
+            const sp<Surface>& compositionSurface,
             surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr)
             REQUIRES(mStateLock);
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -1679,6 +1680,8 @@ private:
     frontend::LayerLifecycleManager mLayerLifecycleManager GUARDED_BY(kMainThreadContext);
     frontend::LayerHierarchyBuilder mLayerHierarchyBuilder GUARDED_BY(kMainThreadContext);
     frontend::LayerSnapshotBuilder mLayerSnapshotBuilder GUARDED_BY(kMainThreadContext);
+    frontend::caching::MergeableHierarchyManager mMergeableHierarchyManager
+            GUARDED_BY(kMainThreadContext);
 
     mutable std::mutex mCreatedLayersLock;
     std::vector<sp<Layer>> mCreatedLayers GUARDED_BY(mCreatedLayersLock);

@@ -45,7 +45,6 @@
 #include "FrontEnd/LayerHandle.h"
 #include "FrontEnd/RequestedLayerState.h"
 #include "Layer.h"
-#include "NativeWindowSurface.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/VSyncTracker.h"
 #include "Scheduler/VsyncController.h"
@@ -105,12 +104,6 @@ public:
         return sp<GraphicBuffer>::make(width, height, format, layerCount, usage, requestorName);
     }
 
-    std::unique_ptr<surfaceflinger::NativeWindowSurface> createNativeWindowSurface(
-            const sp<IGraphicBufferProducer>& producer) override {
-        if (!mCreateNativeWindowSurface) return nullptr;
-        return mCreateNativeWindowSurface(producer);
-    }
-
     std::unique_ptr<compositionengine::CompositionEngine> createCompositionEngine() override {
         return compositionengine::impl::createCompositionEngine();
     }
@@ -129,11 +122,6 @@ public:
             std::shared_ptr<TimeStats> timeStats, pid_t surfaceFlingerPid = 0) override {
         return std::make_unique<mock::FrameTimeline>(timeStats, surfaceFlingerPid);
     }
-
-    using CreateNativeWindowSurfaceFunction =
-            std::function<std::unique_ptr<surfaceflinger::NativeWindowSurface>(
-                    const sp<IGraphicBufferProducer>&)>;
-    CreateNativeWindowSurfaceFunction mCreateNativeWindowSurface;
 
     using CreateCompositionEngineFunction =
             std::function<std::unique_ptr<compositionengine::CompositionEngine>()>;
@@ -278,12 +266,6 @@ public:
     scheduler::TestableScheduler& mutableScheduler() { return *mScheduler; }
     scheduler::mock::SchedulerCallback& mockSchedulerCallback() { return mSchedulerCallback; }
 
-    using CreateNativeWindowSurfaceFunction =
-            surfaceflinger::test::Factory::CreateNativeWindowSurfaceFunction;
-    void setCreateNativeWindowSurface(CreateNativeWindowSurfaceFunction f) {
-        mFactory.mCreateNativeWindowSurface = f;
-    }
-
     void setInternalDisplayPrimaries(const ui::DisplayPrimaries& primaries) {
         memcpy(&mFlinger->mInternalDisplayPrimaries, &primaries, sizeof(ui::DisplayPrimaries));
     }
@@ -418,9 +400,9 @@ public:
             std::shared_ptr<compositionengine::Display> compositionDisplay,
             const DisplayDeviceState& state,
             const sp<compositionengine::DisplaySurface>& dispSurface,
-            const sp<IGraphicBufferProducer>& producer) NO_THREAD_SAFETY_ANALYSIS {
+            const sp<Surface>& compositionSurface) NO_THREAD_SAFETY_ANALYSIS {
         return mFlinger->setupNewDisplayDeviceInternal(displayToken, compositionDisplay, state,
-                                                       dispSurface, producer);
+                                                       dispSurface, compositionSurface);
     }
 
     void commitTransactionsLocked(uint32_t transactionFlags, bool modeset = false) {

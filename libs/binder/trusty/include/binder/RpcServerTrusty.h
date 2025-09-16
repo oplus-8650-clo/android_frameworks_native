@@ -83,6 +83,7 @@ public:
 
     sp<IBinder> getRootObject() { return mRpcServer->getRootObject(); }
 
+    status_t queueConnect(binder::unique_fd chan, const trusty_peer_id& peer, size_t peer_len);
     /**
      * For debugging!
      */
@@ -141,7 +142,8 @@ private:
         sp<RpcSession::RpcConnection> connection;
     };
 
-    static int handleConnect(const tipc_port* port, handle_t chan, const uuid* peer, void** ctx_p);
+    static int handleConnect(const tipc_port* port, handle_t chan, const trusty_peer_id* peer,
+                             size_t peer_len, void** ctx_p);
     static int handleMessage(const tipc_port* port, handle_t chan, void* ctx);
     static void handleDisconnect(const tipc_port* port, handle_t chan, void* ctx);
     static void handleChannelCleanup(void* ctx);
@@ -152,7 +154,7 @@ private:
     static void handleDisconnectInternal(void* ctx);
 
     static constexpr tipc_srv_ops kTipcOps = {
-            .on_connect = &handleConnect,
+            .on_connect_peer_id = &handleConnect,
             .on_message = &handleMessage,
             .on_disconnect = &handleDisconnect,
             .on_channel_cleanup = &handleChannelCleanup,
@@ -164,6 +166,7 @@ private:
     std::vector<const uuid*> mUuidPtrs;
     tipc_port_acl mTipcPortAcl;
     tipc_port mTipcPort;
+    tipc_port_ctx* mTipcPortCtx;
 };
 
 } // namespace android

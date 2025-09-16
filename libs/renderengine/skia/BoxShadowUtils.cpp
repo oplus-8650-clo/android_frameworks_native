@@ -5,59 +5,59 @@
 namespace android::renderengine::skia {
 
 const SkString kEffectSource_BoxShadowEffect(R"(
-uniform vec4  u_rectBounds;     // l, t, r, b
-uniform float u_cornerRadius;
+uniform half4  u_rectBounds;     // l, t, r, b
+uniform half u_cornerRadius;
 
-uniform vec4  u_keyShadowColor;
-uniform vec2  u_keyOffset;
-uniform float u_keyBlurRadius;
-uniform float u_keySpreadRadius;
+uniform half4  u_keyShadowColor;
+uniform half2  u_keyOffset;
+uniform half u_keyBlurRadius;
+uniform half u_keySpreadRadius;
 
-uniform vec4  u_ambientShadowColor;
-uniform vec2  u_ambientOffset;
-uniform float u_ambientBlurRadius;
-uniform float u_ambientSpreadRadius;
+uniform half4  u_ambientShadowColor;
+uniform half2  u_ambientOffset;
+uniform half u_ambientBlurRadius;
+uniform half u_ambientSpreadRadius;
 
-float sdRoundRect(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+half sdRoundRect(half2 p, half2 b, half r) {
+    half2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), half(0.0)) + length(max(q, half2(0.0))) - r;
 }
 
 // Accurate approximation of erf
 // This can be further approximated and probably
 // nooone would notice the reduced visual quality.
-float erf(float x) {
-    return sign(x)*sqrt(1.0-exp2(-1.78776*x*x));
+half erf(half x) {
+    return sign(x)*sqrt(half(1.0)-exp2(half(-1.78776)*x*x));
 }
 
 // Gaussian blur in 1D looks good enough.
-float shadow(float x, float blurRadius)
+half shadow(half x, half blurRadius)
 {
-    float sigma = 0.57735 * blurRadius + 0.5;
-    return 0.5*(1.0 - erf(x/(sigma*1.414213)));
+    half sigma = half(0.57735) * blurRadius + half(0.5);
+    return half(0.5)*(half(1.0) - erf(x/(sigma*half(1.414213))));
 }
 
-half4 main(vec2 fragCoord) {
-    vec2 rectSize = u_rectBounds.zw - u_rectBounds.xy;
-    vec2 halfDims = rectSize * 0.5;
-    vec2 rectCenter = u_rectBounds.xy + halfDims;
+half4 main(float2 fragCoord) {
+    half2 rectSize = u_rectBounds.zw - u_rectBounds.xy;
+    half2 halfDims = rectSize * half(0.5);
+    half2 rectCenter = u_rectBounds.xy + halfDims;
 
     // Ambient Shadow Calculation
-    vec2 ambientHalfDims = halfDims + u_ambientSpreadRadius;
-    vec2 ambientP = fragCoord - rectCenter - u_ambientOffset;
-    float ambientDist = sdRoundRect(ambientP, ambientHalfDims, u_cornerRadius + u_ambientSpreadRadius);
-    float ambientIntensity = shadow(ambientDist, u_ambientBlurRadius);
-    vec4 ambientColor = u_ambientShadowColor * ambientIntensity;
+    half2 ambientHalfDims = halfDims + u_ambientSpreadRadius;
+    half2 ambientP = fragCoord - rectCenter - u_ambientOffset;
+    half ambientDist = sdRoundRect(ambientP, ambientHalfDims, u_cornerRadius + u_ambientSpreadRadius);
+    half ambientIntensity = shadow(ambientDist, u_ambientBlurRadius);
+    half4 ambientColor = u_ambientShadowColor * ambientIntensity;
 
     // Key Shadow Calculation
-    vec2 keyHalfDims = halfDims + u_keySpreadRadius;
-    vec2 keyP = fragCoord - rectCenter - u_keyOffset;
-    float keyDist = sdRoundRect(keyP, keyHalfDims, u_cornerRadius + u_keySpreadRadius);
-    float keyIntensity = shadow(keyDist, u_keyBlurRadius);
-    vec4 keyColor = u_keyShadowColor * keyIntensity;
+    half2 keyHalfDims = halfDims + u_keySpreadRadius;
+    half2 keyP = fragCoord - rectCenter - u_keyOffset;
+    half keyDist = sdRoundRect(keyP, keyHalfDims, u_cornerRadius + u_keySpreadRadius);
+    half keyIntensity = shadow(keyDist, u_keyBlurRadius);
+    half4 keyColor = u_keyShadowColor * keyIntensity;
 
     // Blend the two shadow colors (standard src-over)
-    return keyColor + ambientColor * (1.0 - keyColor.a);
+    return keyColor + ambientColor * (half(1.0) - keyColor.a);
 }
 )");
 
@@ -128,6 +128,11 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
         SkRect killRect = rect;
         float inset = (1.0f - kSin45Deg) * cornerRadius;
         killRect.inset(inset, inset);
+        // Must be pixel aligned to generate glClear
+        killRect.fLeft = ceilf(killRect.fLeft);
+        killRect.fTop = ceilf(killRect.fTop);
+        killRect.fRight = floorf(killRect.fRight);
+        killRect.fBottom = floorf(killRect.fBottom);
 
         SkPaint paint;
         paint.setAntiAlias(false);

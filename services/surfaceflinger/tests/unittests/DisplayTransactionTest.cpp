@@ -37,11 +37,6 @@ DisplayTransactionTest::DisplayTransactionTest(bool withMockScheduler) {
     mFlinger.mutableSupportsWideColor() = false;
     mFlinger.mutableDisplayColorSetting() = DisplayColorSetting::kUnmanaged;
 
-    mFlinger.setCreateNativeWindowSurface([](auto) {
-        ADD_FAILURE() << "Unexpected request to create a native window surface.";
-        return nullptr;
-    });
-
     if (withMockScheduler) {
         injectMockScheduler(PhysicalDisplayId::fromPort(0));
     }
@@ -81,17 +76,6 @@ void DisplayTransactionTest::injectMockComposer(int virtualDisplayCount) {
     mFlinger.enableHalVirtualDisplays(true);
 
     Mock::VerifyAndClear(mComposer);
-}
-
-void DisplayTransactionTest::injectFakeNativeWindowSurfaceFactory() {
-    // This setup is only expected once per test.
-    ASSERT_TRUE(mNativeWindowSurface == nullptr);
-
-    mNativeWindowSurface = new surfaceflinger::mock::NativeWindowSurface();
-
-    mFlinger.setCreateNativeWindowSurface([this](auto) {
-        return std::unique_ptr<surfaceflinger::NativeWindowSurface>(mNativeWindowSurface);
-    });
 }
 
 bool DisplayTransactionTest::hasPhysicalHwcDisplay(HWDisplayId hwcDisplayId) const {

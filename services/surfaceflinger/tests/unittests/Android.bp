@@ -63,7 +63,6 @@ filegroup {
         "mock/MockEventThread.cpp",
         "mock/MockFrameTimeline.cpp",
         "mock/MockFrameTracer.cpp",
-        "mock/MockNativeWindowSurface.cpp",
         "mock/MockTimeStats.cpp",
         "mock/MockVSyncDispatch.cpp",
         "mock/MockVSyncTracker.cpp",

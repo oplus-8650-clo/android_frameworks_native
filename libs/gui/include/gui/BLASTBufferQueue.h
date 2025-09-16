@@ -185,9 +185,7 @@ private:
     friend class BLASTBufferQueueHelper;
     friend class BBQBufferQueueProducer;
     friend class TestBLASTBufferQueue;
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BUFFER_RELEASE_CHANNEL)
     friend class BBQBufferQueueCore;
-#endif
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     friend class libguiextension::QtiBLASTBufferQueueExtension;
@@ -381,7 +379,7 @@ private:
 
     std::function<void(const nsecs_t)> mWaitForBufferReleaseCallback
             GUARDED_BY(mWaitForBufferReleaseMutex);
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BUFFER_RELEASE_CHANNEL)
+
     // BufferReleaseChannel is used to communicate buffer releases from SurfaceFlinger to the
     // client.
     std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint> mBufferReleaseProducer;
@@ -390,7 +388,6 @@ private:
     void drainBufferReleaseConsumer();
 
     std::shared_ptr<BufferReleaseReader> mBufferReleaseReader;
-#endif
 };
 
 } // namespace android

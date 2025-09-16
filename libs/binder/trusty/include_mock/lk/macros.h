@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,24 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
-#include <gmock/gmock.h>
-
-#include <system/window.h> // for ANativeWindow
-
-#include "NativeWindowSurface.h"
-
-namespace android::surfaceflinger::mock {
-
-class NativeWindowSurface : public surfaceflinger::NativeWindowSurface {
-public:
-    NativeWindowSurface();
-    ~NativeWindowSurface() override;
-
-    MOCK_CONST_METHOD0(getNativeWindow, sp<ANativeWindow>());
-    MOCK_METHOD0(preallocateBuffers, void());
-};
-
-} // namespace android::surfaceflinger::mock
+#define containerof(ptr, type, member) ((type*)((uintptr_t)(ptr) - offsetof(type, member)))

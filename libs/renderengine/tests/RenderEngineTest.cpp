@@ -954,8 +954,8 @@ template <typename SourceVariant>
 void RenderEngineTest::fillBufferColorTransformAndSourceDataspace() {
     unordered_map<ui::Dataspace, ubyte4> dataspaceToColorMap;
     dataspaceToColorMap[ui::Dataspace::V0_BT709] = {77, 0, 0, 255};
-    dataspaceToColorMap[ui::Dataspace::BT2020] = {101, 0, 0, 255};
-    dataspaceToColorMap[ui::Dataspace::ADOBE_RGB] = {75, 0, 0, 255};
+    dataspaceToColorMap[ui::Dataspace::BT2020] = {188, 0, 0, 255};
+    dataspaceToColorMap[ui::Dataspace::ADOBE_RGB] = {108, 0, 0, 255};
     ui::Dataspace customizedDataspace = static_cast<ui::Dataspace>(
             ui::Dataspace::STANDARD_BT709 | ui::Dataspace::TRANSFER_GAMMA2_2 |
             ui::Dataspace::RANGE_FULL);
@@ -1000,8 +1000,8 @@ template <typename SourceVariant>
 void RenderEngineTest::fillBufferColorTransformAndOutputDataspace() {
     unordered_map<ui::Dataspace, ubyte4> dataspaceToColorMap;
     dataspaceToColorMap[ui::Dataspace::V0_BT709] = {198, 0, 0, 255};
-    dataspaceToColorMap[ui::Dataspace::BT2020] = {187, 0, 0, 255};
-    dataspaceToColorMap[ui::Dataspace::ADOBE_RGB] = {192, 0, 0, 255};
+    dataspaceToColorMap[ui::Dataspace::BT2020] = {153, 0, 0, 255};
+    dataspaceToColorMap[ui::Dataspace::ADOBE_RGB] = {168, 0, 0, 255};
     ui::Dataspace customizedDataspace = static_cast<ui::Dataspace>(
             ui::Dataspace::STANDARD_BT709 | ui::Dataspace::TRANSFER_GAMMA2_6 |
             ui::Dataspace::RANGE_FULL);

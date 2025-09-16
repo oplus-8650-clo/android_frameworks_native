@@ -118,10 +118,7 @@ class DisplayModeSwitchingTest : public DisplayTransactionTest,
 
 public:
     void SetUp() override {
-        injectFakeNativeWindowSurfaceFactory();
-
         PrimaryDisplayVariant::setupHwcHotplugCallExpectations(this);
-        PrimaryDisplayVariant::setupNativeWindowSurfaceCreationCallExpectations(this);
         PrimaryDisplayVariant::setupHwcGetActiveConfigCallExpectations(this);
 
         auto selectorPtr = std::make_shared<scheduler::RefreshRateSelector>(kModes, kModeId60);
@@ -414,11 +411,6 @@ TEST_P(DisplayModeSwitchingTest, changeResolutionWithoutRefreshRequired) {
 
     // Override expectations set up by PrimaryDisplayVariant.
     EXPECT_CALL(*mComposer, setClientTargetSlotCount(_)).WillOnce(Return(hal::Error::NONE));
-
-    // Create a new native surface to be used by the recreated display.
-    mNativeWindowSurface = nullptr;
-    injectFakeNativeWindowSurfaceFactory();
-    PrimaryDisplayVariant::setupNativeWindowSurfaceCreationCallExpectations(this);
 
     mFlinger.commit();
 

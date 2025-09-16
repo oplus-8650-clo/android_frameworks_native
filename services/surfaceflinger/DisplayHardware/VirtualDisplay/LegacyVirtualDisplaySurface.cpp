@@ -36,6 +36,7 @@
 #include <gui/BufferItem.h>
 #include <gui/BufferQueue.h>
 #include <gui/IProducerListener.h>
+#include <gui/Surface.h>
 #include <system/window.h>
 
 #include "DisplayHardware/HWComposer.h"
@@ -56,11 +57,11 @@
 
 namespace android {
 
-LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(
-        HWComposer& hwc, VirtualDisplayIdVariant virtualIdVariant,
-        const sp<IGraphicBufferProducer>& sink, const sp<IGraphicBufferProducer>& bqProducer,
-        const sp<IGraphicBufferConsumer>& bqConsumer, const std::string& name, bool qtiSecure)
-      : ConsumerBase(bqProducer, bqConsumer),
+LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(HWComposer& hwc,
+                                                         VirtualDisplayIdVariant virtualIdVariant,
+                                                         const sp<IGraphicBufferProducer>& sink,
+                                                         const std::string& name, bool qtiSecure)
+      : ConsumerBase(),
         mHwc(hwc),
         mVirtualIdVariant(virtualIdVariant),
         mDisplayName(name),
@@ -83,7 +84,7 @@ LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(
 // QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mForceHwcCopy(SurfaceFlinger::useHwcForRgbToYuv) {
     mSource[SOURCE_SINK] = sink;
-    mSource[SOURCE_SCRATCH] = bqProducer;
+    mSource[SOURCE_SCRATCH] = mSurface->getIGraphicBufferProducer();
 
     resetPerFrameState();
 
