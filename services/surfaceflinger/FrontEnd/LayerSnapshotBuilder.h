@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "FrontEnd/Caching/MergeableHierarchyManager.h"
 #include "FrontEnd/DisplayInfo.h"
 #include "FrontEnd/LayerLifecycleManager.h"
 #include "LayerHierarchy.h"
@@ -59,6 +60,7 @@ public:
         const std::unordered_map<std::string, uint32_t>& genericLayerMetadataKeyMap;
         bool skipRoundCornersWhenProtected = false;
         LayerSnapshot rootSnapshot = getRootSnapshot();
+        caching::MergeableHierarchyManager* mergeableHierarchyManager = nullptr;
     };
     LayerSnapshotBuilder();
 
@@ -112,7 +114,7 @@ private:
     const LayerSnapshot& updateSnapshotsInHierarchy(
             const Args&, const LayerHierarchy& hierarchy,
             const LayerHierarchy::TraversalPath& traversalPath, const LayerSnapshot& parentSnapshot,
-            int depth);
+            int depth, std::optional<caching::MergeableHierarchy::Accumulator>& accumulator);
     void updateSnapshot(LayerSnapshot&, const Args&, const RequestedLayerState&,
                         const LayerSnapshot& parentSnapshot, const LayerHierarchy::TraversalPath&);
     static void updateRelativeState(LayerSnapshot& snapshot, const LayerSnapshot& parentSnapshot,

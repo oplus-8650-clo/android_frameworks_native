@@ -68,10 +68,6 @@ template <typename Case>
 void DisplayTransactionCommitTest::setupCommonPreconditions() {
     // Wide color displays support is configured appropriately
     Case::WideColorSupport::injectConfigChange(this);
-
-    // SurfaceFlinger will use a test-controlled factory for native window
-    // surfaces.
-    injectFakeNativeWindowSurfaceFactory();
 }
 
 template <typename Case, bool connected>
@@ -85,7 +81,6 @@ template <typename Case>
 void DisplayTransactionCommitTest::setupCommonCallExpectationsForConnectProcessing() {
     Case::Display::setupHwcHotplugCallExpectations(this);
 
-    Case::Display::setupNativeWindowSurfaceCreationCallExpectations(this);
     Case::Display::setupHwcGetActiveConfigCallExpectations(this);
 
     Case::WideColorSupport::setupComposerCallExpectations(this);
@@ -455,7 +450,6 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAdded) {
 
     // --------------------------------------------------------------------
     // Call Expectations
-    Case::Display::setupNativeWindowSurfaceCreationCallExpectations(this);
     Case::Display::setupHwcVirtualDisplayCreationCallExpectations(this);
     Case::WideColorSupport::setupComposerCallExpectations(this);
     Case::HdrSupport::setupComposerCallExpectations(this);

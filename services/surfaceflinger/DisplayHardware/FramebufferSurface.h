@@ -72,9 +72,7 @@ private:
     friend class FramebufferSurfaceTest;
     friend class sp<FramebufferSurface>;
 
-    FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displayId,
-                       const sp<IGraphicBufferProducer>& producer,
-                       const sp<IGraphicBufferConsumer>& consumer, const ui::Size& size,
+    FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displayId, const ui::Size& size,
                        const ui::Size& maxSize);
 
     void initializeConsumer();

@@ -2318,13 +2318,11 @@ TEST_P(RefreshRateSelectorTest,
     // Note that `smoothSwitchOnly` should not have an effect.
     const std::initializer_list<Case> testCases = {
             {FrameRateCategory::Default, false, 120_Hz},
-            // TODO(b/266481656): Once this bug is fixed, NoPreference should be a lower frame rate.
             {FrameRateCategory::NoPreference, false, 120_Hz},
             {FrameRateCategory::Low, false, 48_Hz},
             {FrameRateCategory::Normal, false, 60_Hz},
             {FrameRateCategory::High, false, 120_Hz},
             {FrameRateCategory::Default, true, 120_Hz},
-            // TODO(b/266481656): Once this bug is fixed, NoPreference should be a lower frame rate.
             {FrameRateCategory::NoPreference, true, 120_Hz},
             {FrameRateCategory::Low, true, 48_Hz},
             {FrameRateCategory::Normal, true, 60_Hz},
@@ -4271,8 +4269,6 @@ TEST_P(RefreshRateSelectorTest, SupportsLowPhysicalRefreshRates) {
     EXPECT_EQ(kMode1, selector.getMinRefreshRateByPolicy());
 }
 
-// TODO(b/266481656): Once this bug is fixed, we can remove this test
-// And test for VRR when we remove this work around for VRR.
 TEST_P(RefreshRateSelectorTest, noLowerFrameRateOnMinVote) {
     auto selector = createSelector(kModes_60_90, kModeId60);
 

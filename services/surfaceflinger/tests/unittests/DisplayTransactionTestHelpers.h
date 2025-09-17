@@ -49,7 +49,6 @@
 #include "mock/DisplayHardware/MockComposer.h"
 #include "mock/DisplayHardware/MockDisplayMode.h"
 #include "mock/MockEventThread.h"
-#include "mock/MockNativeWindowSurface.h"
 #include "mock/PowerAdvisor/MockPowerAdvisor.h"
 #include "mock/system/window/MockNativeWindow.h"
 
@@ -87,7 +86,6 @@ public:
 
     void injectMockScheduler(PhysicalDisplayId);
     void injectMockComposer(int virtualDisplayCount);
-    void injectFakeNativeWindowSurfaceFactory();
 
     sp<DisplayDevice> injectDefaultInternalDisplay(
             std::function<void(TestableSurfaceFlinger::FakeDisplayDeviceInjector&)> injectExtra) {
@@ -133,9 +131,6 @@ public:
 
     mock::EventThread* mEventThread = new mock::EventThread;
     mock::EventThread* mSFEventThread = new mock::EventThread;
-
-    // These mocks are created only when expected to be created via a factory.
-    surfaceflinger::mock::NativeWindowSurface* mNativeWindowSurface = nullptr;
 
 protected:
     DisplayTransactionTest(bool withMockScheduler = true);
@@ -319,25 +314,6 @@ struct DisplayVariant {
                 .WillRepeatedly(Return(0));
 
         return injector;
-    }
-
-    // Called by tests to set up any native window creation call expectations.
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        EXPECT_CALL(*test->mNativeWindowSurface, getNativeWindow())
-                .WillOnce(Return(test->mNativeWindow));
-
-        EXPECT_CALL(*test->mNativeWindow, query(NATIVE_WINDOW_WIDTH, _))
-                .WillRepeatedly(DoAll(SetArgPointee<1>(WIDTH), Return(0)));
-        EXPECT_CALL(*test->mNativeWindow, query(NATIVE_WINDOW_HEIGHT, _))
-                .WillRepeatedly(DoAll(SetArgPointee<1>(HEIGHT), Return(0)));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_SET_BUFFERS_FORMAT))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_API_CONNECT))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_SET_USAGE64))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_API_DISCONNECT))
-                .WillRepeatedly(Return(0));
     }
 };
 
@@ -620,11 +596,6 @@ struct NonHwcVirtualDisplayVariant
     static void setupHwcGetActiveConfigCallExpectations(DisplayTransactionTest* test) {
         EXPECT_CALL(*test->mComposer, getActiveConfig(_, _)).Times(0);
     }
-
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        Base::setupNativeWindowSurfaceCreationCallExpectations(test);
-        EXPECT_CALL(*test->mNativeWindow, setSwapInterval(0)).Times(1);
-    }
 };
 
 // A virtual display supported by the HWC.
@@ -669,11 +640,6 @@ struct HwcVirtualDisplayVariant
         test->mFlinger.mutableHwcDisplayData().try_emplace(*displayId);
 
         return compositionDisplay;
-    }
-
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        Base::setupNativeWindowSurfaceCreationCallExpectations(test);
-        EXPECT_CALL(*test->mNativeWindow, setSwapInterval(0)).Times(1);
     }
 
     static void setupHwcVirtualDisplayCreationCallExpectations(DisplayTransactionTest* test) {

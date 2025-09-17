@@ -1304,8 +1304,8 @@ auto RefreshRateSelector::getMaxFpsForMode(std::optional<int> anchorGroupOpt) co
     // find the highest frame rate for each display mode
     PreferredFpsForMode maxRenderRateForMode;
 
-    // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
-    //  use a lower frame rate when we want Ascending frame rates.
+    // Use the highest frame rate for each mode to avoid increased latency due to SF waking up
+    // accoring to the render rate.
     for (const auto& frameRateMode : mPrimaryFrameRates) {
         if (anchorGroupOpt && frameRateMode.modePtr->getGroup() != anchorGroupOpt) {
             continue;
@@ -1371,8 +1371,6 @@ auto RefreshRateSelector::rankFrameRates(std::optional<int> anchorGroupOpt,
 
         const auto id = modePtr->getId();
         const auto fpsOpt = preferredFpsForMode.get(id);
-        // TODO(b/266481656): Once this bug is fixed, we can remove this workaround and actually
-        //  use a lower frame rate when we want Ascending frame rates.
         if (FlagManager::getInstance().use_at_least_60_for_min_vote()) {
             if (fpsOpt && frameRateMode.fps != *fpsOpt) {
                 return;
@@ -1398,8 +1396,6 @@ auto RefreshRateSelector::rankFrameRates(std::optional<int> anchorGroupOpt,
             constexpr float kNonPreferredModePenalty = 0.95f;
             score *= kNonPreferredModePenalty;
         } else if (ascending && id == getMinRefreshRateByPolicyLocked()->getId()) {
-            // TODO(b/266481656): Once this bug is fixed, we can remove this workaround
-            //  and actually use a lower frame rate when we want Ascending frame rates.
             ranking.emplace_front(ScoredFrameRate{frameRateMode, kScore});
             return;
         }

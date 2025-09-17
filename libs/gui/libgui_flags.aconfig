@@ -72,14 +72,6 @@ flag {
 } # wb_stream_splitter
 
 flag {
-  name: "buffer_release_channel"
-  namespace: "window_surfaces"
-  description: "Enable BufferReleaseChannel to optimize buffer releases"
-  bug: "294133380"
-  is_fixed_read_only: true
-} # buffer_release_channel
-
-flag {
   name: "wb_ring_buffer"
   namespace: "core_graphics"
   description: "Remove slot dependency in the Ring Buffer Consumer."
