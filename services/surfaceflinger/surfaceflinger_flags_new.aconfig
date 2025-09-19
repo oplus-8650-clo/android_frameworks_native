@@ -280,13 +280,6 @@ flag {
 } # offload_gpu_composition
 
 flag {
-  name: "pacesetter_selection"
-  namespace: "desktop_display"
-  description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
-  bug: "374072507"
-} # pacesetter_selection
-
-flag {
   name: "parse_edid_version_and_input_type"
   namespace: "desktop_display"
   description: "Extends the display information parsed and provided by SurfaceFlinger to include EDID version and input type."

@@ -692,6 +692,7 @@ private:
         bool populateAbsoluteAxisStates();
 
         bool hasKeycodeLocked(int keycode) const;
+        bool hasKeycodeInternalLocked(int keycode) const;
         bool loadVirtualKeyMapLocked();
         status_t loadKeyMapLocked();
         bool isExternalDeviceLocked();

@@ -18,8 +18,6 @@
 #include <vector>
 
 #include <attestation/HmacKeyManager.h>
-#include <com_android_input_flags.h>
-#include <flag_macros.h>
 #include <gtest/gtest.h>
 #include <input/InputConsumer.h>
 #include <input/InputTransport.h>
@@ -29,11 +27,6 @@ using namespace std::chrono_literals;
 namespace android {
 
 namespace {
-
-namespace input_flags = com::android::input::flags;
-
-const auto CLEAR_RELATIVE_AXES_IN_RESAMPLED_COORDS =
-        ACONFIG_FLAG(input_flags, clear_relative_axes_in_resampled_coords);
 
 struct Pointer {
     int32_t id;
@@ -399,8 +392,7 @@ TEST_F(TouchResamplingTest, MouseEventIsResampled) {
 /**
  * Mouse pointer coordinates are resampled.
  */
-TEST_F_WITH_FLAGS(TouchResamplingTest, MouseEventIsResampledClearingRelativeAxes,
-                  REQUIRES_FLAGS_ENABLED(CLEAR_RELATIVE_AXES_IN_RESAMPLED_COORDS)) {
+TEST_F(TouchResamplingTest, MouseEventIsResampledClearingRelativeAxes) {
     std::chrono::nanoseconds frameTime;
     std::vector<InputEventEntry> entries, expectedEntries;
 
@@ -649,8 +641,7 @@ TEST_F(TouchResamplingTest, OldEventReceivedAfterResampleOccurs) {
 }
 
 // Similar to OldEventReceivedAfterResampleOccurs, but axis values are set and verified.
-TEST_F_WITH_FLAGS(TouchResamplingTest, OldEventReceivedAfterResampleOccursVerifyAxes,
-                  REQUIRES_FLAGS_ENABLED(CLEAR_RELATIVE_AXES_IN_RESAMPLED_COORDS)) {
+TEST_F(TouchResamplingTest, OldEventReceivedAfterResampleOccursVerifyAxes) {
     std::chrono::nanoseconds frameTime;
     std::vector<InputEventEntry> entries, expectedEntries;
 

@@ -597,7 +597,8 @@ TEST_P(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
     // Manually designate the inner display as the pacesetter to prevent pacesetter change when the
     // outer display is powered off. A pacesetter change cancels the refresh rate change on the
     // VsyncModulator which breaks the early phase check in ModeSwitchingTo().
-    mFlinger.scheduler()->designatePacesetterDisplay(innerDisplay->getPhysicalId());
+    ftl::FakeGuard guard(kMainThreadContext);
+    mFlinger.scheduler()->forcePacesetterDisplay(innerDisplay->getPhysicalId());
 
     EXPECT_EQ(NO_ERROR,
               mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
@@ -652,8 +653,6 @@ TEST_P(DisplayModeSwitchingTest, powerOffDuringConcurrentModeSet) {
 }
 
 TEST_P(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
     const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
 
     EXPECT_TRUE(innerDisplay->isPoweredOn());

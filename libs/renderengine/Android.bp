@@ -98,6 +98,7 @@ filegroup {
         "skia/SkiaGLRenderEngine.cpp",
         "skia/SkiaVkRenderEngine.cpp",
         "skia/VulkanInterface.cpp",
+        "skia/compat/Base64.cpp",
         "skia/compat/GaneshBackendTexture.cpp",
         "skia/compat/GaneshGpuContext.cpp",
         "skia/compat/GraphiteBackendTexture.cpp",

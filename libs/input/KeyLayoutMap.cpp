@@ -188,15 +188,6 @@ base::Result<std::shared_ptr<KeyLayoutMap>> KeyLayoutMap::load(Tokenizer* tokeni
     return Errorf("Load KeyLayoutMap failed {}.", status);
 }
 
-void KeyLayoutMap::setKeyRemapping(const std::map<int32_t, int32_t>& keyRemapping) {
-    mKeyRemapping.clear();
-    for (const auto& [scanCode, keyCode] : keyRemapping) {
-        Key remappedKey;
-        remappedKey.keyCode = keyCode;
-        mKeyRemapping.insert_or_assign(scanCode, remappedKey);
-    }
-}
-
 status_t KeyLayoutMap::mapKey(int32_t scanCode, int32_t usageCode,
         int32_t* outKeyCode, uint32_t* outFlags) const {
     const Key* key = getKey(scanCode, usageCode);
@@ -239,10 +230,6 @@ const KeyLayoutMap::Key* KeyLayoutMap::getKey(int32_t scanCode, int32_t usageCod
         }
     }
     if (scanCode) {
-        auto remapIt = mKeyRemapping.find(scanCode);
-        if (remapIt != mKeyRemapping.end()) {
-            return &remapIt->second;
-        }
         auto it = mKeysByScanCode.find(scanCode);
         if (it != mKeysByScanCode.end()) {
             return &it->second;
@@ -253,11 +240,6 @@ const KeyLayoutMap::Key* KeyLayoutMap::getKey(int32_t scanCode, int32_t usageCod
 
 std::vector<int32_t> KeyLayoutMap::findScanCodesForKey(int32_t keyCode) const {
     std::vector<int32_t> scanCodes;
-    for (const auto& [scanCode, key] : mKeyRemapping) {
-        if (keyCode == key.keyCode) {
-            scanCodes.push_back(scanCode);
-        }
-    }
     // b/354333072: Only consider keys without FUNCTION flag
     for (const auto& [scanCode, key] : mKeysByScanCode) {
         if (keyCode == key.keyCode && !(key.flags & POLICY_FLAG_FUNCTION)) {

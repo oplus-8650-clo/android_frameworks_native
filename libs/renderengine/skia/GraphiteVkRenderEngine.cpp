@@ -100,7 +100,9 @@ static void unref_semaphore(void* semaphore, skgpu::CallbackResult result) {
 
 std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
         VulkanInterface& vulkanInterface) {
-    return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext());
+    return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(),
+                                               SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
+                                                      mRuntimeEffectManager.mKnownEffects.size()));
 }
 
 void GraphiteVkRenderEngine::waitFence(SkiaGpuContext*, base::borrowed_fd fenceFd) {

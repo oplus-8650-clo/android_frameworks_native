@@ -126,9 +126,19 @@ public:
     bool getEvents(int32_t deviceId, const char16_t* chars, size_t numChars,
             Vector<KeyEvent>& outEvents) const;
 
+    /* Maps some Android key code to another Android key code. This mapping is applied after
+     * scanCode and usageCodes are mapped to corresponding Android Keycode */
+    void setKeyRemapping(const std::map<int32_t, int32_t>& keyRemapping);
+
     /* Maps a scan code and usage code to a key code, in case this key map overrides
      * the mapping in some way. */
     status_t mapKey(int32_t scanCode, int32_t usageCode, int32_t* outKeyCode) const;
+
+    /* Returns keycode after applying Android key code remapping defined in mKeyRemapping */
+    int32_t applyKeyRemapping(int32_t fromKeyCode) const;
+
+    /** Returns list of keycodes that remap to provided keycode (@see setKeyRemapping()) */
+    std::vector<int32_t> findKeyCodesMappedToKeyCode(int32_t toKeyCode) const;
 
     /* Returns the <keyCode, metaState> pair after applying key behavior defined in the kcm file,
      * that tries to find a replacement key code based on current meta state */
@@ -222,6 +232,7 @@ private:
     std::string mLoadFileName;
     bool mLayoutOverlayApplied = false;
 
+    std::map<int32_t /* fromAndroidKeyCode */, int32_t /* toAndroidKeyCode */> mKeyRemapping;
     std::map<int32_t /* fromScanCode */, int32_t /* toAndroidKeyCode */> mKeysByScanCode;
     std::map<int32_t /* fromHidUsageCode */, int32_t /* toAndroidKeyCode */> mKeysByUsageCode;
 

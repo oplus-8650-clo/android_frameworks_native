@@ -68,8 +68,6 @@ public:
     static base::Result<std::shared_ptr<KeyLayoutMap>> loadContents(const std::string& filename,
                                                                     const char* contents);
 
-    /* Maps some linux scan code to another Android key code. */
-    void setKeyRemapping(const std::map<int32_t, int32_t>& keyRemapping);
     status_t mapKey(int32_t scanCode, int32_t usageCode,
             int32_t* outKeyCode, uint32_t* outFlags) const;
     std::vector<int32_t> findScanCodesForKey(int32_t keyCode) const;
@@ -109,7 +107,6 @@ private:
     std::unordered_map<int32_t, Sensor> mSensorsByAbsCode;
     std::set<std::string> mRequiredKernelConfigs;
     std::string mLoadFileName;
-    std::map<int32_t /* fromScanCode */, Key> mKeyRemapping;
 
     KeyLayoutMap();
 

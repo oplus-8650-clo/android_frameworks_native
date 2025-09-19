@@ -211,7 +211,7 @@ struct InputReaderConfiguration {
     bool stylusPointerIconEnabled;
 
     // Keycodes to be remapped.
-    std::map<int32_t /* fromLocationKeyCode */, int32_t /* toKeyCode */> keyRemapping;
+    std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
 
     // True if the external mouse should have its vertical scrolling reversed, so that rotating the
     // wheel downwards scrolls the content upwards.

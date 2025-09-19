@@ -704,6 +704,21 @@ bool EventHub::Device::populateAbsoluteAxisStates() {
 }
 
 bool EventHub::Device::hasKeycodeLocked(int keycode) const {
+    if (hasKeycodeInternalLocked(keycode)) {
+        return true;
+    }
+    if (!keyMap.haveKeyCharacterMap()) {
+        return false;
+    }
+    for (auto& fromKey : getKeyCharacterMap()->findKeyCodesMappedToKeyCode(keycode)) {
+        if (hasKeycodeInternalLocked(fromKey)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool EventHub::Device::hasKeycodeInternalLocked(int keycode) const {
     if (!keyMap.haveKeyLayout()) {
         return false;
     }
@@ -1114,16 +1129,16 @@ int32_t EventHub::getKeyCodeForKeyLocation(RawDeviceId deviceId, int32_t locatio
     }
 
     Device* virtualKeyboard = getDeviceLocked(VIRTUAL_KEYBOARD_ID);
-    if (virtualKeyboard == nullptr || device->keyMap.keyLayoutMap == nullptr) {
+    if (virtualKeyboard == nullptr || virtualKeyboard->keyMap.keyLayoutMap == nullptr) {
         return AKEYCODE_UNKNOWN;
     }
     // Find scancode for key location by lookup into standard QWERTY layout
     std::vector<int32_t> scanCodes =
             virtualKeyboard->keyMap.keyLayoutMap->findScanCodesForKey(locationKeyCode);
     if (scanCodes.empty()) {
-        ALOGW("Failed to get key code for key location: no scan code maps to key code %d for"
-              " virtual keyboard",
-              locationKeyCode);
+        ALOGW("Failed to get key code for key location: no scan code maps to key code %d for input"
+              "device %d",
+              locationKeyCode, deviceId);
         return AKEYCODE_UNKNOWN;
     }
     if (scanCodes.size() > 1) {
@@ -1131,17 +1146,22 @@ int32_t EventHub::getKeyCodeForKeyLocation(RawDeviceId deviceId, int32_t locatio
               locationKeyCode);
     }
     int32_t outKeyCode;
+    status_t result = NAME_NOT_FOUND;
     if (!device->getKeyCharacterMap()->mapKey(scanCodes[0], /*usageCode=*/0, &outKeyCode)) {
-        return outKeyCode;
+        result = NO_ERROR;
     }
     uint32_t outFlags;
     // key character map doesn't re-map this scanCode, use key layout file instead
-    if (!device->keyMap.keyLayoutMap->mapKey(scanCodes[0], /*usageCode=*/0, &outKeyCode,
-                                             &outFlags)) {
-        return outKeyCode;
+    if (result != NO_ERROR && !device->keyMap.keyLayoutMap->mapKey(scanCodes[0], /*usageCode=*/0,
+                                                                   &outKeyCode, &outFlags)) {
+        result = NO_ERROR;
     }
-    ALOGW("Failed to get key code for key location");
-    return AKEYCODE_UNKNOWN;
+    if (result != NO_ERROR) {
+        return AKEYCODE_UNKNOWN;
+    }
+    // Remap if there is a Key remapping added to the KCM and return the remapped key
+    outKeyCode = device->getKeyCharacterMap()->applyKeyRemapping(outKeyCode);
+    return outKeyCode;
 }
 
 int32_t EventHub::getSwitchState(RawDeviceId deviceId, int32_t sw) const {
@@ -1214,28 +1234,13 @@ void EventHub::setKeyRemapping(RawDeviceId deviceId,
                                const std::map<int32_t, int32_t>& keyRemapping) const {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
-    if (device == nullptr || device->keyMap.keyLayoutMap == nullptr) {
+    if (device == nullptr) {
         return;
     }
-    Device* virtualKeyboard = getDeviceLocked(VIRTUAL_KEYBOARD_ID);
-    if (virtualKeyboard == nullptr || virtualKeyboard->keyMap.keyLayoutMap == nullptr) {
-        return;
+    const std::shared_ptr<KeyCharacterMap> kcm = device->getKeyCharacterMap();
+    if (kcm) {
+        kcm->setKeyRemapping(keyRemapping);
     }
-    std::map<int32_t, int32_t> layoutRemapping;
-    // Iterate over the requested remapping (which maps location keycode -> desired keycode).
-    for (const auto& entry : keyRemapping) {
-        const int32_t locationKeyCode = entry.first;
-        const int32_t desiredKeyCode = entry.second;
-        // Use the virtual keyboard's (standard QWERTY) layout to find all scancodes
-        // that map to the given "location" keycode.
-        std::vector<int32_t> scanCodes =
-                virtualKeyboard->keyMap.keyLayoutMap->findScanCodesForKey(locationKeyCode);
-        // Create a new mapping entry (scancode -> desired keycode) for each scancode found.
-        for (int32_t scanCode : scanCodes) {
-            layoutRemapping[scanCode] = desiredKeyCode;
-        }
-    }
-    device->keyMap.keyLayoutMap->setKeyRemapping(layoutRemapping);
 }
 
 status_t EventHub::mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageCode,
@@ -1264,6 +1269,10 @@ status_t EventHub::mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageC
 
         if (status == NO_ERROR) {
             if (kcm) {
+                // Remap keys based on user-defined key remappings and key behavior defined in the
+                // corresponding kcm file
+                *outKeycode = kcm->applyKeyRemapping(*outKeycode);
+
                 // Remap keys based on Key behavior defined in KCM file
                 std::tie(*outKeycode, *outMetaState) =
                         kcm->applyKeyBehavior(*outKeycode, metaState);

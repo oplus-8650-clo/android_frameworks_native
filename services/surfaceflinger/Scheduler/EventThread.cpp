@@ -888,7 +888,7 @@ scheduler::VSyncCallbackRegistration EventThread::onNewVsyncScheduleInternal(
     // their transactions. The only way to revive the 'mVSyncState' right now is a new Hotplug
     // connect event. We should also revive 'mVSyncState' here so that when a new pacesetter is
     // selected, it can have a new vsync state.
-    if (FlagManager::getInstance().pacesetter_selection() && !mVSyncState) {
+    if (!mVSyncState) {
         SFTRACE_FORMAT_INSTANT("OnNewVsyncScheduleInternalNewState");
         mVSyncState.emplace();
     }
