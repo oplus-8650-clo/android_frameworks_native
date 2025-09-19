@@ -317,10 +317,6 @@ bool KeyCharacterMap::getEvents(int32_t deviceId, const char16_t* chars, size_t 
     return true;
 }
 
-void KeyCharacterMap::setKeyRemapping(const std::map<int32_t, int32_t>& keyRemapping) {
-    mKeyRemapping = keyRemapping;
-}
-
 status_t KeyCharacterMap::mapKey(int32_t scanCode, int32_t usageCode, int32_t* outKeyCode) const {
     if (usageCode) {
         const auto it = mKeysByUsageCode.find(usageCode);
@@ -350,30 +346,6 @@ status_t KeyCharacterMap::mapKey(int32_t scanCode, int32_t usageCode, int32_t* o
 #endif
     *outKeyCode = AKEYCODE_UNKNOWN;
     return NAME_NOT_FOUND;
-}
-
-int32_t KeyCharacterMap::applyKeyRemapping(int32_t fromKeyCode) const {
-    int32_t toKeyCode = fromKeyCode;
-
-    const auto it = mKeyRemapping.find(fromKeyCode);
-    if (it != mKeyRemapping.end()) {
-        toKeyCode = it->second;
-    }
-#if DEBUG_MAPPING
-    ALOGD("applyKeyRemapping: keyCode=%d ~ replacement keyCode=%d.", fromKeyCode, toKeyCode);
-#endif
-    return toKeyCode;
-}
-
-std::vector<int32_t> KeyCharacterMap::findKeyCodesMappedToKeyCode(int32_t toKeyCode) const {
-    std::vector<int32_t> fromKeyCodes;
-
-    for (const auto& [from, to] : mKeyRemapping) {
-        if (toKeyCode == to) {
-            fromKeyCodes.push_back(from);
-        }
-    }
-    return fromKeyCodes;
 }
 
 std::pair<int32_t, int32_t> KeyCharacterMap::applyKeyBehavior(int32_t fromKeyCode,
@@ -660,18 +632,6 @@ std::unique_ptr<KeyCharacterMap> KeyCharacterMap::readFromParcel(Parcel* parcel)
             return nullptr;
         }
     }
-    size_t numKeyRemapping = parcel->readInt32();
-    if (parcel->errorCheck()) {
-        return nullptr;
-    }
-    for (size_t i = 0; i < numKeyRemapping; i++) {
-        int32_t key = parcel->readInt32();
-        int32_t value = parcel->readInt32();
-        map->mKeyRemapping.insert_or_assign(key, value);
-        if (parcel->errorCheck()) {
-            return nullptr;
-        }
-    }
     size_t numKeysByScanCode = parcel->readInt32();
     if (parcel->errorCheck()) {
         return nullptr;
@@ -722,12 +682,6 @@ void KeyCharacterMap::writeToParcel(Parcel* parcel) const {
             parcel->writeInt32(behavior.replacementKeyCode);
         }
         parcel->writeInt32(0);
-    }
-    size_t numKeyRemapping = mKeyRemapping.size();
-    parcel->writeInt32(numKeyRemapping);
-    for (auto const& [fromAndroidKeyCode, toAndroidKeyCode] : mKeyRemapping) {
-        parcel->writeInt32(fromAndroidKeyCode);
-        parcel->writeInt32(toAndroidKeyCode);
     }
     size_t numKeysByScanCode = mKeysByScanCode.size();
     parcel->writeInt32(numKeysByScanCode);

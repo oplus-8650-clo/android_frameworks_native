@@ -18,11 +18,13 @@
 
 #include "UinputDevice.h"
 
+#include <chrono>
+#include <string>
+
 #include <gtest/gtest.h>
 #include <inttypes.h>
 #include <linux/uinput.h>
 #include <log/log.h>
-#include <chrono>
 
 #define TAG "EventHub_test"
 
@@ -279,4 +281,16 @@ TEST_F(BitArrayTest, AnyBit_InvalidBitIndex) {
     ASSERT_FALSE(mBitmaskMulti.any(256, 256));
     ASSERT_FALSE(mBitmaskMulti.any(257, 258));
     ASSERT_FALSE(mBitmaskMulti.any(0, 0));
+}
+
+TEST_F(BitArrayTest, DumpSetIndices) {
+    android::BitArray<32> arr;
+    arr.loadFromBuffer({0x80000004UL});
+    ASSERT_EQ("2, 31", arr.dumpSetIndices(", ", [](int i) { return std::to_string(i); }));
+}
+
+TEST_F(BitArrayTest, DumpSetIndices_EmptySet) {
+    android::BitArray<32> empty;
+    empty.loadFromBuffer({0x00000000UL});
+    ASSERT_EQ("<none>", empty.dumpSetIndices(", ", [](int i) { return std::to_string(i); }));
 }

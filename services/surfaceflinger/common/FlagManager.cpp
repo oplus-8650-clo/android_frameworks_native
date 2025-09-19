@@ -123,8 +123,6 @@ void FlagManager::dump(std::string& result) const {
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(add_first_vsync_to_tracker);
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
-    DUMP_ACONFIG_FLAG(adpf_use_fmq_channel);
-    DUMP_ACONFIG_FLAG(adpf_use_fmq_channel_fixed);
     DUMP_ACONFIG_FLAG(anchor_list);
     DUMP_ACONFIG_FLAG(buffer_stuffing_fix);
     DUMP_ACONFIG_FLAG(connected_displays_cursor);
@@ -329,8 +327,6 @@ FLAG_MANAGER_ACONFIG_FLAG(vsync_predictor_predicts_within_threshold, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel, "", android::os)
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(adpf_use_fmq_channel_fixed, "", android::os)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(connected_displays_cursor, "", com::android::input::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
                                    android::companion::virtualdevice::flags)

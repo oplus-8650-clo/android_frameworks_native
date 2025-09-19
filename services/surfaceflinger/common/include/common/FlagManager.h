@@ -54,8 +54,6 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool add_first_vsync_to_tracker() const;
     bool adpf_gpu_sf() const;
-    bool adpf_use_fmq_channel() const;
-    bool adpf_use_fmq_channel_fixed() const;
     bool anchor_list() const;
     bool buffer_stuffing_fix() const;
     bool connected_displays_cursor() const;

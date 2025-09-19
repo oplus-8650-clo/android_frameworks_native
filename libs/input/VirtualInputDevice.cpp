@@ -17,6 +17,7 @@
 #define LOG_TAG "VirtualInputDevice"
 
 #include <android-base/logging.h>
+#include <android-base/result.h>
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android_companion_virtualdevice_flags.h>
@@ -31,6 +32,9 @@ using android::base::unique_fd;
 
 namespace {
 
+using android::base::Error;
+using android::base::Result;
+
 /**
  * Log debug messages about native virtual input devices.
  * Enable this via "adb shell setprop log.tag.VirtualInputDevice DEBUG"
@@ -41,6 +45,91 @@ bool isDebug() {
 
 unique_fd invalidFd() {
     return unique_fd(-1);
+}
+
+Result<void> setupTouchscreenAxes(const unique_fd& fd, const android::ui::Size& screenSize) {
+    uinput_abs_setup xAbsSetup;
+    xAbsSetup.code = ABS_MT_POSITION_X;
+    xAbsSetup.absinfo.maximum = screenSize.width - 1;
+    xAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &xAbsSetup) != 0) {
+        return Error() << "Could not create touchscreen uinput x axis: " << strerror(errno);
+    }
+    uinput_abs_setup yAbsSetup;
+    yAbsSetup.code = ABS_MT_POSITION_Y;
+    yAbsSetup.absinfo.maximum = screenSize.height - 1;
+    yAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &yAbsSetup) != 0) {
+        return Error() << "Could not create touchscreen uinput y axis: " << strerror(errno);
+    }
+    uinput_abs_setup majorAbsSetup;
+    majorAbsSetup.code = ABS_MT_TOUCH_MAJOR;
+    majorAbsSetup.absinfo.maximum = screenSize.width - 1;
+    majorAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &majorAbsSetup) != 0) {
+        return Error() << "Could not create touchscreen uinput major axis: " << strerror(errno);
+    }
+    uinput_abs_setup pressureAbsSetup;
+    pressureAbsSetup.code = ABS_MT_PRESSURE;
+    pressureAbsSetup.absinfo.maximum = 255;
+    pressureAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &pressureAbsSetup) != 0) {
+        return Error() << "Could not create touchscreen uinput pressure axis: " << strerror(errno);
+    }
+    uinput_abs_setup slotAbsSetup;
+    slotAbsSetup.code = ABS_MT_SLOT;
+    slotAbsSetup.absinfo.maximum = MAX_POINTERS - 1;
+    slotAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &slotAbsSetup) != 0) {
+        return Error() << "Could not create touchscreen uinput slots: " << strerror(errno);
+    }
+    uinput_abs_setup trackingIdAbsSetup;
+    trackingIdAbsSetup.code = ABS_MT_TRACKING_ID;
+    trackingIdAbsSetup.absinfo.maximum = MAX_POINTERS - 1;
+    trackingIdAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &trackingIdAbsSetup) != 0) {
+        return Error() << "Could not create uinput tracking ids: " << strerror(errno);
+    }
+    return {};
+}
+
+Result<void> setupStylusAxes(const unique_fd& fd, const android::ui::Size& screenSize) {
+    uinput_abs_setup xAbsSetup;
+    xAbsSetup.code = ABS_X;
+    xAbsSetup.absinfo.maximum = screenSize.width - 1;
+    xAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &xAbsSetup) != 0) {
+        return Error() << "Could not create stylus uinput x axis: " << strerror(errno);
+    }
+    uinput_abs_setup yAbsSetup;
+    yAbsSetup.code = ABS_Y;
+    yAbsSetup.absinfo.maximum = screenSize.height - 1;
+    yAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &yAbsSetup) != 0) {
+        return Error() << "Could not create stylus uinput y axis: " << strerror(errno);
+    }
+    uinput_abs_setup tiltXAbsSetup;
+    tiltXAbsSetup.code = ABS_TILT_X;
+    tiltXAbsSetup.absinfo.maximum = 90;
+    tiltXAbsSetup.absinfo.minimum = -90;
+    if (ioctl(fd, UI_ABS_SETUP, &tiltXAbsSetup) != 0) {
+        return Error() << "Could not create stylus uinput tilt x axis: " << strerror(errno);
+    }
+    uinput_abs_setup tiltYAbsSetup;
+    tiltYAbsSetup.code = ABS_TILT_Y;
+    tiltYAbsSetup.absinfo.maximum = 90;
+    tiltYAbsSetup.absinfo.minimum = -90;
+    if (ioctl(fd, UI_ABS_SETUP, &tiltYAbsSetup) != 0) {
+        return Error() << "Could not create stylus uinput tilt y axis: " << strerror(errno);
+    }
+    uinput_abs_setup pressureAbsSetup;
+    pressureAbsSetup.code = ABS_PRESSURE;
+    pressureAbsSetup.absinfo.maximum = 255;
+    pressureAbsSetup.absinfo.minimum = 0;
+    if (ioctl(fd, UI_ABS_SETUP, &pressureAbsSetup) != 0) {
+        return Error() << "Could not create stylus uinput pressure axis: " << strerror(errno);
+    }
+    return {};
 }
 
 } // namespace
@@ -139,95 +228,17 @@ unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t product
         if (deviceType == DeviceType::TOUCHSCREEN) {
             LOG_IF(FATAL, screenSize == std::nullopt)
                     << __func__ << ": screenSize must be provided";
-            uinput_abs_setup xAbsSetup;
-            xAbsSetup.code = ABS_MT_POSITION_X;
-            xAbsSetup.absinfo.maximum = screenSize->width - 1;
-            xAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &xAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput x axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup yAbsSetup;
-            yAbsSetup.code = ABS_MT_POSITION_Y;
-            yAbsSetup.absinfo.maximum = screenSize->height - 1;
-            yAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &yAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput y axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup majorAbsSetup;
-            majorAbsSetup.code = ABS_MT_TOUCH_MAJOR;
-            majorAbsSetup.absinfo.maximum = screenSize->width - 1;
-            majorAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &majorAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput major axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup pressureAbsSetup;
-            pressureAbsSetup.code = ABS_MT_PRESSURE;
-            pressureAbsSetup.absinfo.maximum = 255;
-            pressureAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &pressureAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput pressure axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup slotAbsSetup;
-            slotAbsSetup.code = ABS_MT_SLOT;
-            slotAbsSetup.absinfo.maximum = MAX_POINTERS - 1;
-            slotAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &slotAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput slots: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup trackingIdAbsSetup;
-            trackingIdAbsSetup.code = ABS_MT_TRACKING_ID;
-            trackingIdAbsSetup.absinfo.maximum = MAX_POINTERS - 1;
-            trackingIdAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &trackingIdAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput tracking ids: %s", strerror(errno));
+            base::Result<void> result = setupTouchscreenAxes(fd, screenSize.value());
+            if (!result) {
+                LOG(ERROR) << "Could not set up touchscreen: " << result.error();
                 return invalidFd();
             }
         } else if (deviceType == DeviceType::STYLUS) {
             LOG_IF(FATAL, screenSize == std::nullopt)
                     << __func__ << ": screenSize must be provided";
-            uinput_abs_setup xAbsSetup;
-            xAbsSetup.code = ABS_X;
-            xAbsSetup.absinfo.maximum = screenSize->width - 1;
-            xAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &xAbsSetup) != 0) {
-                ALOGE("Error creating stylus uinput x axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup yAbsSetup;
-            yAbsSetup.code = ABS_Y;
-            yAbsSetup.absinfo.maximum = screenSize->height - 1;
-            yAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &yAbsSetup) != 0) {
-                ALOGE("Error creating stylus uinput y axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup tiltXAbsSetup;
-            tiltXAbsSetup.code = ABS_TILT_X;
-            tiltXAbsSetup.absinfo.maximum = 90;
-            tiltXAbsSetup.absinfo.minimum = -90;
-            if (ioctl(fd, UI_ABS_SETUP, &tiltXAbsSetup) != 0) {
-                ALOGE("Error creating stylus uinput tilt x axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup tiltYAbsSetup;
-            tiltYAbsSetup.code = ABS_TILT_Y;
-            tiltYAbsSetup.absinfo.maximum = 90;
-            tiltYAbsSetup.absinfo.minimum = -90;
-            if (ioctl(fd, UI_ABS_SETUP, &tiltYAbsSetup) != 0) {
-                ALOGE("Error creating stylus uinput tilt y axis: %s", strerror(errno));
-                return invalidFd();
-            }
-            uinput_abs_setup pressureAbsSetup;
-            pressureAbsSetup.code = ABS_PRESSURE;
-            pressureAbsSetup.absinfo.maximum = 255;
-            pressureAbsSetup.absinfo.minimum = 0;
-            if (ioctl(fd, UI_ABS_SETUP, &pressureAbsSetup) != 0) {
-                ALOGE("Error creating touchscreen uinput pressure axis: %s", strerror(errno));
+            base::Result<void> result = setupStylusAxes(fd, screenSize.value());
+            if (!result) {
+                LOG(ERROR) << "Could not set up stylus: " << result.error();
                 return invalidFd();
             }
         }

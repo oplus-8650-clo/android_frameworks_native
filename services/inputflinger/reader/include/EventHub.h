@@ -412,82 +412,63 @@ public:
     virtual bool setKernelWakeEnabled(RawDeviceId deviceId, bool enabled) = 0;
 };
 
+/** A bitset with additional utility methods. */
 template <std::size_t BITS>
 class BitArray {
-    /* Array element type and vector of element type. */
+    /** The array element type to use in Buffers. */
     using Element = std::uint32_t;
-    /* Number of bits in each BitArray element. */
+    /** The number of bits in each Buffer element. */
     static constexpr size_t WIDTH = sizeof(Element) * CHAR_BIT;
-    /* Number of elements to represent a bit array of the specified size of bits. */
+    /** The number of Elements needed for a bit array with the specified number of bits. */
     static constexpr size_t COUNT = (BITS + WIDTH - 1) / WIDTH;
 
 public:
-    /* BUFFER type declaration for BitArray */
+    /** A buffer of a suitable size for loading into a BitArray using loadFromBuffer. */
     using Buffer = std::array<Element, COUNT>;
-    /* To tell if a bit is set in array, it selects an element from the array, and test
-     * if the relevant bit set.
-     * Note the parameter "bit" is an index to the bit, 0 <= bit < BITS.
-     */
-    inline bool test(size_t bit) const {
-        return (bit < BITS) && mData[bit / WIDTH].test(bit % WIDTH);
-    }
-    /* Sets the given bit in the bit array to given value.
+
+    /** Returns the value of the bit at the given index, which should be 0 <= bit < BITS. */
+    inline bool test(size_t bit) const { return bit < BITS && mData.test(bit); }
+
+    /**
+     * Sets the given bit in the bit array to the given value.
      * Returns true if the given bit is a valid index and thus was set successfully.
      */
     inline bool set(size_t bit, bool value) {
         if (bit >= BITS) {
             return false;
         }
-        mData[bit / WIDTH].set(bit % WIDTH, value);
+        mData.set(bit, value);
         return true;
     }
-    /* Returns total number of bytes needed for the array */
+
+    /** Returns the total number of bytes needed for the array. */
     inline size_t bytes() { return (BITS + CHAR_BIT - 1) / CHAR_BIT; }
-    /* Returns true if array contains any non-zero bit from the range defined by start and end
-     * bit index [startIndex, endIndex).
-     */
+
+    /** Returns true if any bit in the range [startIndex, endIndex) is set. */
     bool any(size_t startIndex, size_t endIndex) {
-        if (startIndex >= endIndex || startIndex > BITS || endIndex > BITS + 1) {
+        if (startIndex >= endIndex || startIndex >= BITS || endIndex > BITS) {
             ALOGE("Invalid start/end index. start = %zu, end = %zu, total bits = %zu", startIndex,
                   endIndex, BITS);
             return false;
         }
-        size_t se = startIndex / WIDTH; // Start of element
-        size_t ee = endIndex / WIDTH;   // End of element
-        size_t si = startIndex % WIDTH; // Start index in start element
-        size_t ei = endIndex % WIDTH;   // End index in end element
-        // Need to check first unaligned bitset for any non zero bit
-        if (si > 0) {
-            size_t nBits = se == ee ? ei - si : WIDTH - si;
-            // Generate the mask of interested bit range
-            Element mask = ((1 << nBits) - 1) << si;
-            if (mData[se++].to_ulong() & mask) {
-                return true;
-            }
-        }
-        // Check whole bitset for any bit set
-        for (; se < ee; se++) {
-            if (mData[se].any()) {
-                return true;
-            }
-        }
-        // Need to check last unaligned bitset for any non zero bit
-        if (ei > 0 && se <= ee) {
-            // Generate the mask of interested bit range
-            Element mask = (1 << ei) - 1;
-            if (mData[se].to_ulong() & mask) {
+        for (size_t i = startIndex; i < endIndex; i++) {
+            if (mData.test(i)) {
                 return true;
             }
         }
         return false;
     }
-    /* Load bit array values from buffer */
+
+    /** Load bit array values from a buffer. */
     void loadFromBuffer(const Buffer& buffer) {
-        for (size_t i = 0; i < COUNT; i++) {
-            mData[i] = std::bitset<WIDTH>(buffer[i]);
+        mData.reset();
+        for (ssize_t i = buffer.size() - 1; i >= 0; i--) {
+            mData <<= WIDTH;
+            mData |= buffer[i];
         }
     }
-    /* Dump the indices in the bit array that are set. */
+
+    /** Dump the indices in the bit array that are set. */
     inline std::string dumpSetIndices(std::string separator,
                                       std::function<std::string(size_t /*index*/)> format) {
         std::string dmp;
@@ -503,7 +484,7 @@ public:
     }
 
 private:
-    std::array<std::bitset<WIDTH>, COUNT> mData;
+    std::bitset<BITS> mData;
 };
 
 class EventHub : public EventHubInterface {
@@ -711,7 +692,6 @@ private:
         bool populateAbsoluteAxisStates();
 
         bool hasKeycodeLocked(int keycode) const;
-        bool hasKeycodeInternalLocked(int keycode) const;
         bool loadVirtualKeyMapLocked();
         status_t loadKeyMapLocked();
         bool isExternalDeviceLocked();

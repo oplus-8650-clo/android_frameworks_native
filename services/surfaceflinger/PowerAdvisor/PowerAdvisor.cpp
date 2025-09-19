@@ -194,8 +194,7 @@ bool PowerAdvisor::supportsPowerHintSession() {
 }
 
 bool PowerAdvisor::shouldCreateSessionWithConfig() {
-    return mSessionConfigSupported && mBootFinished &&
-            FlagManager::getInstance().adpf_use_fmq_channel();
+    return mSessionConfigSupported && mBootFinished;
 }
 
 void PowerAdvisor::sendHintSessionHint(hal::SessionHint hint) {
@@ -233,9 +232,7 @@ bool PowerAdvisor::ensurePowerHintSessionRunning() {
                                                                  &mSessionConfig);
             if (ret.isOk()) {
                 mHintSession = ret.value();
-                if (FlagManager::getInstance().adpf_use_fmq_channel_fixed()) {
-                    setUpFmq();
-                }
+                setUpFmq();
             }
             // If it fails the first time we try, or ever returns unsupported, assume unsupported
             else if (mFirstConfigSupportCheck || ret.isUnsupported()) {
