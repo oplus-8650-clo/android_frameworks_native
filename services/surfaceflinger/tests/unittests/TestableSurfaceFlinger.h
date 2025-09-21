@@ -1130,11 +1130,10 @@ public:
                                                                       refreshRate, refreshRate);
 
                 if (mFlinger.scheduler() && mSchedulerRegistration) {
-                    mFlinger.scheduler()
-                            ->registerDisplay(*physicalId, *mConnectionType,
-                                              mCreationArgs.refreshRateSelector,
-                                              std::move(controller), std::move(tracker),
-                                              mFlinger.flinger()->getDefaultPacesetterDisplay());
+                    mFlinger.scheduler()->registerDisplay(*physicalId, *mConnectionType,
+                                                          mCreationArgs.refreshRateSelector,
+                                                          std::move(controller),
+                                                          std::move(tracker));
                 }
             }
 

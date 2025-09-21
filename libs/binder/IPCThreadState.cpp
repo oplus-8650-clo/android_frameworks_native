@@ -20,6 +20,7 @@
 
 #include <binder/Binder.h>
 #include <binder/BpBinder.h>
+#include <binder/ProcessState.h>
 #include <binder/TextOutput.h>
 
 #include <utils/CallStack.h>
@@ -73,22 +74,6 @@ using namespace std::chrono_literals;
 namespace {
     bool waitForFrozenListenerRemovalCompletion() {
 #if defined(LIBBINDER_DEFER_BC_REQUEST_FREEZE_NOTIFICATION)
-        return true;
-#else
-        return false;
-#endif
-    }
-
-    bool fixRecursiveDoubleDerefs() {
-#if defined(LIBBINDER_FIX_RECURSIVE_DOUBLE_DEREFS)
-        return true;
-#else
-        return false;
-#endif
-    }
-
-    bool freezeUseFlushIfNeeded() {
-#if defined(LIBBINDER_FREEZE_USE_FLUSH_IF_NEEDED)
         return true;
 #else
         return false;
@@ -457,7 +442,7 @@ const char* IPCThreadState::getCallingSid() const
 uid_t IPCThreadState::getCallingUid() const
 {
     checkContextIsBinderForUse(__func__);
-    return mCallingUid;
+    return mCallingUid.has_value() ? mCallingUid.value() : getuid();
 }
 
 const IPCThreadState::SpGuard* IPCThreadState::pushGetCallingSpGuard(const SpGuard* guard) {
@@ -562,7 +547,8 @@ static_assert(unpackCallingPid(packCallingIdentity(false, 1000, -1)) == -1,
 int64_t IPCThreadState::clearCallingIdentity()
 {
     // ignore mCallingSid for legacy reasons
-    int64_t token = packCallingIdentity(mHasExplicitIdentity, mCallingUid, mCallingPid);
+    uid_t callingUid = mCallingUid.has_value() ? mCallingUid.value() : getuid();
+    int64_t token = packCallingIdentity(mHasExplicitIdentity, callingUid, mCallingPid);
     clearCaller();
     mHasExplicitIdentity = true;
     return token;
@@ -654,7 +640,7 @@ void IPCThreadState::clearCaller()
 {
     mCallingPid = getpid();
     mCallingSid = nullptr;  // expensive to lookup
-    mCallingUid = getuid();
+    mCallingUid.reset();
 }
 
 status_t IPCThreadState::flushCommands() {
@@ -815,10 +801,8 @@ void IPCThreadState::processPendingDerefs()
 
 void IPCThreadState::processPostWriteDerefs()
 {
-    if (fixRecursiveDoubleDerefs()) {
-        LOG_ALWAYS_FATAL_IF(mIsProcessingPostWriteDerefs,
-                            "processPostWriteDerefs is called recursively.");
-    }
+    LOG_ALWAYS_FATAL_IF(mIsProcessingPostWriteDerefs,
+                        "processPostWriteDerefs is called recursively.");
     mIsProcessingPostWriteDerefs = true;
 
     for (size_t i = 0; i < mPostWriteWeakDerefs.size(); i++) {
@@ -839,7 +823,7 @@ void IPCThreadState::processPostWriteDerefs()
 void IPCThreadState::joinThreadPool(bool isMain)
 {
     LOG_THREADPOOL("**** THREAD %p (PID %d) IS JOINING THE THREAD POOL\n", (void*)pthread_self(),
-                   getpid());
+        getpid());
     mProcess->checkExpectingThreadPoolStart();
     mProcess->mCurrentThreads++;
     mOut.writeInt32(isMain ? BC_ENTER_LOOPER : BC_REGISTER_LOOPER);
@@ -1081,12 +1065,6 @@ status_t IPCThreadState::addFrozenStateChangeCallback(int32_t handle, BpBinder* 
             }
         }
         return NO_ERROR;
-    } else if (freezeUseFlushIfNeeded()) {
-        status_t res;
-        if (flushIfNeeded(&res) && res != OK) {
-            LOG_ALWAYS_FATAL("flushIfNeeded failed. %s(%d): %s", __func__, handle,
-                             statusToString(res).c_str());
-        }
     } else if (status_t res = flushCommands(); res != OK) {
         LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
     }
@@ -1111,12 +1089,6 @@ status_t IPCThreadState::removeFrozenStateChangeCallback(int32_t handle, BpBinde
             }
         }
         return NO_ERROR;
-    } else if (freezeUseFlushIfNeeded()) {
-        status_t res;
-        if (flushIfNeeded(&res) && res != OK) {
-            LOG_ALWAYS_FATAL("flushIfNeeded failed. %s(%d): %s", __func__, handle,
-                             statusToString(res).c_str());
-        }
     } else if (status_t res = flushCommands(); res != OK) {
         LOG_ALWAYS_FATAL("%s(%d): %s", __func__, handle, statusToString(res).c_str());
     }
@@ -1536,7 +1508,7 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
 
             const pid_t origPid = mCallingPid;
             const char* origSid = mCallingSid;
-            const uid_t origUid = mCallingUid;
+            const auto origUid = mCallingUid;
             const bool origHasExplicitIdentity = mHasExplicitIdentity;
             const int32_t origStrictModePolicy = mStrictModePolicy;
             const int32_t origTransactionBinderFlags = mLastTransactionBinderFlags;
@@ -1720,7 +1692,7 @@ status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const 
                                           Parcel* reply, uint32_t flags) {
 #ifdef BINDER_WITH_OBSERVERS
     BinderObserver::CallInfo callInfo =
-            mProcess->mBinderObserver->onBeginTransaction(binder, code, mCallingUid);
+            mProcess->mBinderObserver->onBeginTransaction(binder, code, getCallingUid());
 #endif
     status_t error =
             binder != nullptr ? binder->transact(code, data, reply, flags) : UNKNOWN_TRANSACTION;

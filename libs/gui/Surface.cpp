@@ -3165,16 +3165,14 @@ void Surface::destroy() {
 }
 
 bool Surface::IsCursorPlaneCompatibilitySupported() {
-    if (com::android::graphics::libgui::flags::cursor_plane_compatibility()) {
-        const AHardwareBuffer_Desc testDesc{.width = 64,
-                                            .height = 64,
-                                            .layers = 1,
-                                            .format = AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
-                                            .usage = GRALLOC_USAGE_CURSOR};
-        return AHardwareBuffer_isSupported(&testDesc);
-    }
-
-    return false;
+    const AHardwareBuffer_Desc testDesc{.width = 64,
+                                        .height = 64,
+                                        .layers = 1,
+                                        .format = AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
+                                        .usage = GRALLOC_USAGE_CURSOR};
+    const bool ret = AHardwareBuffer_isSupported(&testDesc);
+    ALOGW_IF(!ret, "Required cursor plane buffer format not supported");
+    return ret;
 }
 
 }; // namespace android

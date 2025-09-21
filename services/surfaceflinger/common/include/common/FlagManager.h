@@ -54,8 +54,6 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool add_first_vsync_to_tracker() const;
     bool adpf_gpu_sf() const;
-    bool adpf_use_fmq_channel() const;
-    bool adpf_use_fmq_channel_fixed() const;
     bool anchor_list() const;
     bool buffer_stuffing_fix() const;
     bool connected_displays_cursor() const;
@@ -104,7 +102,6 @@ public:
     bool luts_api() const;
     bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
-    bool pacesetter_selection() const;
     bool parse_edid_version_and_input_type() const;
     bool protected_if_client() const;
     bool renderable_buffer_usage() const;

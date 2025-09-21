@@ -22,6 +22,8 @@
 #include <utils/Errors.h>
 #include <utils/Vector.h>
 
+#include <optional>
+
 #if defined(_WIN32)
 typedef  int  uid_t;
 #endif
@@ -249,7 +251,7 @@ private:
             const SpGuard* mServingStackPointerGuard;
             pid_t               mCallingPid;
             const char*         mCallingSid;
-            uid_t               mCallingUid;
+            std::optional<uid_t> mCallingUid;
             // The UID of the process who is responsible for this transaction.
             // This is used for resource attribution.
             int32_t             mWorkSource;

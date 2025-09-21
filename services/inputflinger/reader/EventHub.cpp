@@ -1127,8 +1127,14 @@ int32_t EventHub::getKeyCodeForKeyLocation(RawDeviceId deviceId, int32_t locatio
         device->keyMap.keyLayoutMap == nullptr) {
         return AKEYCODE_UNKNOWN;
     }
+
+    Device* virtualKeyboard = getDeviceLocked(VIRTUAL_KEYBOARD_ID);
+    if (virtualKeyboard == nullptr || virtualKeyboard->keyMap.keyLayoutMap == nullptr) {
+        return AKEYCODE_UNKNOWN;
+    }
+    // Find scancode for key location by lookup into standard QWERTY layout
     std::vector<int32_t> scanCodes =
-            device->keyMap.keyLayoutMap->findScanCodesForKey(locationKeyCode);
+            virtualKeyboard->keyMap.keyLayoutMap->findScanCodesForKey(locationKeyCode);
     if (scanCodes.empty()) {
         ALOGW("Failed to get key code for key location: no scan code maps to key code %d for input"
               "device %d",
@@ -1140,23 +1146,22 @@ int32_t EventHub::getKeyCodeForKeyLocation(RawDeviceId deviceId, int32_t locatio
               locationKeyCode);
     }
     int32_t outKeyCode;
-    status_t mapKeyRes =
-            device->getKeyCharacterMap()->mapKey(scanCodes[0], /*usageCode=*/0, &outKeyCode);
-    switch (mapKeyRes) {
-        case OK:
-            break;
-        case NAME_NOT_FOUND:
-            // key character map doesn't re-map this scanCode, hence the keyCode remains the same
-            outKeyCode = locationKeyCode;
-            break;
-        default:
-            ALOGW("Failed to get key code for key location: Key character map returned error %s",
-                  statusToString(mapKeyRes).c_str());
-            outKeyCode = AKEYCODE_UNKNOWN;
-            break;
+    status_t result = NAME_NOT_FOUND;
+    if (!device->getKeyCharacterMap()->mapKey(scanCodes[0], /*usageCode=*/0, &outKeyCode)) {
+        result = NO_ERROR;
+    }
+    uint32_t outFlags;
+    // key character map doesn't re-map this scanCode, use key layout file instead
+    if (result != NO_ERROR && !device->keyMap.keyLayoutMap->mapKey(scanCodes[0], /*usageCode=*/0,
+                                                                   &outKeyCode, &outFlags)) {
+        result = NO_ERROR;
+    }
+    if (result != NO_ERROR) {
+        return AKEYCODE_UNKNOWN;
     }
     // Remap if there is a Key remapping added to the KCM and return the remapped key
-    return device->getKeyCharacterMap()->applyKeyRemapping(outKeyCode);
+    outKeyCode = device->getKeyCharacterMap()->applyKeyRemapping(outKeyCode);
+    return outKeyCode;
 }
 
 int32_t EventHub::getSwitchState(RawDeviceId deviceId, int32_t sw) const {
