@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 #pragma once
 
 #include <cstdint>
@@ -71,12 +69,10 @@
 
 namespace android {
 
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 namespace surfaceflingerextension {
 class QtiHWComposerExtension;
 } // namespace surfaceflingerextension
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 namespace hal = hardware::graphics::composer::hal;
 
 struct DisplayedFrameStats;
@@ -563,10 +559,8 @@ private:
     friend TestableSurfaceFlinger;
     friend HWComposerTest;
 
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     friend class android::surfaceflingerextension::QtiHWComposerExtension;
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     struct DisplayData {
         std::unique_ptr<HWC2::Display> hwcDisplay;
         std::optional<uint8_t> port; // Set on hotplug for physical displays

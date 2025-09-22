@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
 
 #pragma clang diagnostic push
@@ -78,9 +74,7 @@
 #include "FrontEnd/LayerHandle.h"
 #include "Layer.h"
 #include "LayerProtoHelper.h"
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 #include "QtiExtension/QtiSurfaceFlingerExtensionIntf.h"
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 #include "Scheduler/FrameTimeline.h"
 #include "SurfaceFlinger.h"
 #include "TimeStats/TimeStats.h"
@@ -130,12 +124,10 @@ TimeStats::SetFrameRateVote frameRateToSetFrameRateVotePayload(Layer::FrameRate 
 
 } // namespace
 
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 namespace surfaceflingerextension {
 class QtiSurfaceFlingerExtensionIntf;
 } // namespace surfaceflingerextension
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 using namespace ftl::flag_operators;
 
 using base::StringAppendF;
@@ -178,9 +170,7 @@ Layer::Layer(const surfaceflinger::LayerCreationArgs& args)
     mOwnerAppId = mOwnerUid % PER_USER_RANGE;
 
     mPotentialCursor = args.flags & ISurfaceComposerClient::eCursorWindow;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     mQtiLayerClass = mFlinger->mQtiSFExtnIntf->qtiGetLayerClass(mName);
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 void Layer::onFirstRef() {
@@ -580,9 +570,7 @@ void Layer::miniDumpHeader(std::string& result) {
     result.append(" Layer name\n");
     result.append("           Z | ");
     result.append(" Window Type | ");
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     result.append(" Layer Class |");
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     result.append(" Comp Type | ");
     result.append(" Transform | ");
     result.append("  Disp Frame (LTRB) | ");
@@ -926,14 +914,12 @@ bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
         REQUIRES(mFlinger->mStateLock) {
     SFTRACE_FORMAT("setBuffer %s - hasBuffer=%s", getDebugName(), (buffer ? "true" : "false"));
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (bufferData.qtiInvalid) {
         callReleaseBufferCallback(bufferData.releaseBufferListener, buffer->getBuffer(),
                                   bufferData.frameNumber, bufferData.acquireFence);
         return false;
     }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (mDrawingState.buffer) {
         releasePreviousBuffer();
     } else if (buffer) {
@@ -1560,10 +1546,8 @@ bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime,
         }
     }
     mFlinger->mQtiSFExtnIntf->qtiSetPresentTime(qtiGetSmomoLayerStackId(), getSequence(),
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                                                 mBufferInfo.mDesiredPresentTime);
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     return true;
 }
 
@@ -1668,14 +1652,12 @@ void Layer::setIsSmallDirty(frontend::LayerSnapshot* snapshot) {
 
 void Layer::qtiSetSmomoLayerStackId(uint32_t id) {
     qtiSmomoLayerStackId = id;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 uint32_t Layer::qtiGetSmomoLayerStackId() {
     return qtiSmomoLayerStackId;
 }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 } // namespace android
 
 #if defined(__gl_h_)

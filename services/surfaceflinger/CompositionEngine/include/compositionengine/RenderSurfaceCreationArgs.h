@@ -24,12 +24,10 @@
 
 struct ANativeWindow;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace android::surfaceflingerextension {
 class QtiDisplaySurfaceExtensionIntf;
 }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace android::compositionengine {
 
 /**
@@ -51,10 +49,8 @@ struct RenderSurfaceCreationArgs {
     // The maximum size of the renderengine::ExternalTexture cache
     size_t maxTextureCacheSize = 0;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 private:
     friend class RenderSurfaceCreationArgsBuilder;
 
@@ -88,14 +84,12 @@ public:
         return *this;
     }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     RenderSurfaceCreationArgsBuilder& qtiSetDisplaySurfaceExtension(
             android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf) {
         mArgs.mQtiDSExtnIntf = mQtiDSExtnIntf;
         return *this;
     }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 private:
     RenderSurfaceCreationArgs mArgs;
 };

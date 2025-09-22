@@ -1338,11 +1338,9 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
         mSlots[slot].requiresFreeOnReturn = false;
     }
 
-    /* QTI_BEGIN */
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->setQueuedBufferSlot(slot);
     }
-    /* QTI_END */
 
     if (mEnableFrameTimestamps) {
         mFrameEventHistory->applyDelta(output.frameTimestamps);
