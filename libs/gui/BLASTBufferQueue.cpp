@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #undef LOG_TAG
 #define LOG_TAG "BLASTBufferQueue"
 
@@ -233,9 +237,13 @@ void BLASTBufferQueue::initialize() {
     mProducer->setMaxDequeuedBufferCount(2);
 
     BQA_LOGV("BLASTBufferQueue created");
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (!mQtiBBQExtn) {
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         mQtiBBQExtn = new libguiextension::QtiBLASTBufferQueueExtension(this, mName);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 BLASTBufferQueue::BLASTBufferQueue(const std::string& name, bool updateDestinationFrame)
@@ -330,9 +338,11 @@ void BLASTBufferQueue::update(const sp<SurfaceControl>& surface, uint32_t width,
         // All transactions on our apply token are one-way. See comment on mAppliedLastTransaction
         t.setApplyToken(mApplyToken).apply(false /* synchronous */, true /* oneWay */);
     }
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (mQtiBBQExtn) {
         mQtiBBQExtn->qtiSetConsumerUsageBitsForRC(mName, mSurfaceControl);
     }
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 static std::optional<SurfaceControlStats> findMatchingStat(

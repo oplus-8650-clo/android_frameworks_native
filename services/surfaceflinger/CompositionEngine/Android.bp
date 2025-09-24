@@ -126,7 +126,9 @@ cc_library {
         "libgtest",
         "libgmock",
         "libcompositionengine",
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         "libqticompositionengineextension",
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     ],
     shared_libs: [
         "server_configurable_flags",
@@ -175,7 +177,9 @@ cc_test {
         "libgtest",
         "libgui_mocks",
         "librenderengine_mocks",
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         "libqticompositionengineextension",
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     ],
     shared_libs: [
         "libbinder_ndk",

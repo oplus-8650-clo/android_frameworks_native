@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 #include <SurfaceFlingerProperties.sysprop.h>
 #include <android-base/stringprintf.h>
 #include <common/FlagManager.h>
@@ -64,9 +66,11 @@
 
 #include "TracedOrdinal.h"
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include "../QtiExtension/QtiOutputExtension.h"
 using android::compositionengineextension::QtiOutputExtension;
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 using aidl::android::hardware::graphics::composer3::Composition;
 
 namespace android::compositionengine {
@@ -115,9 +119,11 @@ std::shared_ptr<Output> createOutput(
     return createOutputTemplated<Output>(compositionEngine);
 }
 
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 Output::Output() {
 }
 
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 Output::~Output() = default;
 
 bool Output::isValid() const {
@@ -996,9 +1002,11 @@ void Output::writeCompositionState(const compositionengine::CompositionRefreshAr
                     z, includeGeometry, overrideZ, isPeekingThrough,
                     layer->requiresClientComposition());
         }
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         QtiOutputExtension::qtiWriteLayerFlagToHWC(layer->getHwcLayer(), this);
         // QTI_END
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
     editState().outputLayerHash = outputLayerHash;
 
@@ -1120,17 +1128,23 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
     }
 
     // respect hdrDataSpace only when there is no legacy HDR support
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     bool isHdr = hdrDataSpace != ui::Dataspace::UNKNOWN &&
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
             !mDisplayColorProfile->hasLegacyHdrSupport(hdrDataSpace) && !isHdrClientComposition;
     if (isHdr) {
         bestDataSpace = hdrDataSpace;
     }
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (QtiOutputExtension::qtiHasSecureDisplay(this)) {
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         bestDataSpace = ui::Dataspace::V0_SRGB;
         isHdr = false;
     }
 
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     ui::RenderIntent intent;
     switch (refreshArgs.outputColorSetting) {
         case OutputColorSetting::kManaged:
@@ -1357,9 +1371,11 @@ void Output::finishFrame(GpuCompositionResult&& result) {
 void Output::updateProtectedContentState() {
     const auto& outputState = getState();
     auto& renderEngine = getCompositionEngine().getRenderEngine();
+// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 
     bool supportsProtectedContent = renderEngine.supportsProtectedContent();
 
+// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     // We need to set the render surface as protected (DRM) if all the following conditions are met:
     // 1. The display is protected (in legacy, check if the display is secure)
     // 2. Protected content is supported
@@ -1440,7 +1456,9 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     OutputCompositionState& outputCompositionState = editState();
     // Check if the client composition requests were rendered into the provided graphic buffer. If
     // so, we can reuse the buffer and avoid client composition.
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (mClientCompositionRequestCache
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         && (!QtiOutputExtension::qtiUseSpecFence() || mLayerRequestingBackgroundBlur != nullptr)
         ) {
         if (mClientCompositionRequestCache->exists(tex->getBuffer()->getId(),
