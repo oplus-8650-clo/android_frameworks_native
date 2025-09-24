@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #pragma once
 
 #include <atomic>
@@ -140,10 +136,8 @@ public:
     using Impl::scheduleFrame;
     using Impl::scheduleImmediateFrame;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     using Impl::qtiScheduleFrameImmed;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     // Schedule an asynchronous or synchronous task on the main thread.
     template <typename F, typename T = std::invoke_result_t<F>>
     [[nodiscard]] std::future<T> schedule(F&& f) {

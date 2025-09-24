@@ -43,10 +43,8 @@
 #include "HWComposer.h"
 #include "../SurfaceFlinger.h"
 
-// QTI_BEGIN: 2023-05-29: Display: sf: extensions: Clean up
 #include "../QtiExtension/QtiSurfaceFlingerExtensionFactory.h"
 
-// QTI_END: 2023-05-29: Display: sf: extensions: Clean up
 namespace android {
 
 using ui::Dataspace;
@@ -70,14 +68,12 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displa
         mHwcBufferIds[i] = UINT64_MAX;
     }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     if (!mQtiDSExtnIntf) {
         mQtiDSExtnIntf = surfaceflingerextension::
                 qtiCreateDisplaySurfaceExtension(/* isVirtual */ false, nullptr, false, 0,
                                                  /* FramebufferSurface */ this);
     }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 void FramebufferSurface::initializeConsumer() {
@@ -115,15 +111,11 @@ status_t FramebufferSurface::advanceFrame(float hdrSdrRatio) {
     BufferItem item;
     status_t err = acquireBufferLocked(&item, 0);
     if (err == BufferQueue::NO_BUFFER_AVAILABLE) {
-// QTI_BEGIN: 2023-06-20: Display: sf: Fix spec fence for SDM caching
         // mDataspace = Dataspace::UNKNOWN;
-// QTI_END: 2023-06-20: Display: sf: Fix spec fence for SDM caching
         return NO_ERROR;
     } else if (err != NO_ERROR) {
         ALOGE("error acquiring buffer: %s (%d)", strerror(-err), err);
-// QTI_BEGIN: 2023-06-20: Display: sf: Fix spec fence for SDM caching
         // mDataspace = Dataspace::UNKNOWN;
-// QTI_END: 2023-06-20: Display: sf: Fix spec fence for SDM caching
         return err;
     }
 

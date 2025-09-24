@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #pragma once
 
 #include <android/gui/DropInputMode.h>
@@ -416,9 +414,7 @@ public:
     void setIsSmallDirty(frontend::LayerSnapshot* snapshot);
 
     void qtiSetSmomoLayerStackId(uint32_t id);
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t qtiGetSmomoLayerStackId();
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t qtiGetLayerClass() { return mQtiLayerClass; };
     bool qtiIsSecureDisplay() { return mQtiIsSecureDisplay; };
     bool qtiIsSecureCamera() { return mQtiIsSecureCamera; };
@@ -459,9 +455,7 @@ protected:
     // Timestamp history for UIAutomation. Thread safe.
     FrameTracker mDeprecatedFrameTracker;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t mQtiLayerClass{0};
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     bool mQtiIsSecureDisplay = false;
     bool mQtiIsSecureCamera = false;
     // main thread
@@ -578,9 +572,7 @@ private:
     // not specify a destination frame.
     ui::Transform mRequestedTransform;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t qtiSmomoLayerStackId = UINT32_MAX;
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     std::vector<std::pair<frontend::LayerHierarchy::TraversalPath, sp<LayerFE>>> mLayerFEs;
     bool mHandleAlive = false;
     std::optional<std::reference_wrapper<scheduler::FrameTimeline>> getTimeline() const {

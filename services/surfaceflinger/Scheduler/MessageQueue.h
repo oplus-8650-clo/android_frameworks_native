@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #pragma once
 
 #include <cstdint>
@@ -85,10 +83,8 @@ public:
     virtual void scheduleFrame(Duration workDurationSlack = Duration::fromNs(0)) = 0;
     virtual void scheduleImmediateFrame() = 0;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     virtual void qtiScheduleFrameImmed() = 0;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     virtual std::optional<scheduler::ScheduleResult> getScheduledFrameResult() const = 0;
 };
 
@@ -112,10 +108,8 @@ protected:
         virtual bool isFramePending() const;
 
         virtual void dispatchFrame(VsyncId, TimePoint expectedVsyncTime);
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         virtual void qtiDispatchFrameImmed();
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     };
 
     friend class Handler;
@@ -169,10 +163,8 @@ public:
     void scheduleFrame(Duration workDurationSlack = Duration::fromNs(0)) override;
     void scheduleImmediateFrame() override;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     void qtiScheduleFrameImmed() override;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     std::optional<scheduler::ScheduleResult> getScheduledFrameResult() const override;
 };
 
