@@ -42,4 +42,9 @@ parcelable JankData {
    * Time taken by the application to render this frame.
    */
   long actualAppFrameTimeNs;
+
+  /**
+   * Delta between expected and actual present time.
+   */
+  long presentDelayNs;
 }

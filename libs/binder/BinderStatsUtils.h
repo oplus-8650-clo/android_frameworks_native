@@ -14,47 +14,9 @@
  * limitations under the License.
  */
 #pragma once
-#include <android/os/IStatsBootstrapAtomService.h>
+#include <utils/String16.h>
 
 namespace android {
-// Helper functions to create a StatsBootstrapAtomValue for a primitive
-inline os::StatsBootstrapAtomValue createPrimitiveValue(bool value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::boolValue>(value);
-    return atomValue;
-}
-
-inline os::StatsBootstrapAtomValue createPrimitiveValue(int32_t value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::intValue>(value);
-    return atomValue;
-}
-
-inline os::StatsBootstrapAtomValue createPrimitiveValue(int64_t value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::longValue>(value);
-    return atomValue;
-}
-
-inline os::StatsBootstrapAtomValue createPrimitiveValue(float value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::floatValue>(value);
-    return atomValue;
-}
-
-inline os::StatsBootstrapAtomValue createPrimitiveValue(const std::string& value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::stringValue>(
-            String16(value.c_str()));
-    return atomValue;
-}
-
-inline os::StatsBootstrapAtomValue createPrimitiveValue(const String16& value) {
-    os::StatsBootstrapAtomValue atomValue;
-    atomValue.value.set<os::StatsBootstrapAtomValue::Primitive::stringValue>(value);
-    return atomValue;
-}
-
 // Data for a monitored binder transaction.
 struct BinderCallData {
     // TODO(b/299356196): Use the receiver binder object instead and resolve interface lazily

@@ -53,9 +53,7 @@ VSyncReactor::~VSyncReactor() = default;
 bool VSyncReactor::updateTrackerWithSignaledFences() {
     bool timestampAccepted = true;
     for (auto it = mUnfiredFences.begin(); it != mUnfiredFences.end();) {
-        auto const time = FlagManager::getInstance().reset_model_flushes_fence()
-                ? (*it)->getSignalTime()
-                : (*it)->getCachedSignalTime();
+        auto const time = (*it)->getSignalTime();
         if (time == Fence::SIGNAL_TIME_PENDING) {
             it++;
         } else if (time == Fence::SIGNAL_TIME_INVALID) {
@@ -120,9 +118,7 @@ void VSyncReactor::setIgnorePresentFencesInternal(bool ignore) {
 
 void VSyncReactor::updateIgnorePresentFencesInternal() {
     if (mExternalIgnoreFences || mInternalIgnoreFences) {
-        if (FlagManager::getInstance().reset_model_flushes_fence()) {
-            updateTrackerWithSignaledFences();
-        }
+        updateTrackerWithSignaledFences();
         mUnfiredFences.clear();
     }
 }

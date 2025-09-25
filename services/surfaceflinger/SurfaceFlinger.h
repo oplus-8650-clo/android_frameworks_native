@@ -1730,6 +1730,10 @@ private:
                                          TimePoint expectedPresentTime, Fps frameInterval,
                                          std::optional<Period> timeoutOpt);
 
+    void updateHdrInfos(
+            const std::vector<std::pair<compositionengine::Display*, sp<HdrLayerInfoReporter>>>&
+                    listeners) REQUIRES(kMainThreadContext);
+
     void sfdo_enableRefreshRateOverlay(bool active);
     void sfdo_setDebugFlash(int delay);
     void sfdo_scheduleComposite();

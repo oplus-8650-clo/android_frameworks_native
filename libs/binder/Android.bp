@@ -591,8 +591,8 @@ cc_defaults {
         ":libbinder_aidl",
         ":libbinder_accessor_aidl",
         ":libbinder_device_interface_sources",
-        ":android-os-statsbootstrap-aidl",
         ":libbinder_observer_sources",
+        ":android-os-binderstatsconsumer-aidl",
     ],
     target: {
         vendor: {
@@ -887,6 +887,25 @@ cc_library {
         "//hardware/interfaces/security/see:__subpackages__",
         "//system/core/trusty:__subpackages__",
         "//vendor:__subpackages__",
+    ],
+}
+
+cc_library {
+    name: "libbindernetlink",
+    vendor_available: false,
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libnl",
+    ],
+    srcs: [
+        "BinderNetlink.cpp",
+    ],
+    export_include_dirs: [
+        "include",
+    ],
+    export_shared_lib_headers: [
+        "libnl",
     ],
 }
 

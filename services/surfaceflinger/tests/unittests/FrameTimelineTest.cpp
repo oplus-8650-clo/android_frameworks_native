@@ -650,6 +650,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsLongSfCpu) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::SurfaceFlingerCpuDeadlineMissed);
+    EXPECT_EQ(jankData[0].presentDelayNs, 10);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsLongSfGpu) {
@@ -684,6 +685,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsLongSfGpu) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::SurfaceFlingerGpuDeadlineMissed);
+    EXPECT_EQ(jankData[0].presentDelayNs, 10);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsDisplayMiss) {
@@ -716,6 +718,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsDisplayMiss) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::DisplayHAL);
+    EXPECT_EQ(jankData[0].presentDelayNs, 30);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppMiss) {
@@ -750,6 +753,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppMiss) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::AppDeadlineMissed);
+    EXPECT_EQ(jankData[0].presentDelayNs, 30);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSfScheduling) {
@@ -784,6 +788,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSfScheduling) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::SurfaceFlingerScheduling);
+    EXPECT_EQ(jankData[0].presentDelayNs, -32);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSfPredictionError) {
@@ -818,6 +823,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSfPredictionError) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::PredictionError);
+    EXPECT_EQ(jankData[0].presentDelayNs, 5);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppBufferStuffing) {
@@ -862,8 +868,6 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppBufferStuffing) {
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSFJankIfStartedLate) {
-    SET_FLAG_FOR_TEST(flags::buffer_stuffing_fix, true);
-
     Fps refreshRate = Fps::fromPeriodNsecs(32);
     EXPECT_CALL(*mTimeStats,
                 incrementJankyFrames(TimeStats::JankyFramesInfo{refreshRate, std::nullopt, sUidOne,
@@ -896,6 +900,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsSFJankIfStartedLate) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::SurfaceFlingerScheduling);
+    EXPECT_EQ(jankData[0].presentDelayNs, 32);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppMissWithRenderRate) {
@@ -932,6 +937,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_reportsAppMissWithRenderRate) {
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::AppDeadlineMissed);
+    EXPECT_EQ(jankData[0].presentDelayNs, 30);
 }
 
 TEST_F(FrameTimelineTest, presentFenceSignaled_displayFramePredictionExpiredPresentsSurfaceFrame) {
@@ -980,6 +986,7 @@ TEST_F(FrameTimelineTest, presentFenceSignaled_displayFramePredictionExpiredPres
     auto jankData = getLayerOneJankData();
     EXPECT_EQ(jankData.size(), 1u);
     EXPECT_EQ(jankData[0].jankType, JankType::Unknown | JankType::AppDeadlineMissed);
+    EXPECT_EQ(jankData[0].presentDelayNs, 30);
 }
 
 /*
