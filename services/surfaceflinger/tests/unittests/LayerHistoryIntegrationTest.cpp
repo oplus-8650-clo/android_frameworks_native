@@ -296,8 +296,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayer) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, gameFrameRateOverrideMapping) {
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-
     history().updateGameDefaultFrameRateOverride(FrameRateOverride({0, 60.0f}));
 
     auto overridePair = history().getGameFrameRateOverride(0);
@@ -328,8 +326,6 @@ TEST_F(LayerHistoryIntegrationTest, gameFrameRateOverrideMapping) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerGameFrameRateOverride) {
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
-
     const uid_t uid = 0;
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
     const Fps gameModeFrameRate = Fps::fromValue(60.0f);
@@ -798,7 +794,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference) {
 // Tests MRR NoPreference-only vote, no game default override. Expects vote reset.
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
 
     const LayerHistory::LayerVoteType defaultVote = LayerHistory::LayerVoteType::Min;
 
@@ -830,7 +825,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_mrr) {
 // reset.
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const LayerHistory::LayerVoteType defaultVote = LayerHistory::LayerVoteType::Min;
@@ -861,7 +855,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreference_vrr) {
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
@@ -895,7 +888,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
     const uid_t uid = 456;
@@ -928,7 +920,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerCategoryNoPreferenceWithGameDefault_
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_vrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
@@ -959,7 +950,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_vrr) {
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerNoVoteWithGameDefault_mrr) {
     SET_FLAG_FOR_TEST(flags::frame_rate_category_mrr, false);
-    SET_FLAG_FOR_TEST(flags::game_default_frame_rate, true);
 
     const Fps gameDefaultFrameRate = Fps::fromValue(30.0f);
     const uid_t uid = 456;

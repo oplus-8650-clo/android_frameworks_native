@@ -2985,10 +2985,15 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         return false;
     }
 
+    bool hasFrameTargetWithPowerModeOn = false;
     {
         Mutex::Autolock lock(mStateLock);
 
         for (const auto [displayId, _] : frameTargets) {
+            const auto display = getDisplayDeviceLocked(displayId);
+            if (display && display->getPowerMode() == hal::PowerMode::ON) {
+                hasFrameTargetWithPowerModeOn = true;
+            }
             if (mDisplayModeController.isModeSetPending(displayId)) {
                 if (!finalizeDisplayModeChange(displayId)) {
                     mScheduler->scheduleFrame();
@@ -3011,10 +3016,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     const Period vsyncPeriod = mScheduler->getVsyncSchedule()->period();
 
     // Save this once per commit + composite to ensure consistency
-    // TODO: b/240619471 - Consider removing front internal display check once AOD is fixed
-    const auto frontInternalDisplay = FTL_FAKE_GUARD(mStateLock, getFrontInternalDisplayLocked());
-    mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && frontInternalDisplay &&
-            frontInternalDisplay->getPowerMode() == hal::PowerMode::ON;
+    mPowerHintSessionEnabled =
+            mPowerAdvisor->usePowerHintSession() && hasFrameTargetWithPowerModeOn;
     if (mPowerHintSessionEnabled) {
         mPowerAdvisor->setCommitStart(pacesetterFrameTarget.frameBeginTime());
         mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTarget.expectedPresentTime());
@@ -3782,8 +3785,7 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
     }
     mLayerEvents.clear();
 
-    std::vector<std::pair<std::shared_ptr<compositionengine::Display>, sp<HdrLayerInfoReporter>>>
-            hdrInfoListeners;
+    std::vector<std::pair<compositionengine::Display*, sp<HdrLayerInfoReporter>>> hdrInfoListeners;
     bool haveNewHdrInfoListeners = false;
     ActivePictureTracker::Listeners activePictureListenersToAdd;
     ActivePictureTracker::Listeners activePictureListenersToRemove;
@@ -3801,7 +3803,7 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
         for (const auto& [displayId, reporter] : mHdrLayerInfoListeners) {
             if (reporter && reporter->hasListeners()) {
                 if (const auto display = getDisplayDeviceLocked(displayId)) {
-                    hdrInfoListeners.emplace_back(display->getCompositionDisplay(), reporter);
+                    hdrInfoListeners.emplace_back(display->getCompositionDisplay().get(), reporter);
                 }
             }
         }
@@ -3813,61 +3815,62 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
     }
 
     if (haveNewHdrInfoListeners || mHdrLayerInfoChanged) {
-        for (auto& [compositionDisplay, listener] : hdrInfoListeners) {
-            HdrLayerInfoReporter::HdrLayerInfo info;
-            int32_t maxArea = 0;
+        if (FlagManager::getInstance().md_degrade_hdr()) {
+            updateHdrInfos(hdrInfoListeners);
+        } else {
+            for (auto& [compositionDisplay, listener] : hdrInfoListeners) {
+                HdrLayerInfoReporter::HdrLayerInfo info;
+                int32_t maxArea = 0;
 
-            auto updateInfoFn =
-                    [&](const std::shared_ptr<compositionengine::Display>& compositionDisplay,
-                        const frontend::LayerSnapshot& snapshot, const sp<LayerFE>& layerFe) {
-                        if (snapshot.isVisible &&
-                            compositionDisplay->includesLayer(snapshot.outputFilter)) {
-                            if (isHdrLayer(snapshot)) {
-                                const auto* outputLayer =
-                                        compositionDisplay->getOutputLayerForLayer(layerFe);
-                                if (outputLayer) {
-                                    const float desiredHdrSdrRatio =
-                                            snapshot.desiredHdrSdrRatio < 1.f
-                                            ? std::numeric_limits<float>::infinity()
-                                            : snapshot.desiredHdrSdrRatio;
+                auto updateInfoFn = [&](compositionengine::Display* compositionDisplay,
+                                        const frontend::LayerSnapshot& snapshot,
+                                        const sp<LayerFE>& layerFe) {
+                    if (snapshot.isVisible &&
+                        compositionDisplay->includesLayer(snapshot.outputFilter)) {
+                        if (isHdrLayer(snapshot)) {
+                            const auto* outputLayer =
+                                    compositionDisplay->getOutputLayerForLayer(layerFe);
+                            if (outputLayer) {
+                                const float desiredHdrSdrRatio = snapshot.desiredHdrSdrRatio < 1.f
+                                        ? std::numeric_limits<float>::infinity()
+                                        : snapshot.desiredHdrSdrRatio;
 
-                                    float desiredRatio = desiredHdrSdrRatio;
-                                    if (FlagManager::getInstance().begone_bright_hlg() &&
-                                        desiredHdrSdrRatio ==
-                                                std::numeric_limits<float>::infinity()) {
-                                        desiredRatio = getIdealizedMaxHeadroom(snapshot.dataspace);
-                                    }
+                                float desiredRatio = desiredHdrSdrRatio;
+                                if (FlagManager::getInstance().begone_bright_hlg() &&
+                                    desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                                    desiredRatio = getIdealizedMaxHeadroom(snapshot.dataspace);
+                                }
 
-                                    info.mergeDesiredRatio(desiredRatio);
-                                    info.numberOfHdrLayers++;
-                                    const auto displayFrame = outputLayer->getState().displayFrame;
-                                    const int32_t area =
-                                            displayFrame.width() * displayFrame.height();
-                                    if (area > maxArea) {
-                                        maxArea = area;
-                                        info.maxW = displayFrame.width();
-                                        info.maxH = displayFrame.height();
-                                    }
+                                info.mergeDesiredRatio(desiredRatio);
+                                info.numberOfHdrLayers++;
+                                const auto displayFrame = outputLayer->getState().displayFrame;
+                                const int32_t area = displayFrame.width() * displayFrame.height();
+                                if (area > maxArea) {
+                                    maxArea = area;
+                                    info.maxW = displayFrame.width();
+                                    info.maxH = displayFrame.height();
                                 }
                             }
                         }
-                    };
+                    }
+                };
 
-            mLayerSnapshotBuilder.forEachVisibleSnapshot(
-                    [&, compositionDisplay = compositionDisplay](
-                            std::unique_ptr<frontend::LayerSnapshot>& snapshot)
-                            FTL_FAKE_GUARD(kMainThreadContext) {
-                                auto it = mLegacyLayers.find(snapshot->sequence);
-                                LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
-                                                                "Couldnt find layer object for %s",
-                                                                snapshot->getDebugString().c_str());
-                                auto& legacyLayer = it->second;
-                                sp<LayerFE> layerFe =
-                                        legacyLayer->getCompositionEngineLayerFE(snapshot->path);
+                mLayerSnapshotBuilder.forEachVisibleSnapshot(
+                        [&, compositionDisplay = compositionDisplay](
+                                std::unique_ptr<frontend::LayerSnapshot>&
+                                        snapshot) FTL_FAKE_GUARD(kMainThreadContext) {
+                            auto it = mLegacyLayers.find(snapshot->sequence);
+                            LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
+                                                            "Couldnt find layer object for %s",
+                                                            snapshot->getDebugString().c_str());
+                            auto& legacyLayer = it->second;
+                            sp<LayerFE> layerFe =
+                                    legacyLayer->getCompositionEngineLayerFE(snapshot->path);
 
-                                updateInfoFn(compositionDisplay, *snapshot, layerFe);
-                            });
-            listener->dispatchHdrLayerInfo(info);
+                            updateInfoFn(compositionDisplay, *snapshot, layerFe);
+                        });
+                listener->dispatchHdrLayerInfo(info);
+            }
         }
     }
     mHdrLayerInfoChanged = false;
@@ -5275,10 +5278,7 @@ void SurfaceFlinger::setTransactionFlags(uint32_t mask, TransactionSchedule sche
     SFTRACE_INT("mTransactionFlags", transactionFlags);
 
     if (const bool scheduled = transactionFlags & mask; !scheduled) {
-        if (FlagManager::getInstance().resync_on_tx() &&
-                FlagManager::getInstance().vsync_predictor_predicts_within_threshold()) {
-            mScheduler->resync(IEventThreadCallback::ResyncCaller::Transaction);
-        }
+        mScheduler->resync(IEventThreadCallback::ResyncCaller::Transaction);
         scheduleCommit(frameHint);
     } else if (frameHint == FrameHint::kActive) {
         // Even if the next frame is already scheduled, we should reset the idle timer
@@ -9152,10 +9152,8 @@ status_t SurfaceFlinger::setGameModeFrameRateOverride(uid_t uid, float frameRate
 }
 
 status_t SurfaceFlinger::setGameDefaultFrameRateOverride(uid_t uid, float frameRate) {
-    if (FlagManager::getInstance().game_default_frame_rate()) {
-        mScheduler->setGameDefaultFrameRateForUid(
-                FrameRateOverride{static_cast<uid_t>(uid), frameRate});
-    }
+    mScheduler->setGameDefaultFrameRateForUid(
+            FrameRateOverride{static_cast<uid_t>(uid), frameRate});
     return NO_ERROR;
 }
 
@@ -10812,6 +10810,131 @@ void SurfaceFlinger::finalizeReadback(
     }
 
     mReadbackRequests.clear();
+}
+
+void SurfaceFlinger::updateHdrInfos(
+        const std::vector<std::pair<compositionengine::Display*, sp<HdrLayerInfoReporter>>>&
+                listeners) {
+    SFTRACE_CALL();
+    struct AccumulatedHdrInfo {
+        HdrLayerInfoReporter::HdrLayerInfo layerInfo{};
+        int32_t maxArea{0};
+        bool hdrAllowed{true};
+    };
+    ui::DisplayMap<DisplayId, AccumulatedHdrInfo> hdrInfosForDisplay;
+
+    for (const auto& [display, _] : listeners) {
+        hdrInfosForDisplay.emplace_or_replace(display->getId());
+    }
+
+    static constexpr auto kLayerCapacity = 20;
+    ftl::SmallMap<int32_t, ftl::Unit, kLayerCapacity> hdrLayersWithSdrDisplays;
+    ftl::SmallMap<int32_t, ftl::Unit, kLayerCapacity> hdrLayersWithHdrDisplays;
+
+    mLayerSnapshotBuilder.forEachVisibleSnapshot(
+            [&](std::unique_ptr<frontend::LayerSnapshot>& snapshot) FTL_FAKE_GUARD(
+                    kMainThreadContext) {
+                auto it = mLegacyLayers.find(snapshot->sequence);
+                LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
+                                                "Couldnt find layer object for %s",
+                                                snapshot->getDebugString().c_str());
+                auto& legacyLayer = it->second;
+                sp<LayerFE> layerFe = legacyLayer->getCompositionEngineLayerFE(snapshot->path);
+
+                if (snapshot->isVisible && isHdrLayer(*snapshot)) {
+                    const auto& allDisplays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+                    if (allDisplays.size() > 1) {
+                        for (const auto& [_, display] : allDisplays) {
+                            const auto& compositionDisplay = display->getCompositionDisplay();
+                            if (compositionDisplay->includesLayer(snapshot->outputFilter)) {
+                                const auto* outputLayer =
+                                        compositionDisplay->getOutputLayerForLayer(layerFe);
+                                if (outputLayer) {
+                                    const auto& displayState = compositionDisplay->getState();
+
+                                    // Typical virtual displays and connected displays don't
+                                    // currently support controlling brightness,
+                                    // so we can safely assume that a display not supporting
+                                    // knowledge of nit values just won't support HDR.
+                                    const bool displayIsSdr =
+                                            displayState.displayBrightnessNits == -1 ||
+                                            displayState.sdrWhitePointNits == -1;
+
+                                    if (displayIsSdr) {
+                                        hdrLayersWithSdrDisplays.emplace_or_replace(
+                                                snapshot->sequence);
+                                    } else {
+                                        hdrLayersWithHdrDisplays.emplace_or_replace(
+                                                snapshot->sequence);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (const auto& [display, _] : listeners) {
+                        const bool mirroringSdrAndHdr =
+                                hdrLayersWithSdrDisplays.contains(snapshot->sequence) &&
+                                hdrLayersWithHdrDisplays.contains(snapshot->sequence);
+
+                        // Ban HDR if we think we're mirroring any HDR layer onto both
+                        // SDR and HDR displays.
+                        const auto hdrInfoOpt = hdrInfosForDisplay.get(display->getId());
+
+                        if (!hdrInfoOpt) {
+                            continue;
+                        }
+
+                        auto& hdrInfo = hdrInfoOpt->get();
+                        const bool hdrAllowed = !mirroringSdrAndHdr && hdrInfo.hdrAllowed;
+                        hdrInfo.hdrAllowed = hdrAllowed;
+
+                        if (!hdrAllowed) {
+                            if (hdrInfo.layerInfo.numberOfHdrLayers > 0) {
+                                hdrInfo.layerInfo = HdrLayerInfoReporter::HdrLayerInfo{};
+                                hdrInfo.maxArea = 0;
+                            }
+                            continue;
+                        }
+
+                        if (!display->includesLayer(snapshot->outputFilter)) {
+                            continue;
+                        }
+
+                        const auto* outputLayer = display->getOutputLayerForLayer(layerFe);
+                        if (!outputLayer) {
+                            continue;
+                        }
+
+                        const float desiredHdrSdrRatio = snapshot->desiredHdrSdrRatio < 1.f
+                                ? std::numeric_limits<float>::infinity()
+                                : snapshot->desiredHdrSdrRatio;
+
+                        float desiredRatio = desiredHdrSdrRatio;
+                        if (FlagManager::getInstance().begone_bright_hlg() &&
+                            desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                            desiredRatio = getIdealizedMaxHeadroom(snapshot->dataspace);
+                        }
+
+                        hdrInfo.layerInfo.mergeDesiredRatio(desiredRatio);
+                        hdrInfo.layerInfo.numberOfHdrLayers++;
+                        const auto displayFrame = outputLayer->getState().displayFrame;
+                        const int32_t area = displayFrame.width() * displayFrame.height();
+                        if (area > hdrInfo.maxArea) {
+                            hdrInfo.maxArea = area;
+                            hdrInfo.layerInfo.maxW = displayFrame.width();
+                            hdrInfo.layerInfo.maxH = displayFrame.height();
+                        }
+                    }
+                }
+            });
+
+    for (const auto& [display, reporter] : listeners) {
+        const auto hdrInfoOpt = hdrInfosForDisplay.get(display->getId());
+        if (hdrInfoOpt) {
+            reporter->dispatchHdrLayerInfo(hdrInfoOpt->get().layerInfo);
+        }
+    }
 }
 
 } // namespace android

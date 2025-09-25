@@ -107,7 +107,8 @@ cc_defaults {
         "libtonemap",
     ],
     header_libs: [
-        "android.hardware.graphics.composer3-command-buffer",
+        // TODO(b/445511672): clean up command-buffer versioning.
+        "android.hardware.graphics.composer3-command-buffer-V5",
         "android.hardware.graphics.composer@2.1-command-buffer",
         "android.hardware.graphics.composer@2.2-command-buffer",
         "android.hardware.graphics.composer@2.3-command-buffer",
@@ -374,6 +375,7 @@ cc_library {
     generated_headers: ["statslog_surfaceflinger_bootstrap.h"],
     export_generated_headers: ["statslog_surfaceflinger_bootstrap.h"],
     shared_libs: [
+        "android.os.statsbootstrap_aidl-cpp",
         "libbinder",
         "libstatsbootstrap",
         "libutils",

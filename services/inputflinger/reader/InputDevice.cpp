@@ -297,6 +297,20 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     getValueByKey(readerConfig.deviceTypeAssociations, mIdentifier.location);
             mIsWaking = mConfiguration.getBool("device.wake").value_or(false);
             mShouldSmoothScroll = mConfiguration.getBool("device.viewBehavior_smoothScroll");
+            auto primaryDirectionalMotionAxisLabel =
+                mConfiguration.getString("device.viewBehavior_primaryDirectionalMotionAxis");
+
+            if (primaryDirectionalMotionAxisLabel.has_value()) {
+                const std::string& label = primaryDirectionalMotionAxisLabel.value();
+                mPrimaryDirectionalMotionAxis = MotionEvent::getAxisFromLabel(label.c_str());
+                if (!mPrimaryDirectionalMotionAxis.has_value()) {
+                    LOG_ALWAYS_FATAL("InputDevice %s: Invalid value '%s' for "
+                                     "'device.viewBehavior_primaryDirectionalMotionAxis'",
+                                     getName().c_str(), label.c_str());
+                }
+            } else {
+                mPrimaryDirectionalMotionAxis = std::nullopt;
+            }
         }
 
         if (!changes.any() || changes.test(Change::VIRTUAL_DEVICES)) {
@@ -506,7 +520,7 @@ InputDeviceInfo InputDevice::getDeviceInfo() {
     outDeviceInfo.initialize(mId, mGeneration, mControllerNumber, mIdentifier, mAlias, mIsExternal,
                              mIsVirtualDevice, mHasMic,
                              getAssociatedDisplayId().value_or(ui::LogicalDisplayId::INVALID),
-                             {mShouldSmoothScroll}, isEnabled());
+                             {mShouldSmoothScroll, mPrimaryDirectionalMotionAxis}, isEnabled());
     outDeviceInfo.setKeyboardType(static_cast<int32_t>(mKeyboardType));
 
     for_each_mapper(

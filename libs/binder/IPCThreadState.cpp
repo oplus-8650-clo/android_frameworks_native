@@ -1189,33 +1189,22 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
             goto finish;
 
         case BR_REPLY:
-            {
-                binder_transaction_data tr;
-                err = mIn.read(&tr, sizeof(tr));
-                ALOG_ASSERT(err == NO_ERROR, "Not enough command data for brREPLY");
-                if (err != NO_ERROR) goto finish;
-
-                if (reply) {
-                    if ((tr.flags & TF_STATUS_CODE) == 0) {
-                        reply->ipcSetDataReference(
-                            reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
-                            tr.data_size,
-                            reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
-                            tr.offsets_size/sizeof(binder_size_t),
-                            freeBuffer);
-                    } else {
-                        err = *reinterpret_cast<const status_t*>(tr.data.ptr.buffer);
-                        freeBuffer(reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
-                                   tr.data_size,
-                                   reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
-                                   tr.offsets_size / sizeof(binder_size_t));
-                    }
-                } else {
-                    freeBuffer(reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer), tr.data_size,
-                               reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
-                               tr.offsets_size / sizeof(binder_size_t));
-                    continue;
-                }
+            LOG_ALWAYS_FATAL_IF(reply == NULL, "Unexpected BR_REPLY");
+            binder_transaction_data tr;
+            err = mIn.read(&tr, sizeof(tr));
+            ALOG_ASSERT(err == NO_ERROR, "Not enough command data for brREPLY");
+            if (err != NO_ERROR) goto finish;
+            if ((tr.flags & TF_STATUS_CODE) == 0) {
+                reply->ipcSetDataReference(reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+                                           tr.data_size,
+                                           reinterpret_cast<const binder_size_t*>(
+                                                   tr.data.ptr.offsets),
+                                           tr.offsets_size / sizeof(binder_size_t), freeBuffer);
+            } else {
+                err = *reinterpret_cast<const status_t*>(tr.data.ptr.buffer);
+                freeBuffer(reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer), tr.data_size,
+                           reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+                           tr.offsets_size / sizeof(binder_size_t));
             }
             goto finish;
 

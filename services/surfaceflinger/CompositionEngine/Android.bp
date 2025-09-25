@@ -57,7 +57,7 @@ cc_defaults {
         "android.hardware.graphics.composer@2.2-command-buffer",
         "android.hardware.graphics.composer@2.3-command-buffer",
         "android.hardware.graphics.composer@2.4-command-buffer",
-        "android.hardware.graphics.composer3-command-buffer",
+        "android.hardware.graphics.composer3-command-buffer-V5",
         "libsurfaceflinger_backend_headers",
     ],
 }

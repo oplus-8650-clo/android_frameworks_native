@@ -47,6 +47,7 @@
 #include "InputMapperTest.h"
 #include "InstrumentedInputReader.h"
 #include "TestConstants.h"
+#include "gmock/gmock.h"
 #include "input/DisplayViewport.h"
 #include "input/Input.h"
 
@@ -2907,6 +2908,52 @@ TEST_F(InputDeviceTest, Configure_SmoothScrollViewBehaviorEnabled) {
     ASSERT_TRUE(mDevice->getDeviceInfo().getViewBehavior().shouldSmoothScroll.value_or(false));
 }
 
+TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorNotSet) {
+    // Set some behavior to force the configuration to be update.
+    mFakeEventHub->addConfigurationProperty(EVENTHUB_ID, "device.wake", "1");
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_FALSE(
+        mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value()
+    );
+}
+
+TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToAxisX) {
+    mFakeEventHub->addConfigurationProperty(
+        EVENTHUB_ID, "device.viewBehavior_primaryDirectionalMotionAxis", "X");
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_TRUE(
+        mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value()
+    );
+    ASSERT_EQ(0, mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+}
+
+TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToAxisY) {
+    mFakeEventHub->addConfigurationProperty(
+        EVENTHUB_ID, "device.viewBehavior_primaryDirectionalMotionAxis", "Y");
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+    ASSERT_TRUE(
+        mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value()
+    );
+    ASSERT_EQ(1, mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+}
+
 TEST_F(InputDeviceTest, WakeDevice_AddsWakeFlagToProcessNotifyArgs) {
     mFakeEventHub->addConfigurationProperty(EVENTHUB_ID, "device.wake", "1");
     FakeInputMapper& mapper =
@@ -3238,6 +3285,25 @@ TEST_F(InputDeviceTest, TouchpadDoesNotResetWhenChangingDisplays) {
     ASSERT_NO_FATAL_FAILURE(mapper.assertConfigureWasCalled());
     ASSERT_NO_FATAL_FAILURE(mapper.assertResetWasNotCalled());
     ASSERT_TRUE(mDevice->isEnabled());
+}
+
+using InputDeviceDeathTest = InputDeviceTest;
+
+TEST_F(InputDeviceDeathTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToInvalidAxis) {
+    mFakeEventHub->addConfigurationProperty(EVENTHUB_ID,
+                                            "device.viewBehavior_primaryDirectionalMotionAxis",
+                                            "SUPER_COOL_CUSTOM_AXIS");
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    ASSERT_DEATH(
+            {
+                std::list<NotifyArgs> unused =
+                        mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                                           /*changes=*/{});
+            },
+            testing::HasSubstr("InputDevice device: Invalid value 'SUPER_COOL_CUSTOM_AXIS' for "
+                               "'device.viewBehavior_primaryDirectionalMotionAxis'"));
 }
 
 // --- TouchInputMapperTest ---

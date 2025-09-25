@@ -62,16 +62,6 @@ flag {
 } # begone_bright_hlg
 
 flag {
-  name: "buffer_stuffing_fix"
-  namespace: "core_graphics"
-  description: "bug fix for buffer stuffing classification"
-  bug: "417070677"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # buffer_stuffing_fix
-
-flag {
   name: "connected_display_hdr_v2"
   namespace: "desktop_display"
   description: "enable connected display hdr selection"
@@ -247,6 +237,16 @@ flag {
 } # local_tonemap_screenshots
 
 flag {
+  name: "md_degrade_hdr"
+  namespace: "core_graphics"
+  description: "Degrades displays from HDR to SDR during multidisplay mirroring"
+  bug: "443315364"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # md_degrade_hdr
+
+flag {
   name: "modeset_state_machine"
   namespace: "core_graphics"
   description: "Prevent data races causing modeset failures and deadlocks"
@@ -293,26 +293,6 @@ flag {
   bug: "384816457"
   is_exported: true
 } # readback_screenshot
-
-flag {
-  name: "reset_model_flushes_fence"
-  namespace: "core_graphics"
-  description: "VsyncReactor flushes pending fence before calling to reset model"
-  bug: "272802278"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # reset_model_flushes_fence
-
-flag {
-  name: "resync_on_tx"
-  namespace: "core_graphics"
-  description: "Resync to vsync on an incoming transaction"
-  bug: "425994753"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # resync_on_tx
 
 flag {
   name: "set_client_drawn_corner_radii"
@@ -393,16 +373,6 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 } # use_at_least_60_for_min_vote
-
-flag {
-  name: "vsync_predictor_predicts_within_threshold"
-  namespace: "core_graphics"
-  description: "VSyncPredictor to ignore vsyncs before the given threshold for period and intercept calculation"
-  bug: "411593328"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
- } # vsync_predictor_predicts_within_threshold
 
 flag {
   name: "wb_virtualdisplay2"

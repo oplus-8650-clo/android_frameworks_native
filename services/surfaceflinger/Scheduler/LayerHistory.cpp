@@ -300,29 +300,26 @@ void LayerHistory::partitionLayers(nsecs_t now) {
             const bool isValuelessVote = voteType == LayerVoteType::NoVote ||
                     voteType == LayerVoteType::Min || voteType == LayerVoteType::Max;
 
-            if (FlagManager::getInstance().game_default_frame_rate()) {
-                // Determine the layer frame rate considering the following priorities:
-                // 1. Game mode intervention frame rate override
-                // 2. setFrameRate vote
-                // 3. Game default frame rate override
+            // Determine the layer frame rate considering the following priorities:
+            // 1. Game mode intervention frame rate override
+            // 2. setFrameRate vote
+            // 3. Game default frame rate override
 
-                const auto& [gameModeFrameRateOverride, gameDefaultFrameRateOverride] =
-                        getGameFrameRateOverrideLocked(info->getOwnerUid());
+            const auto& [gameModeFrameRateOverride, gameDefaultFrameRateOverride] =
+                    getGameFrameRateOverrideLocked(info->getOwnerUid());
 
-                const auto gameFrameRateOverrideVoteType =
-                        info->isVisible() ? LayerVoteType::ExplicitDefault : LayerVoteType::NoVote;
+            const auto gameFrameRateOverrideVoteType =
+                    info->isVisible() ? LayerVoteType::ExplicitDefault : LayerVoteType::NoVote;
 
-                const auto setFrameRateVoteType =
-                        info->isVisible() ? voteType : LayerVoteType::NoVote;
+            const auto setFrameRateVoteType = info->isVisible() ? voteType : LayerVoteType::NoVote;
 
-                const bool hasSetFrameRateOpinion =
-                        frameRate.isValuelessType() || frameRate.vote.rate.isValid();
-                const bool hasCategoryOpinion =
-                        frameRate.category != FrameRateCategory::NoPreference &&
-                        frameRate.category != FrameRateCategory::Default;
-                const bool hasFrameRateOpinionAboveGameDefault =
-                        hasSetFrameRateOpinion || hasCategoryOpinion;
-                const bool hasFrameRateOpinionArr = frameRate.isValid() && !frameRate.isNoVote();
+            const bool hasSetFrameRateOpinion =
+                    frameRate.isValuelessType() || frameRate.vote.rate.isValid();
+            const bool hasCategoryOpinion = frameRate.category != FrameRateCategory::NoPreference &&
+                    frameRate.category != FrameRateCategory::Default;
+            const bool hasFrameRateOpinionAboveGameDefault =
+                    hasSetFrameRateOpinion || hasCategoryOpinion;
+            const bool hasFrameRateOpinionArr = frameRate.isValid() && !frameRate.isNoVote();
 
                 if (gameModeFrameRateOverride.isValid()) {
                     info->setLayerVote({gameFrameRateOverrideVoteType, gameModeFrameRateOverride});
@@ -382,32 +379,6 @@ void LayerHistory::partitionLayers(nsecs_t now) {
                     }
                     info->resetLayerVote();
                 }
-            } else {
-                if (frameRate.isValid() && frameRate.isVoteValidForMrr(isVrrDisplay)) {
-                    const auto type = info->isVisible() ? voteType : LayerVoteType::NoVote;
-                    info->setLayerVote({type, isValuelessVote ? 0_Hz : frameRate.vote.rate,
-                                        frameRate.vote.seamlessness, frameRate.category});
-                } else if (refresh_rate_votes_.find(it->first) != refresh_rate_votes_.end() &&
-                           refresh_rate_votes_[it->first] != -1) {
-                    info->setLayerVote({LayerVoteType::ExplicitExact,
-                                        Fps::fromValue(refresh_rate_votes_[it->first])});
-                    SFTRACE_FORMAT_INSTANT("SmomoFrameRateOverride");
-                    if (CC_UNLIKELY(mTraceEnabled)) {
-                        trace(*info, LayerVoteType::ExplicitExact,
-                              refresh_rate_votes_[it->first]);
-                    }
-                } else {
-                    if (!frameRate.isVoteValidForMrr(isVrrDisplay)) {
-                        SFTRACE_FORMAT_INSTANT("Reset layer to ignore explicit vote on MRR %s: %s "
-                                               "%s %s",
-                                               info->getName().c_str(),
-                                               ftl::enum_string(frameRate.vote.type).c_str(),
-                                               to_string(frameRate.vote.rate).c_str(),
-                                               ftl::enum_string(frameRate.category).c_str());
-                    }
-                    info->resetLayerVote();
-                }
-            }
 
             it++;
         } else {
@@ -505,20 +476,12 @@ void LayerHistory::updateGameDefaultFrameRateOverride(FrameRateOverride frameRat
 }
 
 std::pair<Fps, Fps> LayerHistory::getGameFrameRateOverride(uid_t uid) const {
-    if (!FlagManager::getInstance().game_default_frame_rate()) {
-        return std::pair<Fps, Fps>();
-    }
-
     std::lock_guard lock(mLock);
 
     return getGameFrameRateOverrideLocked(uid);
 }
 
 std::pair<Fps, Fps> LayerHistory::getGameFrameRateOverrideLocked(uid_t uid) const {
-    if (!FlagManager::getInstance().game_default_frame_rate()) {
-        return std::pair<Fps, Fps>();
-    }
-
     const auto it = mGameFrameRateOverride.find(uid);
 
     if (it == mGameFrameRateOverride.end()) {
