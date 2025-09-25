@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <../BinderStatsPusher.h>
+#include <../BinderStatsUtils.h>
 #include <android-base/logging.h>
 #include <android/os/IServiceManager.h>
 #include <binder/Binder.h>
@@ -407,6 +409,74 @@ TEST(RpcBinderAllocation, SetupRpcServer) {
     }
     EXPECT_EQ(mallocs, 1u);
     EXPECT_EQ(totalBytes, 40u);
+}
+
+// Helper function to create BinderCallData for tests
+android::BinderCallData createStatsData(uid_t uid, uint32_t code, const char* desc,
+                                        int64_t startNanos) {
+    return {.interfaceDescriptor = String16(desc),
+            .transactionCode = code,
+            .startTimeNanos = startNanos,
+            .endTimeNanos = 0,
+            .senderUid = uid};
+}
+
+android::BinderCallData createStatsData(uid_t uid, const char* desc, uint32_t code,
+                                        int64_t startNanos, int64_t endNanos) {
+    return {
+            .interfaceDescriptor = String16(desc),
+            .transactionCode = code,
+            .startTimeNanos = startNanos,
+            .endTimeNanos = endNanos,
+            .senderUid = uid,
+    };
+}
+
+TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
+    std::vector<android::BinderCallData> data;
+
+    int64_t currentTimeNanos = 9'100'000'000;
+    // Create enough data in the *same second* to trigger spam, far enough in the past
+    for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
+        data.push_back(createStatsData(1001, 1, "IFoo", currentTimeNanos - 8000'000'000));
+        data.push_back(createStatsData(1002, 1, "IFoo", currentTimeNanos - 8000'000'000));
+    }
+
+    android::BinderStatsPusher pusher;
+    auto service = pusher.getBinderStatsServiceLocked(currentTimeNanos);
+    size_t mallocs = 0, totalBytes = 0;
+    {
+        const auto on_malloc = OnMalloc([&](size_t bytes) {
+            mallocs++;
+            totalBytes += bytes;
+        });
+        pusher.aggregateStatsLocked(data, service, currentTimeNanos);
+    }
+    EXPECT_EQ(mallocs, 13u);
+    EXPECT_EQ(totalBytes, 838u);
+
+    currentTimeNanos = 18'100'000'000;
+    for (int i = 0; i < 150; ++i) {     // More than kMinSpamCount (125)
+        for (int j = 0; j < 100; ++j) { // multiple txnCodes
+            data.push_back(
+                    createStatsData(1003, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
+            data.push_back(
+                    createStatsData(1004, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
+            data.push_back(
+                    createStatsData(1005, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
+        }
+    }
+    mallocs = 0;
+    totalBytes = 0;
+    {
+        const auto on_malloc = OnMalloc([&](size_t bytes) {
+            mallocs++;
+            totalBytes += bytes;
+        });
+        pusher.aggregateStatsLocked(data, service, currentTimeNanos);
+    }
+    EXPECT_EQ(mallocs, 1264u);
+    EXPECT_EQ(totalBytes, 117546u);
 }
 
 int main(int argc, char** argv) {

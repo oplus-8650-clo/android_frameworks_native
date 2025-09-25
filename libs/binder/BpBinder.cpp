@@ -867,9 +867,9 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
                 std::ignore =
                         IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(),
                                                                                 this);
-                mFrozen->isPendingClear = true;
             }
-            mFrozen->callbacks.clear();
+            *mFrozen = {};
+            mFrozen->isPendingClear = true;
         } else {
             std::ignore =
                     IPCThreadState::self()->removeFrozenStateChangeCallback(binderHandle(), this);

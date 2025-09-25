@@ -103,14 +103,6 @@ flag {
 # This file is locked and should not be changed. Use surfaceflinger_flags_new.aconfig
 
 flag {
-  name: "game_default_frame_rate"
-  namespace: "game"
-  description: "This flag guards the new behavior with the addition of Game Default Frame Rate feature."
-  bug: "286084594"
-  is_fixed_read_only: true
-}
-
-flag {
   name: "vulkan_renderengine"
   namespace: "core_graphics"
   description: "Use Vulkan backend in RenderEngine prior to switching to Graphite."

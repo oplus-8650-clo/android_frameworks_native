@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <android/os/BnStatsBootstrapAtomService.h> // For mock implementation
-#include <android/os/StatsBootstrapAtom.h>
-#include <android/os/StatsBootstrapAtomValue.h>
+#include <android/os/binder/BinderCallsStats.h>
+#include <android/os/binder/BinderSpamStats.h>
+#include <android/os/binder/BnBinderStatsConsumerService.h>
 #include <dlfcn.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -31,14 +31,17 @@
 using android::FakeServiceManager;
 using namespace android;
 using namespace testing;
+using os::binder::BinderCallsStats;
+using os::binder::BinderSpamStats;
 
 // --- Mocks ---
 constexpr int64_t kSpamAggregationWindowSec = 5;
 constexpr int64_t kLatencyAggregationWindowSec = 5; // Same as spam for now
-// Mock for IStatsBootstrapAtomService
-class MockStatsBootstrapAtomService : public os::BnStatsBootstrapAtomService {
+// Mock for IBinderStatsConsumerService
+class MockBinderStatsConsumerService : public os::binder::BnBinderStatsConsumerService {
 public:
-    MOCK_METHOD(binder::Status, reportBootstrapAtom, (const os::StatsBootstrapAtom& atom),
+    MOCK_METHOD(binder::Status, reportSpamStats, (const std::vector<BinderSpamStats>&), (override));
+    MOCK_METHOD(binder::Status, reportCallStats, (const std::vector<BinderCallsStats>&),
                 (override));
     MOCK_METHOD(BBinder*, localBinder, (), (override));
 };
@@ -59,83 +62,69 @@ void initServiceManagerOnce() {
     });
 }
 
-// Helper function to create BinderCallData for tests
-BinderCallData createStatsData(uid_t uid, uint32_t code, const char* desc, int64_t startNanos) {
-    return {.interfaceDescriptor = String16(desc),
-            .transactionCode = code,
-            .startTimeNanos = startNanos,
-            .endTimeNanos = 0,
-            .senderUid = uid};
+// Helper function to create a BinderSpamStats for spam comparison
+BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count125, int count250) {
+    auto stats = BinderSpamStats();
+    stats.clientUid = datum.senderUid;
+    stats.interfaceDescriptor = datum.interfaceDescriptor;
+    std::string aidlMethod = "#" + std::to_string(datum.transactionCode);
+    stats.aidlMethod = String16(aidlMethod.c_str());
+    stats.secondsWithAtLeast125Calls = count125;
+    stats.secondsWithAtLeast250Calls = count250;
+    return stats;
 }
 
-BinderCallData createStatsData(uid_t uid, const char* desc, uint32_t code, int64_t startNanos,
-                               int64_t endNanos) {
-    return BinderCallData{
-            .interfaceDescriptor = String16(desc),
-            .transactionCode = code,
-            .startTimeNanos = startNanos,
-            .endTimeNanos = endNanos,
-            .senderUid = uid,
-    };
+// Helper function to create a BinderCallsStats for latency comparison
+BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t callCount,
+                                            int64_t durationSumMicros,
+                                            int32_t secondsWithAtLeast10Calls,
+                                            int32_t secondsWithAtLeast50Calls) {
+    auto stats = BinderCallsStats();
+    stats.clientUid = datum.senderUid;
+    stats.interfaceDescriptor = datum.interfaceDescriptor;
+
+    std::string aidlMethod = "#" + std::to_string(datum.transactionCode);
+    stats.aidlMethod = String16(aidlMethod.c_str());
+
+    stats.callCount = callCount;
+    stats.durationSumMicros = durationSumMicros;
+    stats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
+    stats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
+    return stats;
 }
 
-// Helper function to create a StatsBootstrapAtom for spam comparison
-os::StatsBootstrapAtom createExpectedAtom(const BinderCallData& datum, int count125, int count250) {
-    auto atom = os::StatsBootstrapAtom();
-    // TODO: use directly from stats/atoms/framework/framework_extension_atoms.proto
-    atom.atomId = 1064; // kBinderSpamAtomId
-    atom.values.push_back(createPrimitiveValue((int64_t)datum.senderUid));
-    atom.values.push_back(createPrimitiveValue((int64_t)getuid())); // host uid
-    atom.values.push_back(createPrimitiveValue(datum.interfaceDescriptor));
-    atom.values.push_back(createPrimitiveValue(std::to_string(datum.transactionCode)));
-    atom.values.push_back(createPrimitiveValue((int32_t)count125));
-    atom.values.push_back(createPrimitiveValue((int32_t)count250));
-    return atom;
+MATCHER_P(SpamStatsEq, expectedStats, "") {
+    return arg.clientUid == expectedStats.clientUid &&
+            arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
+            arg.aidlMethod == expectedStats.aidlMethod &&
+            arg.secondsWithAtLeast125Calls == expectedStats.secondsWithAtLeast125Calls &&
+            arg.secondsWithAtLeast250Calls == expectedStats.secondsWithAtLeast250Calls;
 }
 
-// Helper function to create a StatsBootstrapAtom for latency comparison
-os::StatsBootstrapAtom createExpectedLatencyAtom(const BinderCallData& datum, int64_t callCount,
-                                                 int64_t durationSumMicros,
-                                                 int32_t secondsWithAtLeast10Calls,
-                                                 int32_t secondsWithAtLeast50Calls) {
-    auto atom = os::StatsBootstrapAtom();
-    // TODO: use directly from stats/atoms/framework/framework_extension_atoms.proto
-    atom.atomId = 1090; // kBinderLatencyAtomId
-    atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(datum.senderUid)));
-    atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(getuid()))); // host uid
-    atom.values.push_back(createPrimitiveValue(datum.interfaceDescriptor));
-    atom.values.push_back(createPrimitiveValue(std::to_string(datum.transactionCode)));
-    atom.values.push_back(createPrimitiveValue(callCount));
-    atom.values.push_back(createPrimitiveValue(durationSumMicros));
-    atom.values.push_back(createPrimitiveValue(secondsWithAtLeast10Calls));
-    atom.values.push_back(createPrimitiveValue(secondsWithAtLeast50Calls));
-    return atom;
-}
-
-// Matcher for StatsBootstrapAtom
-MATCHER_P(StatsAtomEq, expectedAtom, "") {
-    if (arg.atomId != expectedAtom.atomId) return false;
-    if (arg.values.size() != expectedAtom.values.size()) return false;
-    for (size_t i = 0; i < arg.values.size(); ++i) {
-        if (arg.values[i].value.getTag() != expectedAtom.values[i].value.getTag()) return false;
-    }
-    return true;
+MATCHER_P(CallStatsEq, expectedStats, "") {
+    return arg.clientUid == expectedStats.clientUid &&
+            arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
+            arg.aidlMethod == expectedStats.aidlMethod &&
+            arg.callCount == expectedStats.callCount &&
+            arg.durationSumMicros == expectedStats.durationSumMicros &&
+            arg.secondsWithAtLeast10Calls == expectedStats.secondsWithAtLeast10Calls &&
+            arg.secondsWithAtLeast50Calls == expectedStats.secondsWithAtLeast50Calls;
 }
 
 class BinderStatsPusherTest : public Test {
 protected:
-    sp<StrictMock<MockStatsBootstrapAtomService>> mockStatsService;
+    sp<StrictMock<MockBinderStatsConsumerService>> mockStatsService;
     sp<NiceMock<MockServiceManager>> mockServiceManager;
     BinderStatsPusher pusher;
 
     void SetUp() override {
-        mockStatsService = sp<StrictMock<MockStatsBootstrapAtomService>>::make();
+        mockStatsService = sp<StrictMock<MockBinderStatsConsumerService>>::make();
         initServiceManagerOnce();
         mockServiceManager = sp<NiceMock<MockServiceManager>>::cast(defaultServiceManager());
         ASSERT_NE(mockServiceManager, nullptr)
                 << "Default service manager is not the expected mock type";
         // Default behavior: Service Manager returns the mock Stats Service
-        ON_CALL(*mockServiceManager.get(), checkService(String16("statsbootstrap")))
+        ON_CALL(*mockServiceManager.get(), checkService(String16("binder_stats_consumer")))
                 .WillByDefault(Return(IInterface::asBinder(mockStatsService)));
         ON_CALL(*mockStatsService.get(), localBinder()).WillByDefault(Return(nullptr));
     }
@@ -145,12 +134,34 @@ protected:
 
 // --- Test Cases ---
 
-TEST_F(BinderStatsPusherTest, GetBootstrapService) {
-    EXPECT_CALL(*mockServiceManager, checkService(String16("statsbootstrap")))
+// Unit Test
+TEST_F(BinderStatsPusherTest, ConvertTxnCodeToString16) {
+    uint32_t code = 14;
+    String16 expectedOutput("#14");
+    String16 output;
+    output = pusher.convertTxnCodeToString(code);
+    ASSERT_EQ(output, expectedOutput);
+
+    // edge cases: 0 and max int
+    code = 0;
+    expectedOutput = String16("#0");
+    String16 output2;
+    output2 = pusher.convertTxnCodeToString(code);
+    ASSERT_EQ(output2, expectedOutput);
+
+    code = std::numeric_limits<uint32_t>::max();
+    expectedOutput = String16("#4294967295");
+    String16 output3;
+    output3 = pusher.convertTxnCodeToString(code);
+    ASSERT_EQ(output3, expectedOutput);
+}
+
+TEST_F(BinderStatsPusherTest, GetBinderStatsService) {
+    EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .Times(1)
             .WillOnce(Return(IInterface::asBinder(mockStatsService)));
 
-    auto service = pusher.getBootstrapAtomServiceLocked(15);
+    auto service = pusher.getBinderStatsServiceLocked(15);
     ASSERT_EQ(service, mockStatsService);
 }
 
@@ -159,15 +170,18 @@ TEST_F(BinderStatsPusherTest, AggregateSpamNoSpamBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 50; ++i) { // Less than kMinSpamCount (125)
-        data.push_back(createStatsData(1001, 1, "IFoo", (currentTimeSec - 5) * 1000000000LL));
+        data.push_back({.interfaceDescriptor = String16("IFoo"),
+                        .transactionCode = 1,
+                        .startTimeNanos = (currentTimeSec - 5) * 1000000000LL,
+                        .endTimeNanos = 0,
+                        .senderUid = 1001});
     }
 
-    // Expect no calls to reportBootstrapAtom
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec); //  pushLocked calls
-                                             //  aggregateBinderSpamLocked
+    pusher.pushLocked(data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
@@ -176,11 +190,17 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
     int64_t currentTimeNanos = 9'100'000'000;
     // Create enough data in the *same second* to trigger spam, far enough in the past
     for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
-        data.push_back(createStatsData(1001, 1, "IFoo", currentTimeNanos - 8000'000'000));
+        data.push_back({.interfaceDescriptor = String16("IFoo"),
+                        .transactionCode = 1,
+                        .startTimeNanos = currentTimeNanos - 8000'000'000,
+                        .endTimeNanos = 0,
+                        .senderUid = 1001});
     }
 
-    auto expectedAtom = createExpectedAtom(data[0], 1, 0); // 1 second with >= 125 calls
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedSpamStats(data[0], 1, 0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
@@ -192,11 +212,16 @@ TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
 
     // Create spam data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 150; ++i) {
-        data.push_back(createStatsData(1002, 2, "IBar", currentTimeNanos - 1000'000'000));
+        data.push_back({.interfaceDescriptor = String16("IBar"),
+                        .transactionCode = 2,
+                        .startTimeNanos = currentTimeNanos - 1000'000'000,
+                        .endTimeNanos = 0,
+                        .senderUid = 1002});
     }
 
     // Expect no calls, data is delayed
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
     pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
 }
@@ -206,17 +231,27 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
     int64_t currentTimeNanos = 9'100'000'000;
 
     for (int i = 0; i < 130; ++i) {
-        data.push_back(createStatsData(1003, 3, "IBaz", currentTimeNanos - 8000'000'000));
+        data.push_back({.interfaceDescriptor = String16("IBaz"),
+                        .transactionCode = 3,
+                        .startTimeNanos = currentTimeNanos - 8000'000'000,
+                        .endTimeNanos = 0,
+                        .senderUid = 1003});
     }
     // Delayed spam data (within kDelaySeconds)
     for (int i = 0; i < 140; ++i) {
-        data.push_back(createStatsData(1004, 4, "IQux", currentTimeNanos - 1000'000'000));
+        data.push_back({.interfaceDescriptor = String16("IQux"),
+                        .transactionCode = 4,
+                        .startTimeNanos = currentTimeNanos - 1000'000'000,
+                        .endTimeNanos = 0,
+                        .senderUid = 1004});
     }
 
     // Expect immediate spam to be reported now
-    auto expectedImmediateAtom = createExpectedAtom(data[0], 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedImmediateAtom)))
+    auto expectedImmediateStats = createExpectedSpamStats(data[0], 1, 0);
+    EXPECT_CALL(*mockStatsService,
+                reportSpamStats(ElementsAre(SpamStatsEq(expectedImmediateStats))))
             .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
     pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
 }
@@ -228,11 +263,17 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
 
     // Create data exceeding the second watermark (250 calls/sec)
     for (int i = 0; i < 300; ++i) {
-        data.push_back(createStatsData(1005, 5, "IHighVolume", spamTimeNanos));
+        data.push_back({.interfaceDescriptor = String16("IHighVolume"),
+                        .transactionCode = 5,
+                        .startTimeNanos = spamTimeNanos,
+                        .endTimeNanos = 0,
+                        .senderUid = 1005});
     }
 
-    auto expectedAtom = createExpectedAtom(data[0], 1, 1);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedSpamStats(data[0], 1, 1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -247,17 +288,27 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
 
     // Spam for the first second
     for (int i = 0; i < 150; ++i) {
-        data.push_back(createStatsData(1006, 6, "IMultiSecond", firstSpamSecondNanos));
+        data.push_back({.interfaceDescriptor = String16("IMultiSecond"),
+                        .transactionCode = 6,
+                        .startTimeNanos = firstSpamSecondNanos,
+                        .endTimeNanos = 0,
+                        .senderUid = 1006});
     }
     // Spam for the second second
     for (int i = 0; i < 160; ++i) {
         // Use the same UID, code, desc for aggregation
-        data.push_back(createStatsData(1006, 6, "IMultiSecond", secondSpamSecondNanos));
+        data.push_back({.interfaceDescriptor = String16("IMultiSecond"),
+                        .transactionCode = 6,
+                        .startTimeNanos = secondSpamSecondNanos,
+                        .endTimeNanos = 0,
+                        .senderUid = 1006});
     }
 
     // Expect one atom representing spam across 2 seconds
-    auto expectedAtom = createExpectedAtom(data[0], 2, 0); // 2 seconds with >= 125 calls
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedSpamStats(data[0], 2, 0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -269,11 +320,16 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     int64_t spamDataTimeNanos = (callTimeSec1 - 2) * 1000'000'000LL; // 8s, will be delayed
 
     for (int i = 0; i < 150; ++i) {
-        callData1.push_back(createStatsData(1007, 7, "IDelayed", spamDataTimeNanos));
+        callData1.push_back({.interfaceDescriptor = String16("IDelayed"),
+                             .transactionCode = 7,
+                             .startTimeNanos = spamDataTimeNanos,
+                             .endTimeNanos = 0,
+                             .senderUid = 1007});
     }
 
     // First push: data should be buffered as it's too recent
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // For the first push
     pusher.pushLocked(callData1, callTimeSec1);
 
@@ -281,8 +337,10 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     std::vector<BinderCallData> callData2; // Can be empty or contain new data
     int64_t call2_time_sec = callTimeSec1 + kSpamAggregationWindowSec + 1; // 10 + 5 + 1 = 16s
 
-    auto expectedAtom = createExpectedAtom(callData1[0], 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedSpamStats(callData1[0], 1, 0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // For the second push
 
     pusher.pushLocked(callData2, call2_time_sec);
@@ -295,21 +353,33 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
             (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 4 + 5 + 1 = 10s
 
     // Spam for method 1
-    BinderCallData method1Spam = createStatsData(1008, 8, "IMultiMethod", spamTimeNanos);
+    BinderCallData method1Spam = {.interfaceDescriptor = String16("IMultiMethod"),
+                                  .transactionCode = 8,
+                                  .startTimeNanos = spamTimeNanos,
+                                  .endTimeNanos = 0,
+                                  .senderUid = 1008};
     for (int i = 0; i < 200; ++i) {
         data.push_back(method1Spam);
     }
 
     // Spam for method 2 (different transaction code)
-    BinderCallData method2Spam = createStatsData(1008, 9, "IMultiMethod", spamTimeNanos);
+    BinderCallData method2Spam = {.interfaceDescriptor = String16("IMultiMethod"),
+                                  .transactionCode = 9,
+                                  .startTimeNanos = spamTimeNanos,
+                                  .endTimeNanos = 0,
+                                  .senderUid = 1008};
     for (int i = 0; i < 200; ++i) {
         data.push_back(method2Spam);
     }
 
-    auto expectedAtom1 = createExpectedAtom(method1Spam, 1, 0);
-    auto expectedAtom2 = createExpectedAtom(method2Spam, 1, 0);
+    auto expectedStats1 = createExpectedSpamStats(method1Spam, 1, 0);
+    auto expectedStats2 = createExpectedSpamStats(method2Spam, 1, 0);
 
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(2);
+    EXPECT_CALL(*mockStatsService,
+                reportSpamStats(UnorderedElementsAre(SpamStatsEq(expectedStats1),
+                                                     SpamStatsEq(expectedStats2))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -327,10 +397,15 @@ TEST_F(BinderStatsPusherTest, SkipPushForLocalBinderWithoutJvm) {
     int64_t currentTimeSec = (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 8s
 
     for (int i = 0; i < 150; ++i) {
-        data.push_back(createStatsData(1009, 10, "ILocalSkipped", spamTimeNanos));
+        data.push_back({.interfaceDescriptor = String16("ILocalSkipped"),
+                        .transactionCode = 10,
+                        .startTimeNanos = spamTimeNanos,
+                        .endTimeNanos = 0,
+                        .senderUid = 1009});
     }
 
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0); // Should be skipped
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -343,16 +418,21 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     int64_t spamDataTimeNanos = (timeSec1 - kSpamAggregationWindowSec) * 1000'000'000LL;
 
     for (int i = 0; i < 150; ++i) { // Enough to trigger kSpamFirstWatermark
-        spamCallData1.push_back(createStatsData(1010, 11, "IServiceSkipped", spamDataTimeNanos));
+        spamCallData1.push_back({.interfaceDescriptor = String16("IServiceSkipped"),
+                                 .transactionCode = 11,
+                                 .startTimeNanos = spamDataTimeNanos,
+                                 .endTimeNanos = 0,
+                                 .senderUid = 1010});
     }
 
     // First push: Service is unavailable
-    EXPECT_CALL(*mockServiceManager, checkService(String16("statsbootstrap")))
+    EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .Times(1)
             .WillOnce(Return(nullptr));
     // localBinder() shouldn't be called if service is null in aggregateBinderSpamLocked
     EXPECT_CALL(*mockStatsService, localBinder()).Times(0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
 
     pusher.pushLocked(spamCallData1, timeSec1);
     Mock::VerifyAndClearExpectations(mockServiceManager.get());
@@ -362,12 +442,14 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     std::vector<BinderCallData> spamCallData2; // Empty data for the second call
     int64_t timeSec2 = timeSec1 + 6;
 
-    EXPECT_CALL(*mockServiceManager, checkService(String16("statsbootstrap")))
+    EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .Times(1)
             .WillOnce(Return(IInterface::asBinder(mockStatsService)));
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // Called when service is not null
-    auto expectedAtom = createExpectedAtom(spamCallData1[0], 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedSpamStats(spamCallData1[0], 1, 0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
 
     pusher.pushLocked(spamCallData2, timeSec2);
 }
@@ -379,15 +461,18 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyNoLatencyBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window
     for (int i = 0; i < 5; ++i) { // Less than kLatencyCountFirstWatermark (10)
-        data.push_back(
-                createStatsData(2001, "ILatencyFoo", 1,
+        data.push_back({.interfaceDescriptor = String16("ILatencyFoo"),
+                        .transactionCode = 1,
+                        .startTimeNanos =
                                 (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL,
+                        .endTimeNanos =
                                 (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL +
-                                        1000000 /* 1ms */));
+                                1000000 /* 1ms */,
+                        .senderUid = 2001});
     }
 
-    // Expect no calls to reportBootstrapAtom
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -403,13 +488,18 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
     // Create enough data in the *same second* to trigger latency reporting
     for (int i = 0; i < 15; ++i) {              // More than kLatencyCountFirstWatermark (10)
         int64_t durationMicros = (i + 1) * 100; // e.g. 100us, 200us ..
-        data.push_back(createStatsData(2002, "ILatencyBar", 2, callTimeNanos,
-                                       callTimeNanos + durationMicros * 1000));
+        data.push_back({.interfaceDescriptor = String16("ILatencyBar"),
+                        .transactionCode = 2,
+                        .startTimeNanos = callTimeNanos,
+                        .endTimeNanos = callTimeNanos + durationMicros * 1000,
+                        .senderUid = 2002});
         totalDurationMicros += durationMicros;
     }
 
-    auto expectedAtom = createExpectedLatencyAtom(data[0], 15, totalDurationMicros, 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedLatencyStats(data[0], 15, totalDurationMicros, 1, 0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);
@@ -421,12 +511,16 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyDelayedLatency) {
 
     // Create latency data within the aggregation window
     for (int i = 0; i < 15; ++i) {
-        data.push_back(createStatsData(2003, "ILatencyBaz", 3, currentTimeNanos - 1000'000'000,
-                                       currentTimeNanos - 1000'000'000 + 500000 /* 0.5ms */));
+        data.push_back({.interfaceDescriptor = String16("ILatencyBaz"),
+                        .transactionCode = 3,
+                        .startTimeNanos = currentTimeNanos - 1000'000'000,
+                        .endTimeNanos = currentTimeNanos - 1000'000'000 + 500000 /* 0.5ms */,
+                        .senderUid = 2003});
     }
 
     // Expect no calls, data is delayed
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
     pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
 }
@@ -439,13 +533,17 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
 
     for (int i = 0; i < 15; ++i) {
         int64_t durationMicros = (i + 1) * 150;
-        callData1.push_back(createStatsData(2004, "ILatencyDelayed", 4, latencyDataTimeNanos,
-                                            latencyDataTimeNanos + durationMicros * 1000));
+        callData1.push_back({.interfaceDescriptor = String16("ILatencyDelayed"),
+                             .transactionCode = 4,
+                             .startTimeNanos = latencyDataTimeNanos,
+                             .endTimeNanos = latencyDataTimeNanos + durationMicros * 1000,
+                             .senderUid = 2004});
         totalDurationMicros1 += durationMicros;
     }
 
     // First push: data should be buffered as it's too recent
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
     pusher.pushLocked(callData1, callTimeSec1);
 
@@ -453,8 +551,10 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
     std::vector<BinderCallData> callData2;                                    // Can be empty
     int64_t call2_time_sec = callTimeSec1 + kLatencyAggregationWindowSec + 1; // 10 + 5 + 1 = 16s
 
-    auto expectedAtom = createExpectedLatencyAtom(callData1[0], 15, totalDurationMicros1, 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedLatencyStats(callData1[0], 15, totalDurationMicros1, 1, 0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(callData2, call2_time_sec);
@@ -471,16 +571,22 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     // Data for the first second
     for (int i = 0; i < 12; ++i) { // 12 calls
         int64_t durationMicros = (i + 1) * 100;
-        data.push_back(createStatsData(2005, "ILatencyMultiSec", 5, firstCallSecondNanos,
-                                       firstCallSecondNanos + durationMicros * 1000));
+        data.push_back({.interfaceDescriptor = String16("ILatencyMultiSec"),
+                        .transactionCode = 5,
+                        .startTimeNanos = firstCallSecondNanos,
+                        .endTimeNanos = firstCallSecondNanos + durationMicros * 1000,
+                        .senderUid = 2005});
         totalDurationMicros += durationMicros;
     }
     // Data for the second second
     for (int i = 0; i < 8; ++i) { // 8 calls
         int64_t durationMicros = (i + 1) * 120;
         // Use the same UID, code, desc for aggregation
-        data.push_back(createStatsData(2005, "ILatencyMultiSec", 5, secondCallSecondNanos,
-                                       secondCallSecondNanos + durationMicros * 1000));
+        data.push_back({.interfaceDescriptor = String16("ILatencyMultiSec"),
+                        .transactionCode = 5,
+                        .startTimeNanos = secondCallSecondNanos,
+                        .endTimeNanos = secondCallSecondNanos + durationMicros * 1000,
+                        .senderUid = 2005});
         totalDurationMicros += durationMicros;
     }
 
@@ -488,8 +594,10 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     // Total calls = 12 + 8 = 20
     // secondsWithAtLeast10Calls = 1 (only the first second has >= 10 calls)
     // secondsWithAtLeast50Calls = 0
-    auto expectedAtom = createExpectedLatencyAtom(data[0], 20, totalDurationMicros, 1, 0);
-    EXPECT_CALL(*mockStatsService, reportBootstrapAtom(StatsAtomEq(expectedAtom))).Times(1);
+    auto expectedStats = createExpectedLatencyStats(data[0], 20, totalDurationMicros, 1, 0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
     pusher.pushLocked(data, currentTimeSec);

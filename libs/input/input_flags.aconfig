@@ -84,6 +84,14 @@ flag {
 }
 
 flag {
+  name: "input_device_primary_directional_motion_axis_api"
+  is_exported: true
+  namespace: "input"
+  description: "Controls the API to provide the primary directional motion axis in InputDevice view behavior."
+  bug: "441964225"
+}
+
+flag {
   name: "enable_prediction_pruning_via_jerk_thresholding"
   namespace: "input"
   description: "Enable prediction pruning based on jerk thresholds."
@@ -271,6 +279,16 @@ flag {
   namespace: "input"
   description: "Bug fix to prevent dispatcher from crashing when a window is expected to receive simultaneous action-outside and hover-exit events"
   bug: "423393151"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "touchpad_bottom_right_click_region_fix"
+  namespace: "input"
+  description: "Fix the 'Bottom-right click' touchpad setting so it actually only affects the bottom-right corner of the touchpad, rather than the whole right side."
+  bug: "352584365"
   metadata {
     purpose: PURPOSE_BUGFIX
   }

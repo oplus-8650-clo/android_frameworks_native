@@ -577,13 +577,17 @@ void SurfaceFrame::dumpPresentTime(std::string& result) const {
 
 // QTI_END: 2024-03-18: Performance: SF: Add one dump option to print present time only
 void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& refreshRate,
-                                      Fps displayFrameRenderRate, nsecs_t* outDeadlineDelta) {
+                                      Fps displayFrameRenderRate, nsecs_t* outDeadlineDelta,
+                                      nsecs_t* outPresentDelta) {
     if (mActuals.presentTime == Fence::SIGNAL_TIME_INVALID) {
         // Cannot do any classification for invalid present time.
         mJankType = JankType::Unknown;
         mJankSeverityType = JankSeverityType::Unknown;
         if (outDeadlineDelta) {
             *outDeadlineDelta = -1;
+        }
+        if (outPresentDelta) {
+            *outPresentDelta = 0;
         }
         return;
     }
@@ -598,6 +602,9 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& r
         if (outDeadlineDelta) {
             *outDeadlineDelta = -1;
         }
+        if (outPresentDelta) {
+            *outPresentDelta = 0;
+        }
         return;
     }
 
@@ -610,6 +617,9 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& r
     const nsecs_t deltaToVsync = refreshRate.getPeriodNsecs() > 0
             ? std::abs(presentDelta) % refreshRate.getPeriodNsecs()
             : 0;
+    if (outPresentDelta) {
+        *outPresentDelta = presentDelta;
+    }
     const nsecs_t deadlineDelta = mActuals.endTime - mPredictions.endTime;
     if (outDeadlineDelta) {
         *outDeadlineDelta = deadlineDelta;
@@ -658,10 +668,9 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& r
     } else { // FramePresentMetadata::LatePresent
         const bool readyBeforePreviousLatch = mLastFrameTimestamps.latchTime != 0 &&
                 mPredictions.endTime <= mLastFrameTimestamps.latchTime;
-        const bool dueLastFrame = !FlagManager::getInstance().buffer_stuffing_fix() ||
-                (mLastFrameTimestamps.expectedPresentTime != 0 &&
-                 mPredictions.presentTime - presentThreshold <
-                         mLastFrameTimestamps.expectedPresentTime);
+        const bool dueLastFrame = (mLastFrameTimestamps.expectedPresentTime != 0 &&
+                                   mPredictions.presentTime - presentThreshold <
+                                           mLastFrameTimestamps.expectedPresentTime);
 
         if (readyBeforePreviousLatch && dueLastFrame) {
             // Buffer Stuffing.
@@ -677,6 +686,12 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& r
                 mFrameReadyMetadata = FrameReadyMetadata::OnTimeFinish;
             } else {
                 mFrameReadyMetadata = FrameReadyMetadata::LateFinish;
+            }
+
+            if (outPresentDelta) {
+                nsecs_t adjustedPresent = mLastFrameTimestamps.expectedPresentTime +
+                        displayFrameRenderRate.getPeriodNsecs();
+                *outPresentDelta = mActuals.presentTime - adjustedPresent;
             }
         }
         if (mFrameReadyMetadata == FrameReadyMetadata::OnTimeFinish) {
@@ -721,8 +736,10 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankType, 
     mDisplayFrameRenderRate = displayFrameRenderRate;
     mActuals.presentTime = presentTime;
     nsecs_t deadlineDelta = 0;
+    nsecs_t presentDelta = 0;
 
-    classifyJankLocked(displayFrameJankType, refreshRate, displayFrameRenderRate, &deadlineDelta);
+    classifyJankLocked(displayFrameJankType, refreshRate, displayFrameRenderRate, &deadlineDelta,
+                       &presentDelta);
 
     if (mPredictionState != PredictionState::None) {
         // Only update janky frames if the app used vsync predictions
@@ -735,6 +752,7 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankType, 
         jd.jankType = mJankType;
         jd.frameIntervalNs =
                 (mRenderRate ? *mRenderRate : mDisplayFrameRenderRate).getPeriodNsecs();
+        jd.presentDelayNs = presentDelta;
 
         if (mPredictionState == PredictionState::Valid) {
             jd.scheduledAppFrameTimeNs = mPredictions.endTime - mPredictions.startTime;
@@ -761,7 +779,7 @@ void SurfaceFrame::onCommitNotComposited(Fps refreshRate, Fps displayFrameRender
 
     mDisplayFrameRenderRate = displayFrameRenderRate;
     mActuals.presentTime = mPredictions.presentTime;
-    classifyJankLocked(JankType::None, refreshRate, displayFrameRenderRate, nullptr);
+    classifyJankLocked(JankType::None, refreshRate, displayFrameRenderRate, nullptr, nullptr);
 }
 
 void SurfaceFrame::tracePredictions(int64_t displayFrameToken, nsecs_t monoBootOffset,

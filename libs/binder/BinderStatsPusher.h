@@ -15,10 +15,13 @@
  */
 #pragma once
 
+#include <android/os/binder/IBinderStatsConsumerService.h>
 #include <vector>
 #include "BinderStatsUtils.h"
 
-class BinderStatsPusherTest_GetBootstrapService_Test;
+class BinderStatsPusherTest_GetBinderStatsService_Test;
+class BinderStatsPusherTest_ConvertTxnCodeToString16_Test;
+class BinderAllocation_BinderStatsPusher_aggregateStatsLocked_Test;
 
 namespace android {
 /**
@@ -37,8 +40,10 @@ public:
     void pushLocked(const std::vector<BinderCallData>& data, const int64_t nowSec);
 
 private:
-    friend ::BinderStatsPusherTest_GetBootstrapService_Test;
-    sp<os::IStatsBootstrapAtomService> getBootstrapAtomServiceLocked(const int64_t nowSec);
+    friend ::BinderStatsPusherTest_GetBinderStatsService_Test;
+    friend ::BinderAllocation_BinderStatsPusher_aggregateStatsLocked_Test;
+    friend ::BinderStatsPusherTest_ConvertTxnCodeToString16_Test;
+    sp<os::binder::IBinderStatsConsumerService> getBinderStatsServiceLocked(const int64_t nowSec);
 
     // timeout for checking the service.
     static const int32_t kCheckServiceTimeoutSec = 5;
@@ -46,6 +51,7 @@ private:
     static const int32_t kLatencyCountSecondWatermark = 50;
     static const int32_t kSpamFirstWatermark = 125;
     static const int32_t kSpamSecondWatermark = 250;
+    static const int32_t kMaxStatsCount = 64;
     // Time window (in seconds) for aggregating per-second call counts.
     // Data for a specific second (startTimeSec) is processed for spam detection
     // and to update latency-related 'secondsWithAtLeastXCalls' counts
@@ -89,11 +95,17 @@ private:
     int64_t mServiceCheckTimeSec = -kCheckServiceTimeoutSec - 1;
     // Aggregates binder transaction data into BinderSpamReport objects.
     void aggregateStatsLocked(const std::vector<BinderCallData>& data,
-                              const sp<os::IStatsBootstrapAtomService>& service,
+                              const sp<os::binder::IBinderStatsConsumerService>& service,
                               const int64_t nowSec);
-
+    // Encodes the given transaction code to string, e.g. 15 -> "#15".
+    String16 convertTxnCodeToString(uint32_t txnCode);
     // The stats which are not sent to StatsBootStrap
     StatsBufferMap mStatsBuffer;
+
+    // Vectors to temporarily store the data before sending to BnderStatsConsumer.
+    // They are member variables to reduce allocations across multiple calls.
+    std::vector<os::binder::BinderCallsStats> mCallStats;
+    std::vector<os::binder::BinderSpamStats> mSpamStats;
 };
 
 } // namespace android

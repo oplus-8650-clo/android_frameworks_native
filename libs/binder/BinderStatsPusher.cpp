@@ -17,22 +17,23 @@
 
 #include "BinderStatsPusher.h"
 
+#include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android/os/IStatsBootstrapAtomService.h>
+#include <android/os/binder/BinderCallsStats.h>
+#include <android/os/binder/BinderSpamStats.h>
+#include <android/os/binder/IBinderStatsConsumerService.h>
 #include <binder/Functional.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <utils/SystemClock.h>
+#include <charconv>
 #include "BinderStatsUtils.h"
 #include "JvmUtils.h"
 
 namespace android {
-// defined in stats/atoms/framework/framework_extension_atoms.proto
-constexpr int32_t kBinderSpamAtomId = 1064;
-constexpr int32_t kBinderLatencyAtomId = 1090;
-[[clang::no_destroy]] static const StaticString16 kStatsBootstrapServiceName(u"statsbootstrap");
+[[clang::no_destroy]] static const StaticString16 kBinderStatsServiceName(u"binder_stats_consumer");
 
-sp<os::IStatsBootstrapAtomService> BinderStatsPusher::getBootstrapAtomServiceLocked(
+sp<os::binder::IBinderStatsConsumerService> BinderStatsPusher::getBinderStatsServiceLocked(
         const int64_t nowSec) {
     // When this is removed, the device does not get past the boot animation
     // TODO(b/299356196): This might result in dropped stats for high usage apps like
@@ -44,8 +45,8 @@ sp<os::IStatsBootstrapAtomService> BinderStatsPusher::getBootstrapAtomServiceLoc
     if (!sm) {
         LOG_ALWAYS_FATAL("defaultServiceManager() returned nullptr.");
     }
-    auto service = interface_cast<os::IStatsBootstrapAtomService>(
-            defaultServiceManager()->checkService(kStatsBootstrapServiceName));
+    auto service = interface_cast<os::binder::IBinderStatsConsumerService>(
+            defaultServiceManager()->checkService(kBinderStatsServiceName));
     mServiceCheckTimeSec = nowSec;
     if (service == nullptr) {
         mLastServiceCheckSucceeded = false;
@@ -55,10 +56,22 @@ sp<os::IStatsBootstrapAtomService> BinderStatsPusher::getBootstrapAtomServiceLoc
     return service;
 }
 
-__attribute__((no_sanitize("signed-integer-overflow")))
-void BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
-                                             const sp<os::IStatsBootstrapAtomService>& service,
-                                             const int64_t nowSec) {
+String16 BinderStatsPusher::convertTxnCodeToString(uint32_t txnCode) {
+    // Size: 1 for '#', 10 for max uint32_t digits.
+    char buffer[11];
+    buffer[0] = '#';
+    auto result = std::to_chars(buffer + 1, buffer + std::size(buffer), txnCode);
+    if (result.ec != std::errc()) {
+        LOG_FATAL("Error converting txnCode to String16");
+    }
+    // Construct the String16 from the char array and its length.
+    return String16(buffer, result.ptr - buffer);
+}
+
+__attribute__((no_sanitize("signed-integer-overflow"))) void
+BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
+                                        const sp<os::binder::IBinderStatsConsumerService>& service,
+                                        const int64_t nowSec) {
     for (const auto& datum : data) {
         int64_t startTimeSec = datum.startTimeNanos / 1000'000'000;
         // Check if the buffer period has passed.
@@ -128,47 +141,38 @@ void BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& 
                 ++innerIt;
             }
         }
+        if (mCallStats.size() >= kMaxStatsCount) {
+            service->reportCallStats(mCallStats);
+            mCallStats.clear();
+        }
         if (callsWithLatency > 0) {
             auto datum = outerIt->first;
-            auto atom = os::StatsBootstrapAtom();
-            atom.atomId = kBinderLatencyAtomId;
-            std::vector<os::StatsBootstrapAtomValue> values;
-            atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(datum.senderUid)));
-            atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(getuid()))); // host uid
-            atom.values.push_back(createPrimitiveValue(datum.interfaceDescriptor));
-            // TODO (b/299356196): get actual method name.
-            atom.values.push_back(
-                    createPrimitiveValue(std::to_string(datum.transactionCode))); // aidl method
-            atom.values.push_back(
-                    createPrimitiveValue(static_cast<int64_t>(callsWithLatency))); // call count
-            atom.values.push_back(
-                    createPrimitiveValue(static_cast<int64_t>(durationSumMicros))); // dur sum in us
-            atom.values.push_back(createPrimitiveValue(static_cast<int32_t>(
-                    secondsWithAtLeast10Calls))); // seconds_with_at_least_10_calls
-            atom.values.push_back(createPrimitiveValue(static_cast<int32_t>(
-                    secondsWithAtLeast50Calls))); // seconds_with_at_least_50_calls
-
-            // TODO(b/414551350): combine multiple binder calls into one.
-            service->reportBootstrapAtom(atom);
+            mCallStats.emplace_back(os::binder::BinderCallsStats());
+            auto& callsStats = mCallStats.back();
+            callsStats.clientUid = static_cast<int32_t>(datum.senderUid);
+            callsStats.interfaceDescriptor = datum.interfaceDescriptor;
+            // TODO(b/299356196): use actual method name when available.
+            callsStats.aidlMethod = convertTxnCodeToString(datum.transactionCode);
+            callsStats.callCount = static_cast<int64_t>(callsWithLatency);
+            callsStats.durationSumMicros = static_cast<int64_t>(durationSumMicros);
+            callsStats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
+            callsStats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
         }
 
+        if (mSpamStats.size() >= kMaxStatsCount) {
+            service->reportSpamStats(mSpamStats);
+            mSpamStats.clear();
+        }
         if (secondsWithAtLeast125Calls > 0) {
             auto datum = outerIt->first;
-            auto atom = os::StatsBootstrapAtom();
-            atom.atomId = kBinderSpamAtomId;
-            std::vector<os::StatsBootstrapAtomValue> values;
-            atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(datum.senderUid)));
-            atom.values.push_back(createPrimitiveValue(static_cast<int64_t>(getuid()))); // host uid
-            atom.values.push_back(createPrimitiveValue(datum.interfaceDescriptor));
-            // TODO (b/299356196): get actual method name.
-            atom.values.push_back(
-                    createPrimitiveValue(std::to_string(datum.transactionCode))); // aidl method
-            atom.values.push_back(
-                    createPrimitiveValue(static_cast<int32_t>(secondsWithAtLeast125Calls)));
-            atom.values.push_back(
-                    createPrimitiveValue(static_cast<int32_t>(secondsWithAtLeast250Calls)));
-            // TODO(b/414551350): combine multiple binder calls into one.
-            service->reportBootstrapAtom(atom);
+            mSpamStats.emplace_back(os::binder::BinderSpamStats());
+            auto& spamStats = mSpamStats.back();
+            spamStats.clientUid = static_cast<int32_t>(datum.senderUid);
+            spamStats.interfaceDescriptor = datum.interfaceDescriptor;
+            // TODO(b/299356196): replace with actual method name.
+            spamStats.aidlMethod = convertTxnCodeToString(datum.transactionCode);
+            spamStats.secondsWithAtLeast125Calls = secondsWithAtLeast125Calls;
+            spamStats.secondsWithAtLeast250Calls = secondsWithAtLeast250Calls;
         }
 
         if (outerIt->second.empty()) {
@@ -177,10 +181,18 @@ void BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& 
             ++outerIt;
         }
     }
+    if (!mCallStats.empty()) {
+        service->reportCallStats(mCallStats);
+        mCallStats.clear();
+    }
+    if (!mSpamStats.empty()) {
+        service->reportSpamStats(mSpamStats);
+        mSpamStats.clear();
+    }
 }
 
 void BinderStatsPusher::pushLocked(const std::vector<BinderCallData>& data, const int64_t nowSec) {
-    auto service = getBootstrapAtomServiceLocked(nowSec);
+    auto service = getBinderStatsServiceLocked(nowSec);
     aggregateStatsLocked(data, service, nowSec);
 }
 

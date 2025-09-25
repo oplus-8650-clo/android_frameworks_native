@@ -222,6 +222,7 @@ private:
     bool mHasMic;
     bool mDropUntilNextSync;
     std::optional<bool> mShouldSmoothScroll;
+    std::optional<int32_t> mPrimaryDirectionalMotionAxis;
     std::filesystem::path mSysfsRootPath;
 
     typedef int32_t (InputMapper::*GetStateFunc)(uint32_t sourceMask, int32_t code);

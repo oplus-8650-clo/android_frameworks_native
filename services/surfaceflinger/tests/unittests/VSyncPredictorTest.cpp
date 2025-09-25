@@ -273,14 +273,8 @@ TEST_F(VSyncPredictorTest, adaptsToFenceTimelinesDiscontinuous_22hzLowVariance) 
         tracker.addVsyncTimestamp(timestamp);
     }
     auto [slope, intercept] = tracker.getVSyncPredictionModel();
-    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
-        FlagManager::getInstance().resync_on_tx()) {
-        EXPECT_EQ(slope, idealPeriod);
-        EXPECT_EQ(intercept, 0);
-    } else {
-        EXPECT_THAT(slope, IsCloseTo(expectedPeriod, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(expectedIntercept, mMaxRoundingError));
-    }
+    EXPECT_EQ(slope, idealPeriod);
+    EXPECT_EQ(intercept, 0);
 }
 
 TEST_F(VSyncPredictorTest, againstOutliersDiscontinuous_500hzLowVariance) {
@@ -306,18 +300,11 @@ TEST_F(VSyncPredictorTest, againstOutliersDiscontinuous_500hzLowVariance) {
     }
 
     auto [slope, intercept] = tracker.getVSyncPredictionModel();
-    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
-        FlagManager::getInstance().resync_on_tx()) {
-        EXPECT_EQ(slope, idealPeriod);
-        EXPECT_EQ(intercept, 0);
-    } else {
-        EXPECT_THAT(slope, IsCloseTo(expectedPeriod, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(expectedIntercept, mMaxRoundingError));
-    }
+    EXPECT_EQ(slope, idealPeriod);
+    EXPECT_EQ(intercept, 0);
 }
 
 TEST_F(VSyncPredictorTest, recoverAfterDriftedVSyncAreReplacedWithCorrectVSync) {
-    SET_FLAG_FOR_TEST(flags::vsync_predictor_predicts_within_threshold, true);
     auto constexpr idealPeriodNs = 4166666;
     auto constexpr minFrameIntervalNs = 8333333;
     auto constexpr idealPeriod = Fps::fromPeriodNsecs(idealPeriodNs);
@@ -364,7 +351,6 @@ TEST_F(VSyncPredictorTest, recoverAfterDriftedVSyncAreReplacedWithCorrectVSync) 
 }
 
 TEST_F(VSyncPredictorTest, vsyncsOutsideThresholdDoesNotCauseIncorrectPrediction) {
-    SET_FLAG_FOR_TEST(flags::vsync_predictor_predicts_within_threshold, true);
     auto constexpr idealPeriodNs = 8'333'333;
     auto constexpr minFrameIntervalNs = 8'333'333;
     auto constexpr idealPeriod = Fps::fromPeriodNsecs(idealPeriodNs);
@@ -515,14 +501,8 @@ TEST_F(VSyncPredictorTest, doesNotPredictBeforeTimePointWithHigherIntercept) {
     }
 
     auto [slope, intercept] = tracker.getVSyncPredictionModel();
-    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
-        FlagManager::getInstance().resync_on_tx()) {
-        EXPECT_THAT(slope, IsCloseTo(11603853, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(1016896, mMaxRoundingError));
-    } else {
-        EXPECT_THAT(slope, IsCloseTo(expectedPeriod, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(expectedIntercept, mMaxRoundingError));
-    }
+    EXPECT_THAT(slope, IsCloseTo(11603853, mMaxRoundingError));
+    EXPECT_THAT(intercept, IsCloseTo(1016896, mMaxRoundingError));
 
     // (timePoint - oldestTS) % expectedPeriod works out to be: 10702663
     // (timePoint - oldestTS) / expectedPeriod works out to be: 37.96
@@ -731,14 +711,8 @@ TEST_F(VSyncPredictorTest, robustToDuplicateTimestamps_60hzRealTraceData) {
         tracker.addVsyncTimestamp(timestamp);
     }
     auto [slope, intercept] = tracker.getVSyncPredictionModel();
-    if (FlagManager::getInstance().vsync_predictor_predicts_within_threshold() &&
-        FlagManager::getInstance().resync_on_tx()) {
-        EXPECT_THAT(slope, IsCloseTo(16664349, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(38082, mMaxRoundingError));
-    } else {
-        EXPECT_THAT(slope, IsCloseTo(expectedPeriod, mMaxRoundingError));
-        EXPECT_THAT(intercept, IsCloseTo(expectedIntercept, mMaxRoundingError));
-    }
+    EXPECT_THAT(slope, IsCloseTo(16664349, mMaxRoundingError));
+    EXPECT_THAT(intercept, IsCloseTo(38082, mMaxRoundingError));
 }
 
 TEST_F(VSyncPredictorTest, setRenderRateIsRespected) {
