@@ -154,7 +154,9 @@ public:
 
     client_cache_t cachedBuffer;
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     bool qtiInvalid = false;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     nsecs_t dequeueTime;
 
     // Generates the release callback id based on the buffer id and frame number.

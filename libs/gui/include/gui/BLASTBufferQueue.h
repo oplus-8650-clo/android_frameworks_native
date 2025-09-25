@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #ifndef ANDROID_GUI_BLAST_BUFFER_QUEUE_H
 #define ANDROID_GUI_BLAST_BUFFER_QUEUE_H
 
@@ -41,16 +43,20 @@
 
 #include <com_android_graphics_libgui_flags.h>
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include "../../QtiExtension/QtiBLASTBufferQueueExtension.h"
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace android {
 
 // Sizes determined empirically to avoid allocations during common activity.
 constexpr size_t kSubmittedBuffersMapSizeHint = 8;
 constexpr size_t kDequeueTimestampsMapSizeHint = 32;
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace libguiextension {
 class QtiBLASTBufferQueueExtension;
 };
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 class BLASTBufferQueue;
 class BufferItemConsumer;
 class BufferReleaseReader;
@@ -181,8 +187,10 @@ private:
     friend class TestBLASTBufferQueue;
     friend class BBQBufferQueueCore;
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     friend class libguiextension::QtiBLASTBufferQueueExtension;
     libguiextension::QtiBLASTBufferQueueExtension* mQtiBBQExtn = nullptr;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     // can't be copied
     BLASTBufferQueue& operator = (const BLASTBufferQueue& rhs);
     BLASTBufferQueue(const BLASTBufferQueue& rhs);
