@@ -350,8 +350,6 @@ void ABBinder::addDeathRecipient(const ::android::sp<AIBinder_DeathRecipient>& /
 ABpBinder::ABpBinder(const ::android::sp<::android::IBinder>& binder)
     : AIBinder(nullptr /*clazz*/), mRemote(binder) {
     LOG_ALWAYS_FATAL_IF(binder == nullptr, "binder == nullptr");
-
-    mRemote->getWeakRefs()->tag(RefBase::OBJECT_TAG_NDK_PROXY);
 }
 
 ABpBinder::~ABpBinder() {
@@ -361,8 +359,6 @@ ABpBinder::~ABpBinder() {
             strongRecip->pruneThisTransferEntry(getBinder(), recip.cookie);
         }
     }
-
-    mRemote->getWeakRefs()->untag(RefBase::OBJECT_TAG_NDK_PROXY);
 }
 
 sp<AIBinder> ABpBinder::lookupOrCreateFromBinder(const ::android::sp<::android::IBinder>& binder) {

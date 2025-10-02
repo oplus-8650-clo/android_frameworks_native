@@ -61,7 +61,7 @@ std::unique_ptr<SkiaGpuContext> GaneshVkRenderEngine::createContext(
                                              cache);
 }
 
-void GaneshVkRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
+void GaneshVkRenderEngine::waitFenceImpl(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
     if (fenceFd.get() < 0) return;
 
     const int dupedFd = dup(fenceFd.get());

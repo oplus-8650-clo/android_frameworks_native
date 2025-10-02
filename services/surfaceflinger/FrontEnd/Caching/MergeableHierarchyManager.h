@@ -18,23 +18,35 @@
 
 #include <memory>
 #include "FrontEnd/Caching/MergeableHierarchy.h"
-#include "ftl/small_map.h"
+#include "compositionengine/CompositionEngine.h"
 
-namespace android::surfaceflinger::frontend::caching {
+namespace android::surfaceflinger::frontend {
+
+namespace caching {
 
 // Manages the lifecycle of MergeableHierarchies constructed from the layer graph
 class MergeableHierarchyManager {
 public:
-    // Adds a new MergeableHierarchy to be tracked by the manager
-    void add(std::unique_ptr<MergeableHierarchy>&& mergeableHierarchy) {
-        mMergeableHierarchies.emplace_back(std::move(mergeableHierarchy));
+    void update(const LayerHierarchy& hierarchy);
+
+    void constructSnapshots(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
+                            compositionengine::CompositionEngine& compositionEngine);
+
+    MergeableHierarchy* getOwnedHierarchy(uint32_t id) const {
+        auto hierarchy =
+                std::find_if(mMergeableHierarchies.begin(), mMergeableHierarchies.end(),
+                             [id](const auto& hierarchy) { return hierarchy->getId() == id; });
+
+        if (hierarchy != mMergeableHierarchies.end()) {
+            return hierarchy->get();
+        } else {
+            return nullptr;
+        }
     }
 
-    // Removes an MergeableHierarchy, if it exists, based on its owner ID
-    void remove(uint32_t id) {
-        std::erase_if(mMergeableHierarchies, [id](const auto& mergeableHierarchy) {
-            return mergeableHierarchy->getId() == id;
-        });
+    bool isMemberOfAnyHierarchy(uint32_t id) const {
+        return std::any_of(mMergeableHierarchies.cbegin(), mMergeableHierarchies.cend(),
+                           [id](const auto& hierarchy) { return hierarchy->hasLayer(id); });
     }
 
     // Dumps all tracked MergeableHiearchies to a string
@@ -55,9 +67,20 @@ public:
     }
 
 private:
+    void add(std::unique_ptr<MergeableHierarchy>&& mergeableHierarchy) {
+        mMergeableHierarchies.emplace_back(std::move(mergeableHierarchy));
+    }
+    void remove(uint32_t id) {
+        std::erase_if(mMergeableHierarchies, [id](const auto& mergeableHierarchy) {
+            return mergeableHierarchy->getId() == id;
+        });
+    }
+    void update(const LayerHierarchy* hierarchy, MergeableHierarchy::Accumulator& accumulator);
     // TODO: use a better data structure for this. Conceptually we want a set of sets
     // so that destroying a LayerHierarchy won't cause a linear time search.
     std::vector<std::unique_ptr<caching::MergeableHierarchy>> mMergeableHierarchies;
 };
 
-} // namespace android::surfaceflinger::frontend::caching
+} // namespace caching
+
+} // namespace android::surfaceflinger::frontend

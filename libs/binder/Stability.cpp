@@ -139,7 +139,7 @@ status_t Stability::setRepr(IBinder* binder, int32_t setting, uint32_t flags) {
 
     BBinder* local = binder->localBinder();
     if (local != nullptr) {
-        local->mStability = setting;
+        local->setStability(setting);
     } else {
         binder->remoteBinder()->mStability = setting;
     }
@@ -154,7 +154,7 @@ int16_t Stability::getRepr(IBinder* binder) {
 
     BBinder* local = binder->localBinder();
     if (local != nullptr) {
-        return local->mStability;
+        return local->getStability();
     }
 
     return binder->remoteBinder()->mStability;

@@ -26,7 +26,7 @@ public:
 
 protected:
     std::unique_ptr<SkiaGpuContext> createContext(VulkanInterface& vulkanInterface) override;
-    void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) override;
+    void waitFenceImpl(SkiaGpuContext* context, base::borrowed_fd fenceFd) override;
     base::unique_fd flushAndSubmit(SkiaGpuContext* context, sk_sp<SkSurface> dstSurface) override;
     void appendBackendSpecificInfoToDump(std::string& result) override;
 

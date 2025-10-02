@@ -183,12 +183,12 @@ filegroup {
         "DisplayHardware/AidlComposerHal.cpp",
         "DisplayHardware/ComposerHal.cpp",
         "DisplayHardware/FramebufferSurface.cpp",
+        "DisplayHardware/HwcSlotTracker.cpp",
         "DisplayHardware/HWC2.cpp",
         "DisplayHardware/HWComposer.cpp",
         "DisplayHardware/HidlComposerHal.cpp",
         "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.cpp",
         "DisplayHardware/VirtualDisplay/SinkSurfaceHelper.cpp",
-        "DisplayHardware/VirtualDisplay/VirtualDisplayBufferSlotTracker.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplaySurface.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplayThread.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplayThreadManager.cpp",
@@ -234,6 +234,7 @@ filegroup {
         "FrontEnd/RequestedLayerState.cpp",
         "FrontEnd/TransactionHandler.cpp",
         "FrontEnd/Caching/MergeableHierarchy.cpp",
+        "FrontEnd/Caching/MergeableHierarchyManager.cpp",
         "HdrLayerInfoReporter.cpp",
         "HdrSdrRatioOverlay.cpp",
         "Jank/JankTracker.cpp",
@@ -390,7 +391,7 @@ genrule {
     name: "statslog_surfaceflinger_bootstrap.h",
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --header $(genDir)/statslog_surfaceflinger_bootstrap.h" +
-        " --module surfaceflinger --namespace android,surfaceflinger,stats --bootstrap",
+        " --module surfaceflinger --namespace android,surfaceflinger,stats --interface bootstrap",
     out: [
         "statslog_surfaceflinger_bootstrap.h",
     ],
@@ -401,7 +402,7 @@ genrule {
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --cpp $(genDir)/statslog_surfaceflinger_bootstrap.cpp" +
         " --module surfaceflinger --namespace android,surfaceflinger,stats" +
-        " --importHeader statslog_surfaceflinger_bootstrap.h --bootstrap",
+        " --importHeader statslog_surfaceflinger_bootstrap.h --interface bootstrap",
     out: [
         "statslog_surfaceflinger_bootstrap.cpp",
     ],

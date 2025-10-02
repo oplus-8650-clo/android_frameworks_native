@@ -29,7 +29,7 @@ use binder::{
 };
 use futures::StreamExt;
 use nix::libc;
-use rustutils::users::{AID_ROOT, AID_SYSTEM};
+use rustutils::android::users::{AID_ROOT, AID_SYSTEM};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::OpenOptions;
 use std::io::Write;

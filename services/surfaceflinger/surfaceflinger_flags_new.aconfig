@@ -287,6 +287,26 @@ flag {
 } # parse_edid_version_and_input_type
 
 flag {
+  name: "re_check_fence"
+  namespace: "core_graphics"
+  description: "Check fence status before waiting for fence in RenderEngine"
+  bug: "446240423"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # re_check_fence
+
+flag {
+  name: "re_powered_off_displays_inform_cache_budgets"
+  namespace: "core_graphics"
+  description: "Allow powered off displays to contribute to RenderEngine's cache budgets, since displays aren't fully initialized when cache budget calculations are needed during boot."
+  bug: "446658240"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # re_powered_off_displays_inform_cache_budgets
+
+flag {
   name: "readback_screenshot"
   namespace: "core_graphics"
   description: "Allows devices to use DPU readback for fullscreen screenshots"

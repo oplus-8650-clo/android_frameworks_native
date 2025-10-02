@@ -50,6 +50,7 @@
 
 #include "../InputDeviceMetricsSource.h"
 
+#include "CancellationOptions.h"
 #include "Connection.h"
 #include "DebugConfig.h"
 #include "InputDispatcher.h"
@@ -782,17 +783,17 @@ int32_t getUserActivityEventType(const EventEntry& eventEntry) {
 }
 
 std::pair<bool /*cancelPointers*/, bool /*cancelNonPointers*/> expandCancellationMode(
-        CancelationOptions::Mode mode) {
+        CancellationOptions::Mode mode) {
     switch (mode) {
-        case CancelationOptions::Mode::CANCEL_ALL_EVENTS:
+        case CancellationOptions::Mode::CANCEL_ALL_EVENTS:
             return {true, true};
-        case CancelationOptions::Mode::CANCEL_POINTER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_POINTER_EVENTS:
             return {true, false};
-        case CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
             return {false, true};
-        case CancelationOptions::Mode::CANCEL_FALLBACK_EVENTS:
+        case CancellationOptions::Mode::CANCEL_FALLBACK_EVENTS:
             return {false, true};
-        case CancelationOptions::Mode::CANCEL_HOVER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_HOVER_EVENTS:
             return {true, false};
     }
 }
@@ -1509,27 +1510,27 @@ void InputDispatcher::dropInboundEventLocked(const EventEntry& entry, DropReason
     switch (entry.type) {
         case EventEntry::Type::KEY: {
             const KeyEntry& keyEntry = static_cast<const KeyEntry&>(entry);
-            CancelationOptions options(CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS, reason,
-                                       keyEntry.traceTracker);
+            CancellationOptions options(CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
+                                        reason, keyEntry.traceTracker);
             options.displayId = keyEntry.displayId;
             options.deviceId = keyEntry.deviceId;
-            synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+            synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
             break;
         }
         case EventEntry::Type::MOTION: {
             const MotionEntry& motionEntry = static_cast<const MotionEntry&>(entry);
             if (motionEntry.source & AINPUT_SOURCE_CLASS_POINTER) {
-                CancelationOptions options(CancelationOptions::Mode::CANCEL_POINTER_EVENTS, reason,
-                                           motionEntry.traceTracker);
+                CancellationOptions options(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
+                                            reason, motionEntry.traceTracker);
                 options.displayId = motionEntry.displayId;
                 options.deviceId = motionEntry.deviceId;
-                synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+                synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
             } else {
-                CancelationOptions options(CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
+                CancellationOptions options(CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
                                            reason, motionEntry.traceTracker);
                 options.displayId = motionEntry.displayId;
                 options.deviceId = motionEntry.deviceId;
-                synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+                synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
             }
             break;
         }
@@ -1647,10 +1648,10 @@ bool InputDispatcher::dispatchDeviceResetLocked(nsecs_t currentTime,
     }
 
     ScopedSyntheticEventTracer traceContext(mTracer);
-    CancelationOptions options(CancelationOptions::Mode::CANCEL_ALL_EVENTS, "device was reset",
+    CancellationOptions options(CancellationOptions::Mode::CANCEL_ALL_EVENTS, "device was reset",
                                traceContext.getTracker());
     options.deviceId = entry.deviceId;
-    synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+    synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
 
     // Remove all active pointers from this device
     mTouchStates.removeAllPointersForDevice(entry.deviceId);
@@ -2111,12 +2112,12 @@ bool InputDispatcher::dispatchMotionLocked(nsecs_t currentTime,
         return true;
     }
     if (injectionResult != InputEventInjectionResult::SUCCEEDED) {
-        CancelationOptions::Mode mode(
-                isPointerEvent ? CancelationOptions::Mode::CANCEL_POINTER_EVENTS
-                               : CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS);
-        CancelationOptions options(mode, "input event injection failed", entry->traceTracker);
+        CancellationOptions::Mode mode(
+                isPointerEvent ? CancellationOptions::Mode::CANCEL_POINTER_EVENTS
+                               : CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS);
+        CancellationOptions options(mode, "input event injection failed", entry->traceTracker);
         options.displayId = entry->displayId;
-        synthesizeCancelationEventsForMonitorsLocked(options);
+        synthesizeCancellationEventsForMonitorsLocked(options);
         return true;
     }
 
@@ -2219,7 +2220,7 @@ void InputDispatcher::cancelEventsForAnrLocked(const std::shared_ptr<Connection>
         return;
     }
     ScopedSyntheticEventTracer traceContext(mTracer);
-    CancelationOptions options(CancelationOptions::Mode::CANCEL_ALL_EVENTS,
+    CancellationOptions options(CancellationOptions::Mode::CANCEL_ALL_EVENTS,
                                "application not responding", traceContext.getTracker());
 
     sp<WindowInfoHandle> windowHandle;
@@ -2232,7 +2233,7 @@ void InputDispatcher::cancelEventsForAnrLocked(const std::shared_ptr<Connection>
             return;
         }
     }
-    synthesizeCancelationEventsForConnectionLocked(connection, options, windowHandle);
+    synthesizeCancellationEventsForConnectionLocked(connection, options, windowHandle);
 }
 
 void InputDispatcher::resetNoFocusedWindowTimeoutLocked() {
@@ -4072,8 +4073,8 @@ int InputDispatcher::handleReceiveCallback(int events, sp<IBinder> connectionTok
     return 0; // remove the callback
 }
 
-void InputDispatcher::synthesizeCancelationEventsForAllConnectionsLocked(
-        CancelationOptions&& options) {
+void InputDispatcher::synthesizeCancellationEventsForAllConnectionsLocked(
+        CancellationOptions&& options) {
     // Cancel windows (i.e. non-monitors).
     // A channel must have at least one window to receive any input. If a window was removed, the
     // event streams directed to the window will already have been canceled during window removal.
@@ -4090,14 +4091,14 @@ void InputDispatcher::synthesizeCancelationEventsForAllConnectionsLocked(
                                                        options.windowHandle = windowHandle;
                                                        base::ScopedLockAssertion assumeLocked(
                                                                mLock);
-                                                       synthesizeCancelationEventsForWindowLocked(
+                                                       synthesizeCancellationEventsForWindowLocked(
                                                                options);
                                                    });
         } else {
             mTouchStates.forAllTouchedWindows([&](const sp<gui::WindowInfoHandle>& windowHandle) {
                 options.windowHandle = windowHandle;
                 base::ScopedLockAssertion assumeLocked(mLock);
-                synthesizeCancelationEventsForWindowLocked(options);
+                synthesizeCancellationEventsForWindowLocked(options);
             });
         }
     }
@@ -4108,24 +4109,24 @@ void InputDispatcher::synthesizeCancelationEventsForAllConnectionsLocked(
                 [&](const sp<android::gui::WindowInfoHandle>& windowHandle) {
                     options.windowHandle = windowHandle;
                     base::ScopedLockAssertion assumeLocked(mLock);
-                    synthesizeCancelationEventsForWindowLocked(options);
+                    synthesizeCancellationEventsForWindowLocked(options);
                 });
     }
 
     // Cancel monitors.
-    synthesizeCancelationEventsForMonitorsLocked(options);
+    synthesizeCancellationEventsForMonitorsLocked(options);
 }
 
-void InputDispatcher::synthesizeCancelationEventsForMonitorsLocked(
-        const CancelationOptions& options) {
+void InputDispatcher::synthesizeCancellationEventsForMonitorsLocked(
+        const CancellationOptions& options) {
     mConnectionManager.forEachMonitorConnection([&](const std::shared_ptr<Connection>& connection) {
         base::ScopedLockAssertion assumeLocked(mLock);
-        synthesizeCancelationEventsForConnectionLocked(connection, options, /*window=*/nullptr);
+        synthesizeCancellationEventsForConnectionLocked(connection, options, /*window=*/nullptr);
     });
 }
 
-void InputDispatcher::synthesizeCancelationEventsForWindowLocked(
-        const CancelationOptions& options, const std::shared_ptr<Connection>& connection) {
+void InputDispatcher::synthesizeCancellationEventsForWindowLocked(
+        const CancellationOptions& options, const std::shared_ptr<Connection>& connection) {
     if (options.windowHandle == nullptr) {
         LOG(FATAL) << __func__ << ": Window handle must not be null";
     }
@@ -4145,12 +4146,12 @@ void InputDispatcher::synthesizeCancelationEventsForWindowLocked(
                    << "No connection found for window: " << options.windowHandle->getName();
         return;
     }
-    synthesizeCancelationEventsForConnectionLocked(resolvedConnection, options,
+    synthesizeCancellationEventsForConnectionLocked(resolvedConnection, options,
                                                    options.windowHandle);
 }
 
-void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
-        const std::shared_ptr<Connection>& connection, const CancelationOptions& options,
+void InputDispatcher::synthesizeCancellationEventsForConnectionLocked(
+        const std::shared_ptr<Connection>& connection, const CancellationOptions& options,
         const sp<WindowInfoHandle>& window) {
     if (!connection->isFocusMonitor && window == nullptr) {
         LOG(FATAL) << __func__
@@ -4163,17 +4164,17 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
 
     nsecs_t currentTime = now();
 
-    std::vector<std::unique_ptr<EventEntry>> cancelationEvents =
-            connection->inputState.synthesizeCancelationEvents(currentTime, options);
+    std::vector<std::unique_ptr<EventEntry>> cancellationEvents =
+            connection->inputState.synthesizeCancellationEvents(currentTime, options);
 
-    if (cancelationEvents.empty()) {
+    if (cancellationEvents.empty()) {
         return;
     }
 
     LOG_IF(INFO, DEBUG_OUTBOUND_EVENT_DETAILS)
             << "channel '" << connection->getInputChannelName() << "' ~ Synthesized "
-            << cancelationEvents.size()
-            << " cancelation events to bring channel back in sync with reality: " << options.reason
+            << cancellationEvents.size()
+            << " cancellation events to bring channel back in sync with reality: " << options.reason
             << ", mode=" << ftl::enum_string(options.mode) << ".";
 
     std::string reason = std::string("reason=").append(options.reason);
@@ -4185,18 +4186,18 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
     const InputTarget fallbackTarget{connection};
     const auto& token = connection->getToken();
 
-    for (size_t i = 0; i < cancelationEvents.size(); i++) {
-        std::unique_ptr<EventEntry> cancelationEventEntry = std::move(cancelationEvents[i]);
+    for (size_t i = 0; i < cancellationEvents.size(); i++) {
+        std::unique_ptr<EventEntry> cancellationEventEntry = std::move(cancellationEvents[i]);
         std::vector<InputTarget> targets{};
 
-        switch (cancelationEventEntry->type) {
+        switch (cancellationEventEntry->type) {
             case EventEntry::Type::KEY: {
                 if (mTracer) {
-                    static_cast<KeyEntry&>(*cancelationEventEntry).traceTracker =
-                            mTracer->traceDerivedEvent(*cancelationEventEntry,
+                    static_cast<KeyEntry&>(*cancellationEventEntry).traceTracker =
+                            mTracer->traceDerivedEvent(*cancellationEventEntry,
                                                        *options.traceTracker);
                 }
-                const auto& keyEntry = static_cast<const KeyEntry&>(*cancelationEventEntry);
+                const auto& keyEntry = static_cast<const KeyEntry&>(*cancellationEventEntry);
                 if (window) {
                     addWindowTargetLocked(window, InputTarget::DispatchMode::AS_IS,
                                           /*targetFlags=*/{}, keyEntry.downTime, targets);
@@ -4208,11 +4209,11 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
             }
             case EventEntry::Type::MOTION: {
                 if (mTracer) {
-                    static_cast<MotionEntry&>(*cancelationEventEntry).traceTracker =
-                            mTracer->traceDerivedEvent(*cancelationEventEntry,
+                    static_cast<MotionEntry&>(*cancellationEventEntry).traceTracker =
+                            mTracer->traceDerivedEvent(*cancellationEventEntry,
                                                        *options.traceTracker);
                 }
-                const auto& motionEntry = static_cast<const MotionEntry&>(*cancelationEventEntry);
+                const auto& motionEntry = static_cast<const MotionEntry&>(*cancellationEventEntry);
                 if (window) {
                     std::bitset<MAX_POINTER_ID + 1> pointerIds;
                     for (uint32_t pointerIndex = 0; pointerIndex < motionEntry.getPointerCount();
@@ -4252,13 +4253,13 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
             case EventEntry::Type::POINTER_CAPTURE_CHANGED:
             case EventEntry::Type::DRAG: {
                 LOG_ALWAYS_FATAL("Canceling %s events is not supported",
-                                 ftl::enum_string(cancelationEventEntry->type).c_str());
+                                 ftl::enum_string(cancellationEventEntry->type).c_str());
                 break;
             }
             case EventEntry::Type::DEVICE_RESET:
             case EventEntry::Type::SENSOR: {
                 LOG_ALWAYS_FATAL("%s event should not be found inside Connections's queue",
-                                 ftl::enum_string(cancelationEventEntry->type).c_str());
+                                 ftl::enum_string(cancellationEventEntry->type).c_str());
                 break;
             }
         }
@@ -4267,7 +4268,7 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
         if (mTracer) {
             mTracer->dispatchToTargetHint(*options.traceTracker, targets[0]);
         }
-        enqueueDispatchEntryLocked(connection, std::move(cancelationEventEntry), targets[0]);
+        enqueueDispatchEntryLocked(connection, std::move(cancellationEventEntry), targets[0]);
     }
 
     // If the outbound queue was previously empty, start the dispatch cycle going.
@@ -5580,10 +5581,10 @@ void InputDispatcher::setInputWindowsLocked(
         onFocusChangedLocked(*changes, traceContext.getTracker(), removedFocusedWindowHandle);
     }
 
-    const std::list<CancelationOptions> cancellations =
+    const std::list<CancellationOptions> cancellations =
             mTouchStates.updateFromWindowInfo(displayId, traceContext.getTracker());
-    for (const auto& cancelationOption : cancellations) {
-        synthesizeCancelationEventsForWindowLocked(cancelationOption);
+    for (const auto& cancellationOption : cancellations) {
+        synthesizeCancellationEventsForWindowLocked(cancellationOption);
     }
 
     // If drag window is gone, it would receive a cancel event and broadcast the DRAG_END. We
@@ -5608,10 +5609,10 @@ void InputDispatcher::setInputWindowsLocked(
     }
 }
 
-std::list<CancelationOptions> InputDispatcher::DispatcherTouchState::updateFromWindowInfo(
+std::list<CancellationOptions> InputDispatcher::DispatcherTouchState::updateFromWindowInfo(
         ui::LogicalDisplayId displayId,
         const std::unique_ptr<trace::EventTrackerInterface>& traceTracker) {
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     forTouchAndCursorStatesOnDisplay(displayId, [&](TouchState& state) {
         cancellations.splice(cancellations.end(),
                              eraseRemovedWindowsFromWindowInfo(state, displayId, traceTracker));
@@ -5622,11 +5623,11 @@ std::list<CancelationOptions> InputDispatcher::DispatcherTouchState::updateFromW
     return cancellations;
 }
 
-std::list<CancelationOptions>
+std::list<CancellationOptions>
 InputDispatcher::DispatcherTouchState::eraseRemovedWindowsFromWindowInfo(
         TouchState& state, ui::LogicalDisplayId displayId,
         const std::unique_ptr<trace::EventTrackerInterface>& traceTracker) {
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     for (auto it = state.windows.begin(); it != state.windows.end();) {
         TouchedWindow& touchedWindow = *it;
         if (mWindowInfos.isWindowPresent(touchedWindow.windowHandle)) {
@@ -5635,7 +5636,7 @@ InputDispatcher::DispatcherTouchState::eraseRemovedWindowsFromWindowInfo(
         }
         LOG(INFO) << "Touched window was removed: " << touchedWindow.windowHandle->getName()
                   << " in display %" << displayId;
-        cancellations.emplace_back(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+        cancellations.emplace_back(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                    "touched window was removed", touchedWindow.windowHandle,
                                    traceTracker);
         // Since we are about to drop the touch, cancel the events for the wallpaper as well.
@@ -5644,7 +5645,7 @@ InputDispatcher::DispatcherTouchState::eraseRemovedWindowsFromWindowInfo(
                     gui::WindowInfo::InputConfig::DUPLICATE_TOUCH_TO_WALLPAPER)) {
             for (const DeviceId deviceId : touchedWindow.getTouchingDeviceIds()) {
                 if (const auto& ww = state.getWallpaperWindow(deviceId); ww != nullptr) {
-                    cancellations.emplace_back(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+                    cancellations.emplace_back(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                                "touched window was removed", ww, deviceId,
                                                traceTracker);
                 }
@@ -5655,11 +5656,11 @@ InputDispatcher::DispatcherTouchState::eraseRemovedWindowsFromWindowInfo(
     return cancellations;
 }
 
-std::list<CancelationOptions>
+std::list<CancellationOptions>
 InputDispatcher::DispatcherTouchState::updateHoveringStateFromWindowInfo(
         TouchState& state, ui::LogicalDisplayId displayId,
         const std::unique_ptr<trace::EventTrackerInterface>& traceTracker) {
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     // Check if the hovering should stop because the window is no longer eligible to receive it
     // (for example, if the touchable region changed)
     for (TouchedWindow& touchedWindow : state.windows) {
@@ -5676,7 +5677,7 @@ InputDispatcher::DispatcherTouchState::updateHoveringStateFromWindowInfo(
                 });
 
         for (DeviceId deviceId : erasedDevices) {
-            cancellations.emplace_back(CancelationOptions::Mode::CANCEL_HOVER_EVENTS,
+            cancellations.emplace_back(CancellationOptions::Mode::CANCEL_HOVER_EVENTS,
                                        "WindowInfo changed", touchedWindow.windowHandle, deviceId,
                                        traceTracker);
         }
@@ -5753,12 +5754,12 @@ void InputDispatcher::setFocusedDisplay(ui::LogicalDisplayId displayId) {
                 if (windowHandle == nullptr) {
                     LOG(FATAL) << __func__ << ": Previously focused token did not have a window";
                 }
-                CancelationOptions
-                        options(CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
+                CancellationOptions
+                        options(CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
                                 "The display which contains this window no longer has focus.",
                                 windowHandle, traceContext.getTracker());
                 options.displayId = ui::LogicalDisplayId::INVALID;
-                synthesizeCancelationEventsForWindowLocked(options);
+                synthesizeCancellationEventsForWindowLocked(options);
             }
             mFocusedDisplayId = displayId;
             // Enqueue a command to run outside the lock to tell the policy that the focused display
@@ -5922,8 +5923,8 @@ bool InputDispatcher::transferTouchGesture(const sp<IBinder>& fromToken, const s
         const auto& [toWindowHandle, deviceId, pointers, cancellations, pointerDowns] =
                 result.value();
 
-        for (const auto& cancelationOption : cancellations) {
-            synthesizeCancelationEventsForWindowLocked(cancelationOption);
+        for (const auto& cancellationOption : cancellations) {
+            synthesizeCancellationEventsForWindowLocked(cancellationOption);
         }
 
         for (const auto& pointerDownArgs : pointerDowns) {
@@ -5952,7 +5953,7 @@ bool InputDispatcher::transferTouchGesture(const sp<IBinder>& fromToken, const s
 }
 
 std::optional<std::tuple<sp<gui::WindowInfoHandle>, DeviceId, std::vector<PointerProperties>,
-                         std::list<CancelationOptions>,
+                         std::list<CancellationOptions>,
                          std::list<InputDispatcher::DispatcherTouchState::PointerDownArgs>>>
 InputDispatcher::DispatcherTouchState::transferTouchGesture(
         const sp<android::IBinder>& fromToken, const sp<android::IBinder>& toToken,
@@ -6010,11 +6011,11 @@ InputDispatcher::DispatcherTouchState::transferTouchGesture(
     // Synthesize cancel for old window and down for new window.
     std::shared_ptr<Connection> fromConnection = mConnectionManager.getConnection(fromToken);
     std::shared_ptr<Connection> toConnection = mConnectionManager.getConnection(toToken);
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     std::list<PointerDownArgs> pointerDowns;
     if (fromConnection != nullptr && toConnection != nullptr) {
         fromConnection->inputState.mergePointerStateTo(toConnection->inputState);
-        cancellations.emplace_back(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+        cancellations.emplace_back(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                    "transferring touch from this window to another window",
                                    fromWindowHandle, traceTracker);
 
@@ -6097,9 +6098,9 @@ void InputDispatcher::resetAndDropEverythingLocked(const char* reason) {
     LOG_IF(INFO, DEBUG_FOCUS) << "Resetting and dropping all events (" << reason << ").";
 
     ScopedSyntheticEventTracer traceContext(mTracer);
-    CancelationOptions options(CancelationOptions::Mode::CANCEL_ALL_EVENTS, reason,
+    CancellationOptions options(CancellationOptions::Mode::CANCEL_ALL_EVENTS, reason,
                                traceContext.getTracker());
-    synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+    synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
 
     resetKeyRepeatLocked();
     releasePendingEventLocked();
@@ -6381,13 +6382,13 @@ status_t InputDispatcher::pilferPointersLocked(const sp<IBinder>& token) {
     }
 
     const auto& cancellations = *result;
-    for (const auto& cancelationOptions : cancellations) {
-        synthesizeCancelationEventsForWindowLocked(cancelationOptions);
+    for (const auto& cancellationOptions : cancellations) {
+        synthesizeCancellationEventsForWindowLocked(cancellationOptions);
     }
     return OK;
 }
 
-base::Result<std::list<CancelationOptions>, status_t>
+base::Result<std::list<CancellationOptions>, status_t>
 InputDispatcher::DispatcherTouchState::pilferPointers(
         const sp<IBinder>& token, const Connection& requestingConnection,
         const std::unique_ptr<trace::EventTrackerInterface>& traceTracker) {
@@ -6407,7 +6408,7 @@ InputDispatcher::DispatcherTouchState::pilferPointers(
         return Error(BAD_VALUE);
     }
 
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     for (const DeviceId deviceId : deviceIds) {
         // Send cancel events to all the input channels we're stealing from.
         std::vector<PointerProperties> pointers = window.getTouchingPointers(deviceId);
@@ -6423,7 +6424,7 @@ InputDispatcher::DispatcherTouchState::pilferPointers(
                 // Skip cancelling from window with DO_NOT_PILFER flag.
                 continue;
             }
-            cancellations.emplace_back(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+            cancellations.emplace_back(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                        "input channel stole pointer stream", w.windowHandle,
                                        deviceId, displayId, pointerIds, traceTracker);
             canceledWindows += canceledWindows.empty() ? "[" : ", ";
@@ -6842,13 +6843,13 @@ std::unique_ptr<const KeyEntry> InputDispatcher::afterKeyEventLockedInterruptabl
             if (*fallbackKeyCode != AKEYCODE_UNKNOWN) {
                 const auto windowHandle = mWindowInfos.findWindowHandle(connection->getToken());
                 if (windowHandle != nullptr) {
-                    CancelationOptions options(CancelationOptions::Mode::CANCEL_FALLBACK_EVENTS,
+                    CancellationOptions options(CancellationOptions::Mode::CANCEL_FALLBACK_EVENTS,
                                                "application handled the original non-fallback key "
                                                "or is no longer a foreground target, "
                                                "canceling previously dispatched fallback key",
                                                windowHandle, keyEntry.traceTracker);
                     options.keyCode = *fallbackKeyCode;
-                    synthesizeCancelationEventsForWindowLocked(options, connection);
+                    synthesizeCancellationEventsForWindowLocked(options, connection);
                 }
             }
             connection->inputState.removeFallbackKey(originalKeyCode);
@@ -6929,11 +6930,11 @@ std::unique_ptr<const KeyEntry> InputDispatcher::afterKeyEventLockedInterruptabl
 
             const auto windowHandle = mWindowInfos.findWindowHandle(connection->getToken());
             if (windowHandle != nullptr) {
-                CancelationOptions options(CancelationOptions::Mode::CANCEL_FALLBACK_EVENTS,
+                CancellationOptions options(CancellationOptions::Mode::CANCEL_FALLBACK_EVENTS,
                                            "canceling fallback, policy no longer desires it",
                                            windowHandle, keyEntry.traceTracker);
                 options.keyCode = *fallbackKeyCode;
-                synthesizeCancelationEventsForWindowLocked(options, connection);
+                synthesizeCancellationEventsForWindowLocked(options, connection);
             }
 
             fallback = false;
@@ -7088,9 +7089,9 @@ void InputDispatcher::onFocusChangedLocked(
         if (resolvedWindow == nullptr) {
             LOG(FATAL) << __func__ << ": Previously focused token did not have a window";
         }
-        CancelationOptions options(CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
+        CancellationOptions options(CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS,
                                    "focus left window", resolvedWindow, traceTracker);
-        synthesizeCancelationEventsForWindowLocked(options);
+        synthesizeCancellationEventsForWindowLocked(options);
         enqueueFocusEventLocked(changes.oldFocus, /*hasFocus=*/false, changes.reason);
     }
     if (changes.newFocus) {
@@ -7245,9 +7246,9 @@ void InputDispatcher::cancelCurrentTouch() {
         std::scoped_lock _l(mLock);
         ScopedSyntheticEventTracer traceContext(mTracer);
         ALOGD("Canceling all ongoing pointer gestures on all displays.");
-        CancelationOptions options(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+        CancellationOptions options(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                    "cancel current touch", traceContext.getTracker());
-        synthesizeCancelationEventsForAllConnectionsLocked(std::move(options));
+        synthesizeCancellationEventsForAllConnectionsLocked(std::move(options));
 
         mTouchStates.clear();
     }
@@ -7299,7 +7300,7 @@ void InputDispatcher::DispatcherTouchState::slipWallpaperTouch(
     }
 }
 
-std::pair<std::list<CancelationOptions>,
+std::pair<std::list<CancellationOptions>,
           std::list<InputDispatcher::DispatcherTouchState::PointerDownArgs>>
 InputDispatcher::DispatcherTouchState::transferWallpaperTouch(
         const sp<gui::WindowInfoHandle> fromWindowHandle,
@@ -7323,11 +7324,11 @@ InputDispatcher::DispatcherTouchState::transferWallpaperTouch(
         return {};
     }
 
-    std::list<CancelationOptions> cancellations;
+    std::list<CancellationOptions> cancellations;
     std::list<PointerDownArgs> pointerDowns;
     if (oldWallpaper != nullptr) {
         state.removeWindowByToken(oldWallpaper->getToken());
-        cancellations.emplace_back(CancelationOptions::Mode::CANCEL_POINTER_EVENTS,
+        cancellations.emplace_back(CancellationOptions::Mode::CANCEL_POINTER_EVENTS,
                                    "transferring touch from this window to another window",
                                    oldWallpaper, traceTracker);
     }

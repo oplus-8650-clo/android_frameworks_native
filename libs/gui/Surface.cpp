@@ -37,6 +37,7 @@
 
 #ifndef NO_BINDER
 #include <android/gui/DisplayStatInfo.h>
+#include <binder/IInterface.h>
 #include <gui/AidlUtil.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/LayerState.h>
@@ -223,6 +224,23 @@ Surface::~Surface() {
 
 sp<Surface> Surface::from(ANativeWindow* anw) {
     return sp<Surface>::fromExisting(static_cast<Surface*>(anw));
+}
+
+bool Surface::areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b) {
+    if (a == b) {
+        return true;
+    }
+
+    if ((a == nullptr && b != nullptr) || (a != nullptr && b == nullptr)) {
+        return false;
+    }
+
+#ifndef NO_BINDER
+    return IInterface::asBinder(a->mGraphicBufferProducer) ==
+            IInterface::asBinder(b->mGraphicBufferProducer);
+#else
+    return a->mGraphicBufferProducer == b->mGraphicBufferProducer;
+#endif
 }
 
 #ifndef NO_BINDER

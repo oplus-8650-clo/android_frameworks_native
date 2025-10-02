@@ -21,11 +21,13 @@
 #include <android/gui/ISurfaceComposerClient.h>
 #include <android/native_window.h>
 #include <binder/Parcel.h>
+#include <binder/Parcelable.h>
 #include <com_android_graphics_libgui_flags.h>
 #include <gui/FrameRateUtils.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/LayerState.h>
 #include <gui/SurfaceControl.h>
+#include <gui/view/Surface.h>
 #include <private/gui/ParcelUtils.h>
 #include <system/window.h>
 #include <utils/Errors.h>
@@ -438,7 +440,7 @@ DisplayState::DisplayState() = default;
 
 status_t DisplayState::write(Parcel& output) const {
     SAFE_PARCEL(output.writeStrongBinder, token);
-    SAFE_PARCEL(output.writeStrongBinder, IInterface::asBinder(surface));
+    SAFE_PARCEL(output.writeParcelable, surface);
     SAFE_PARCEL(output.writeUint32, what);
     SAFE_PARCEL(output.writeUint32, flags);
     SAFE_PARCEL(output.writeUint32, layerStack.id);
@@ -452,9 +454,9 @@ status_t DisplayState::write(Parcel& output) const {
 
 status_t DisplayState::read(const Parcel& input) {
     SAFE_PARCEL(input.readStrongBinder, &token);
-    sp<IBinder> tmpBinder;
-    SAFE_PARCEL(input.readNullableStrongBinder, &tmpBinder);
-    surface = interface_cast<IGraphicBufferProducer>(tmpBinder);
+    view::Surface viewSurface;
+    SAFE_PARCEL(input.readParcelable, &viewSurface);
+    surface = std::move(viewSurface);
 
     SAFE_PARCEL(input.readUint32, &what);
     SAFE_PARCEL(input.readUint32, &flags);

@@ -19,22 +19,20 @@
 
 #include <cstdint>
 
-#include "VirtualDisplayBufferSlotTracker.h"
+#include "HwcSlotTracker.h"
 
 namespace android {
 
-VirtualDisplayBufferSlotTracker::VirtualDisplayBufferSlotTracker(uint32_t maxCapacity)
-      : mCache(maxCapacity) {
+HwcSlotTracker::HwcSlotTracker(uint32_t maxCapacity) : mCache(maxCapacity) {
     mCache.setOnEntryRemovedListener(this);
     for (uint32_t i = 0; i < maxCapacity; ++i) {
         mOpenSlots.insert(i);
     }
 }
 
-VirtualDisplayBufferSlotTracker::~VirtualDisplayBufferSlotTracker() = default;
+HwcSlotTracker::~HwcSlotTracker() = default;
 
-VirtualDisplayBufferSlotTracker::Slot VirtualDisplayBufferSlotTracker::getSlot(
-        const sp<GraphicBuffer>& buffer) {
+HwcSlotTracker::Slot HwcSlotTracker::getSlot(const sp<GraphicBuffer>& buffer) {
     uint64_t bufferId = buffer->getId();
 
     if (mCache.contains(bufferId)) {
@@ -51,7 +49,7 @@ VirtualDisplayBufferSlotTracker::Slot VirtualDisplayBufferSlotTracker::getSlot(
     return {true, slot};
 }
 
-void VirtualDisplayBufferSlotTracker::operator()(uint64_t&, uint32_t& value) {
+void HwcSlotTracker::operator()(uint64_t&, uint32_t& value) {
     // Since the slot is not being cached any longer, make it available for use.
     mOpenSlots.insert(value);
 }

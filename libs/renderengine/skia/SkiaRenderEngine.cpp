@@ -780,6 +780,16 @@ private:
     AutoBackendTexture::CleanupManager& mMgr;
 };
 
+void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
+    // If the fence is already signaled, we can skip waiting on it.
+    if (FlagManager::getInstance().re_check_fence() && fenceFd.get() >= 0) {
+        if (sync_wait(fenceFd.get(), 0) >= 0) {
+            return;
+        }
+    }
+    waitFenceImpl(context, fenceFd);
+}
+
 void SkiaRenderEngine::drawLayersInternal(
         const std::shared_ptr<std::promise<FenceResult>>&& resultPromise,
         const DisplaySettings& display, const std::vector<LayerSettings>& layers,
@@ -1470,6 +1480,14 @@ void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {
     // conservative default based on that analysis.
     const float SURFACE_SIZE_MULTIPLIER = 3.5f * bytesPerPixel(mDefaultPixelFormat);
     const int maxResourceBytes = size.width * size.height * SURFACE_SIZE_MULTIPLIER;
+    if (FlagManager::getInstance().re_powered_off_displays_inform_cache_budgets()) {
+        LOG_ALWAYS_FATAL_IF(maxResourceBytes <= 0,
+                            "Invalid maxResourceBytes (size: %dx%d, bytesPerPixel(%d): %" PRIu32
+                            ")",
+                            size.getWidth(), size.getHeight(),
+                            static_cast<int>(mDefaultPixelFormat),
+                            bytesPerPixel(mDefaultPixelFormat));
+    }
 
     // start by resizing the current context
     getActiveContext()->setResourceCacheLimit(maxResourceBytes);

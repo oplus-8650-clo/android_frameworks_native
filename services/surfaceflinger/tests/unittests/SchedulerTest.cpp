@@ -1858,6 +1858,32 @@ TEST_F(SelectPacesetterDisplayTest, TwoDisplaysAllOffFirstUsed) FTL_FAKE_GUARD(k
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 }
 
+TEST_F(SelectPacesetterDisplayTest, TwoDisplaysAllOnThenAllOffLastOnUsed)
+FTL_FAKE_GUARD(kMainThreadContext) {
+    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()));
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    mScheduler->designatePacesetterDisplay();
+
+    // When both are on and have the same rate, use the original pacesetter.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::OFF);
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+
+    // If all displays are off, maintain the last pacesetter display to reduce churn.
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+}
+
 TEST_F(SelectPacesetterDisplayTest, TwoDisplaysWithinEpsilon) FTL_FAKE_GUARD(kMainThreadContext) {
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,

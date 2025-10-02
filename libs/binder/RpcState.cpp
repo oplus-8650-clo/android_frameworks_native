@@ -930,7 +930,11 @@ status_t RpcState::drainCommands(const sp<RpcSession::RpcConnection>& connection
     while (true) {
         status_t status = connection->rpcTransport->pollRead();
         if (status == WOULD_BLOCK) break;
-        if (status != OK) return status;
+
+        if (status != OK) {
+            return handleRpcError(connection->rpcTransport, session, status, "poll",
+                                  "drainCommands", 0);
+        }
 
         status = getAndExecuteCommand(connection, session, type);
         if (status != OK) return status;

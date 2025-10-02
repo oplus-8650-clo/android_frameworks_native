@@ -39,10 +39,10 @@
 #include <utility>
 
 #include "DisplayHardware/HWComposer.h"
+#include "DisplayHardware/HwcSlotTracker.h"
 #include "compositionengine/DisplaySurface.h"
 
 #include "SinkSurfaceHelper.h"
-#include "VirtualDisplayBufferSlotTracker.h"
 #include "VirtualDisplaySurface.h"
 
 namespace android {

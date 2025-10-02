@@ -6861,7 +6861,7 @@ TEST_F(InputDispatcherDisplayProjectionTest,
     firstWindow->assertNoEvents();
 }
 
-TEST_F(InputDispatcherDisplayProjectionTest, SynthesizeHoverCancelationWithCorrectCoordinates) {
+TEST_F(InputDispatcherDisplayProjectionTest, SynthesizeHoverCancellationWithCorrectCoordinates) {
     auto [firstWindow, secondWindow] = setupScaledDisplayScenario();
 
     // Send hover enter to second window
@@ -6881,7 +6881,7 @@ TEST_F(InputDispatcherDisplayProjectionTest, SynthesizeHoverCancelationWithCorre
 
 // Same as above, but while the window is being mirrored.
 TEST_F(InputDispatcherDisplayProjectionTest,
-       SynthesizeHoverCancelationWithCorrectCoordinatesWhenMirrored) {
+       SynthesizeHoverCancellationWithCorrectCoordinatesWhenMirrored) {
     auto [firstWindow, secondWindow] = setupScaledDisplayScenario();
 
     const std::array<float, 9> matrix = {1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 0.0, 0.0, 1.0};
@@ -6903,7 +6903,7 @@ TEST_F(InputDispatcherDisplayProjectionTest,
 
     mDispatcher->cancelCurrentTouch();
 
-    // Ensure the cancelation happens with the correct displayId and the correct coordinates.
+    // Ensure the cancellation happens with the correct displayId and the correct coordinates.
     secondWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_HOVER_EXIT), WithCoords(100, 80),
                                            WithRawCoords(300, 880),
                                            WithDisplayId(ui::LogicalDisplayId::DEFAULT)));
@@ -15655,8 +15655,6 @@ TEST_P(InputDispatcherCrossDisplayGestureTestFixture, InputDispatcherCrossDispla
     // Topology values are defined in DP units.
     const bool isSourceDisplayRotated = sourceDisplayOrientation == ui::ROTATION_90 ||
             sourceDisplayOrientation == ui::ROTATION_270;
-    const int32_t sourceDisplayLogicalWidthDp =
-            pxToDp(isSourceDisplayRotated ? DISPLAY_HEIGHT : DISPLAY_WIDTH, sourceDisplayDensity);
     const int32_t sourceDisplayLogicalHeightDp =
             pxToDp(isSourceDisplayRotated ? DISPLAY_WIDTH : DISPLAY_HEIGHT, sourceDisplayDensity);
 

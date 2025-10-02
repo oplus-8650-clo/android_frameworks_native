@@ -34,10 +34,10 @@ namespace android {
  *
  * Not threadsafe.
  */
-class VirtualDisplayBufferSlotTracker : public OnEntryRemoved<uint64_t, uint32_t> {
+class HwcSlotTracker : public OnEntryRemoved<uint64_t, uint32_t> {
 public:
-    explicit VirtualDisplayBufferSlotTracker(uint32_t maxCapeacity = BufferQueue::NUM_BUFFER_SLOTS);
-    virtual ~VirtualDisplayBufferSlotTracker();
+    explicit HwcSlotTracker(uint32_t maxCapeacity = BufferQueue::NUM_BUFFER_SLOTS);
+    virtual ~HwcSlotTracker();
 
     struct Slot {
         // If true, the full GraphicBuffer must be sent to HWC. This is the case for a buffer that
