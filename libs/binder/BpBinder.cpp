@@ -44,6 +44,12 @@ namespace {
         return false;
 #endif
     }
+
+#if defined(LIBBINDER_BPBINDER_DECSTRONG_LAST)
+    constexpr bool kDecStrongLast = true;
+#else
+    constexpr bool kDecStrongLast = false;
+#endif
 }
 
 using android::binder::unique_fd;
@@ -848,14 +854,15 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
         printRefs();
     }
     IPCThreadState* ipc = IPCThreadState::self();
-    if (ipc) ipc->decStrongHandle(binderHandle());
+    if (ipc && !kDecStrongLast) ipc->decStrongHandle(binderHandle());
 
     mLock.lock();
     Vector<Obituary>* obits = mObituaries;
     if(obits != nullptr) {
         if (!obits->isEmpty()) {
-            ALOGI("onLastStrongRef automatically unlinking death recipients for descriptor: '%s'",
-                  BPBINDER_BEST_DESCRIPTOR_LOCKED);
+            ALOGI("onLastStrongRef automatically unlinking death recipients for binder (%p) with "
+                  "descriptor: '%s'",
+                  this, BPBINDER_BEST_DESCRIPTOR_LOCKED);
         }
 
         if (ipc) ipc->clearDeathNotification(binderHandle(), this);
@@ -884,6 +891,8 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
         // are no longer linked?
         delete obits;
     }
+
+    if (ipc && kDecStrongLast) ipc->decStrongHandle(binderHandle());
 }
 
 bool BpBinder::onIncStrongAttempted(uint32_t /*flags*/, const void* /*id*/)

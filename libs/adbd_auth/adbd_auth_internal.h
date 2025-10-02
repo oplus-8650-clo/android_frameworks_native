@@ -68,11 +68,22 @@ struct AdbdPacketTlsServerPort {
   uint16_t port;
 };
 
+struct AdbdPacketRegisterService{
+    std::string instance_name;
+    std::string service_type;
+    uint16_t port;
+};
+
+struct AdbdPacketUnregisterService{
+    std::string instance_name;
+    std::string service_type;
+};
+
 using AdbdAuthPacket =
     std::variant<AdbdAuthPacketAuthenticated, AdbdAuthPacketDisconnected,
                  AdbdAuthPacketRequestAuthorization,
                  AdbdPacketTlsDeviceConnected, AdbdPacketTlsDeviceDisconnected,
-                 AdbdPacketTlsServerPort>;
+                 AdbdPacketTlsServerPort, AdbdPacketRegisterService, AdbdPacketUnregisterService>;
 
 struct AdbdAuthContext {
   static constexpr uint64_t kEpollConstSocket = 0;
@@ -114,6 +125,8 @@ struct AdbdAuthContext {
   void NotifyTlsDeviceDisconnected(AdbTransportType type, uint64_t id)
       EXCLUDES(mutex_);
   void SendTLSServerPort(uint16_t port);
+  void SendRegisterService(const char* instance_name, const char* service_type, uint16_t port);
+  void SendUnregisterService(const char* instance_name, const char* service_type);
   void Interrupt();
   virtual void InitFrameworkHandlers();
 

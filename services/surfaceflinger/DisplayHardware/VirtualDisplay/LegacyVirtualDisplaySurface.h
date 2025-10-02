@@ -120,7 +120,7 @@ public:
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 private:
     LegacyVirtualDisplaySurface(HWComposer&, VirtualDisplayIdVariant,
-                                const sp<IGraphicBufferProducer>& sink,
+                                const sp<Surface>& sink,
                                 const std::string& name, bool qtiSecure = false);
 
     friend class sp<LegacyVirtualDisplaySurface>;

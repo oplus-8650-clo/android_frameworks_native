@@ -149,6 +149,12 @@ public:
      */
     static sp<Surface> from(ANativeWindow* anw);
 
+    /*
+     * Null-safe check of whether two surfaces represent the same underlying object. Roughly
+     * equivalent to ensuring the underlying binder objects are the same.
+     */
+    static bool areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b);
+
     /* getIGraphicBufferProducer() returns the IGraphicBufferProducer this
      * Surface was created with. Usually it's an error to use the
      * IGraphicBufferProducer while the Surface is connected.

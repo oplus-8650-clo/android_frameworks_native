@@ -35,6 +35,7 @@
 #include <compositionengine/Display.h>
 #include <compositionengine/DisplaySurface.h>
 #include <gui/LayerState.h>
+#include <gui/Surface.h>
 #include <math/mat4.h>
 #include <renderengine/RenderEngine.h>
 #include <system/window.h>
@@ -63,7 +64,6 @@ namespace android {
 class Fence;
 class HWComposer;
 class HdrSdrRatioOverlay;
-class IGraphicBufferProducer;
 class Layer;
 class RefreshRateOverlay;
 class SurfaceFlinger;
@@ -338,7 +338,7 @@ struct DisplayDeviceState {
 
     int32_t sequenceId = sNextSequenceId++;
     std::optional<Physical> physical;
-    sp<IGraphicBufferProducer> surface;
+    sp<Surface> surface;
     ui::LayerStack layerStack;
     uint32_t flags = 0;
     Rect layerStackSpaceRect;

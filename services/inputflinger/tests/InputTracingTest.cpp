@@ -265,7 +265,7 @@ TEST_F(InputDispatcherTracingTest, UnspecifiedTracelLevel) {
         config->set_trace_dispatcher_window_dispatch(true);
         config->set_mode(AndroidInputEventConfig::TRACE_MODE_USE_RULES);
         // Rule: Match everything, trace level unspecified
-        auto rule = config->add_rules();
+        config->add_rules();
     }};
 
     auto window = sp<FakeWindowHandle>::make(APP, mDispatcher, "Window", DISPLAY_ID);

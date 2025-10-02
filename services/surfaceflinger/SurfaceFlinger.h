@@ -814,6 +814,9 @@ private:
     void moveSnapshotsFromCompositionArgs(compositionengine::CompositionRefreshArgs& refreshArgs,
                                           const std::vector<std::pair<Layer*, LayerFE*>>& layers)
             REQUIRES(kMainThreadContext);
+    std::vector<std::pair<Layer*, LayerFE*>> copyMergedSnapshots(
+            compositionengine::CompositionRefreshArgs& refreshArgs) REQUIRES(kMainThreadContext);
+
     // Return true if we must composite this frame
     bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, nsecs_t expecedPresentTimeNs,
                               bool transactionsFlushed, bool& out) REQUIRES(kMainThreadContext);

@@ -673,6 +673,16 @@ cc_test {
     require_root: true,
 }
 
+sh_test {
+    name: "binderRpcOnTrustyTest",
+    src: "binder_rpc_on_trusty_test.sh",
+    filename_from_src: true,
+    test_config_template: "binder_rpc_on_trusty_test_sh.xml",
+
+    test_suites: ["general-tests"],
+    require_root: true,
+}
+
 cc_test {
     name: "RpcTlsUtilsTest",
     host_supported: true,

@@ -420,8 +420,8 @@ std::unique_ptr<MotionEntry> InputState::createCancelEntryForMemento(const Motio
                                          memento.pointerCoords);
 }
 
-std::vector<std::unique_ptr<EventEntry>> InputState::synthesizeCancelationEvents(
-        nsecs_t currentTime, const CancelationOptions& options) {
+std::vector<std::unique_ptr<EventEntry>> InputState::synthesizeCancellationEvents(
+        nsecs_t currentTime, const CancellationOptions& options) {
     std::vector<std::unique_ptr<EventEntry>> events;
     for (KeyMemento& memento : mKeyMementos) {
         if (shouldCancelKey(memento, options)) {
@@ -442,8 +442,8 @@ std::vector<std::unique_ptr<EventEntry>> InputState::synthesizeCancelationEvents
                 events.push_back(createCancelEntryForMemento(memento, currentTime));
             } else {
                 std::vector<std::unique_ptr<MotionEntry>> pointerCancelEvents =
-                        synthesizeCancelationEventsForPointers(memento, options.pointerIds.value(),
-                                                               currentTime);
+                        synthesizeCancellationEventsForPointers(memento, options.pointerIds.value(),
+                                                                currentTime);
                 events.insert(events.end(), std::make_move_iterator(pointerCancelEvents.begin()),
                               std::make_move_iterator(pointerCancelEvents.end()));
             }
@@ -505,7 +505,7 @@ std::vector<std::unique_ptr<EventEntry>> InputState::synthesizePointerDownEvents
     return events;
 }
 
-std::vector<std::unique_ptr<MotionEntry>> InputState::synthesizeCancelationEventsForPointers(
+std::vector<std::unique_ptr<MotionEntry>> InputState::synthesizeCancellationEventsForPointers(
         const MotionMemento& memento, std::bitset<MAX_POINTER_ID + 1> pointerIds,
         nsecs_t currentTime) {
     std::vector<std::unique_ptr<MotionEntry>> events;
@@ -606,7 +606,7 @@ void InputState::removeFallbackKey(int32_t originalKeyCode) {
     mFallbackKeys.erase(originalKeyCode);
 }
 
-bool InputState::shouldCancelKey(const KeyMemento& memento, const CancelationOptions& options) {
+bool InputState::shouldCancelKey(const KeyMemento& memento, const CancellationOptions& options) {
     if (options.keyCode && memento.keyCode != options.keyCode.value()) {
         return false;
     }
@@ -620,10 +620,10 @@ bool InputState::shouldCancelKey(const KeyMemento& memento, const CancelationOpt
     }
 
     switch (options.mode) {
-        case CancelationOptions::Mode::CANCEL_ALL_EVENTS:
-        case CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_ALL_EVENTS:
+        case CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
             return true;
-        case CancelationOptions::Mode::CANCEL_FALLBACK_EVENTS:
+        case CancellationOptions::Mode::CANCEL_FALLBACK_EVENTS:
             return memento.flags & AKEY_EVENT_FLAG_FALLBACK;
         default:
             return false;
@@ -631,7 +631,7 @@ bool InputState::shouldCancelKey(const KeyMemento& memento, const CancelationOpt
 }
 
 bool InputState::shouldCancelMotion(const MotionMemento& memento,
-                                    const CancelationOptions& options) {
+                                    const CancellationOptions& options) {
     if (options.deviceId && memento.deviceId != options.deviceId.value()) {
         return false;
     }
@@ -641,13 +641,13 @@ bool InputState::shouldCancelMotion(const MotionMemento& memento,
     }
 
     switch (options.mode) {
-        case CancelationOptions::Mode::CANCEL_ALL_EVENTS:
+        case CancellationOptions::Mode::CANCEL_ALL_EVENTS:
             return true;
-        case CancelationOptions::Mode::CANCEL_POINTER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_POINTER_EVENTS:
             return memento.source & AINPUT_SOURCE_CLASS_POINTER;
-        case CancelationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_NON_POINTER_EVENTS:
             return !(memento.source & AINPUT_SOURCE_CLASS_POINTER);
-        case CancelationOptions::Mode::CANCEL_HOVER_EVENTS:
+        case CancellationOptions::Mode::CANCEL_HOVER_EVENTS:
             return memento.hovering;
         default:
             return false;

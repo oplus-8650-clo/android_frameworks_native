@@ -63,7 +63,7 @@ protected:
     bool supportsFastRotatedClipRRectAA() const override;
     bool supportsProtectedContentImpl() const override;
     bool useProtectedContextImpl(GrProtected isProtected) override;
-    void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) override;
+    void waitFenceImpl(SkiaGpuContext* context, base::borrowed_fd fenceFd) override;
     base::unique_fd flushAndSubmit(SkiaGpuContext* context, sk_sp<SkSurface> dstSurface) override;
     void appendBackendSpecificInfoToDump(std::string& result) override;
 

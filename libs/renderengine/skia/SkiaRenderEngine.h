@@ -97,7 +97,7 @@ protected:
     virtual bool supportsForwardPixelKill() const { return false; }
     virtual bool supportsFastRotatedClipRRectAA() const { return true; }
     virtual bool useProtectedContextImpl(GrProtected isProtected) = 0;
-    virtual void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) = 0;
+    virtual void waitFenceImpl(SkiaGpuContext* context, base::borrowed_fd fenceFd) = 0;
     virtual base::unique_fd flushAndSubmit(SkiaGpuContext* context,
                                            sk_sp<SkSurface> dstSurface) = 0;
     virtual void appendBackendSpecificInfoToDump(std::string& result) = 0;
@@ -168,6 +168,8 @@ private:
             const std::shared_ptr<ExternalTexture>& hdr, base::borrowed_fd&& hdrFence,
             float hdrSdrRatio, ui::Dataspace dataspace, const std::shared_ptr<ExternalTexture>& sdr,
             const std::shared_ptr<ExternalTexture>& gainmap) override final;
+
+    void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd);
 
     void dump(std::string& result) override final;
 

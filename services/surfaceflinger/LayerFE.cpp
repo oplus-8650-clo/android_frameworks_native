@@ -238,6 +238,7 @@ void LayerFE::prepareBufferStateClientComposition(
                 (mSnapshot->isSecure && !targetSettings.isSecure);
     const bool bufferCanBeUsedAsHwTexture =
             mSnapshot->externalTexture->getUsage() & GraphicBuffer::USAGE_HW_TEXTURE;
+    ALOGE("alecmouri moar texture %s %d", mSnapshot->name.c_str(), blackOutLayer);
     if (blackOutLayer || !bufferCanBeUsedAsHwTexture) {
         ALOGE_IF(!bufferCanBeUsedAsHwTexture, "%s is blacked out as buffer is not gpu readable",
                  mSnapshot->name.c_str());

@@ -105,7 +105,7 @@ std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
                                                       mRuntimeEffectManager.mKnownEffects.size()));
 }
 
-void GraphiteVkRenderEngine::waitFence(SkiaGpuContext*, base::borrowed_fd fenceFd) {
+void GraphiteVkRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {
     if (fenceFd.get() < 0) return;
 
     int dupedFd = dup(fenceFd.get());
@@ -131,7 +131,7 @@ base::unique_fd GraphiteVkRenderEngine::flushAndSubmit(SkiaGpuContext* context, 
 
     VulkanInterface& vulkanInterface = getVulkanInterface(isProtected());
     // This "signal" semaphore is called after rendering, but it is cleaned up in the same mechanism
-    // as "wait" semaphores from waitFence.
+    // as "wait" semaphores from waitFenceImpl.
     VkSemaphore vkSignalSemaphore = vulkanInterface.createExportableSemaphore();
     auto backendSignalSemaphore = graphite::BackendSemaphores::MakeVulkan(vkSignalSemaphore);
 

@@ -146,35 +146,23 @@ static EGLDisplay getPlatformDisplayAngle(EGLNativeDisplayType display, egl_conn
             }
         }
 
-        if (graphicsenv_flags::angle_feature_overrides()) {
-            // Get the list of ANGLE features to enable from Global.Settings.
-            const auto& eglFeatures = GraphicsEnv::getInstance().getAngleEglFeatures();
-            for (const std::string& eglFeature : eglFeatures) {
-                enabled.push_back(eglFeature.c_str());
-            }
+        // Get the list of ANGLE features to enable from Global.Settings.
+        const auto& eglFeatures = GraphicsEnv::getInstance().getAngleEglFeatures();
+        for (const std::string& eglFeature : eglFeatures) {
+            enabled.push_back(eglFeature.c_str());
+        }
 
-            // Get the list of ANGLE features to enable/disable from gpuservice.
-            GraphicsEnv::getInstance().getAngleFeatureOverrides(enabled, disabled);
-            if (!enabled.empty()) {
-                enabled.push_back(nullptr);
-                attrs.push_back(EGL_FEATURE_OVERRIDES_ENABLED_ANGLE);
-                attrs.push_back(reinterpret_cast<EGLAttrib>(enabled.data()));
-            }
-            if (!disabled.empty()) {
-                disabled.push_back(nullptr);
-                attrs.push_back(EGL_FEATURE_OVERRIDES_DISABLED_ANGLE);
-                attrs.push_back(reinterpret_cast<EGLAttrib>(disabled.data()));
-            }
-        } else {
-            const auto& eglFeatures = GraphicsEnv::getInstance().getAngleEglFeatures();
-            if (!eglFeatures.empty()) {
-                for (const std::string& eglFeature : eglFeatures) {
-                    enabled.push_back(eglFeature.c_str());
-                }
-                enabled.push_back(nullptr);
-                attrs.push_back(EGL_FEATURE_OVERRIDES_ENABLED_ANGLE);
-                attrs.push_back(reinterpret_cast<EGLAttrib>(enabled.data()));
-            }
+        // Get the list of ANGLE features to enable/disable from gpuservice.
+        GraphicsEnv::getInstance().getAngleFeatureOverrides(enabled, disabled);
+        if (!enabled.empty()) {
+            enabled.push_back(nullptr);
+            attrs.push_back(EGL_FEATURE_OVERRIDES_ENABLED_ANGLE);
+            attrs.push_back(reinterpret_cast<EGLAttrib>(enabled.data()));
+        }
+        if (!disabled.empty()) {
+            disabled.push_back(nullptr);
+            attrs.push_back(EGL_FEATURE_OVERRIDES_DISABLED_ANGLE);
+            attrs.push_back(reinterpret_cast<EGLAttrib>(disabled.data()));
         }
 
         attrs.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);

@@ -28,6 +28,19 @@ namespace internal {
 class Stability;
 }
 
+struct TransactionCodeData {
+    // Total size of the struct
+    uint32_t totalSize;
+    // caller backend type (cpp, ndk, rust, java)
+    const char* backendType;
+
+    // function names and count
+    const char* const* names;
+    uint32_t count;
+
+    // Add fields below and check the totalSize before reading them
+};
+
 class BBinder : public IBinder {
 public:
     LIBBINDER_EXPORTED BBinder();
@@ -113,6 +126,21 @@ public:
     [[nodiscard]] LIBBINDER_EXPORTED status_t setRpcClientDebug(binder::unique_fd clientFd,
                                                                 const sp<IBinder>& keepAliveBinder);
 
+    LIBBINDER_EXPORTED void setTransactionCodeMap(const TransactionCodeData* data);
+    LIBBINDER_EXPORTED std::string getFunctionName(size_t transactionCode);
+
+    class PrivateAccessor {
+    public:
+        friend class BinderTest;
+        friend class BBinder;
+        explicit PrivateAccessor(BBinder* binder) : mBinder(binder) {}
+        void setStability(int16_t level) { mBinder->setStability(level); }
+        int16_t getStability() const { return mBinder->getStability(); }
+        BBinder* mBinder;
+    };
+
+    LIBBINDER_EXPORTED PrivateAccessor getPrivateAccessor() { return PrivateAccessor(this); }
+
 protected:
     LIBBINDER_EXPORTED virtual ~BBinder();
 
@@ -121,6 +149,47 @@ protected:
                                                    uint32_t flags = 0);
 
 private:
+    friend class PrivateAccessor;
+    LIBBINDER_EXPORTED void setStability(int16_t level);
+    LIBBINDER_EXPORTED int16_t getStability() const;
+    class PackedData {
+    public:
+        void setTransactionCodeMap(const TransactionCodeData* data);
+        const TransactionCodeData* getTransactionCodeMap() const;
+
+        void setStability(uintptr_t stability);
+        uintptr_t getStability() const;
+
+        void setParceled();
+        bool isParceled() const;
+
+    private:
+        static constexpr size_t POINTER_ALIGNMENT = 16;
+        static constexpr uintptr_t POINTER_MASK = ~(POINTER_ALIGNMENT - 1);
+
+        static constexpr uintptr_t PARCELED_BIT = 1UL << 0;
+        static constexpr int STABILITY_SHIFT = 1;
+        static constexpr uintptr_t STABILITY_MASK = 0b11UL << STABILITY_SHIFT;
+        /*
+         * A packed pointer storing an address to TransactionCodeData and status flags.
+         *
+         * The data is 16-byte aligned, leaving the 4 least-significant bits (LSBs)
+         * free to be used for other flags.
+         *
+         * 64-Bit Layout:
+         * MSB                           LSB
+         * 63                3   2   1   0
+         * +-------------------+---+---+---+
+         * |      Address   | R | S | S | P |
+         * +-------------------+---+---+---+
+         *
+         * P (Bit 0)    : Parceled flag
+         * S (Bits 2:1) : Stability (2 bits)
+         * R (Bit 3     : Reserved for future use
+         */
+        std::atomic<uintptr_t> mPackedData{0};
+    };
+
                         BBinder(const BBinder& o);
             BBinder&    operator=(const BBinder& o);
 
@@ -139,12 +208,8 @@ private:
     std::atomic<Extras*> mExtras;
 
     friend ::android::internal::Stability;
-    int16_t mStability;
-    bool mParceled;
 
-#ifdef __LP64__
-    int32_t mReserved1;
-#endif
+    PackedData mPackedData;
 };
 
 // ---------------------------------------------------------------------------

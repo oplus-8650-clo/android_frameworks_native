@@ -27,7 +27,7 @@ namespace android {
 namespace inputdispatcher {
 
 /* Specifies which events are to be canceled and why. */
-struct CancelationOptions {
+struct CancellationOptions {
     enum class Mode {
         CANCEL_ALL_EVENTS = 0,
         CANCEL_POINTER_EVENTS = 1,
@@ -40,10 +40,10 @@ struct CancelationOptions {
     // The criterion to use to determine which events should be canceled.
     Mode mode;
 
-    // Descriptive reason for the cancelation.
+    // Descriptive reason for the cancellation.
     const char* reason;
 
-    // Target window for the cancelation if set.
+    // Target window for the cancellation if set.
     sp<gui::WindowInfoHandle> windowHandle = nullptr;
 
     // The specific keycode of the key event to cancel, or nullopt to cancel any key event.
@@ -60,26 +60,26 @@ struct CancelationOptions {
 
     const std::unique_ptr<trace::EventTrackerInterface>& traceTracker;
 
-    explicit CancelationOptions(Mode mode, const char* reason,
-                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+    explicit CancellationOptions(Mode mode, const char* reason,
+                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode), reason(reason), traceTracker(traceTracker) {}
-    explicit CancelationOptions(Mode mode, const char* reason,
-                                const sp<gui::WindowInfoHandle>& windowHandle,
-                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+    explicit CancellationOptions(Mode mode, const char* reason,
+                                 const sp<gui::WindowInfoHandle>& windowHandle,
+                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode), reason(reason), windowHandle(windowHandle), traceTracker(traceTracker) {}
-    explicit CancelationOptions(Mode mode, const char* reason,
-                                const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
-                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+    explicit CancellationOptions(Mode mode, const char* reason,
+                                 const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
+                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode),
             reason(reason),
             windowHandle(windowHandle),
             deviceId(deviceId),
             traceTracker(traceTracker) {}
-    explicit CancelationOptions(Mode mode, const char* reason,
-                                const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
-                                ui::LogicalDisplayId displayId,
-                                std::bitset<MAX_POINTER_ID + 1> pointerIds,
-                                const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
+    explicit CancellationOptions(Mode mode, const char* reason,
+                                 const sp<gui::WindowInfoHandle>& windowHandle, DeviceId deviceId,
+                                 ui::LogicalDisplayId displayId,
+                                 std::bitset<MAX_POINTER_ID + 1> pointerIds,
+                                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker)
           : mode(mode),
             reason(reason),
             windowHandle(windowHandle),
@@ -88,8 +88,8 @@ struct CancelationOptions {
             pointerIds(pointerIds),
             traceTracker(traceTracker) {}
 
-    CancelationOptions(const CancelationOptions&) = delete;
-    CancelationOptions operator=(const CancelationOptions&) = delete;
+    CancellationOptions(const CancellationOptions&) = delete;
+    CancellationOptions operator=(const CancellationOptions&) = delete;
 };
 
 } // namespace inputdispatcher

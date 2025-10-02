@@ -2322,14 +2322,18 @@ status_t SurfaceFlinger::getDisplayBrightnessSupport(const sp<IBinder>& displayT
 
 status_t SurfaceFlinger::setDisplayBrightness(const sp<IBinder>& displayToken,
                                               const gui::DisplayBrightness& brightness) {
+    const char* const whence = __func__;
+    SFTRACE_FORMAT("%s %s", whence, brightness.toString().c_str());
+
     if (!displayToken) {
         return BAD_VALUE;
     }
 
-    const char* const whence = __func__;
     return ftl::Future(mScheduler->schedule([=, this]() FTL_FAKE_GUARD(mStateLock) {
                // TODO(b/241285876): Validate that the display is physical instead of failing later.
                if (const auto display = getDisplayDeviceLocked(displayToken)) {
+                   SFTRACE_FORMAT("%s displayId=%s %s", whence, to_string(display->getId()).c_str(),
+                                  brightness.toString().c_str());
                    const bool supportsDisplayBrightnessCommand =
                            getHwComposer().getComposer()->isSupported(
                                    Hwc2::Composer::OptionalFeature::DisplayBrightnessCommand);
@@ -2379,6 +2383,9 @@ status_t SurfaceFlinger::setDisplayBrightness(const sp<IBinder>& displayToken,
                                                              .applyImmediately = true});
                    }
                } else {
+                   SFTRACE_FORMAT("%s (invalid display token) %s", whence,
+                                  to_string(display->getId()).c_str(),
+                                  brightness.toString().c_str());
                    ALOGE("%s: Invalid display token %p", whence, displayToken.get());
                    return ftl::yield<status_t>(NAME_NOT_FOUND);
                }
@@ -2768,25 +2775,42 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
     bool mustComposite = false;
     mustComposite |= applyAndCommitDisplayTransactionStatesLocked(update.transactions);
 
+    frontend::LayerSnapshotBuilder::Args
+            args{.root = mLayerHierarchyBuilder.getHierarchy(),
+                 .layerLifecycleManager = mLayerLifecycleManager,
+                 .includeMetadata = mCompositionEngine->getFeatureFlags().test(
+                         compositionengine::Feature::kSnapshotLayerMetadata),
+                 .displays = mFrontEndDisplayInfos,
+                 .displayChanges = mFrontEndDisplayInfosChanged,
+                 .globalShadowSettings = mDrawingState.globalShadowSettings,
+                 .supportsBlur = mSupportsBlur,
+                 .forceFullDamage = mForceFullDamage,
+                 .supportedLayerGenericMetadata =
+                         getHwComposer().getSupportedLayerGenericMetadata(),
+                 .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
+                 .skipRoundCornersWhenProtected = !getRenderEngine().supportsProtectedContent(),
+                 .mergeableHierarchyManager = FlagManager::getInstance().frontend_caching_v0()
+                         ? &mMergeableHierarchyManager
+                         : nullptr};
+
+    if (FlagManager::getInstance().frontend_caching_v0()) {
+        {
+            SFTRACE_NAME("MergeableHierarchyManager::update");
+            mMergeableHierarchyManager.update(mLayerHierarchyBuilder.getHierarchy());
+        }
+
+        {
+            SFTRACE_NAME("MergeableHierarchyManager::constructSnapshots");
+            std::unique_ptr<compositionengine::CompositionEngine> compositionEngine =
+                    mFactory.createCompositionEngine();
+            compositionEngine->setRenderEngine(mRenderEngine.get());
+            compositionEngine->setHwComposer(mHWComposer.get());
+            mMergeableHierarchyManager.constructSnapshots(mLayerSnapshotBuilder, args,
+                                                          *compositionEngine);
+        }
+    }
     {
         SFTRACE_NAME("LayerSnapshotBuilder:update");
-        frontend::LayerSnapshotBuilder::Args
-                args{.root = mLayerHierarchyBuilder.getHierarchy(),
-                     .layerLifecycleManager = mLayerLifecycleManager,
-                     .includeMetadata = mCompositionEngine->getFeatureFlags().test(
-                             compositionengine::Feature::kSnapshotLayerMetadata),
-                     .displays = mFrontEndDisplayInfos,
-                     .displayChanges = mFrontEndDisplayInfosChanged,
-                     .globalShadowSettings = mDrawingState.globalShadowSettings,
-                     .supportsBlur = mSupportsBlur,
-                     .forceFullDamage = mForceFullDamage,
-                     .supportedLayerGenericMetadata =
-                             getHwComposer().getSupportedLayerGenericMetadata(),
-                     .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
-                     .skipRoundCornersWhenProtected = !getRenderEngine().supportsProtectedContent(),
-                     .mergeableHierarchyManager = FlagManager::getInstance().frontend_caching_v0()
-                             ? &mMergeableHierarchyManager
-                             : nullptr};
         mLayerSnapshotBuilder.update(args);
     }
 
@@ -3310,9 +3334,10 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     //mQtiSFExtnIntf->qtiSetDisplayElapseTime(refreshArgs.earliestPrsesentTime);
 
     constexpr bool kCursorOnly = false;
-    const auto layers = addLayerSnapshotsToCompositionArgs(mainThreadRefreshArgs, kCursorOnly);
-
-    prepareLayersForComposition(mainThreadRefreshArgs, kCursorOnly, layers);
+    const auto layers = mLayerSnapshotBuilder.hasMergedSnapshots()
+            ? copyMergedSnapshots(refreshArgs)
+            : addLayerSnapshotsToCompositionArgs(mainThreadRefreshArgs, kCursorOnly);
+    setVisibleRegionDirtyIfNeeded(mainThreadRefreshArgs);
 
     for (auto& [layer, layerFE] : layers) {
         validateForReadback(layerFE);
@@ -3468,7 +3493,9 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         }
     }
 
-    moveSnapshotsFromCompositionArgs(mainThreadRefreshArgs, layers);
+    if (!mLayerSnapshotBuilder.hasMergedSnapshots()) {
+        moveSnapshotsFromCompositionArgs(refreshArgs, layers);
+    }
     if (optionalOffloadedRefreshArgs) {
         offloadedCompositionFuture->wait();
         moveSnapshotsFromCompositionArgs(*optionalOffloadedRefreshArgs, offloadedLayers);
@@ -4510,8 +4537,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
                                         // we weave this through the codebase.
             auto surface =
                     sp<VirtualDisplaySurface>::make(getHwComposer(), *virtualDisplayIdVariantOpt,
-                                                    state.displayName, creatorUid,
-                                                    sp<Surface>::make(state.surface));
+                                                    state.displayName, creatorUid, state.surface);
             displaySurface = surface;
             compositionSurface = surface->getCompositionSurface();
         } else {
@@ -4666,11 +4692,9 @@ void SurfaceFlinger::processDisplayRemoved(const wp<IBinder>& displayToken) {
 void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
                                            const DisplayDeviceState& currentState,
                                            const DisplayDeviceState& drawingState) {
-    const sp<IBinder> currentBinder = IInterface::asBinder(currentState.surface);
-    const sp<IBinder> drawingBinder = IInterface::asBinder(drawingState.surface);
-
     // Recreate the DisplayDevice if the surface or sequence ID changed.
-    if (currentBinder != drawingBinder || currentState.sequenceId != drawingState.sequenceId) {
+    if (!Surface::areSurfacesEquivalent(currentState.surface, drawingState.surface) ||
+        currentState.sequenceId != drawingState.sequenceId) {
         if (const auto display = getDisplayDeviceLocked(displayToken)) {
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
             mQtiSFExtnIntf->qtiUpdateDisplaysList(display, /*addDisplay*/ false);
@@ -5297,8 +5321,10 @@ ui::Size SurfaceFlinger::findLargestFramebufferSizeLocked() const {
     ui::Size maxSize(0, 0);
     int64_t maxArea = 0;
     for (const auto& [_, display] : mDisplays) {
-        if (!display->isPoweredOn()) {
-            continue;
+        if (!FlagManager::getInstance().re_powered_off_displays_inform_cache_budgets()) {
+            if (!display->isPoweredOn()) {
+                continue;
+            }
         }
 
         const ui::Size size = display->getSize();
@@ -5929,8 +5955,9 @@ uint32_t SurfaceFlinger::setDisplayStateLocked(const DisplayState& s) {
 
     const uint32_t what = s.what;
     if (what & DisplayState::eSurfaceChanged) {
-        if (IInterface::asBinder(state.surface) != IInterface::asBinder(s.surface)) {
-            state.surface = s.surface;
+        sp<Surface> sSurface = s.surface.toSurface();
+        if (!Surface::areSurfacesEquivalent(state.surface, sSurface)) {
+            state.surface = sSurface;
             flags |= eDisplayTransactionNeeded;
         }
     }
@@ -7421,6 +7448,7 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
                   pid, uid);
             return PERMISSION_DENIED;
         }
+        SFTRACE_FORMAT("onTransact (backdoor) code %" PRId32, code);
         int n;
         switch (code) {
             case 1000: // Unused.
@@ -9624,6 +9652,31 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::addLayerSnapshotsToComp
                 return snapshot.isVisible ||
                         (needsMetadata &&
                          snapshot.changes.test(frontend::RequestedLayerState::Changes::Metadata));
+            });
+    return layers;
+}
+
+std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::copyMergedSnapshots(
+        compositionengine::CompositionRefreshArgs& refreshArgs) {
+    std::vector<std::pair<Layer*, LayerFE*>> layers;
+    nsecs_t currentTime = systemTime();
+    const bool needsMetadata = mCompositionEngine->getFeatureFlags().test(
+            compositionengine::Feature::kSnapshotLayerMetadata);
+    mLayerSnapshotBuilder.forEachMergedSnapshot(
+            [&](const frontend::LayerSnapshot& snapshot) FTL_FAKE_GUARD(kMainThreadContext) {
+                if (!snapshot.hasSomethingToDraw()) {
+                    return;
+                }
+
+                auto it = mLegacyLayers.find(snapshot.sequence);
+                LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
+                                                "Couldnt find layer object for %s",
+                                                snapshot.getDebugString().c_str());
+                auto& legacyLayer = it->second;
+                sp<LayerFE> layerFE = legacyLayer->getCompositionEngineLayerFE(snapshot.path);
+                layerFE->mSnapshot = std::make_unique<frontend::LayerSnapshot>(snapshot);
+                refreshArgs.layers.push_back(layerFE);
+                layers.emplace_back(legacyLayer.get(), layerFE.get());
             });
     return layers;
 }

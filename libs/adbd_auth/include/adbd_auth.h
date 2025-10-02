@@ -204,4 +204,39 @@ bool adbd_auth_supports_feature(AdbdAuthFeature feature);
  */
 void adbd_auth_send_tls_server_port(AdbdAuthContext* ctx, uint16_t port) __INTRODUCED_IN(37);
 
+enum RegisterResult {
+    ADBD_AUTH_REGISTER_OK,
+    ADBD_AUTH_REGISTER_BAD_NAME, // Either instance name or service type was too long (>255)
+};
+/**
+ * Register mDNS Service
+ *
+ * @param ctx the AdbdAuthContext
+ * @param instance_name the mDNS service instance name (255 max characters null terminated string).
+ * @param service_type the mDNS service name (255 max characters null terminated string).
+ * @param port the port number of the service
+ * @return RegisterResult
+ */
+RegisterResult adbd_auth_register_service(AdbdAuthContext* ctx, const char* instance_name,
+                                          const char* service_type, uint16_t port) __INTRODUCED_IN(37);
+
+enum UnregisterResult {
+    ADBD_AUTH_UNREGISTER_OK,
+    ADBD_AUTH_UNREGISTER_BAD_NAME, // Either instance name or service type was too long (>255)
+};
+/**
+ * Unregister mDNS Service
+ *
+ * @param ctx the AdbdAuthContext
+ * @param instance_name the mDNS service instance name (255 max characters null terminated string).
+ * @param service_type the mDNS service name (255 max characters null terminated string).
+ * @return UnregisterResult
+ *
+ * It is ok to call unregister on an service unknown to framework. Services are tracked there
+ * and results in a no-op.
+ *
+ */
+UnregisterResult adbd_auth_unregister_service(AdbdAuthContext* ctx, const char* instance_name,
+                                              const char* service_type) __INTRODUCED_IN(37);
+
 __END_DECLS

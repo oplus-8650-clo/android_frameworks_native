@@ -824,10 +824,12 @@ static bool setUpUserspaceTracing()
     return ok;
 }
 
-static void cleanUpUserspaceTracing()
+void cleanUpUserspaceTracing()
 {
-    setTagsProperty(0);
+    // Clean up k_traceAppsNumberProperty before k_traceTagsProperty to prevent
+    // a race condition.
     clearAppProperties();
+    setTagsProperty(0);
 }
 
 
@@ -1250,6 +1252,7 @@ static bool cleanUpVendorTracingWithHal() {
     return true;
 }
 
+#ifndef ATRACE_TEST_BUILD
 int main(int argc, char **argv)
 {
     bool async = false;
@@ -1476,3 +1479,4 @@ int main(int argc, char **argv)
 
     return g_traceAborted ? 1 : 0;
 }
+#endif // ATRACE_TEST_BUILD
