@@ -1760,9 +1760,19 @@ void IPCThreadState::logExtendedError() {
     }
 #endif
 
+    const int bErrno = -ee.param;
+    const char* extraErrorString = "";
+
+    switch (bErrno) {
+        case ENOSPC:
+            extraErrorString = " - Binder buffer full. Too many or too large transactions.";
+            break;
+    }
+
     ALOGE_IF(ee.command != BR_OK,
-             "Binder transaction failure. id: %d, cmd: %s (%d), error: %d (%s)", ee.id,
-             getReturnString(ee.command), ee.command, ee.param, strerror(-ee.param));
+             "Binder transaction failure. id: %d, cmd: %s (%d), error: %d (%s%s)", ee.id,
+             getReturnString(ee.command), ee.command, ee.param, strerror(bErrno),
+             extraErrorString);
 }
 
 void IPCThreadState::freeBuffer(const uint8_t* data, size_t /*dataSize*/,

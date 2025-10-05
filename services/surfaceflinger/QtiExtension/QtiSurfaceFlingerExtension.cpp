@@ -1255,7 +1255,7 @@ bool QtiSurfaceFlingerExtension::qtiIsScreenshot(const std::string& layer_name) 
 void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState& state) {
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
-    const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(state.physical->id);
+    const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(state.getPhysical().id);
     const auto& displayObject = displayOpt->get();
     const auto& snapshot = displayObject.snapshot();
 
@@ -1269,12 +1269,12 @@ void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState
     }
 
     SmomoInfo smomoInfo;
-    smomoInfo.displayId = state.physical->hwcDisplayId;
+    smomoInfo.displayId = state.getPhysical().hwcDisplayId;
     smomoInfo.layerStackId = state.layerStack.id;
     smomoInfo.active = true;
     smomo::DisplayInfo displayInfo;
-    displayInfo.display_id = static_cast<int32_t>(state.physical->hwcDisplayId);
-    displayInfo.is_primary = state.physical->hwcDisplayId == 0;
+    displayInfo.display_id = static_cast<int32_t>(state.getPhysical().hwcDisplayId);
+    displayInfo.is_primary = state.getPhysical().hwcDisplayId == 0;
     displayInfo.type = smomo::kBuiltin;
     bool ret = mQtiComposerExtnIntf->CreateSmomoExtn(&smomoInfo.smoMo, displayInfo);
     if (!ret) {

@@ -442,7 +442,7 @@ private:
         std::optional<size_t> getDisplayIndex(PhysicalDisplayId displayId) const {
             for (size_t i = 0; i < displays.size(); i++) {
                 const auto& state = displays.valueAt(i);
-                if (state.physical && state.physical->id == displayId) {
+                if (state.isPhysical() && state.getPhysical().id == displayId) {
                     return i;
                 }
             }

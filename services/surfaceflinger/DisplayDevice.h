@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <variant>
 
 #include <android-base/thread_annotations.h>
 #include <android/native_window.h>
@@ -334,10 +335,20 @@ struct DisplayDeviceState {
         }
     };
 
-    bool isVirtual() const { return !physical; }
+    struct Virtual {
+        uid_t ownerUid = static_cast<uid_t>(-1);
+    };
+
+    bool isPhysical() const { return std::holds_alternative<Physical>(physicalOrVirtual); }
+    bool isVirtual() const { return std::holds_alternative<Virtual>(physicalOrVirtual); }
+
+    Physical& getPhysical() { return std::get<Physical>(physicalOrVirtual); }
+    const Physical& getPhysical() const { return std::get<Physical>(physicalOrVirtual); }
+    Virtual& getVirtual() { return std::get<Virtual>(physicalOrVirtual); }
+    const Virtual& getVirtual() const { return std::get<Virtual>(physicalOrVirtual); }
 
     int32_t sequenceId = sNextSequenceId++;
-    std::optional<Physical> physical;
+    std::variant<Physical, Virtual> physicalOrVirtual;
     sp<Surface> surface;
     ui::LayerStack layerStack;
     uint32_t flags = 0;

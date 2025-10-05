@@ -112,7 +112,7 @@ TEST(Binder, GetFunctionName) {
 
 TEST(Binder, GetFunctionNameNotFound) {
     auto binder = sp<BBinder>::make();
-    std::string expected = "name=?_code=" + std::to_string(IBinder::FIRST_CALL_TRANSACTION);
+    std::string expected = "#" + std::to_string(IBinder::FIRST_CALL_TRANSACTION);
     EXPECT_EQ(expected, binder->getFunctionName(IBinder::FIRST_CALL_TRANSACTION));
 }
 
@@ -124,15 +124,13 @@ TEST(Binder, GetFunctionNameInvalidCode) {
     data.count = 2;
     binder->setTransactionCodeMap(&data);
 
-    std::string expectedBefore =
-            "name=?_code=" + std::to_string(IBinder::FIRST_CALL_TRANSACTION - 1);
+    std::string expectedBefore = "#" + std::to_string(IBinder::FIRST_CALL_TRANSACTION - 1);
     EXPECT_EQ(expectedBefore, binder->getFunctionName(IBinder::FIRST_CALL_TRANSACTION - 1));
-    std::string expectedAfter =
-            "name=?_code=" + std::to_string(IBinder::FIRST_CALL_TRANSACTION + 2);
+    std::string expectedAfter = "#" + std::to_string(IBinder::FIRST_CALL_TRANSACTION + 2);
     EXPECT_EQ(expectedAfter, binder->getFunctionName(IBinder::FIRST_CALL_TRANSACTION + 2));
-    std::string expectedZero = "name=?_code=0";
+    std::string expectedZero = "#0";
     EXPECT_EQ(expectedZero, binder->getFunctionName(0));
-    std::string expectedNegative = "name=?_code=" + std::to_string(static_cast<size_t>(-1));
+    std::string expectedNegative = "#" + std::to_string(static_cast<size_t>(-1));
     EXPECT_EQ(expectedNegative, binder->getFunctionName(-1));
 }
 
@@ -163,7 +161,7 @@ TEST(Binder, GetFunctionNameMalformed) {
     malformedData.names = nullptr;
     malformedData.count = 2;
     binder->setTransactionCodeMap(&malformedData);
-    std::string expected = "name=?_code=" + std::to_string(IBinder::FIRST_CALL_TRANSACTION);
+    std::string expected = "#" + std::to_string(IBinder::FIRST_CALL_TRANSACTION);
     EXPECT_EQ(expected, binder->getFunctionName(IBinder::FIRST_CALL_TRANSACTION));
 }
 

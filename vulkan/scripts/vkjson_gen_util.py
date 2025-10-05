@@ -21,6 +21,7 @@ This file contains all supporting utility functions for vkjson_generator.py
 import dataclasses
 import re
 import vk as VK
+import generator_common as gencom
 from typing import List, get_origin, Tuple, Optional, get_args
 
 CONST_PHYSICAL_DEVICE_FEATURE_2 = "VkPhysicalDeviceFeatures2"
@@ -549,6 +550,10 @@ def generate_vk_extension_structs_init_code(mapping, struct_category):
     next_pointer = struct_category.lower()
 
     for extension, struct_mappings in mapping.items():
+
+        if extension in gencom._VKJSON_BLOCKED_EXTENSIONS:
+            continue
+
         struct_var_name = get_vkjson_struct_variable_name(extension)
         extension_code = [f'  if (HasExtension("{extension}", device.extensions)) {{', f"    device.{struct_var_name}.reported = true;"]
         struct_count = 0

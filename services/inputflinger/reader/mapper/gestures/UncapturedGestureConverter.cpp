@@ -31,6 +31,7 @@
 #include <ui/FloatRect.h>
 
 #include "TouchCursorInputMapperCommon.h"
+#include "gestures/GestureConverterCommon.h"
 #include "input/Input.h"
 
 namespace input_flags = com::android::input::flags;
@@ -43,23 +44,6 @@ namespace {
 // re-enabling the tap to click.
 const bool ENABLE_TOUCHPAD_PALM_REJECTION_V2 =
         input_flags::enable_v2_touchpad_typing_palm_rejection();
-
-uint32_t gesturesButtonToMotionEventButton(uint32_t gesturesButton) {
-    switch (gesturesButton) {
-        case GESTURES_BUTTON_LEFT:
-            return AMOTION_EVENT_BUTTON_PRIMARY;
-        case GESTURES_BUTTON_MIDDLE:
-            return AMOTION_EVENT_BUTTON_TERTIARY;
-        case GESTURES_BUTTON_RIGHT:
-            return AMOTION_EVENT_BUTTON_SECONDARY;
-        case GESTURES_BUTTON_BACK:
-            return AMOTION_EVENT_BUTTON_BACK;
-        case GESTURES_BUTTON_FORWARD:
-            return AMOTION_EVENT_BUTTON_FORWARD;
-        default:
-            return 0;
-    }
-}
 
 bool isGestureNoFocusChange(MotionClassification classification) {
     switch (classification) {

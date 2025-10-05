@@ -149,6 +149,7 @@ void MergeableHierarchy::materializeSnapshot(
     mSnapshot = std::move(firstLayer->mSnapshot);
     mSnapshot->externalTexture = texture;
     mSnapshot->acquireFence = output->getRenderSurface()->getClientTargetAcquireFence();
+    mSnapshot->buffer = texture->getBuffer();
 }
 
 void MergeableHierarchy::dump(std::ostream& out) const {

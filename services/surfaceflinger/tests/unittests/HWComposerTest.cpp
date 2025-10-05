@@ -414,7 +414,7 @@ TEST_F(HWComposerTest, displayIdConflictResolution) {
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
 
-    constexpr uint64_t kExpectedDisplayId1 = 4067182673952280501;
+    constexpr uint64_t kExpectedDisplayId1 = 16539125038779109301u;
     const auto physicalDisplayId1 = info1->id;
     EXPECT_EQ(kExpectedDisplayId1, physicalDisplayId1.value);
 
@@ -449,7 +449,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionWithInvertedPortBits) {
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
 
-    constexpr uint64_t kExpectedDisplayId1 = 4067182673952280501;
+    constexpr uint64_t kExpectedDisplayId1 = 16539125038779109301u;
     const auto physicalDisplayId1 = info1->id;
     EXPECT_EQ(kExpectedDisplayId1, physicalDisplayId1.value);
 
@@ -487,7 +487,7 @@ TEST_F(HWComposerTest, displayIdConflictResolutionFails) {
     const auto info1 = mHwc.onHotplug(kHwcDisplayId1, HWComposer::HotplugEvent::Connected);
     ASSERT_TRUE(info1);
 
-    constexpr uint64_t kExpectedDisplayId1 = 4067182673952280501;
+    constexpr uint64_t kExpectedDisplayId1 = 16539125038779109301u;
     const auto physicalDisplayId1 = info1->id;
     EXPECT_EQ(kExpectedDisplayId1, physicalDisplayId1.value);
 

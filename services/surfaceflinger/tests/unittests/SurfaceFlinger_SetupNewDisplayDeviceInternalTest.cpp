@@ -22,6 +22,7 @@
 #include <gui/Surface.h>
 #include <ui/ScreenPartStatus.h>
 
+#include "DisplayDevice.h"
 #include "DisplayHardware/DisplayMode.h"
 
 #include "DisplayTransactionTestHelpers.h"
@@ -246,10 +247,8 @@ void SetupNewDisplayDeviceInternalTest::setupNewDisplayDeviceInternalTest() {
                                             .setGroup(0)
                                             .build();
 
-        state.physical = {.id = *displayId,
-                          .hwcDisplayId = *hwcDisplayId,
-                          .port = *port,
-                          .activeMode = activeMode};
+        state.physicalOrVirtual.emplace<DisplayDeviceState::Physical>(*displayId, *hwcDisplayId,
+                                                                      *port, activeMode);
 
         ui::ColorModes colorModes;
         if constexpr (Case::WideColorSupport::WIDE_COLOR_SUPPORTED) {
@@ -266,6 +265,9 @@ void SetupNewDisplayDeviceInternalTest::setupNewDisplayDeviceInternalTest() {
         FTL_FAKE_GUARD(kMainThreadContext,
                        mFlinger.mutableDisplayModeController()
                                .registerDisplay(it->second.snapshot(), activeMode->getId(), {}));
+    } else {
+        constexpr uid_t kOwnerUid = 123;
+        state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
     }
 
     state.isSecure = static_cast<bool>(Case::Display::SECURE);
