@@ -473,13 +473,20 @@ PhysicalDisplayId getVirtualDisplayId(uint32_t id) {
 }
 
 PhysicalDisplayId generateEdidDisplayId(const Edid& edid) {
+    // Prioritize the DTD's physical size to generate a more stable ID across
+    // inconsistent ports. The value's consistency is what matters, not its
+    // units (mm vs cm), so mixing them is acceptable. Fall back to the main EDID size.
+    const ui::Size physicalSize = edid.preferredDetailedTimingDescriptor
+            ? edid.preferredDetailedTimingDescriptor->physicalSizeInMm
+            : edid.physicalSizeInCm;
+
     const ftl::Concat displayDetailsString{edid.manufacturerId,
                                            edid.productId,
                                            ftl::truncated<13>(edid.displayName),
                                            edid.manufactureWeek,
                                            edid.manufactureOrModelYear,
-                                           edid.physicalSizeInCm.getWidth(),
-                                           edid.physicalSizeInCm.getHeight()};
+                                           physicalSize.getWidth(),
+                                           physicalSize.getHeight()};
 
     // String has to be cropped to 64 characters (at most) for ftl::stable_hash.
     // This is fine as the accuracy or completeness of the above fields is not

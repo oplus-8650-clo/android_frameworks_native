@@ -27,6 +27,7 @@
 #include <gui/LayerState.h>
 #include <gui/ScreenCaptureResults.h>
 #include <gui/TransactionState.h>
+#include <ui/DisplayId.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <ui/ScreenPartStatus.h>
 
@@ -1110,9 +1111,10 @@ public:
                 // Save a copy for use after `modes` is consumed.
                 const Fps refreshRate = activeModeOpt->get()->getPeakFps();
 
-                state.physical = {.id = *physicalId,
-                                  .hwcDisplayId = *mHwcDisplayId,
-                                  .activeMode = activeModeOpt->get()};
+                state.physicalOrVirtual.emplace<DisplayDeviceState::Physical>(*physicalId,
+                                                                              *mHwcDisplayId,
+                                                                              *mPort,
+                                                                              activeModeOpt->get());
 
                 const auto it =
                         mFlinger.mutablePhysicalDisplays()
@@ -1135,6 +1137,11 @@ public:
                                                           std::move(controller),
                                                           std::move(tracker));
                 }
+            } else if (mCreationArgs.compositionDisplay->getDisplayIdVariant()
+                               .transform([](auto id) -> bool { return isVirtualDisplayId(id); })
+                               .value_or(false)) {
+                constexpr uid_t kOwnerUid = 123;
+                state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
             }
 
             sp<DisplayDevice> display = sp<DisplayDevice>::make(mCreationArgs);

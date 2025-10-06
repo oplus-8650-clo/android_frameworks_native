@@ -112,6 +112,7 @@ public:
     bool true_hdr_screenshots() const;
     bool use_known_refresh_rate_for_fps_consistency() const;
     bool vulkan_renderengine() const;
+    bool wb_framebuffersurface2() const;
     bool wb_virtualdisplay2() const;
     bool window_blur_kawase2() const;
     bool window_blur_kawase2_fix_aliasing() const;

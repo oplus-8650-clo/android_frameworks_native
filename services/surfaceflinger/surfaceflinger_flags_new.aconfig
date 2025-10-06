@@ -395,6 +395,13 @@ flag {
 } # use_at_least_60_for_min_vote
 
 flag {
+  name: "wb_framebuffersurface2"
+  namespace: "core_graphics"
+  description: "When enabled, use an updated FrameBufferSurface instead of the legacy one"
+  bug: "340933138"
+} # wb_framebuffersurface2
+
+flag {
   name: "wb_virtualdisplay2"
   namespace: "core_graphics"
   description: "When enabled, use VirtualDisplaySurface2 instead of the legacy one"

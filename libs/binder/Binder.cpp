@@ -50,7 +50,7 @@ using android::binder::unique_fd;
 
 constexpr uid_t kUidRoot = 0;
 
-static const char* UNKNOWN_CODE = "name=?_code=";
+static const char* UNKNOWN_CODE = "#";
 
 // Internal 2-bit codes that we will store in the flags
 static constexpr uintptr_t INTERNAL_STABILITY_UNDECLARED = 0;

@@ -645,6 +645,9 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
         gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
         float requestedRefreshRate) {
+    // TODO: b/340933138 -  set this to be the correct value.
+    uid_t ownerUid = static_cast<uid_t>(-1);
+
     // SurfaceComposerAIDL checks for some permissions, but adding an additional check here.
     // This is to ensure that only root, system, and graphics can request to create a secure
     // display. Secure displays can show secure content so we add an additional restriction on it.
@@ -674,6 +677,7 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
     Mutex::Autolock _l(mStateLock);
     // Display ID is assigned when virtual display is allocated by HWC.
     DisplayDeviceState state;
+    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(ownerUid);
     state.isSecure = isSecure;
     // Set display as protected when marked as secure to ensure no behavior change
     // TODO (b/314820005): separate as a different arg when creating the display.
@@ -698,7 +702,7 @@ status_t SurfaceFlinger::destroyVirtualDisplay(const sp<IBinder>& displayToken) 
     }
 
     const DisplayDeviceState& state = mCurrentState.displays.valueAt(index);
-    if (state.physical) {
+    if (state.isPhysical()) {
         ALOGE("%s: Invalid operation on physical display", __func__);
         return INVALID_OPERATION;
     }
@@ -1601,7 +1605,7 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
             // We need to generate new sequenceId in order to recreate the display (and this
             // way the framebuffer).
             state.sequenceId = DisplayDeviceState{}.sequenceId;
-            state.physical->activeMode = activeMode.modePtr.get();
+            state.getPhysical().activeMode = activeMode.modePtr.get();
             processDisplayChangesLocked();
 
             if (FlagManager::getInstance().modeset_state_machine()) {
@@ -2107,10 +2111,10 @@ status_t SurfaceFlinger::getMaxLayerPictureProfiles(const sp<IBinder>& displayTo
             ALOGE("%s: Invalid display token %p", whence, displayToken.get());
             return 0;
         }
-        int32_t maxProfiles = getHwComposer().getMaxLayerPictureProfiles(
-                *physicalDisplayId);
-        bool hasPictureProcessing = getHwComposer().hasDisplayCapability(
-                *physicalDisplayId, DisplayCapability::PICTURE_PROCESSING);
+        int32_t maxProfiles = getHwComposer().getMaxLayerPictureProfiles(*physicalDisplayId);
+        bool hasPictureProcessing =
+                getHwComposer().hasDisplayCapability(*physicalDisplayId,
+                                                     DisplayCapability::PICTURE_PROCESSING);
         // A display-global picture processing pipeline can allow for one layer
         // to have a picture profile.
         return maxProfiles > 0 ? maxProfiles : hasPictureProcessing ? 1 : 0;
@@ -4285,8 +4289,8 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
 
         auto& state = mCurrentState.displays.editValueFor(it->second.token());
         state.sequenceId = DisplayDeviceState{}.sequenceId; // Generate new sequenceId.
-        state.physical->activeMode = std::move(activeMode);
-        state.physical->port = port;
+        state.getPhysical().activeMode = std::move(activeMode);
+        state.getPhysical().port = port;
         ALOGI("Reconnecting %s", displayString);
         return activeModeId;
     } else if (event == HWComposer::HotplugEvent::LinkUnstable) {
@@ -4303,10 +4307,8 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
                                   std::move(info.deviceProductInfo));
 
     DisplayDeviceState state;
-    state.physical = {.id = displayId,
-                      .hwcDisplayId = hwcDisplayId,
-                      .port = info.port,
-                      .activeMode = std::move(activeMode)};
+    state.physicalOrVirtual.emplace<DisplayDeviceState::Physical>(displayId, hwcDisplayId,
+                                                                  info.port, std::move(activeMode));
     // TODO: b/349703362 - Remove first condition when HDCP aidl APIs are enforced
     state.isSecure = !mDisplayModeController.supportsHdcp() ||
             connectionType == ui::DisplayConnectionType::Internal;
@@ -4429,9 +4431,10 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
             compositionengine::Output::ColorProfile{defaultColorMode, defaultDataSpace,
                                                     RenderIntent::COLORIMETRIC});
 
-    if (const auto& physical = state.physical) {
-        const auto& mode = *physical->activeMode;
-        mDisplayModeController.setActiveMode(physical->id, mode.getId(), mode.getVsyncRate(),
+    if (state.isPhysical()) {
+        const auto& physical = state.getPhysical();
+        const auto& mode = *physical.activeMode;
+        mDisplayModeController.setActiveMode(physical.id, mode.getId(), mode.getVsyncRate(),
                                              mode.getPeakFps());
     }
 
@@ -4474,8 +4477,8 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     bool qtiCanAllocateHwcForVDS = false;
 
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-    if (state.physical) {
-        resolution = state.physical->activeMode->getResolution();
+    if (state.isPhysical()) {
+        resolution = state.getPhysical().activeMode->getResolution();
         pixelFormat = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
     } else if (state.surface != nullptr) {
         int status = state.surface->query(NATIVE_WINDOW_WIDTH, &resolution.width);
@@ -4500,10 +4503,10 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
 
     compositionengine::DisplayCreationArgsBuilder builder;
     std::optional<VirtualDisplayIdVariant> virtualDisplayIdVariantOpt;
-    if (const auto& physical = state.physical) {
-        builder.setId(physical->id);
-        builder.setMaxLayerPictureProfiles(
-                getHwComposer().getMaxLayerPictureProfiles(physical->id));
+    if (state.isPhysical()) {
+        const auto displayId = state.getPhysical().id;
+        builder.setId(displayId);
+        builder.setMaxLayerPictureProfiles(getHwComposer().getMaxLayerPictureProfiles(displayId));
     } else {
         auto qtiVirtualDisplayId =
                 mQtiSFExtnIntf->qtiAcquireVirtualDisplay(resolution, pixelFormat, state.uniqueId, builder,
@@ -4532,12 +4535,12 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (state.isVirtual()) {
+        const auto& virtualState = state.getVirtual();
         if (FlagManager::getInstance().wb_virtualdisplay2()) {
-            const uid_t creatorUid = 0; // Set to 0 so there's only a single thread for now, while
-                                        // we weave this through the codebase.
             auto surface =
                     sp<VirtualDisplaySurface>::make(getHwComposer(), *virtualDisplayIdVariantOpt,
-                                                    state.displayName, creatorUid, state.surface);
+                                                    state.displayName, virtualState.ownerUid,
+                                                    state.surface);
             displaySurface = surface;
             compositionSurface = surface->getCompositionSurface();
         } else {
@@ -4553,9 +4556,10 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
                  "adding a supported display, but rendering "
                  "surface is provided (%p), ignoring it",
                  state.surface.get());
+        const auto& physical = state.getPhysical();
         const auto frameBufferSurface =
-                sp<FramebufferSurface>::make(getHwComposer(), state.physical->id,
-                                             state.physical->activeMode->getResolution(),
+                sp<FramebufferSurface>::make(getHwComposer(), physical.id,
+                                             physical.activeMode->getResolution(),
                                              ui::Size(maxGraphicsWidth, maxGraphicsHeight));
         displaySurface = frameBufferSurface;
         compositionSurface = frameBufferSurface->getSurface();
@@ -4628,13 +4632,14 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     // For an external display, loadDisplayModes already attempted to select the same mode
     // as DM, but SF still needs to be updated to match.
     // TODO (b/318534874): Let DM decide the initial mode.
-    if (const auto& physical = state.physical; mScheduler && physical) {
-        const bool isInternalDisplay = mPhysicalDisplays.get(physical->id)
+    if (mScheduler && state.isPhysical()) {
+        const auto& physical = state.getPhysical();
+        const bool isInternalDisplay = mPhysicalDisplays.get(physical.id)
                                                .transform(&PhysicalDisplay::isInternal)
                                                .value_or(false);
 
         if (!isInternalDisplay) {
-            auto activeModePtr = physical->activeMode;
+            auto activeModePtr = physical.activeMode;
             const auto fps = activeModePtr->getPeakFps();
 
             setDesiredMode(
@@ -4715,14 +4720,15 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         mDisplays.erase(displayToken);
         mQtiSFExtnIntf->qtiSetDisplayCount(mDisplays.size());
 
-        if (const auto& physical = currentState.physical) {
-            getHwComposer().allocatePhysicalDisplay(physical->hwcDisplayId, physical->id,
-                                                    physical->port, /*physicalSize=*/std::nullopt);
+        if (currentState.isPhysical()) {
+            const auto& physical = currentState.getPhysical();
+            getHwComposer().allocatePhysicalDisplay(physical.hwcDisplayId, physical.id,
+                                                    physical.port, /*physicalSize=*/std::nullopt);
         }
 
         processDisplayAdded(displayToken, currentState);
 
-        if (currentState.physical) {
+        if (currentState.isPhysical()) {
             const auto display = getDisplayDeviceLocked(displayToken);
             if (!mSkipPowerOnForQuiescent) {
                 setPhysicalDisplayPowerMode(display, hal::PowerMode::ON);
@@ -4745,9 +4751,11 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
             display->setLayerFilter(makeLayerFilterForDisplay(display->getDisplayIdVariant(),
                                                               currentState.layerStack));
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-            mQtiSFExtnIntf->qtiUpdateSmomoLayerStackId(currentState.physical->hwcDisplayId,
-                                                       currentState.layerStack.id,
-                                                       drawingState.layerStack.id);
+            if (currentState.isPhysical()) {
+                mQtiSFExtnIntf->qtiUpdateSmomoLayerStackId(currentState.getPhysical().hwcDisplayId,
+                                                           currentState.layerStack.id,
+                                                           drawingState.layerStack.id);
+            }
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         }
         if (currentState.flags != drawingState.flags) {
@@ -4762,7 +4770,7 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
 
                     // Resize the framebuffer. For a virtual display, always do so. For a physical
                     // display, only do so if it has a pending modeset for the matching resolution.
-                    if (!currentState.physical ||
+                    if (currentState.isVirtual() ||
                         (FlagManager::getInstance().synced_resolution_switch() &&
                          mDisplayModeController.getDesiredMode(display->getPhysicalId())
                                  .transform([resolution](const auto& request) {
@@ -5488,8 +5496,8 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyBufferC
                                     std::chrono::seconds(4);
                             if (timeout) {
                                 TransactionTraceWriter::getInstance()
-                                .invoke("IgnoreBarrierDueToTimeout",
-                                        /* overwrite= */ false);
+                                        .invoke("IgnoreBarrierDueToTimeout",
+                                                /* overwrite= */ false);
                                 SFTRACE_FORMAT("IgnoreBarrierDueToTimeout %s", layer->name.c_str());
                             } else {
                                 ready = TransactionReadiness::NotReadyBarrier;

@@ -22,10 +22,13 @@
 #include <gui/Surface.h>
 #include <ui/ScreenPartStatus.h>
 
+#include "DisplayDevice.h"
 #include "DisplayTransactionTestHelpers.h"
 
 namespace android {
 namespace {
+
+constexpr uid_t kOwnerUid = 123;
 
 template <typename Id>
 class MockDisplayIdGenerator : public DisplayIdGenerator<Id> {
@@ -119,13 +122,17 @@ void DisplayTransactionCommitTest::verifyDisplayIsConnected(const sp<IBinder>& d
     ASSERT_TRUE(hasCurrentDisplayState(displayToken));
     const auto& current = getCurrentDisplayState(displayToken);
     EXPECT_EQ(static_cast<bool>(Case::Display::VIRTUAL), current.isVirtual());
-    EXPECT_EQ(expectedPhysical, current.physical);
+    if (expectedPhysical) {
+        EXPECT_EQ(expectedPhysical, current.getPhysical());
+    }
 
     // The display should have been set up in the drawing display state
     ASSERT_TRUE(hasDrawingDisplayState(displayToken));
     const auto& draw = getDrawingDisplayState(displayToken);
     EXPECT_EQ(static_cast<bool>(Case::Display::VIRTUAL), draw.isVirtual());
-    EXPECT_EQ(expectedPhysical, draw.physical);
+    if (expectedPhysical) {
+        EXPECT_EQ(expectedPhysical, draw.getPhysical());
+    }
 }
 
 template <typename Case>
@@ -439,6 +446,7 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAdded) {
     sp<BBinder> displayToken = sp<BBinder>::make();
 
     DisplayDeviceState state;
+    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
     state.isSecure = static_cast<bool>(Case::Display::SECURE);
 
     auto [consumer, surface] = BufferItemConsumer::create(0);
@@ -496,6 +504,7 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAddedWithNoSurface) 
     sp<BBinder> displayToken = sp<BBinder>::make();
 
     DisplayDeviceState state;
+    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
     state.isSecure = static_cast<bool>(Case::Display::SECURE);
 
     mFlinger.mutableCurrentState().displays.add(displayToken, state);
