@@ -18,6 +18,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/thread_annotations.h>
+#include <android/os/PointerCaptureMode.h>
 #include <gtest/gtest.h>
 
 #include "TestConstants.h"
@@ -172,9 +173,17 @@ void FakeInputReaderPolicy::addInputUniqueIdAssociation(const std::string& input
     mConfig.inputPortToDisplayUniqueIdAssociations.insert({inputUniqueId, displayUniqueId});
 }
 
-void FakeInputReaderPolicy::addKeyboardLayoutAssociation(const std::string& inputUniqueId,
+void FakeInputReaderPolicy::addKeyboardLayoutAssociation(const std::string& inputPort,
                                                          const KeyboardLayoutInfo& layoutInfo) {
-    mConfig.keyboardLayoutAssociations.insert({inputUniqueId, layoutInfo});
+    mConfig.keyboardLayoutAssociations.insert({inputPort, layoutInfo});
+}
+
+void FakeInputReaderPolicy::addVirtualDevice(const std::string& inputPort) {
+    mConfig.virtualDevicePorts.insert(inputPort);
+}
+
+void FakeInputReaderPolicy::removeVirtualDevice(const std::string& inputPort) {
+    mConfig.virtualDevicePorts.erase(inputPort);
 }
 
 void FakeInputReaderPolicy::addDisabledDevice(int32_t deviceId) {
@@ -203,8 +212,9 @@ void FakeInputReaderPolicy::setTouchAffineTransformation(const TouchAffineTransf
     transform = t;
 }
 
-PointerCaptureRequest FakeInputReaderPolicy::setPointerCapture(const sp<IBinder>& window) {
-    mConfig.pointerCaptureRequest = {window, mNextPointerCaptureSequenceNumber++};
+PointerCaptureRequest FakeInputReaderPolicy::setPointerCapture(PointerCaptureMode mode,
+                                                               const sp<IBinder>& window) {
+    mConfig.pointerCaptureRequest = {mode, window, mNextPointerCaptureSequenceNumber++};
     return mConfig.pointerCaptureRequest;
 }
 

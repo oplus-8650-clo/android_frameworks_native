@@ -318,7 +318,7 @@ std::vector<tonemap::ShaderUniform> buildLinearEffectUniforms(
                                .buffer = buffer,
                                .renderIntent = renderIntent};
 
-    for (const auto uniform : tonemap::getToneMapper()->generateShaderSkSLUniforms(metadata)) {
+    for (const auto& uniform : tonemap::getToneMapper()->generateShaderSkSLUniforms(metadata)) {
         uniforms.push_back(uniform);
     }
 

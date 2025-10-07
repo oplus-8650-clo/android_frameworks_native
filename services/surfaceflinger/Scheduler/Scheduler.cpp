@@ -17,13 +17,13 @@
 // QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
+// QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 // QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
-#undef LOG_TAG
-#define LOG_TAG "Scheduler"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "Scheduler.h"
@@ -304,6 +304,12 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId,
                 promotePacesetterDisplayLocked(defaultPacesetterId, kPromotionParams);
     }
     applyNewVsyncSchedule(std::move(pacesetterVsyncSchedule));
+
+    {
+        std::scoped_lock lock(mPolicyLock);
+        mPolicy.modeOpt.erase(displayId);
+        mPolicy.emittedModeOpt.erase(displayId);
+    }
 }
 
 void Scheduler::run() {
@@ -350,9 +356,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
         }
 
         if (!compositor.commit(pacesetterPtr->displayId, targets)) {
-            if (FlagManager::getInstance().vrr_config()) {
-                compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
-            }
+            compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
             mSchedulerCallback.onCommitNotComposited();
             return;
         }
@@ -372,8 +376,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
         targeters.try_emplace(id, &targeter);
     }
 
-    if (FlagManager::getInstance().vrr_config() &&
-        CC_UNLIKELY(mPacesetterFrameDurationFractionToSkip > 0.f)) {
+    if (CC_UNLIKELY(mPacesetterFrameDurationFractionToSkip > 0.f)) {
         const auto period = pacesetterPtr->targeterPtr->target().expectedFrameDuration();
         const auto skipDuration = Duration::fromNs(
                 static_cast<nsecs_t>(period.ns() * mPacesetterFrameDurationFractionToSkip));
@@ -384,9 +387,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
     }
 
     const auto resultsPerDisplay = compositor.composite(pacesetterPtr->displayId, targeters);
-    if (FlagManager::getInstance().vrr_config()) {
-        compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
-    }
+    compositor.sendNotifyExpectedPresentHint(pacesetterPtr->displayId);
     compositor.sample();
 
     for (const auto& [id, targeter] : targeters) {
@@ -574,9 +575,11 @@ bool Scheduler::updatePolicyContentRequirements(PhysicalDisplayId displayId,
             FTL_FAKE_GUARD(kMainThreadContext,
                            (std::scoped_lock(mDisplayLock), displayId == mPacesetterDisplayId));
 
-    if (isPacesetter) {
+    const bool followerArbitraryRefreshRate =
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+    if (isPacesetter || followerArbitraryRefreshRate) {
         std::lock_guard<std::mutex> lock(mPolicyLock);
-        mPolicy.emittedModeOpt = mode;
+        mPolicy.emittedModeOpt[displayId] = mode;
 
         if (clearContentRequirements) {
             // Invalidate content based refresh rate selection so it could be calculated
@@ -627,25 +630,26 @@ void Scheduler::onDisplayModeRejected(PhysicalDisplayId displayId, DisplayModeId
     }
 }
 
-void Scheduler::emitModeChangeIfNeeded() {
-    if (!mPolicy.modeOpt || !mPolicy.emittedModeOpt) {
+void Scheduler::emitPacesetterModeChangeIfNeeded() {
+    const PhysicalDisplayId pacesetterId = getPacesetterDisplayId();
+    if (!mPolicy.modeOpt[pacesetterId] || !mPolicy.emittedModeOpt[pacesetterId]) {
         ALOGW("No mode change to emit");
         return;
     }
 
-    const auto& mode = *mPolicy.modeOpt;
+    const auto& mode = *mPolicy.modeOpt[pacesetterId];
 
     if (mode != pacesetterSelectorPtr()->getActiveMode()) {
         // A mode change is pending. The event will be emitted when the mode becomes active.
         return;
     }
 
-    if (mode == *mPolicy.emittedModeOpt) {
+    if (mode == *mPolicy.emittedModeOpt[pacesetterId]) {
         // The event was already emitted.
         return;
     }
 
-    mPolicy.emittedModeOpt = mode;
+    mPolicy.emittedModeOpt[pacesetterId] = mode;
 
     if (hasEventThreads()) {
         const auto vsyncConfigSet = getVsyncConfigsForRefreshRate(mode.fps);
@@ -936,15 +940,33 @@ void Scheduler::setLayerProperties(int32_t id, const android::scheduler::LayerPr
     mLayerHistory.setLayerProperties(id, properties);
 }
 
+bool Scheduler::canAnySelectorSwitch() const {
+    std::scoped_lock lock(mDisplayLock);
+    ftl::FakeGuard guard(kMainThreadContext);
+
+    for (const auto& [_, display] : mDisplays) {
+        if (display.powerMode != hal::PowerMode::ON) {
+            continue;
+        }
+        if (display.selectorPtr->canSwitch()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Scheduler::chooseRefreshRateForContent(
         const surfaceflinger::frontend::LayerHierarchy* hierarchy,
         bool updateAttachedChoreographer) {
-    const auto selectorPtr = pacesetterSelectorPtr();
-    if (!selectorPtr->canSwitch()) return;
+    const bool canSwitch = FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()
+            ? canAnySelectorSwitch()
+            : pacesetterSelectorPtr()->canSwitch();
+
+    if (!canSwitch) return;
 
     SFTRACE_CALL();
 
-    LayerHistory::Summary summary = mLayerHistory.summarize(*selectorPtr, systemTime());
+    LayerHistory::Summary summary = mLayerHistory.summarize(systemTime());
     applyPolicy(&Policy::contentRequirements, std::move(summary));
 
     if (updateAttachedChoreographer) {
@@ -953,7 +975,8 @@ void Scheduler::chooseRefreshRateForContent(
         // update the attached choreographers after we selected the render rate.
         const ftl::Optional<FrameRateMode> modeOpt = [&] {
             std::scoped_lock lock(mPolicyLock);
-            return mPolicy.modeOpt;
+            ftl::FakeGuard guard(mDisplayLock);
+            return mPolicy.modeOpt[*mPacesetterDisplayId];
         }();
 
         if (modeOpt) {
@@ -1196,6 +1219,22 @@ bool Scheduler::updateFrameRateOverridesLocked(GlobalSignals consideredSignals,
     return mFrameRateOverrideMappings.updateFrameRateOverridesByContent(frameRateOverrides);
 }
 
+RefreshRateSelector* Scheduler::selectorPtrForLayerStack(ui::LayerStack stack) const {
+    std::scoped_lock lock(mDisplayLock);
+
+    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+        for (const auto& [_, display] : mDisplays) {
+            RefreshRateSelector* selector = display.selectorPtr.get();
+            if (selector && selector->getLayerFilter().layerStack == stack) {
+                return selector;
+            }
+        }
+    }
+
+    // Fall back to the pacesetter's RefreshRateSelector
+    return pacesetterSelectorPtrLocked().get();
+}
+
 void Scheduler::promotePacesetterDisplay(std::optional<PhysicalDisplayId> pacesetterId,
                                          PromotionParams params) {
     std::shared_ptr<VsyncSchedule> pacesetterVsyncSchedule;
@@ -1411,9 +1450,6 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
 
             modeChoices = chooseDisplayModes();
 
-            // TODO(b/240743786): The pacesetter display's mode must change for any
-            // DisplayModeRequest to go through. Fix this by tracking per-display Scheduler::Policy
-            // and timers.
             std::tie(modeOpt, consideredSignals) =
                     modeChoices.get(*mPacesetterDisplayId)
                             .transform([](const DisplayModeChoice& choice) {
@@ -1428,32 +1464,69 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
             if (FlagManager::getInstance().unify_refresh_rate_callbacks()) {
                 modeRequests.emplace_back(display::DisplayModeRequest{.mode = choice.mode});
                 emitModeChangedEvents.emplace_back(
-                        display::DisplayModeRequest{.mode = std::move(choice.mode),
+                        display::DisplayModeRequest{.mode = choice.mode,
                                                     .emitEvent = choice.consideredSignals
                                                                          .shouldEmitEvent()});
             } else {
                 modeRequests.emplace_back(
-                        display::DisplayModeRequest{.mode = std::move(choice.mode),
+                        display::DisplayModeRequest{.mode = choice.mode,
                                                     .emitEvent = choice.consideredSignals
                                                                          .shouldEmitEvent()});
             }
         }
 
-        if (mPolicy.modeOpt != modeOpt) {
-// QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
-            // Need a null pointer check for mPolicy since it's null during boot up
-            std::string str = "UpdateRefreshRate " +
-                    (!mPolicy.modeOpt ? "NA" : std::to_string(mPolicy.modeOpt->fps.getIntValue())) +
-                    " to " + std::to_string(modeOpt->fps.getIntValue());
-// QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
-            SFTRACE_NAME(str.c_str());
+        const bool followerRefreshRateSelection =
+                FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+        bool anyChosenModeDiffers = false;
+        bool chosenModeDiffersForPacesetter = false;
+        {
+            std::scoped_lock lock(mDisplayLock);
+            ftl::FakeGuard guard(kMainThreadContext);
+            for (const auto& [id, display] : mDisplays) {
+                const auto choiceOpt = modeChoices.get(id);
+                if (id != *mPacesetterDisplayId && !followerRefreshRateSelection) {
+                    continue;
+                }
+                if (!choiceOpt) {
+                    continue;
+                }
 
-            mPolicy.modeOpt = modeOpt;
+                const bool chosenModeDiffers = (mPolicy.modeOpt[id] != choiceOpt->get().mode);
+                anyChosenModeDiffers |= chosenModeDiffers;
+                if (id == *mPacesetterDisplayId) {
+                    chosenModeDiffersForPacesetter = chosenModeDiffers;
+                    if (chosenModeDiffers) {
+                        // Need a null pointer check for mPolicy since it's null during boot up
+                        const auto& oldMode = mPolicy.modeOpt[id];
+                        const auto& newMode = choiceOpt->get().mode;
+                        std::string str = "UpdateRefreshRate " +
+                                (!oldMode ? "NA" : std::to_string(oldMode->fps.getIntValue())) +
+                                " to " + std::to_string(newMode.fps.getIntValue());
+                        SFTRACE_NAME(str.c_str());
+                    }
+                }
+            }
+        }
+
+        if (anyChosenModeDiffers) {
             refreshRateChanged = true;
-        } else if (consideredSignals.shouldEmitEvent()) {
+
+            std::scoped_lock lock(mDisplayLock);
+            ftl::FakeGuard guard(kMainThreadContext);
+            for (const auto& [id, display] : mDisplays) {
+                if (id != *mPacesetterDisplayId && !followerRefreshRateSelection) {
+                    continue;
+                }
+                if (const auto choiceOpt = modeChoices.get(id)) {
+                    mPolicy.modeOpt[id] = choiceOpt->get().mode;
+                }
+            }
+        }
+
+        if (!chosenModeDiffersForPacesetter && consideredSignals.shouldEmitEvent()) {
             // The mode did not change, but we may need to emit if DisplayModeRequest::emitEvent was
             // previously false.
-            emitModeChangeIfNeeded();
+            emitPacesetterModeChangeIfNeeded();
         }
     }
     if (refreshRateChanged) {
@@ -1464,7 +1537,8 @@ auto Scheduler::applyPolicy(S Policy::*statePtr, T&& newState) -> GlobalSignals 
     {
         std::scoped_lock lock(mPolicyLock);
         frameRateOverridesChanged =
-                updateFrameRateOverridesLocked(consideredSignals, mPolicy.modeOpt->fps);
+                updateFrameRateOverridesLocked(consideredSignals,
+                                               mPolicy.modeOpt[getPacesetterDisplayId()]->fps);
     }
     if (frameRateOverridesChanged && !FlagManager::getInstance().unify_refresh_rate_callbacks()) {
         onFrameRateOverridesChanged();
@@ -1535,7 +1609,7 @@ FrameRateMode Scheduler::getPreferredDisplayMode() {
                     .frameRateMode;
 
     // Make sure the stored mode is up to date.
-    mPolicy.modeOpt = frameRateMode;
+    mPolicy.modeOpt[getPacesetterDisplayId()] = frameRateMode;
 
     return frameRateMode;
 }
@@ -1618,23 +1692,17 @@ bool Scheduler::isSmallDirtyArea(int32_t appId, uint32_t dirtyArea) {
     return false;
 }
 
-// QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
 void Scheduler::qtiUpdateThermalFps(float fps) {
     mQtiThermalFps = fps;
     mLayerHistory.qtiUpdateThermalFps(fps);
 }
-// QTI_END: 2023-04-17: Display: sf: Add support for thermal fps
-// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
 
 void Scheduler::qtiUpdateSmoMoRefreshRateVote(std::map<int, int>& refresh_rate_votes) {
   mLayerHistory.qtiUpdateSmoMoRefreshRateVote(refresh_rate_votes);
 }
-// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
-// QTI_BEGIN: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
 
 bool Scheduler::isGameFrameRateOverridePresent() {
     return mLayerHistory.isGameFrameRateOverridePresent();
 }
 
-// QTI_END: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
 } // namespace android::scheduler

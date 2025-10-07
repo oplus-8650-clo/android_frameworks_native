@@ -927,8 +927,30 @@ status_t BufferQueueConsumer::getOccupancyHistory(bool forceFlush,
 }
 
 status_t BufferQueueConsumer::discardFreeBuffers() {
-    std::lock_guard<std::mutex> lock(mCore->mMutex);
-    mCore->discardFreeBuffersLocked();
+    sp<IProducerListener> listener;
+    std::vector<int32_t> freeBuffers;
+
+    { // Mutex scope
+        std::lock_guard<std::mutex> lock(mCore->mMutex);
+        if (mCore->mConnectedProducerListener != nullptr && mCore->mFreeBuffers.size() > 0) {
+            listener = mCore->mConnectedProducerListener;
+            freeBuffers.assign(mCore->mFreeBuffers.begin(), mCore->mFreeBuffers.end());
+        }
+
+        for (int s : mCore->mFreeBuffers) {
+            mCore->mFreeSlots.insert(s);
+            mCore->clearBufferSlotLocked(s);
+        }
+        mCore->mFreeBuffers.clear();
+
+        VALIDATE_CONSISTENCY();
+    }
+
+    // Call the listener outside the lock with the copied data
+    if (listener != nullptr) {
+        listener->onBuffersDiscarded(freeBuffers);
+    }
+
     return NO_ERROR;
 }
 

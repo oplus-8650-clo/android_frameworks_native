@@ -35,28 +35,9 @@ namespace skia {
 
 using base::StringAppendF;
 
-sk_sp<SkRuntimeEffect> RuntimeEffectManager::createAndStoreRuntimeEffect(
-        KnownId effectId, const std::string& effectName, const SkString& effectSkSL) {
-    SFTRACE_CALL();
-
+sk_sp<SkRuntimeEffect> RuntimeEffectManager::getKnownRuntimeEffect(KnownEffectId effectId) {
     auto effectIdValue = static_cast<size_t>(effectId);
-    LOG_ALWAYS_FATAL_IF(mKnownRuntimeEffects[effectIdValue],
-                        "RuntimeEffect already created for ID:%zu", effectIdValue);
-
-    std::string name = "RE_" + effectName;
-    SkRuntimeEffect::Options options;
-    options.fName = name;
-    auto [runtimeEffect, error] = SkRuntimeEffect::MakeForShader(effectSkSL, options);
-    LOG_ALWAYS_FATAL_IF(!runtimeEffect, "%s (ID:%zu) construction error: %s", name.c_str(),
-                        effectIdValue, error.c_str());
-
-    mKnownRuntimeEffects[effectIdValue] = runtimeEffect;
-    return runtimeEffect;
-}
-
-sk_sp<SkRuntimeEffect> RuntimeEffectManager::getKnownRuntimeEffect(KnownId effectId) {
-    auto effectIdValue = static_cast<size_t>(effectId);
-    sk_sp<SkRuntimeEffect> runtimeEffect = mKnownRuntimeEffects[effectIdValue];
+    sk_sp<SkRuntimeEffect> runtimeEffect = mKnownEffects[effectIdValue];
     LOG_ALWAYS_FATAL_IF(!runtimeEffect, "RuntimeEffect for ID:%zu has not been created yet",
                         effectIdValue);
     return runtimeEffect;
@@ -95,6 +76,62 @@ std::string dataspaceEnumString(ui::Dataspace dataspace) {
     } else {
         return "ui::Dataspace::" + dataspaceStr;
     }
+}
+
+void RuntimeEffectManager::createAndStoreKnownEffects() {
+    for (int i = 0; i < kEffectCount; i++) {
+        SkRuntimeEffect::Options options;
+        options.fName = kEffectNames[i];
+        const SkString* effectSource = kEffectSources[i];
+        if (effectSource) {
+            auto [effect, error] = SkRuntimeEffect::MakeForShader(*effectSource, options);
+            LOG_ALWAYS_FATAL_IF(!effect, "%s (ID:%d) construction error: %s", kEffectNames[i], i,
+                                error.c_str());
+            mKnownEffects[i] = effect;
+        }
+    }
+
+    mKnownEffects[kUNKNOWN__SRGB__false__UNKNOWN__Shader] = getOrCreateLinearRuntimeEffect({
+            .inputDataspace = ui::Dataspace::UNKNOWN, // Default
+            .outputDataspace = ui::Dataspace::SRGB,   // (deprecated) sRGB sRGB Full range
+            .undoPremultipliedAlpha = false,
+            .fakeOutputDataspace = ui::Dataspace::UNKNOWN, // Default
+            .type = shaders::LinearEffect::SkSLType::Shader,
+    });
+
+    mKnownEffects[kBT2020_ITU_PQ__BT2020__false__UNKNOWN__Shader] = getOrCreateLinearRuntimeEffect(
+            {.inputDataspace = ui::Dataspace::BT2020_ITU_PQ, // BT2020 SMPTE 2084 Limited range
+             .outputDataspace = ui::Dataspace::BT2020,       // BT2020 SMPTE_170M Full range
+             .undoPremultipliedAlpha = false,
+             .fakeOutputDataspace = ui::Dataspace::UNKNOWN, // Default
+             .type = shaders::LinearEffect::SkSLType::Shader});
+
+    mKnownEffects[k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader] =
+            getOrCreateLinearRuntimeEffect({
+                    .inputDataspace =
+                            static_cast<ui::Dataspace>(0x188a0000), // DCI-P3 sRGB Extended range
+                    .outputDataspace = ui::Dataspace::DISPLAY_P3,   // DCI-P3 sRGB Full range
+                    .undoPremultipliedAlpha = false,
+                    .fakeOutputDataspace =
+                            static_cast<ui::Dataspace>(0x90a0000), // DCI-P3 gamma 2.2 Full range
+                    .type = shaders::LinearEffect::SkSLType::Shader,
+            });
+
+    mKnownEffects[kV0_SRGB__V0_SRGB__true__UNKNOWN__Shader] = getOrCreateLinearRuntimeEffect({
+            .inputDataspace = ui::Dataspace::V0_SRGB,
+            .outputDataspace = ui::Dataspace::V0_SRGB,
+            .undoPremultipliedAlpha = true,
+            .fakeOutputDataspace = ui::Dataspace::UNKNOWN, // Default
+            .type = shaders::LinearEffect::SkSLType::Shader,
+    });
+
+    mKnownEffects[k0x188a0000__V0_SRGB__true__0x9010000__Shader] = getOrCreateLinearRuntimeEffect({
+            .inputDataspace = static_cast<ui::Dataspace>(0x188a0000), // DCI-P3 sRGB Extended range
+            .outputDataspace = ui::Dataspace::V0_SRGB,
+            .undoPremultipliedAlpha = true,
+            .fakeOutputDataspace = static_cast<ui::Dataspace>(0x9010000),
+            .type = shaders::LinearEffect::SkSLType::Shader,
+    });
 }
 
 void RuntimeEffectManager::dump(std::string& result) {

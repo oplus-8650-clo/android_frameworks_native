@@ -105,11 +105,14 @@ filegroup {
     srcs: [
         "android/gui/BorderSettings.aidl",
         "android/gui/BoxShadowSettings.aidl",
+        "android/gui/CornerRadiiData.aidl",
         "android/gui/DropInputMode.aidl",
         "android/gui/EarlyWakeupInfo.aidl",
         "android/gui/StalledTransactionInfo.aidl",
         "android/**/TouchOcclusionMode.aidl",
+        "android/gui/TransactionBarrier.aidl",
         "android/gui/TrustedOverlay.aidl",
+        "android/gui/Vec2.aidl",
     ],
 }
 
@@ -386,6 +389,7 @@ cc_library_shared {
     },
 
     cflags: [
+        "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         "-Wthread-safety",
     ],
 }
@@ -551,11 +555,9 @@ cc_library_static {
 soong_config_module_type_import {
     from: "frameworks/native/services/surfaceflinger/QtiExtension/Android.bp",
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
     module_types: [
         "qtidisplayextension_cc_library_static",
         "qtidisplayextension_cc_defaults",],
-// QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
@@ -565,12 +567,13 @@ qtidisplayextension_cc_library_static {
     defaults: [
         "libgui_bufferqueue-defaults",
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
         "libguiextension_defaults",
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     header_libs: [
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+        "jni_headers",
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         "libgui_aidl_headers",
     ],
     static_libs: [
@@ -582,36 +585,25 @@ qtidisplayextension_cc_library_static {
                 "-DQTI_DISPLAY_EXTENSION",
             ],
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
             srcs: [
                 "QtiExtension/QtiBufferQueueProducerExtension.cpp",
             ],
-// QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
        },
     },
     srcs: [
         "QtiExtension/QtiBLASTBufferQueueExtension.cpp",
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
         "QtiExtension/QtiDolphinWrapper.cpp",
-// QTI_END: 2024-05-15: Performance: native: smart touch consuming
-// QTI_BEGIN: 2025-05-13: Performance: native: detect GPU big jank
         "QtiExtension/QtiFenceMonitorExtension.cpp",
-// QTI_END: 2025-05-13: Performance: native: detect GPU big jank
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
         "QtiExtension/QtiSurfaceExtension.cpp",
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
         "QtiExtension/QtiSurfaceExtensionGPP.cpp",
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     local_include_dirs: ["QtiExtension"],
     export_include_dirs: ["QtiExtension"],
 }
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 
 qtidisplayextension_cc_defaults {
     name: "guicommonsys_defaults",
@@ -621,29 +613,17 @@ qtidisplayextension_cc_defaults {
                 "-DQTI_DISPLAY_EXTENSION",
             ],
         }
-// QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     },
     header_libs: [
         "display_intf_headers",
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
         "libimapper_stablec",
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     ],
     shared_libs: [
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
         "libvndksupport",
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
         "libgralloctypes",
         "libhidlbase",
         "android.hardware.graphics.mapper@4.0",
     ],
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 }
 
 cc_defaults {
@@ -652,6 +632,5 @@ cc_defaults {
         "guicommonsys_defaults",
     ],
 }
-// QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 
 subdirs = ["tests"]

@@ -19,7 +19,6 @@ cc_defaults {
         "poweradvisor_deps",
     ],
     cflags: [
-        "-DLOG_TAG=\"CompositionEngine\"",
         "-DATRACE_TAG=ATRACE_TAG_GRAPHICS",
     ],
     shared_libs: [
@@ -173,10 +172,11 @@ cc_test {
     static_libs: [
         "libcompositionengine",
         "libcompositionengine_mocks",
-        "libgui_mocks",
-        "librenderengine_mocks",
+        "libflagtest",
         "libgmock",
         "libgtest",
+        "libgui_mocks",
+        "librenderengine_mocks",
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         "libqticompositionengineextension",
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays

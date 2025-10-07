@@ -15,8 +15,7 @@
  */
 
 // #define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "SurfaceFlinger"
+
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include <common/trace.h>
@@ -126,14 +125,16 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     layerSettings.geometry.originalBounds = mSnapshot->geomLayerBounds;
 
     if (mSnapshot->parentRoundedCorner.hasRequestedRadius()) {
-        layerSettings.geometry.otherRoundedCornersRadius = mSnapshot->parentRoundedCorner.radius;
+        layerSettings.geometry.otherRoundedCornersRadii = mSnapshot->parentRoundedCorner.radii;
         layerSettings.geometry.otherCrop = mSnapshot->parentRoundedCorner.cropRect;
     } else {
         layerSettings.geometry.otherCrop = mSnapshot->parentGeomLayerCrop;
     }
 
     layerSettings.geometry.boundaries =
-            reduce(mSnapshot->geomLayerBounds, mSnapshot->transparentRegionHint);
+            (FlagManager::getInstance().disable_transparent_region_hint())
+            ? mSnapshot->geomLayerBounds
+            : reduce(mSnapshot->geomLayerBounds, mSnapshot->transparentRegionHint);
     layerSettings.geometry.positionTransform = mSnapshot->geomLayerTransform.asMatrix4();
 
     // skip drawing content if the targetSettings indicate the content will be occluded
@@ -145,7 +146,7 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     }
 
     const auto& roundedCornerState = mSnapshot->roundedCorner;
-    layerSettings.geometry.roundedCornersRadius = roundedCornerState.radius;
+    layerSettings.geometry.roundedCornersRadii = roundedCornerState.radii;
     layerSettings.geometry.roundedCornersCrop = roundedCornerState.cropRect;
 
     layerSettings.alpha = mSnapshot->alpha;
@@ -472,9 +473,7 @@ const LayerFE::HwcLayerDebugState& LayerFE::getLastHwcState() const {
     return mLastHwcState;
 };
 
-// QTI_BEGIN: 2024-07-26: Display: sf: use layer id instead of unique sequence
 int32_t LayerFE::getLayerId() const {
     return static_cast<int32_t>(mSnapshot->sequence);
 }
-// QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
 } // namespace android

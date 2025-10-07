@@ -21,8 +21,6 @@
 
 //#define LOG_NDEBUG 0
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
-#undef LOG_TAG
-#define LOG_TAG "RegionSamplingThread"
 
 #include "RegionSamplingThread.h"
 
@@ -355,7 +353,7 @@ void RegionSamplingThread::captureSample() {
                            .disableBlur = true,
                            .isGrayscale = false,
                            .isSecure = true,
-                           .seamlessTransition = false,
+                           .preserveDisplayColors = false,
                            .debugName = "RegionSampling"};
 
     std::vector<std::pair<Layer*, sp<LayerFE>>> layers;

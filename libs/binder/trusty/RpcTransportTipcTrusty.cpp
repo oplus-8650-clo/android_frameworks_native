@@ -28,6 +28,8 @@
 #include "../RpcTransportUtils.h"
 #include "TrustyStatus.h"
 
+constexpr size_t kWaitTimeoutMsec = 10'000;
+
 namespace android {
 
 using namespace android::binder::impl;
@@ -84,7 +86,7 @@ public:
                 // when the handler gets called by the library
                 uevent uevt;
                 do {
-                    rc = ::wait(mSocket.fd.get(), &uevt, INFINITE_TIME);
+                    rc = ::wait(mSocket.fd.get(), &uevt, kWaitTimeoutMsec);
                     if (rc < 0) {
                         return statusFromTrusty(rc);
                     }
@@ -178,7 +180,7 @@ public:
             if (rc == NO_ERROR) {
                 return currSize - cutSize;
             } else {
-                return 0;
+                return rc;
             }
         };
 
@@ -225,7 +227,7 @@ public:
                     .num_iov = static_cast<uint32_t>(niovs),
                     .iov = iovs,
                     .num_handles = mMessageInfo.num_handles,
-                    .handles = haveHandles ? msgHandles : 0,
+                    .handles = haveHandles ? msgHandles : nullptr,
             };
             ssize_t rc = read_msg(mSocket.fd.get(), mMessageInfo.id, mMessageOffset, &msg);
             if (rc < 0) {
@@ -299,9 +301,9 @@ private:
             return OK;
         }
 
-        /* TODO: interruptible wait, maybe with a timeout??? */
+        /* TODO: interruptible wait? */
         uevent uevt;
-        rc = ::wait(mSocket.fd.get(), &uevt, wait ? INFINITE_TIME : 0);
+        rc = ::wait(mSocket.fd.get(), &uevt, wait ? kWaitTimeoutMsec : 0);
         if (rc < 0) {
             if (rc == ERR_TIMED_OUT && !wait) {
                 // If we timed out with wait==false, then there's no message

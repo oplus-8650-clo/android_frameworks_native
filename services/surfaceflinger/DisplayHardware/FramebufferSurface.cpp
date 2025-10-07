@@ -20,8 +20,6 @@
 #pragma clang diagnostic ignored "-Wconversion"
 
 // #define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "FramebufferSurface"
 
 #include <errno.h>
 #include <stdio.h>
@@ -59,8 +57,8 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displa
                                        const ui::Size& size, const ui::Size& maxSize)
       : ConsumerBase(producer, consumer),
         mDisplayId(displayId),
-        mLimitedSize(limitSize(size)),
         mMaxSize(maxSize),
+        mLimitedSize(limitSize(size)),
         mCurrentBufferSlot(-1),
         mCurrentBuffer(),
         mCurrentFence(Fence::NO_FENCE),

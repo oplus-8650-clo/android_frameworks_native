@@ -154,7 +154,7 @@ public:
     // For main functions - dangerous for libraries to use
     LIBBINDER_EXPORTED status_t setupPolling(int* fd);
     LIBBINDER_EXPORTED status_t handlePolledCommands();
-    LIBBINDER_EXPORTED void flushCommands();
+    LIBBINDER_EXPORTED status_t flushCommands();
     LIBBINDER_EXPORTED bool flushIfNeeded();
 
     // Adds the current thread into the binder threadpool.
@@ -180,7 +180,8 @@ public:
     LIBBINDER_EXPORTED status_t requestDeathNotification(int32_t handle, BpBinder* proxy);
     LIBBINDER_EXPORTED status_t clearDeathNotification(int32_t handle, BpBinder* proxy);
     [[nodiscard]] status_t addFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
-    [[nodiscard]] status_t removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy);
+    [[nodiscard]] status_t removeFrozenStateChangeCallback(int32_t handle, BpBinder* proxy,
+                                                           bool flush);
 
     // Call this to disable switching threads to background scheduling when
     // receiving incoming IPC calls.  This is specifically here for the
@@ -223,6 +224,9 @@ private:
                                                 status_t* statusBuffer);
     [[nodiscard]] status_t getAndExecuteCommand();
     [[nodiscard]] status_t executeCommand(int32_t command);
+    [[nodiscard]] status_t doTransactBinder(BBinder* binder, uint32_t code, const Parcel& data,
+                                            Parcel* reply, uint32_t flags);
+
     void processPendingDerefs();
     void processPostWriteDerefs();
 
@@ -253,11 +257,13 @@ private:
             bool                mPropagateWorkSource;
             bool                mIsLooper;
             bool mIsFlushing;
+            bool mIsProcessingPostWriteDerefs;
             bool mHasExplicitIdentity;
             int32_t             mStrictModePolicy;
             int32_t             mLastTransactionBinderFlags;
             CallRestriction     mCallRestriction;
 #ifdef BINDER_WITH_OBSERVERS
+            // This is used and managed by BinderObserver
             std::shared_ptr<BinderStatsSpscQueue> mBinderStatsQueue;
 #endif
 };

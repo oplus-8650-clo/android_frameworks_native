@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #ifndef ANDROID_GUI_SURFACE_H
 #define ANDROID_GUI_SURFACE_H
 
@@ -42,21 +40,13 @@
 #include <shared_mutex>
 #include <unordered_set>
 
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #include "../../QtiExtension/QtiSurfaceExtension.h"
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 #include "../../QtiExtension/QtiSurfaceExtensionGPP.h"
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 namespace android {
 
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 namespace libguiextension {
 class QtiSurfaceExtension;
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 class QtiSurfaceExtensionGPP;
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 }
 class GraphicBuffer;
 
@@ -153,6 +143,11 @@ public:
      */
     explicit Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controlledByApp = false,
                      const sp<IBinder>& surfaceControlHandle = nullptr);
+
+    /*
+     * Get the underlying Surface from the given ANativeWindow.
+     */
+    static sp<Surface> from(ANativeWindow* anw);
 
     /* getIGraphicBufferProducer() returns the IGraphicBufferProducer this
      * Surface was created with. Usually it's an error to use the
@@ -527,7 +522,7 @@ protected:
 
     void querySupportedTimestampsLocked() const;
 
-    void freeAllBuffersLocked() REQUIRES(mMutex);
+    void clearBuffersForDisconnectLocked() REQUIRES(mMutex);
     void freeUndequeuedBuffersLocked() REQUIRES(mMutex);
 
     int getSlotFromBufferLocked(const sp<GraphicBuffer>& buffer) const;
@@ -556,11 +551,9 @@ protected:
         bool requiresFreeOnReturn = false;
     };
 
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     friend class libguiextension::QtiSurfaceExtension;
     libguiextension::QtiSurfaceExtension* mQtiSurfaceExtn = nullptr;
 
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     // mSurfaceTexture is the interface to the surface texture server. All
     // operations on the surface texture client ultimately translate into
     // interactions with the server using this interface.
@@ -583,6 +576,17 @@ protected:
 #else
     BufferSlot mSlots[NUM_BUFFER_SLOTS];
 #endif
+
+    struct BufferHash {
+        std::size_t operator()(const sp<GraphicBuffer>& buffer) const {
+            return std::hash<GraphicBuffer*>{}(buffer.get());
+        }
+    };
+
+    // mLeakedBuffers holds references to buffers that were dequeued at the time of a disconnection.
+    // The contract for ANW's dequeue implies that a reference is held onto these until they're
+    // given back to the Surface via queue or cancel.
+    std::unordered_set<sp<GraphicBuffer>, BufferHash> mLeakedBuffers;
 
     // mReqWidth is the buffer width that will be requested at the next dequeue
     // operation. It is initialized to 1.
@@ -695,6 +699,7 @@ protected:
     // must be used from the lock/unlock thread
     sp<GraphicBuffer>           mLockedBuffer;
     sp<GraphicBuffer>           mPostedBuffer;
+    bool                        mIsConnected;
     bool                        mConnectedToCpu;
 
     // When a CPU producer is attached, this reflects the region that the
@@ -770,10 +775,8 @@ protected:
 
     // Buffers that are successfully dequeued/attached and handed to clients
     std::unordered_set<int> mDequeuedSlots;
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     std::shared_ptr<libguiextension::QtiSurfaceExtensionGPP> mQtiSurfaceGPPExtn = nullptr;
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     // Indicates whether this surface holds the mouse cursor, and subsequently determines whether
     // the GRALLOC_USAGE_CURSOR usage flag should be set on the buffer created when this surface is

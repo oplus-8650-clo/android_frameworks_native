@@ -66,6 +66,7 @@ interface ISurfaceComposer {
     enum EventRegistration {
         modeChanged = 1 << 0,
         frameRateOverride = 1 << 1,
+        modeRejected = 1 << 2,
     }
 
     enum OptimizationPolicy {

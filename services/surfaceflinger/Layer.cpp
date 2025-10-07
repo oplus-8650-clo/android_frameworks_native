@@ -18,9 +18,7 @@
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-// QTI_BEGIN: 2024-02-28: Display: sf: Add check for unknown dataspace
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
-// QTI_END: 2024-02-28: Display: sf: Add check for unknown dataspace
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -32,8 +30,7 @@
 #pragma clang diagnostic ignored "-Wconversion"
 
 //#define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "Layer"
+
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include <android-base/properties.h>
@@ -389,7 +386,7 @@ void Layer::commitTransaction() REQUIRES(mFlinger->mStateLock) {
         if (surfaceFrame->getPresentState() != PresentState::Presented) {
             // With applyPendingStates, we could end up having presented surfaceframes from previous
             // states
-            surfaceFrame->setPresentState(PresentState::Presented, mLastLatchTime);
+            surfaceFrame->setPresentState(PresentState::Presented, mFrameTimelinePastTimestamps);
             mFlinger->mFrameTimeline->addSurfaceFrame(surfaceFrame);
         }
     }
@@ -479,11 +476,12 @@ void Layer::addSurfaceFrameDroppedForBuffer(std::shared_ptr<scheduler::SurfaceFr
 
 void Layer::addSurfaceFramePresentedForBuffer(
         std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame, nsecs_t acquireFenceTime,
-        nsecs_t currentLatchTime) REQUIRES(mFlinger->mStateLock) {
+        nsecs_t currentLatchTime, nsecs_t expectedPresentTime) REQUIRES(mFlinger->mStateLock) {
     surfaceFrame->setAcquireFenceTime(acquireFenceTime);
-    surfaceFrame->setPresentState(PresentState::Presented, mLastLatchTime);
+    surfaceFrame->setPresentState(PresentState::Presented, mFrameTimelinePastTimestamps);
     mFlinger->mFrameTimeline->addSurfaceFrame(surfaceFrame);
-    updateLastLatchTime(currentLatchTime);
+    updateFrameTimelinePastTimestamps(
+            {.latchTime = currentLatchTime, .expectedPresentTime = expectedPresentTime});
 }
 
 std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForTransaction(
@@ -605,9 +603,7 @@ void Layer::miniDump(std::string& result, const frontend::LayerSnapshot& snapsho
     StringAppendF(&result, "  %10zu | ", snapshot.globalZ);
     StringAppendF(&result, "  %10d | ",
                   snapshot.layerMetadata.getInt32(gui::METADATA_WINDOW_TYPE, 0));
-// QTI_BEGIN: 2024-01-29: Display: sf: enable layerext in Android V
     StringAppendF(&result, "  %10d | ", mQtiLayerClass);
-// QTI_END: 2024-01-29: Display: sf: enable layerext in Android V
     StringAppendF(&result, "%10s | ", toString(getCompositionType(outputLayer)).c_str());
     const auto& outputLayerState = outputLayer->getState();
     StringAppendF(&result, "%10s | ", toString(outputLayerState.bufferTransform).c_str());
@@ -760,7 +756,8 @@ void Layer::callReleaseBufferCallback(const sp<ITransactionCompletedListener>& l
     }
 
     if (listener) {
-        listener->onReleaseBuffer(callbackId, fence, currentMaxAcquiredBufferCount);
+        listener->onReleaseBuffer(callbackId, fence, currentMaxAcquiredBufferCount,
+                                  false /* removeFromCache */);
     }
 
     if (!mBufferReleaseChannel) {
@@ -849,6 +846,7 @@ void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
     for (const auto& handle : mDrawingState.callbackHandles) {
         handle->bufferReleaseChannel = mBufferReleaseChannel;
         handle->transformHint = mTransformHint;
+        handle->cornerRadii = mCornerRadii;
         handle->dequeueReadyTime = dequeueReadyTime;
         handle->currentMaxAcquiredBufferCount =
                 mFlinger->getMaxAcquiredBufferCountForCurrentRefreshRate(mOwnerUid);
@@ -941,7 +939,7 @@ bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
     } else if (buffer) {
         // if we are latching a buffer for the first time then clear the mLastLatchTime since
         // we don't want to incorrectly classify a frame if we miss the desired present time.
-        updateLastLatchTime(0);
+        updateFrameTimelinePastTimestamps({});
     }
 
     mDrawingState.desiredPresentTime = desiredPresentTime;
@@ -1240,7 +1238,8 @@ bool Layer::latchSidebandStream(bool& recomputeVisibleRegions) {
     return false;
 }
 
-void Layer::updateTexImage(nsecs_t latchTime, bool bgColorOnly) REQUIRES(mFlinger->mStateLock) {
+void Layer::updateTexImage(nsecs_t latchTime, nsecs_t expectedPresentTime, bool bgColorOnly)
+        REQUIRES(mFlinger->mStateLock) {
     const State& s(getDrawingState());
 
     if (!s.buffer) {
@@ -1278,7 +1277,7 @@ void Layer::updateTexImage(nsecs_t latchTime, bool bgColorOnly) REQUIRES(mFlinge
         // are processing the next state.
         addSurfaceFramePresentedForBuffer(bufferSurfaceFrame,
                                           mDrawingState.acquireFenceTime->getSignalTime(),
-                                          latchTime);
+                                          latchTime, expectedPresentTime);
         mDrawingState.bufferSurfaceFrameTX.reset();
     }
 
@@ -1321,30 +1320,20 @@ void Layer::gatherBufferInfo() {
         {
             SFTRACE_NAME("getDataspace");
             err = mapper.getDataspace(mBufferInfo.mBuffer->getBuffer()->handle, &dataspace);
-// QTI_BEGIN: 2024-02-28: Display: sf: Add check for unknown dataspace
             if (dataspace == ui::Dataspace::UNKNOWN) {
-// QTI_END: 2024-02-28: Display: sf: Add check for unknown dataspace
-// QTI_BEGIN: 2024-12-24: Display: SF: Reduce unknown dataspace log priority
               ALOGV("%s: Received unknown dataspace from gralloc", __func__);
-// QTI_END: 2024-12-24: Display: SF: Reduce unknown dataspace log priority
-// QTI_BEGIN: 2024-02-28: Display: sf: Add check for unknown dataspace
             }
-// QTI_END: 2024-02-28: Display: sf: Add check for unknown dataspace
         }
-// QTI_BEGIN: 2024-02-28: Display: sf: Add check for unknown dataspace
         if ((err != OK || dataspace != mBufferInfo.mDataspace)
             && dataspace != ui::Dataspace::UNKNOWN) {
-// QTI_END: 2024-02-28: Display: sf: Add check for unknown dataspace
             {
                 SFTRACE_NAME("setDataspace");
                 err = mapper.setDataspace(mBufferInfo.mBuffer->getBuffer()->handle,
                                           static_cast<ui::Dataspace>(mBufferInfo.mDataspace));
             }
-// QTI_BEGIN: 2024-02-28: Display: sf: upsert RenderEngine's caches
             // GPU drivers cache gralloc metadata which means before we composite we need
             // to upsert RenderEngine's cache.
             mBufferInfo.mBuffer->remapBuffer();
-// QTI_END: 2024-02-28: Display: sf: upsert RenderEngine's caches
         }
     }
     if (lastDataspace != mBufferInfo.mDataspace) {
@@ -1412,7 +1401,6 @@ sp<LayerFE> Layer::getCompositionEngineLayerFE(
     }
     auto layerFE = mFlinger->getFactory().createLayerFE(mName, this);
     mLayerFEs.emplace_back(path, layerFE);
-// QTI_BEGIN: 2025-01-07: Display: sf: Update LayerFE's composition state before composition
 
     if (getBuffer()) {
         mQtiIsSecureDisplay = mFlinger->mQtiSFExtnIntf->qtiIsSecureDisplay(
@@ -1420,7 +1408,6 @@ sp<LayerFE> Layer::getCompositionEngineLayerFE(
         mQtiIsSecureCamera = mFlinger->mQtiSFExtnIntf->qtiIsSecureCamera(
                 static_cast<sp<const GraphicBuffer>>(getBuffer()));
     }
-// QTI_END: 2025-01-07: Display: sf: Update LayerFE's composition state before composition
     return layerFE;
 }
 
@@ -1513,7 +1500,8 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
     mBufferInfo.mFrameLatencyNeeded = false;
 }
 
-bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime, bool bgColorOnly)
+bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime,
+                            nsecs_t expectedPresentTime, bool bgColorOnly)
         REQUIRES(mFlinger->mStateLock) {
     SFTRACE_FORMAT_INSTANT("latchBuffer %s - %" PRIu64, getDebugName(),
                            getDrawingState().frameNumber);
@@ -1531,7 +1519,7 @@ bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime, bo
         mFlinger->onLayerUpdate();
         return false;
     }
-    updateTexImage(latchTime, bgColorOnly);
+    updateTexImage(latchTime, expectedPresentTime, bgColorOnly);
 
     // Capture the old state of the layer for comparisons later
     BufferInfo oldBufferInfo = mBufferInfo;
@@ -1571,9 +1559,7 @@ bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime, bo
             recomputeVisibleRegions = true;
         }
     }
-// QTI_BEGIN: 2024-07-19: Display: sf: use correct layer stack id in smomo
     mFlinger->mQtiSFExtnIntf->qtiSetPresentTime(qtiGetSmomoLayerStackId(), getSequence(),
-// QTI_END: 2024-07-19: Display: sf: use correct layer stack id in smomo
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                                                 mBufferInfo.mDesiredPresentTime);
 
@@ -1648,8 +1634,8 @@ void Layer::setBufferReleaseChannel(
     mBufferReleaseChannel = channel;
 }
 
-void Layer::updateLastLatchTime(nsecs_t latchTime) {
-    mLastLatchTime = latchTime;
+void Layer::updateFrameTimelinePastTimestamps(scheduler::SurfaceFrame::LastFrameTimestamps time) {
+    mFrameTimelinePastTimestamps = time;
 }
 
 void Layer::setIsSmallDirty(frontend::LayerSnapshot* snapshot) {
@@ -1680,10 +1666,8 @@ void Layer::setIsSmallDirty(frontend::LayerSnapshot* snapshot) {
                                                    bounds.getWidth() * bounds.getHeight());
 }
 
-// QTI_BEGIN: 2024-07-19: Display: sf: use correct layer stack id in smomo
 void Layer::qtiSetSmomoLayerStackId(uint32_t id) {
     qtiSmomoLayerStackId = id;
-// QTI_END: 2024-07-19: Display: sf: use correct layer stack id in smomo
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 

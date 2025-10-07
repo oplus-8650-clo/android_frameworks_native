@@ -66,8 +66,8 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
                                              const sp<IGraphicBufferConsumer>& bqConsumer,
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
                                              const std::string& name,
-                                             bool qtiSecure)
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
+                                             bool qtiSecure)
       : ConsumerBase(bqProducer, bqConsumer),
         mHwc(hwc),
         mVirtualIdVariant(virtualIdVariant),
@@ -86,9 +86,9 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
         mOutputFence(Fence::NO_FENCE),
         mFbProducerSlot(BufferQueue::INVALID_BUFFER_SLOT),
         mOutputProducerSlot(BufferQueue::INVALID_BUFFER_SLOT),
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mQtiVdsDataSpace(ui::Dataspace::UNKNOWN),
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mForceHwcCopy(SurfaceFlinger::useHwcForRgbToYuv) {
     mSource[SOURCE_SINK] = sink;
     mSource[SOURCE_SCRATCH] = bqProducer;
@@ -107,9 +107,7 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
     // on usage bits.
     int sinkUsage;
     sink->query(NATIVE_WINDOW_CONSUMER_USAGE_BITS, &sinkUsage);
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (!mQtiDSExtnIntf) {
         mQtiDSExtnIntf = surfaceflingerextension::
@@ -216,8 +214,8 @@ status_t VirtualDisplaySurface::prepareFrame(CompositionType compositionType) {
     if (mCompositionType != CompositionType::Gpu &&
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         (mOutputFormat != mDefaultOutputFormat ||
-         !(mOutputUsage & GRALLOC_USAGE_HW_COMPOSER))) {
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
+         !(mOutputUsage & GRALLOC_USAGE_HW_COMPOSER))) {
         // We must have just switched from GPU-only to MIXED or HWC
         // composition. Stop using the format and usage requested by the GPU
         // driver; they may be suboptimal when HWC is writing to the output
@@ -286,10 +284,10 @@ status_t VirtualDisplaySurface::advanceFrame(float hdrSdrRatio) {
         }
         // TODO: Correctly propagate the dataspace from GL composition
 
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
         result = mHwc.setClientTarget(*halVirtualDisplayId, mFbProducerSlot, mFbFence, hwcBuffer,
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
                                       mQtiVdsDataSpace, hdrSdrRatio);
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
     }
 
     return result;
@@ -319,9 +317,7 @@ void VirtualDisplaySurface::onFrameCommitted() {
         int sslot = mapProducer2SourceSlot(SOURCE_SINK, mOutputProducerSlot);
         QueueBufferOutput qbo;
         VDS_LOGV("%s: queue sink sslot=%d", __func__, sslot);
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         if (retireFence->isValid() && mMustRecompose) {
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
             status_t result = mSource[SOURCE_SINK]->queueBuffer(sslot,
                     QueueBufferInput(
                         systemTime(), false /* isAutoTimestamp */,
@@ -560,9 +556,9 @@ status_t VirtualDisplaySurface::queueBuffer(int pslot,
                     item.mSlot, sslot);
         mFbProducerSlot = mapSource2ProducerSlot(SOURCE_SCRATCH, item.mSlot);
         mFbFence = mSlots[item.mSlot].mFence;
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mQtiVdsDataSpace = static_cast<ui::Dataspace>(item.mDataSpace);
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
 
     } else {
         LOG_FATAL_IF(mCompositionType != CompositionType::Gpu,
@@ -691,9 +687,9 @@ void VirtualDisplaySurface::resetPerFrameState() {
     mOutputFence = Fence::NO_FENCE;
     mOutputProducerSlot = -1;
     mFbProducerSlot = -1;
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
     mQtiVdsDataSpace = ui::Dataspace::UNKNOWN;
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
 }
 
 status_t VirtualDisplaySurface::refreshOutputBuffer() {

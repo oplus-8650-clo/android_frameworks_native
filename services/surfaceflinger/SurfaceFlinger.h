@@ -17,9 +17,7 @@
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
-// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
-// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -43,6 +41,8 @@
 #include <android/gui/IActivePictureListener.h>
 #include <android/gui/IJankListener.h>
 #include <android/gui/ISurfaceComposerClient.h>
+#include <common/FlagManager.h>
+#include <common/LayerFilter.h>
 #include <common/trace.h>
 #include <cutils/atomic.h>
 #include <cutils/compiler.h>
@@ -81,7 +81,6 @@
 #include <scheduler/interface/ICompositor.h>
 #include <ui/FenceResult.h>
 
-#include <common/FlagManager.h>
 #include "ActivePictureTracker.h"
 #include "Display/DisplayModeController.h"
 #include "Display/PhysicalDisplay.h"
@@ -373,11 +372,9 @@ public:
         return sFrontInternalDisplayRotationFlags;
     }
 
-// QTI_BEGIN: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
     bool mRequestDisplayModeFlag = false;
     std::thread::id mFlagThread = std::this_thread::get_id();
 
-// QTI_END: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
 protected:
     // We're reference counted, never destroy SurfaceFlinger directly
     virtual ~SurfaceFlinger();
@@ -805,15 +802,16 @@ private:
             REQUIRES(mStateLock, kMainThreadContext);
     void doCommitTransactions() REQUIRES(mStateLock);
 
-    std::vector<std::pair<Layer*, LayerFE*>> moveSnapshotsToCompositionArgs(
+    std::vector<std::pair<Layer*, LayerFE*>> addLayerSnapshotsToCompositionArgs(
             compositionengine::CompositionRefreshArgs& refreshArgs, bool cursorOnly)
             REQUIRES(kMainThreadContext);
+
     void moveSnapshotsFromCompositionArgs(compositionengine::CompositionRefreshArgs& refreshArgs,
                                           const std::vector<std::pair<Layer*, LayerFE*>>& layers)
             REQUIRES(kMainThreadContext);
     // Return true if we must composite this frame
-    bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, bool transactionsFlushed,
-                              bool& out) REQUIRES(kMainThreadContext);
+    bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, nsecs_t expecedPresentTimeNs,
+                              bool transactionsFlushed, bool& out) REQUIRES(kMainThreadContext);
     void updateLayerHistory(nsecs_t now) REQUIRES(kMainThreadContext);
 
     void updateInputFlinger(VsyncId vsyncId, TimePoint frameTime) REQUIRES(kMainThreadContext);
@@ -912,6 +910,12 @@ private:
     // Checks if a protected layer exists in a list of layers.
     bool layersHasProtectedLayer(const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) const;
 
+    // Checks if a secure layer exists in a list of layers.
+    bool layersHasSecureLayer(const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) const;
+
+    // Checks if any hdr layer exists in a list of layers
+    bool layersHasHdrLayer(const std::vector<std::pair<Layer*, sp<LayerFE>>>& layers) const;
+
     using OutputCompositionState = compositionengine::impl::OutputCompositionState;
 
     struct SnapshotRequestArgs {
@@ -954,6 +958,9 @@ private:
         // List of all layer snapshots that are included in the screenshot
         std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
 
+        // If true, the layers in ScreenshotArgs.layers contains a protected layer.
+        bool hasProtectedLayer{false};
+
         // Source crop of the render area
         Rect sourceCrop;
 
@@ -989,7 +996,7 @@ private:
 
         // If true, the render result may be used for system animations
         // that must preserve the exact colors of the display
-        bool seamlessTransition{false};
+        bool preserveDisplayColors{false};
 
         // Current display brightness of the output composition state
         float displayBrightnessNits{-1.f};
@@ -1005,6 +1012,9 @@ private:
 
         // Current listener for the screenshot result
         sp<IScreenCaptureListener> captureListener{nullptr};
+
+        // If true, will force using DPU readback optimization for the screenshot.
+        bool requireDpuReadback{false};
 
         std::string debugName;
     };
@@ -1148,15 +1158,17 @@ private:
 
     // mark a region of a layer stack dirty. this updates the dirty
     // region of all screens presenting this layer stack.
-    void invalidateLayerStack(const ui::LayerFilter& layerFilter, const Region& dirty);
+    void invalidateLayerStack(const LayerFilter& layerFilter, const Region& dirty);
 
-    ui::LayerFilter makeLayerFilterForDisplay(DisplayIdVariant displayId, ui::LayerStack layerStack)
+    LayerFilter makeLayerFilterForDisplay(DisplayIdVariant displayId, ui::LayerStack layerStack)
             REQUIRES(mStateLock) {
-        return {layerStack,
-                asPhysicalDisplayId(displayId)
-                        .and_then(display::getPhysicalDisplay(mPhysicalDisplays))
-                        .transform(&display::PhysicalDisplay::isInternal)
-                        .value_or(false)};
+        return {.layerStack = layerStack,
+                .toInternalDisplay =
+                        asPhysicalDisplayId(displayId)
+                                .and_then(display::getPhysicalDisplay(mPhysicalDisplays))
+                                .transform(&display::PhysicalDisplay::isInternal)
+                                .value_or(false),
+                .skipScreenshot = false};
     }
 
     ui::Size findLargestFramebufferSizeLocked() const REQUIRES(mStateLock);
@@ -1449,7 +1461,7 @@ private:
         PhysicalDisplayId id;
         sp<GraphicBuffer> buffer;
         sp<IScreenCaptureListener> captureListener;
-        bool seamlessTransition;
+        bool preserveDisplayColors;
         bool isSecure;
     };
     std::vector<ReadbackRequest> mReadbackRequests;
@@ -1578,6 +1590,8 @@ private:
     std::atomic<int> mNumTrustedPresentationListeners = 0;
 
     std::unique_ptr<compositionengine::CompositionEngine> mCompositionEngine;
+    // Dedicated composition engine instance for the virtual displays offloaded from main thread.
+    std::unique_ptr<compositionengine::CompositionEngine> mOffloadedCompositionEngine;
     std::unique_ptr<HWComposer> mHWComposer;
 
     CompositionCoveragePerDisplay mCompositionCoverage;
@@ -1638,8 +1652,8 @@ private:
                 [](const auto& display) { return display.isHdrSdrRatioOverlayEnabled(); });
     }
 
-    std::vector<std::pair<Layer*, sp<LayerFE>>> getLayerSnapshotsForScreenshots(
-            const SnapshotRequestArgs& args) REQUIRES(kMainThreadContext);
+    base::expected<std::vector<std::pair<Layer*, sp<LayerFE>>>, status_t>
+    getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args) REQUIRES(kMainThreadContext);
 
     const sp<WindowInfosListenerInvoker> mWindowInfosListenerInvoker;
 
@@ -1674,9 +1688,7 @@ private:
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     surfaceflingerextension::QtiSurfaceFlingerExtensionIntf* mQtiSFExtnIntf = nullptr;
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
-// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
     std::mutex mSmomoMutex;
-// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
 
 
     TransactionHandler mTransactionHandler GUARDED_BY(kMainThreadContext);
@@ -1727,6 +1739,22 @@ private:
     void sfdo_forceClientComposition(bool enabled);
     status_t sfdo_forcePacesetter(PhysicalDisplayId displayId);
     void sfdo_resetForcedPacesetter();
+
+    // Partition displays: physical for main thread, virtual for offloaded.
+    struct RefreshArgsPartition {
+        compositionengine::CompositionRefreshArgs mainThreadRefreshArgs;
+        std::optional<compositionengine::CompositionRefreshArgs> offloadedRefreshArgs;
+    };
+    RefreshArgsPartition addOutputsToRefreshArgs(
+            PhysicalDisplayId pacesetterId,
+            const compositionengine::CompositionRefreshArgs& refreshArgs,
+            const scheduler::FrameTargeters& frameTargeters);
+    std::future<void> offloadGpuCompositedDisplays(
+            compositionengine::CompositionRefreshArgs offloadedRefreshArgs,
+            std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers);
+    // TODO(b/431836223): Workaround to capture traces to disk and recover gracefully by forcing CE
+    //  to rebuild layer stack instead of crashing.
+    void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1880,6 +1908,7 @@ private:
     status_t checkObservePictureProfilesPermission();
     static void getDynamicDisplayInfoInternal(ui::DynamicDisplayInfo& info,
                                               gui::DynamicDisplayInfo*& outInfo);
+    bool isBackedByGpu() const;
 
 private:
     const sp<SurfaceFlinger> mFlinger;

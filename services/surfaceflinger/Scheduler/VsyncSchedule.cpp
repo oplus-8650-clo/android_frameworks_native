@@ -82,10 +82,7 @@ Period VsyncSchedule::period() const {
 }
 
 Period VsyncSchedule::minFramePeriod() const {
-    if (FlagManager::getInstance().vrr_config()) {
-        return mTracker->minFramePeriod();
-    }
-    return period();
+    return mTracker->minFramePeriod();
 }
 
 TimePoint VsyncSchedule::vsyncDeadlineAfter(TimePoint timePoint,

@@ -24,9 +24,6 @@
 
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
-#undef LOG_TAG
-#define LOG_TAG "PowerAdvisor"
-
 #include <unistd.h>
 #include <cinttypes>
 #include <cstdint>
@@ -236,8 +233,7 @@ bool PowerAdvisor::ensurePowerHintSessionRunning() {
                                                                  &mSessionConfig);
             if (ret.isOk()) {
                 mHintSession = ret.value();
-                if (FlagManager::getInstance().adpf_use_fmq_channel_fixed() &&
-                    FlagManager::getInstance().adpf_fmq_sf()) {
+                if (FlagManager::getInstance().adpf_use_fmq_channel_fixed()) {
                     setUpFmq();
                 }
             }
@@ -819,8 +815,7 @@ void PowerAdvisor::setCommittedWorkload(ftl::Flags<Workload> workload) {
 
         // Provides a load up hint only for effects that require client
         // composition, such as blur or shadows.
-        if (FlagManager::getInstance().adpf_cpu_effects_loadup() &&
-            mCommittedWorkload.any(adpf::Workload::EFFECTS)) {
+        if (mCommittedWorkload.any(adpf::Workload::EFFECTS)) {
             notifyCpuLoadUp();
         }
     }

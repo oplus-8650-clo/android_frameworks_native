@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 #include <unordered_map>
 #include "android/gui/FocusRequest.h"
+#include "android/gui/TransactionBarrier.h"
 #include "binder/Binder.h"
 #include "binder/Parcel.h"
 #include "gtest/gtest.h"
@@ -28,6 +29,8 @@
 #include "gui/TransactionState.h"
 
 namespace android {
+
+using ::testing::Eq;
 
 void sprintf(std::string& out, const char* format, ...) {
     va_list arg_list;
@@ -83,11 +86,16 @@ void Compare(const TransactionListenerCallbacks& s1, const TransactionListenerCa
     EXPECT_EQ(s1.mFlattenedListenerCallbacks, s2.mFlattenedListenerCallbacks);
 }
 
+void Compare(const gui::TransactionBarrier& b1, const gui::TransactionBarrier& b2) {
+    EXPECT_EQ(b1.barrierToken, b2.barrierToken);
+    EXPECT_EQ(b1.kind, b2.kind);
+}
+
 void CompareComplex(const TransactionState& s1, const TransactionState& s2) {
     EXPECT_EQ(s1.mMergedTransactionIds, s2.mMergedTransactionIds);
     EXPECT_EQ(s1.mFrameTimelineInfo, s2.mFrameTimelineInfo);
     EXPECT_EQ(s1.mUncacheBuffers, s2.mUncacheBuffers);
-    EXPECT_EQ(s1.mCallbacks, s2.mCallbacks);
+    Compare(s1.mCallbacks, s2.mCallbacks);
     EXPECT_EQ(s1.mInputWindowCommands, s2.mInputWindowCommands);
     EXPECT_EQ(s1.mDisplayStates.size(), s2.mDisplayStates.size());
     for (size_t i = 0; i < s1.mDisplayStates.size(); ++i) {
@@ -96,6 +104,11 @@ void CompareComplex(const TransactionState& s1, const TransactionState& s2) {
     EXPECT_EQ(s1.mComposerStates.size(), s2.mComposerStates.size());
     for (size_t i = 0; i < s1.mComposerStates.size(); ++i) {
         EXPECT_EQ(s1.mComposerStates.at(i), s2.mComposerStates.at(i));
+    }
+
+    EXPECT_EQ(s1.mBarriers.size(), s2.mBarriers.size());
+    for (size_t i = 0; i < s1.mBarriers.size(); ++i) {
+        Compare(s1.mBarriers.at(i), s2.mBarriers.at(i));
     }
 }
 
@@ -183,7 +196,6 @@ TransactionState createTransactionStateForTest() {
     for (size_t i = 0; i < kMaxComposerStates; i++) {
         state.mComposerStates.push_back(createComposerStateForTest(i));
     }
-    return state;
 
     return state;
 }
@@ -192,6 +204,22 @@ TransactionState createEmptyTransaction(uint64_t id) {
     TransactionState state;
     state.mId = id;
     return state;
+}
+
+gui::TransactionBarrier createTransactionBarrier(std::string_view token,
+                                                 gui::TransactionBarrier::BarrierKind kind) {
+    gui::TransactionBarrier barrier;
+    barrier.barrierToken = String16(token.data(), token.size());
+    barrier.kind = kind;
+    return barrier;
+}
+
+gui::TransactionBarrier createSignalBarrier(std::string_view token) {
+    return createTransactionBarrier(token, gui::TransactionBarrier::BarrierKind::KIND_SIGNAL);
+}
+
+gui::TransactionBarrier createWaitBarrier(std::string_view token) {
+    return createTransactionBarrier(token, gui::TransactionBarrier::BarrierKind::KIND_WAIT);
 }
 
 TEST(SimpleTransactionStateTest, parcel) {
@@ -206,6 +234,7 @@ TEST(SimpleTransactionStateTest, parcel) {
 
 TEST(TransactionStateTest, parcel) {
     TransactionState state = createTransactionStateForTest();
+    state.mBarriers.emplace_back(createSignalBarrier("sig"));
     Parcel p;
     state.writeToParcel(&p);
     p.setDataPosition(0);
@@ -287,6 +316,7 @@ TEST(TransactionStateTest, merge) {
     static constexpr uint64_t kUpdateTransactionId = 200;
 
     TransactionState state = createTransactionStateForTest();
+    state.mBarriers.emplace_back(createSignalBarrier("sig"));
 
     TransactionState update;
     update.mId = kUpdateTransactionId;
@@ -303,6 +333,8 @@ TEST(TransactionStateTest, merge) {
         composerState.state.what = layer_state_t::eBufferChanged;
         update.mComposerStates.push_back(composerState);
     }
+    update.mBarriers.emplace_back(
+            createTransactionBarrier("wait", gui::TransactionBarrier::BarrierKind::KIND_WAIT));
     int32_t overrwiteLayerId = -1;
     auto updateCopy = update;
     // Mutation.
@@ -322,10 +354,33 @@ TEST(TransactionStateTest, merge) {
     // desired present time is not merged.
     expectedMergedState.mDesiredPresentTime = state.mDesiredPresentTime;
 
+    expectedMergedState.mBarriers.emplace_back(createSignalBarrier("sig"));
+    expectedMergedState.mBarriers.emplace_back(createWaitBarrier("wait"));
+
     EXPECT_EQ(state.mComposerStates[0], expectedMergedState.mComposerStates[0]);
     EXPECT_EQ(state.mInputWindowCommands, expectedMergedState.mInputWindowCommands);
     EXPECT_EQ(state, expectedMergedState);
 };
+
+TEST(TransactionStateTest, mergeMoreThanMaxBarriers) {
+    TransactionState state = createTransactionStateForTest();
+    for (size_t i = 0; i < TransactionState::MAX_BARRIERS_LENGTH; ++i) {
+        std::string token = std::format("sig{}", i);
+        state.mBarriers.emplace_back(createSignalBarrier(token));
+    }
+
+    TransactionState update;
+    update.mId = 200;
+    update.mBarriers.emplace_back(createWaitBarrier("wait"));
+
+    state.merge(std::move(update), [](layer_state_t) {});
+
+    EXPECT_EQ(TransactionState::MAX_BARRIERS_LENGTH, state.mBarriers.size());
+    EXPECT_THAT(state.mBarriers.front().toString(),
+                Eq("TransactionBarrier{barrierToken: sig1, kind: KIND_SIGNAL}"));
+    EXPECT_THAT(state.mBarriers.back().toString(),
+                Eq("TransactionBarrier{barrierToken: wait, kind: KIND_WAIT}"));
+}
 
 TEST(TransactionStateTest, clear) {
     TransactionState state = createTransactionStateForTest();

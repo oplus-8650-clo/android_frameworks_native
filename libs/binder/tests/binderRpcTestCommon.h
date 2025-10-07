@@ -156,7 +156,9 @@ static inline size_t epochMillis() {
 }
 
 struct BinderRpcOptions {
-    size_t numThreads = 1;
+    size_t numMaxThreads = 1;
+    // This will overrwrite the RpcServer's mMaxThreads with a warning log
+    size_t numMinThreadsPerBinder = 1;
     size_t numSessions = 1;
     // right now, this can be empty, or length numSessions, where each value
     // represents the info for the corresponding session, but we should

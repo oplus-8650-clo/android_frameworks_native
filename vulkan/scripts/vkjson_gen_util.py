@@ -336,6 +336,28 @@ def generate_memset_statements(f):
 
     return entries
 
+def normalize_json_field_name(json_field_name):
+    if json_field_name[0].isdigit():
+        # This regex splits the name into three parts:
+        # 1. The leading number (e.g., "16")
+        # 2. The first "word" (e.g., "BIT" or "Bit")
+        # 3. The rest of the string (e.g., "Format")
+        pattern = re.compile(r"^(\d+)([A-Z]+(?=[A-Z]|$)|[A-Z][a-z]*)(.*)$")
+        match = pattern.match(json_field_name)
+        if not match:
+            return json_field_name # Failsafe
+        number, first_word, rest = match.groups()
+        result = f"{first_word}{number}{rest}"
+        is_acronym = len(first_word) > 1 and first_word.isupper()
+        if is_acronym:
+            return result
+        else:
+            return result[0].lower() + result[1:]
+    else:
+        if re.match(r"^[A-Z]{2,}", json_field_name):
+            return json_field_name
+        else:
+            return json_field_name[0].lower() + json_field_name[1:]
 
 def generate_extension_struct_template():
     """Generates templates for extensions
@@ -361,13 +383,7 @@ def generate_extension_struct_template():
         for struct_map in struct_mappings:
             for struct_name in struct_map:
                 json_field_name = struct_name.replace("VkPhysicalDevice", "")
-                json_field_name = json_field_name[0].lower() + json_field_name[1:]
-
-                # Move the leading digits after the first capitalized word
-                json_field_name = re.sub(r"^(\d+)([A-Z][a-z]*)", r"\2\1", json_field_name)
-                # Lowercase the first character
-                json_field_name = json_field_name[0].lower() + json_field_name[1:] if json_field_name else json_field_name
-
+                json_field_name = normalize_json_field_name(json_field_name)
                 visitor_calls.append(f'visitor->Visit("{json_field_name}", &structs->{get_struct_name(struct_name)})')
 
         template_code.append(" &&\n         ".join(visitor_calls) + ";")

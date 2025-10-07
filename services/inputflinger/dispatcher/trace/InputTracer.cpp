@@ -18,10 +18,14 @@
 
 #include "InputTracer.h"
 
+#include <memory>
+
 #include <android-base/logging.h>
 #include <private/android_filesystem_config.h>
 
 namespace android::inputdispatcher::trace::impl {
+
+using namespace android::input_trace;
 
 namespace {
 
@@ -44,7 +48,6 @@ TracedEvent createTracedEvent(const MotionEntry& e, EventType type) {
                              e.metaState,
                              e.buttonState,
                              e.classification,
-                             e.edgeFlags,
                              e.xPrecision,
                              e.yPrecision,
                              e.xCursorPosition,
@@ -68,7 +71,7 @@ void writeEventToBackend(const TracedEvent& event, const TracedEventMetadata met
                event);
 }
 
-inline auto getId(const trace::TracedEvent& v) {
+inline auto getId(const TracedEvent& v) {
     return std::visit([](const auto& event) { return event.id; }, v);
 }
 
@@ -96,8 +99,8 @@ InputTargetInfo getTargetInfo(const InputTarget& target) {
 
 // --- InputTracer ---
 
-InputTracer::InputTracer(std::unique_ptr<InputTracingBackendInterface> backend)
-      : mBackend(std::move(backend)) {}
+InputTracer::InputTracer(std::shared_ptr<InputTracingBackendInterface> backend)
+      : mBackend(backend) {}
 
 std::unique_ptr<EventTrackerInterface> InputTracer::traceInboundEvent(const EventEntry& entry) {
     // This is a newly traced inbound event. Create a new state to track it and its derived events.

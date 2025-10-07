@@ -748,7 +748,7 @@
     },
     "profiles": {
         "VP_ANDROID_baseline_2021_cpu_only": {
-            "version": 1,
+            "version": 2,
             "api-version": "1.0.68",
             "label": "Android Vulkan Baseline 2021 cpu only profile ",
             "description": "Collection of functionality that is broadly supported on CPU only Android",
@@ -765,6 +765,12 @@
                 }
             },
             "history": [
+                {
+                    "revision": 2,
+                    "date": "2025-08-20",
+                    "author": "Chris Forbes",
+                    "comment": "Remove minMemoryMapAlignment, in line with ABP21"
+                },
                 {
                     "revision": 1,
                     "date": "2023-03-01",

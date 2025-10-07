@@ -27,8 +27,6 @@
 #pragma clang diagnostic ignored "-Wconversion"
 
 // #define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "DisplayDevice"
 
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
@@ -265,8 +263,11 @@ ui::Dataspace DisplayDevice::getCompositionDataSpace() const {
     return mCompositionDisplay->getState().dataspace;
 }
 
-void DisplayDevice::setLayerFilter(ui::LayerFilter filter) {
+void DisplayDevice::setLayerFilter(LayerFilter filter) {
     mCompositionDisplay->setLayerFilter(filter);
+    if (mRefreshRateSelector) {
+        mRefreshRateSelector->setLayerFilter(filter);
+    }
     if (mRefreshRateOverlay) {
         mRefreshRateOverlay->setLayerStack(filter.layerStack);
     }
@@ -445,10 +446,12 @@ HdrCapabilities DisplayDevice::getHdrCapabilities() const {
 
 void DisplayDevice::enableHdrSdrRatioOverlay(bool enable) {
     if (!enable) {
+        ALOGD("Disabling HdrSdrRatioOverlay");
         mHdrSdrRatioOverlay.reset();
         return;
     }
 
+    ALOGD("Enabling HdrSdrRatioOverlay");
     mHdrSdrRatioOverlay = HdrSdrRatioOverlay::create();
     if (mHdrSdrRatioOverlay) {
         mHdrSdrRatioOverlay->setLayerStack(getLayerStack());
@@ -469,9 +472,11 @@ void DisplayDevice::enableRefreshRateOverlay(bool enable, bool setByHwc, Fps ref
                                              Fps renderFps, bool showSpinner, bool showRenderRate,
                                              bool showInMiddle) {
     if (!enable) {
+        ALOGD("Disabling RefreshRateOverlay");
         mRefreshRateOverlay.reset();
         return;
     }
+    ALOGD("Enabling RefreshRateOverlay");
 
     ftl::Flags<RefreshRateOverlay::Features> features;
     if (showSpinner) {

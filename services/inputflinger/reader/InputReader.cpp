@@ -35,6 +35,8 @@
 #include <string>
 
 #include "InputDevice.h"
+#include "InputTracingPerfettoBackend.h"
+#include "InputTracingThreadedBackend.h"
 #include "include/gestures.h"
 
 using android::base::StringPrintf;
@@ -122,7 +124,8 @@ std::optional<DeviceId> getDeviceIdOfNewGesture(const NotifyArgs& args) {
 
 InputReader::InputReader(std::shared_ptr<EventHubInterface> eventHub,
                          const sp<InputReaderPolicyInterface>& policy,
-                         InputListenerInterface& listener, JNIEnv* env)
+                         InputListenerInterface& listener, JNIEnv* env,
+                         std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend)
       : mContext(this),
         mJniEnv(env),
         mEventHub(eventHub),
@@ -136,6 +139,10 @@ InputReader::InputReader(std::shared_ptr<EventHubInterface> eventHub,
         mDisableVirtualKeysTimeout(LLONG_MIN),
         mNextTimeout(LLONG_MAX),
         mConfigurationChangesToRefresh(0) {
+    if (com::android::input::flags::low_level_tracing() && tracingBackend != nullptr) {
+        mTracer = std::make_shared<InputReaderTracer>(tracingBackend);
+        mEventHub->setTracer(mTracer);
+    }
     refreshConfigurationLocked(/*changes=*/{});
     updateGlobalMetaStateLocked();
 }

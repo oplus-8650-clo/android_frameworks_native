@@ -56,6 +56,7 @@
 
 #include "../Utils.h"
 #include "../binder_module.h"
+#include "binderKernelRpcCommon.h"
 
 using namespace android;
 using namespace android::binder::impl;
@@ -81,6 +82,13 @@ static ::testing::AssertionResult IsPageAligned(void *buf) {
         return ::testing::AssertionSuccess();
     else
         return ::testing::AssertionFailure() << buf << " is not page aligned";
+}
+
+status_t addFrozenStateChangeCallback(
+        sp<IBinder> binder, const wp<android::IBinder::FrozenStateChangeCallback>& callback) {
+    status_t res = binder->addFrozenStateChangeCallback(callback);
+    IPCThreadState::self()->flushCommands();
+    return res;
 }
 
 static testing::Environment* binder_env;
@@ -993,7 +1001,7 @@ TEST_F(BinderLibTest, ReturnErrorIfKernelDoesNotSupportFreezeNotification) {
     sp<IBinder> binder = addServer();
     ASSERT_NE(nullptr, binder);
     ASSERT_EQ(nullptr, binder->localBinder());
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(INVALID_OPERATION));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(INVALID_OPERATION));
 }
 
 TEST_F(BinderLibTest, FrozenStateChangeNotificatiion) {
@@ -1007,7 +1015,7 @@ TEST_F(BinderLibTest, FrozenStateChangeNotificatiion) {
     int32_t pid;
     ASSERT_TRUE(getBinderPid(&pid, binder));
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(NO_ERROR));
     // Expect current state (unfrozen) to be delivered immediately.
     callback->ensureUnfrozenEventReceived();
     // Check that the process hasn't died otherwise there's a risk of freezing
@@ -1036,7 +1044,7 @@ TEST_F(BinderLibTest, AddFrozenCallbackWhenFrozen) {
     EXPECT_EQ(OK, binder->pingBinder());
     freezeProcess(pid);
     // Add the callback while the target process is frozen.
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(NO_ERROR));
     callback->ensureFrozenEventReceived();
     unfreezeProcess(pid);
     callback->ensureUnfrozenEventReceived();
@@ -1062,7 +1070,7 @@ TEST_F(BinderLibTest, NoFrozenNotificationAfterCallbackRemoval) {
     int32_t pid;
     ASSERT_TRUE(getBinderPid(&pid, binder));
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(NO_ERROR));
     callback->ensureUnfrozenEventReceived();
     removeCallbackAndValidateNoEvent(binder, callback);
 
@@ -1084,11 +1092,11 @@ TEST_F(BinderLibTest, MultipleFrozenStateChangeCallbacks) {
     int32_t pid;
     ASSERT_TRUE(getBinderPid(&pid, binder));
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback1), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback1), StatusEq(NO_ERROR));
     // Expect current state (unfrozen) to be delivered immediately.
     callback1->ensureUnfrozenEventReceived();
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback2), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback2), StatusEq(NO_ERROR));
     // Expect current state (unfrozen) to be delivered immediately.
     callback2->ensureUnfrozenEventReceived();
 
@@ -1117,12 +1125,12 @@ TEST_F(BinderLibTest, RemoveThenAddFrozenStateChangeCallbacks) {
     int32_t pid;
     ASSERT_TRUE(getBinderPid(&pid, binder));
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(NO_ERROR));
     // Expect current state (unfrozen) to be delivered immediately.
     callback->ensureUnfrozenEventReceived();
     removeCallbackAndValidateNoEvent(binder, callback);
 
-    EXPECT_THAT(binder->addFrozenStateChangeCallback(callback), StatusEq(NO_ERROR));
+    EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(NO_ERROR));
     callback->ensureUnfrozenEventReceived();
 }
 
@@ -1176,6 +1184,34 @@ TEST_F(BinderLibTest, CoalesceFreezeCallbacksWhenListenerIsFrozen) {
         EXPECT_TRUE(events[0]);
     }
 }
+
+TEST(Parcel, ValidateReadFds) {
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    readFdsTest(p1, fd);
+    close(fd);
+}
+
+TEST(Parcel, ValidateReadOverFds) {
+    int fd = memfd_create("test", MFD_CLOEXEC);
+    Parcel p1;
+    readOverFdsTest(p1, fd, sizeof(flat_binder_object));
+    close(fd);
+}
+
+#if !defined(__TRUSTY__)
+TEST(Parcel, ValidateReadBinders) {
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    readBindersTest(p1, b1);
+}
+
+TEST(Parcel, ValidateReadOverBinders) {
+    sp<IBinder> b1 = sp<BBinder>::make();
+    Parcel p1;
+    readOverBindersTest(p1, b1, sizeof(flat_binder_object));
+}
+#endif // !defined(__TRUSTY__)
 
 TEST_F(BinderLibTest, PassFile) {
     int ret;
@@ -2595,7 +2631,7 @@ public:
                 // Hold an strong pointer to the binder object so it doesn't go
                 // away.
                 frozenStateChangeCallback->binder = binder;
-                int ret = binder->addFrozenStateChangeCallback(frozenStateChangeCallback);
+                int ret = ::addFrozenStateChangeCallback(binder, frozenStateChangeCallback);
                 if (ret != NO_ERROR) {
                     return ret;
                 }

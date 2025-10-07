@@ -49,6 +49,8 @@
 #include <utils/Log.h>
 #include <utils/Mutex.h>
 
+#include "InputReaderTracer.h"
+#include "RawEvent.h"
 #include "TouchVideoDevice.h"
 #include "VibrationElement.h"
 
@@ -58,20 +60,6 @@ namespace android {
 
 /* Number of colors : {red, green, blue} */
 static constexpr size_t COLOR_NUM = 3;
-/*
- * A raw event as retrieved from the EventHub.
- */
-struct RawEvent {
-    // Time when the event happened
-    nsecs_t when;
-    // Time when the event was read by EventHub. Only populated for input events.
-    // For other events (device added/removed/etc), this value is undefined and should not be read.
-    nsecs_t readTime;
-    int32_t deviceId;
-    int32_t type;
-    int32_t code;
-    int32_t value;
-};
 
 /* Describes an absolute axis. */
 struct RawAbsoluteAxisInfo {
@@ -265,6 +253,8 @@ public:
 
         FIRST_SYNTHETIC_EVENT = DEVICE_ADDED,
     };
+
+    virtual void setTracer(std::shared_ptr<InputReaderTracer> tracer) = 0;
 
     virtual ftl::Flags<InputDeviceClass> getDeviceClasses(int32_t deviceId) const = 0;
 
@@ -514,6 +504,8 @@ class EventHub : public EventHubInterface {
 public:
     EventHub();
 
+    void setTracer(std::shared_ptr<InputReaderTracer> tracer) override final { mTracer = tracer; }
+
     ftl::Flags<InputDeviceClass> getDeviceClasses(int32_t deviceId) const override final;
 
     InputDeviceIdentifier getDeviceIdentifier(int32_t deviceId) const override final;
@@ -701,8 +693,16 @@ private:
         template <std::size_t N>
         status_t readDeviceBitMask(unsigned long ioctlCode, BitArray<N>& bitArray);
 
-        void configureFd();
-        void populateAbsoluteAxisStates();
+        /**
+         * Configures the device's FD and caches its current state.
+         *
+         * Returns false if an error is encountered that means the caller should not continue to try
+         * opening the device (e.g. if the device no longer exists).
+         */
+        bool configureFd();
+        bool readDeviceState();
+        bool populateAbsoluteAxisStates();
+
         bool hasKeycodeLocked(int keycode) const;
         bool hasKeycodeInternalLocked(int keycode) const;
         bool loadVirtualKeyMapLocked();
@@ -715,7 +715,6 @@ private:
 
         bool currentFrameDropped;
         void trackInputEvent(const struct input_event& event);
-        void readDeviceState();
     };
 
     /**
@@ -788,6 +787,8 @@ private:
 
     // Protect all internal state.
     mutable std::mutex mLock;
+
+    std::shared_ptr<InputReaderTracer> mTracer;
 
     // The actual id of the built-in keyboard, or NO_BUILT_IN_KEYBOARD if none.
     // EventHub remaps the built-in keyboard to id 0 externally as required by the API.

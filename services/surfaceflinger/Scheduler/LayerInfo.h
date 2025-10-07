@@ -22,6 +22,7 @@
 #include <string>
 #include <unordered_map>
 
+#include <ui/LayerStack.h>
 #include <ui/Transform.h>
 #include <utils/Timers.h>
 
@@ -58,9 +59,7 @@ class LayerInfo {
     static constexpr size_t kFrequentLayerWindowSize = 4;
     static constexpr Fps kMinFpsForFrequentLayer = 10_Hz;
     static constexpr auto kMaxPeriodForFrequentLayerNs =
-// QTI_BEGIN: 2024-07-02: Display: sf: Increase queue time threshold for infrequent layers
             std::chrono::nanoseconds(kMinFpsForFrequentLayer.getPeriodNsecs()) + 51ms;
-// QTI_END: 2024-07-02: Display: sf: Increase queue time threshold for infrequent layers
     static constexpr size_t kNumSmallDirtyThreshold = 2;
 
     friend class LayerHistoryTest;
@@ -204,7 +203,7 @@ public:
 
     uid_t getOwnerUid() const { return mOwnerUid; }
 
-    RefreshRateVotes getRefreshRateVote(const RefreshRateSelector&, nsecs_t now);
+    RefreshRateVotes getRefreshRateVote(nsecs_t now);
 
     // Return the last updated time. If the present time is farther in the future than the
     // updated time, the updated time is the present time.
@@ -216,12 +215,18 @@ public:
     bool isFrontBuffered() const;
     FloatRect getBounds() const;
     ui::Transform getTransform() const;
+    RefreshRateSelector* getRefreshRateSelector() const;
+    LayerFilter getLayerFilter() const;
 
     // Returns a C string for tracing a vote
     const char* getTraceTag(LayerHistory::LayerVoteType type) const;
 
     // Return the framerate of this layer.
     Fps getFps(nsecs_t now) const;
+
+    bool isLayerActive(nsecs_t threshold) const;
+
+    bool isVrrDisplay() const;
 
     void onLayerInactive(nsecs_t now) {
         // Mark mFrameTimeValidSince to now to ignore all previous frame times.
@@ -319,7 +324,7 @@ private:
     Frequent isFrequent(nsecs_t now) const;
     bool isAnimating(nsecs_t now) const;
     bool hasEnoughDataForHeuristic() const;
-    std::optional<Fps> calculateRefreshRateIfPossible(const RefreshRateSelector&, nsecs_t now);
+    std::optional<Fps> calculateRefreshRateIfPossible(nsecs_t now);
     std::optional<nsecs_t> calculateAverageFrameTime() const;
     bool isFrameTimeValid(const FrameTimeData&) const;
 
@@ -376,6 +381,7 @@ struct LayerProps {
     int32_t frameRateSelectionPriority = -1;
     bool isSmallDirty = false;
     bool isFrontBuffered = false;
+    RefreshRateSelector* refreshRateSelector = nullptr;
 };
 
 } // namespace scheduler

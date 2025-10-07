@@ -23,7 +23,10 @@ import copy
 import generator_common as gencom
 
 # --- FILE PATHS & OUTPUT CONFIGURATION ---
-VULKAN_XML_FILE_PATH = Path("../../../../external/vulkan-headers/registry/vk.xml")
+SCRIPT_DIR = Path(__file__).resolve().parent
+VULKAN_XML_FILE_PATH = SCRIPT_DIR / "../../../../external/vulkan-headers/registry/vk.xml"
+VULKAN_XML_FILE_PATH = VULKAN_XML_FILE_PATH.resolve()
+
 OUTPUT_VK_PY_PATH = Path("vk.py")
 
 # Output file initial content
@@ -1040,7 +1043,7 @@ def extract_extension_struct_mapping(root: ET.Element, struct_to_type_map: Dict[
                     continue
 
                 # Process only relevant physical device structs not already added to the map
-                if type_name not in processed_structs and type_name in ALL_STRUCT_NAMES:
+                if type_name in ALL_STRUCT_NAMES:
                     if "Properties" not in type_name and "Features" not in type_name:
                         if type_name not in disabled_structs:
                             disabled_structs.append(type_name)
@@ -1117,7 +1120,7 @@ def generate_core_struct_mapping(struct_names: list[str], vk_py_file_handle: IO[
 def extract_list_size_mapping(struct_elements: List[ET.Element]) :
     """Extracts mappings from list members to their corresponding size-indicating members within structs."""
     member_map = {}  # Stores {list_member_name: size_member_name}
-    struct_with_dynamic_size_list_variables = {} # Stores {struct_name: set of list variables}
+    struct_with_dynamic_size_list_variables = {} # Stores {struct_name: list of list variables}
     for type_element in struct_elements:
         struct_name = type_element.get(ATTR_NAME)
         # Skip invalid or non-physical device structs
@@ -1136,7 +1139,7 @@ def extract_list_size_mapping(struct_elements: List[ET.Element]) :
             if name_value and len_attribute_value and len_attribute_value.strip().lower() != "null-terminated":
                 member_map[name_value] = len_attribute_value.strip()
                 if is_pointer:
-                    struct_with_dynamic_size_list_variables.setdefault(struct_name, set()).add(name_value)
+                    struct_with_dynamic_size_list_variables.setdefault(struct_name, []).append(name_value)
     return member_map, struct_with_dynamic_size_list_variables
 
 
@@ -1150,8 +1153,7 @@ def write_list_size_mapping(struct_elements: List[ET.Element], vk_py_file_handle
         sorted_items_by_key = sorted(input_dict.items())
         sorted_dict = {}
         for key, value_set in sorted_items_by_key:
-            sorted_elements = sorted(list(value_set))
-            sorted_dict[key] = set(sorted_elements)
+            sorted_dict[key] = sorted(list(value_set))
 
         return sorted_dict
 
@@ -1389,7 +1391,7 @@ def copy_vulkan_1_0_enums(enums_data, vk_format_map):
 
 
 # --- CODEGEN EXECUTION ---
-def gen_vk():
+def gen_vk(xml_path = None, output_path = None):
     """
     Orchestrates parsing of Vulkan XML registry and generation of vk.py.
 
@@ -1400,12 +1402,18 @@ def gen_vk():
     4. Write all parsed and processed data into vk.py, including dataclasses,
        constants, aliases, and various mapping dictionaries.
     """
+    OUTPUT_VK_PY_PATH = output_path if output_path else SCRIPT_DIR / "vk.py"
     # Ensure output directory exists
     OUTPUT_VK_PY_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with open(OUTPUT_VK_PY_PATH, "w", encoding="utf-8") as vk_py_file_handle:
         write_initial_content(vk_py_file_handle)
-        xml_root = load_xml_registry(VULKAN_XML_FILE_PATH)
+        xml_root = None
+        if xml_path is None:
+            xml_root = load_xml_registry(VULKAN_XML_FILE_PATH)
+        else:
+            xml_root = load_xml_registry(xml_path)
+
         if xml_root is None:
             return
 

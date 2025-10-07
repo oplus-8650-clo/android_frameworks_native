@@ -92,7 +92,6 @@ Display::~Display() = default;
 void Display::setConfiguration(const compositionengine::DisplayCreationArgs& args) {
     mIdVariant = args.idVariant;
     mPowerAdvisor = args.powerAdvisor;
-    mHasPictureProcessing = args.hasPictureProcessing;
     mMaxLayerPictureProfiles = args.maxLayerPictureProfiles;
     editState().isSecure = args.isSecure;
     editState().isProtected = args.isProtected;
@@ -183,8 +182,8 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
     mQtiColorProfile.renderIntent = colorProfile.renderIntent;
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
 
-// QTI_BEGIN: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
     if (isVirtual()) {
         auto qtiHalId = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
         DisplayId qtiDisplayId = *qtiHalId;
@@ -194,8 +193,8 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
                                                                   colorProfile.renderIntent);
         return;
     }
-// QTI_END: 2025-05-28: Display: sf: Add FBT WCG blending space support for WFD
 
+// QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
     const auto physicalId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
     LOG_FATAL_IF(!physicalId);
     getCompositionEngine().getHwComposer().setActiveColorMode(*physicalId, colorProfile.mode,
@@ -238,7 +237,9 @@ std::unique_ptr<compositionengine::OutputLayer> Display::createOutputLayer(
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         if (layerFE->getCompositionState()->outputFilter.toInternalDisplay) {
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             QtiOutputExtension::qtiSetLayerAsMask(mIdVariant, outputLayer->getHwcLayer()->getId());
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         }
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
@@ -560,7 +561,12 @@ Display::getOverlaySupport() {
 }
 
 bool Display::hasPictureProcessing() const {
-    return mHasPictureProcessing;
+    const auto halDisplayIdOpt = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
+    if (!halDisplayIdOpt) {
+        return false;
+    }
+    return getCompositionEngine().getHwComposer().hasDisplayCapability(
+            *halDisplayIdOpt, DisplayCapability::PICTURE_PROCESSING);
 }
 
 int32_t Display::getMaxLayerPictureProfiles() const {
@@ -588,8 +594,8 @@ void Display::qtiBeginDraw() {
     if (displayext && hwcextn) {
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         SFTRACE_CALL();
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!physicalDisplayId.has_value() || isVirtual()) {
             if (!physicalDisplayId.has_value())
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -667,7 +673,9 @@ void Display::qtiBeginDraw() {
             return;
         }
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto halDisplayId = getDisplayIdVariant().and_then(asHalDisplayId<DisplayIdVariant>);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!displayext->BeginDraw(static_cast<uint32_t>(*hwcDisplayId), displayLayerFlags,
                                    fbtLayerInfo, current, future)) {
             hwcextn->qtiSetClientTarget_3_1(*halDisplayId, future.index, future.fence,
@@ -701,8 +709,10 @@ void Display::qtiEndDraw() {
             return;
         }
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (!physicalDisplayId) {
             return;
         }

@@ -31,6 +31,7 @@
 #include <android-base/thread_annotations.h>
 #include <android/native_window.h>
 #include <binder/IBinder.h>
+#include <common/LayerFilter.h>
 #include <compositionengine/Display.h>
 #include <compositionengine/DisplaySurface.h>
 #include <gui/LayerState.h>
@@ -110,6 +111,9 @@ public:
 
     bool isVirtual() const;
     bool isPrimary() const { return mIsPrimary; }
+    bool isGpuVirtualDisplay() const {
+        return std::holds_alternative<GpuVirtualDisplayId>(getDisplayIdVariant());
+    }
 
     // isSecure indicates whether this display can be trusted to display
     // secure surfaces.
@@ -125,7 +129,7 @@ public:
     int getHeight() const;
     ui::Size getSize() const { return {getWidth(), getHeight()}; }
 
-    void setLayerFilter(ui::LayerFilter);
+    void setLayerFilter(LayerFilter);
     void setDisplaySize(ui::Size);
     void setProjection(ui::Rotation orientation, Rect viewport, Rect frame);
     void stageBrightness(float brightness) REQUIRES(kMainThreadContext);
@@ -351,8 +355,6 @@ struct DisplayDeviceState {
     bool isProtected = false;
     // Refer to DisplayDevice::mRequestedRefreshRate, for virtual display only
     Fps requestedRefreshRate;
-    int32_t maxLayerPictureProfiles = 0;
-    bool hasPictureProcessing = false;
     hardware::graphics::composer::hal::PowerMode initialPowerMode{
             hardware::graphics::composer::hal::PowerMode::OFF};
 

@@ -23,6 +23,7 @@
 #include <InputDevice.h>
 #include <InputMapper.h>
 #include <InputReader.h>
+#include <InputReaderTracer.h>
 #include <ThreadSafeFuzzedDataProvider.h>
 
 constexpr size_t kValidTypes[] = {EV_SW,
@@ -125,6 +126,8 @@ public:
     FuzzEventHub(std::shared_ptr<ThreadSafeFuzzedDataProvider> fdp) : mFdp(std::move(fdp)) {}
     ~FuzzEventHub() {}
     void addProperty(std::string key, std::string value) { mFuzzConfig.addProperty(key, value); }
+
+    void setTracer(std::shared_ptr<InputReaderTracer> tracer) override {}
 
     ftl::Flags<InputDeviceClass> getDeviceClasses(int32_t deviceId) const override {
         uint32_t flags = 0;

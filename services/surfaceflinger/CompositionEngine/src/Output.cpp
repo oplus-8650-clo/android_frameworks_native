@@ -271,7 +271,7 @@ ui::Transform::RotationFlags Output::getTransformHint() const {
     return static_cast<ui::Transform::RotationFlags>(getState().transform.getOrientation());
 }
 
-void Output::setLayerFilter(ui::LayerFilter filter) {
+void Output::setLayerFilter(LayerFilter filter) {
     editState().layerFilter = filter;
     dirtyEntireOutput();
 }
@@ -415,7 +415,7 @@ Region Output::getDirtyRegion() const {
     return outputState.dirtyRegion.intersect(outputState.layerStackSpace.getContent());
 }
 
-bool Output::includesLayer(ui::LayerFilter filter) const {
+bool Output::includesLayer(LayerFilter filter) const {
     return getState().layerFilter.includes(filter);
 }
 
@@ -602,8 +602,15 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
         return;
     }
 
-    bool computeAboveCoveredExcludingOverlays = coverage.aboveCoveredLayersExcludingOverlays &&
-            !layerFEState->outputFilter.toInternalDisplay;
+    bool computeAboveCoveredExcludingOverlays = [&]() {
+        if (FlagManager::getInstance().connected_displays_cursor()) {
+            return coverage.aboveCoveredLayersExcludingOverlays &&
+                    !layerFEState->outputFilter.skipScreenshot;
+        } else {
+            return coverage.aboveCoveredLayersExcludingOverlays &&
+                    !layerFEState->outputFilter.toInternalDisplay;
+        }
+    }();
 
     /*
      * opaqueRegion: area of a surface that is fully opaque.
@@ -998,11 +1005,9 @@ void Output::writeCompositionState(const compositionengine::CompositionRefreshAr
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
     editState().outputLayerHash = outputLayerHash;
-// QTI_BEGIN: 2023-06-15: Display: sf: extensions: Reduce instructions in SmoMo & LayerExt update
 
     QtiOutputExtension::qtiGetVisibleLayerInfo(this);
     // QTI_END
-// QTI_END: 2023-06-15: Display: sf: extensions: Reduce instructions in SmoMo & LayerExt update
 }
 
 compositionengine::OutputLayer* Output::findLayerRequestingBackgroundComposition() const {
@@ -1375,10 +1380,8 @@ void Output::updateProtectedContentState() {
                     (!FlagManager::getInstance().protected_if_client() ||
                      layer->requiresClientComposition());
         });
-// QTI_BEGIN: 2023-04-28: Display: sf: Fix secure to nonsecure transitions
 
         needsProtected = needsProtected && QtiOutputExtension::qtiIsProtectedContent(this);
-// QTI_END: 2023-04-28: Display: sf: Fix secure to nonsecure transitions
         if (needsProtected != mRenderSurface->isProtected()) {
             mRenderSurface->setProtected(needsProtected);
         }
@@ -1433,11 +1436,9 @@ std::optional<base::unique_fd> Output::composeSurfaces(
 
     // Generate the client composition requests for the layers on this output.
     auto& renderEngine = getCompositionEngine().getRenderEngine();
-// QTI_BEGIN: 2023-03-28: Display: sf: don't allow secure camera and display to GPU
     const bool supportsProtectedContent = renderEngine.supportsProtectedContent()
             && mRenderSurface->isProtected();
 
-// QTI_END: 2023-03-28: Display: sf: don't allow secure camera and display to GPU
     std::vector<LayerFE*> clientCompositionLayersFE;
     std::vector<LayerFE::LayerSettings> clientCompositionLayers =
             generateClientCompositionRequests(supportsProtectedContent,
@@ -1451,10 +1452,8 @@ std::optional<base::unique_fd> Output::composeSurfaces(
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (mClientCompositionRequestCache
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-05-24: Display: CompositionEngine: Avoid disabling SF Client Composition Caching
         && (!QtiOutputExtension::qtiUseSpecFence() || mLayerRequestingBackgroundBlur != nullptr)
         ) {
-// QTI_END: 2023-05-24: Display: CompositionEngine: Avoid disabling SF Client Composition Caching
         if (mClientCompositionRequestCache->exists(tex->getBuffer()->getId(),
                                                    clientCompositionDisplay,
                                                    clientCompositionLayers)) {

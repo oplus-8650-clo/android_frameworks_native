@@ -18,12 +18,12 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 #include "FrontEnd/LayerSnapshot.h"
 #include "ui/Transform.h"
-#undef LOG_TAG
-#define LOG_TAG "SurfaceFlinger"
 
 #include <numeric>
 #include <optional>
 
+#include <android/gui/ISystemContentPriorityConstants.h>
+#include <android/gui/Vec2.h>
 #include <common/FlagManager.h>
 #include <common/trace.h>
 #include <ftl/small_map.h>
@@ -342,6 +342,7 @@ LayerSnapshot LayerSnapshotBuilder::getRootSnapshot() {
     snapshot.edgeExtensionEffect = {};
     snapshot.outputFilter.layerStack = ui::DEFAULT_LAYER_STACK;
     snapshot.outputFilter.toInternalDisplay = false;
+    snapshot.outputFilter.skipScreenshot = false;
     snapshot.isSecure = false;
     snapshot.color.a = 1.0_hf;
     snapshot.colorTransformIsIdentity = true;
@@ -752,9 +753,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
                 snapshot.trustedOverlay = parentSnapshot.trustedOverlay;
                 break;
             case gui::TrustedOverlay::DISABLED:
-                snapshot.trustedOverlay = FlagManager::getInstance().override_trusted_overlay()
-                        ? requested.trustedOverlay
-                        : parentSnapshot.trustedOverlay;
+                snapshot.trustedOverlay = requested.trustedOverlay;
                 break;
             case gui::TrustedOverlay::ENABLED:
                 snapshot.trustedOverlay = requested.trustedOverlay;
@@ -780,10 +779,12 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     }
 
     if (forceUpdate || snapshot.changes.any(RequestedLayerState::Changes::Mirror)) {
-        // Display mirrors are always placed in a VirtualDisplay so we never want to capture layers
-        // marked as skip capture
+        // We don't want to capture layers with eLayerSkipScreenshot in mirrored hierarchies. This
+        // field is used to hide mirrored layers with the flag set.
         snapshot.handleSkipScreenshotFlag = parentSnapshot.handleSkipScreenshotFlag ||
-                (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK);
+                (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK) ||
+                (FlagManager::getInstance().connected_displays_cursor() &&
+                 requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eAlphaChanged) {
@@ -795,8 +796,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eFlagsChanged) {
         snapshot.isSecure =
                 parentSnapshot.isSecure || (requested.flags & layer_state_t::eLayerSecure);
-        snapshot.outputFilter.toInternalDisplay = parentSnapshot.outputFilter.toInternalDisplay ||
-                (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        if (FlagManager::getInstance().connected_displays_cursor()) {
+            snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
+                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
+            // This may cause a layer to become invisible, removing it from the hierarchy
+            mResortSnapshots = true;
+        } else {
+            snapshot.outputFilter.toInternalDisplay =
+                    parentSnapshot.outputFilter.toInternalDisplay ||
+                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        }
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eStretchChanged) {
@@ -968,6 +977,14 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         updateInput(snapshot, requested, parentSnapshot, path, args);
     }
 
+    if (forceUpdate || snapshot.clientChanges & layer_state_t::eSystemContentPriorityChanged) {
+        if (requested.systemContentPriority == gui::ISystemContentPriorityConstants::Unset) {
+            snapshot.systemContentPriority = parentSnapshot.systemContentPriority;
+        } else {
+            snapshot.systemContentPriority = requested.systemContentPriority;
+        }
+    }
+
     // computed snapshot properties
     snapshot.forceClientComposition = snapshot.shadowSettings.length > 0 ||
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
@@ -1000,23 +1017,22 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
         parentRoundedCorner = parentSnapshot.roundedCorner;
         ui::Transform t = snapshot.localTransform.inverse();
         parentRoundedCorner.cropRect = t.transform(parentRoundedCorner.cropRect);
-        parentRoundedCorner.radius.x *= t.getScaleX();
-        parentRoundedCorner.radius.y *= t.getScaleY();
-        parentRoundedCorner.requestedRadius.x *= t.getScaleX();
-        parentRoundedCorner.requestedRadius.y *= t.getScaleY();
+        parentRoundedCorner.radii.transform(t);
+        parentRoundedCorner.requestedRadii.transform(t);
     }
 
     FloatRect layerCropRect = snapshot.croppedBufferSize;
-    const vec2 requestedRadius(requested.cornerRadius, requested.cornerRadius);
-    const vec2 clientDrawnRadius(requested.clientDrawnCornerRadius,
-                                 requested.clientDrawnCornerRadius);
+    const gui::CornerRadii requestedRadii(requested.cornerRadii);
+    const gui::CornerRadii clientDrawnRadii(requested.clientDrawnCornerRadii);
+
     RoundedCornerState layerSettings;
     layerSettings.cropRect = layerCropRect;
-    layerSettings.requestedRadius = requestedRadius;
-    layerSettings.clientDrawnRadius = clientDrawnRadius;
+    layerSettings.requestedRadii = requestedRadii;
+    layerSettings.clientDrawnRadii = clientDrawnRadii;
 
     const bool layerSettingsValid = layerSettings.hasRequestedRadius() && !layerCropRect.isEmpty();
     const bool parentRoundedCornerValid = parentRoundedCorner.hasRequestedRadius();
+
     if (layerSettingsValid && parentRoundedCornerValid) {
         // If the parent and the layer have rounded corner settings, use the parent settings if
         // the parent crop is entirely inside the layer crop. This has limitations and cause
@@ -1032,18 +1048,94 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
     } else if (layerSettingsValid) {
         snapshot.roundedCorner = layerSettings;
     } else if (parentRoundedCornerValid) {
-        snapshot.roundedCorner = parentRoundedCorner;
+        if (doesChildOverlapParentCornerRegion(layerCropRect, parentRoundedCorner.cropRect,
+                                               parentRoundedCorner.requestedRadii)) {
+            snapshot.roundedCorner = parentRoundedCorner;
+        }
     }
 
-    if (snapshot.roundedCorner.requestedRadius.x == requested.clientDrawnCornerRadius) {
-        // If the client drawn radius matches the requested radius, then surfaceflinger
+    snapshot.roundedCorner.croppedRequestedRadii =
+            getClippedClientRadii(snapshot.roundedCorner.requestedRadii,
+                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+
+    if (!clientDrawnRadii.isEmpty() &&
+        clientDrawnRadii == snapshot.roundedCorner.croppedRequestedRadii &&
+        snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop) {
+        // If the client drawn radius matches the inherited/requested radius
+        // and the geometric layer bounds match the client crop then surfaceflinger
         // does not need to draw rounded corners for this layer
-        snapshot.roundedCorner.radius = vec2(0.f, 0.f);
+        snapshot.roundedCorner.radii = gui::CornerRadii(0.f);
     } else {
-        snapshot.roundedCorner.radius = snapshot.roundedCorner.requestedRadius;
+        snapshot.roundedCorner.radii = snapshot.roundedCorner.requestedRadii;
     }
+}
 
-    snapshot.parentRoundedCorner = parentRoundedCorner;
+bool LayerSnapshotBuilder::doesChildOverlapParentCornerRegion(const FloatRect& childCropRect,
+                                                              const FloatRect& parentCropRect,
+                                                              const gui::CornerRadii& parentRadii) {
+    if (childCropRect.isEmpty()) {
+        // If either child crop is empty then assume there is overlap
+        // so that child can inherit parent rounded corner state. Otherwise, the
+        // overlap computation will return false.
+        return true;
+    }
+    FloatRect parentCornerRegionTL(parentCropRect.left, parentCropRect.top,
+                                   parentCropRect.left + parentRadii.topLeft.x,
+                                   parentCropRect.top + parentRadii.topLeft.y);
+    FloatRect parentCornerRegionTR(parentCropRect.right - parentRadii.topRight.x,
+                                   parentCropRect.top, parentCropRect.right,
+                                   parentCropRect.top + parentRadii.topRight.y);
+    FloatRect parentCornerRegionBL(parentCropRect.left,
+                                   parentCropRect.bottom - parentRadii.bottomLeft.y,
+                                   parentCropRect.left + parentRadii.bottomLeft.x,
+                                   parentCropRect.bottom);
+    FloatRect parentCornerRegionBR(parentCropRect.right - parentRadii.bottomRight.x,
+                                   parentCropRect.bottom - parentRadii.bottomRight.y,
+                                   parentCropRect.right, parentCropRect.bottom);
+
+    return !childCropRect.intersect(parentCornerRegionTL).isEmpty() ||
+            !childCropRect.intersect(parentCornerRegionTR).isEmpty() ||
+            !childCropRect.intersect(parentCornerRegionBL).isEmpty() ||
+            !childCropRect.intersect(parentCornerRegionBR).isEmpty();
+}
+
+gui::CornerRadii LayerSnapshotBuilder::getClippedClientRadii(const gui::CornerRadii& requestedRadii,
+                                                             const FloatRect& layerCropRect,
+                                                             const FloatRect& layerBounds) {
+    gui::CornerRadii clippedRadii;
+    android::gui::Vec2 zeroVec;
+    zeroVec.x = 0.f;
+    zeroVec.y = 0.f;
+
+    auto calculateClippedCorner = [&](const android::gui::Vec2& cornerRadius, float left, float top,
+                                      float right, float bottom) {
+        FloatRect cornerRegion(left, top, right, bottom);
+        return layerBounds.contains(cornerRegion) ? cornerRadius : zeroVec;
+    };
+
+    clippedRadii.topLeft =
+            calculateClippedCorner(requestedRadii.topLeft, layerCropRect.left, layerCropRect.top,
+                                   layerCropRect.left + requestedRadii.topLeft.x,
+                                   layerCropRect.top + requestedRadii.topLeft.y);
+
+    clippedRadii.topRight = calculateClippedCorner(requestedRadii.topRight,
+                                                   layerCropRect.right - requestedRadii.topRight.x,
+                                                   layerCropRect.top, layerCropRect.right,
+                                                   layerCropRect.top + requestedRadii.topRight.y);
+
+    clippedRadii.bottomLeft =
+            calculateClippedCorner(requestedRadii.bottomLeft, layerCropRect.left,
+                                   layerCropRect.bottom - requestedRadii.bottomLeft.y,
+                                   layerCropRect.left + requestedRadii.bottomLeft.x,
+                                   layerCropRect.bottom);
+
+    clippedRadii.bottomRight =
+            calculateClippedCorner(requestedRadii.bottomRight,
+                                   layerCropRect.right - requestedRadii.bottomRight.x,
+                                   layerCropRect.bottom - requestedRadii.bottomRight.y,
+                                   layerCropRect.right, layerCropRect.bottom);
+
+    return clippedRadii;
 }
 
 /**
@@ -1300,11 +1392,11 @@ void LayerSnapshotBuilder::forEachVisibleSnapshot(const Visitor& visitor) {
     }
 }
 
-void LayerSnapshotBuilder::forEachSnapshot(const Visitor& visitor,
-                                           const ConstPredicate& predicate) {
+void LayerSnapshotBuilder::forEachNonNullSnapshot(const Visitor& visitor,
+                                                  const ConstPredicate& predicate) {
     for (int i = 0; i < mNumInterestingSnapshots; i++) {
         std::unique_ptr<LayerSnapshot>& snapshot = mSnapshots.at((size_t)i);
-        if (!predicate(*snapshot)) continue;
+        if (!snapshot || !predicate(*snapshot)) continue;
         visitor(snapshot);
     }
 }

@@ -100,6 +100,9 @@ struct InputReaderConfiguration {
         // primary button.
         MOUSE_SETTINGS = 1u << 15,
 
+        // The virtual devices list is updated
+        VIRTUAL_DEVICES = 1u << 16,
+
         // All devices must be reopened.
         MUST_REOPEN = 1u << 31,
     };
@@ -132,6 +135,10 @@ struct InputReaderConfiguration {
     // The map from the input device physical port location to the input device layout info.
     // Can be used to determine the layout of the keyboard device.
     std::unordered_map<std::string, KeyboardLayoutInfo> keyboardLayoutAssociations;
+
+    // List of input device physical port locations of devices that are marked as virtual and should
+    // not be treated as physically connected peripheral (e.g. created using VDM in userspace)
+    std::set<std::string> virtualDevicePorts;
 
     // The suggested display ID to show the cursor.
     ui::LogicalDisplayId defaultPointerDisplayId;

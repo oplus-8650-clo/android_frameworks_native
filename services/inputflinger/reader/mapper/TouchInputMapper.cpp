@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <sstream>
@@ -31,6 +32,7 @@
 
 #include <math.h>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android/input.h>
 #include <com_android_input_flags.h>
@@ -51,6 +53,8 @@
 
 namespace android {
 
+using std::chrono_literals::operator""ms;
+
 namespace input_flags = com::android::input::flags;
 
 // --- Constants ---
@@ -59,8 +63,6 @@ namespace input_flags = com::android::input::flags;
 // data.
 static constexpr nsecs_t STYLUS_DATA_LATENCY = ms2ns(10);
 
-// Minimum width between two pointers to determine a gesture as freeform gesture in mm
-static const float MIN_FREEFORM_GESTURE_WIDTH_IN_MILLIMETER = 30;
 // --- Static Definitions ---
 
 static const DisplayViewport kUninitializedViewport;
@@ -924,11 +926,6 @@ void TouchInputMapper::configureInputDevice(nsecs_t when, bool* outResetNeeded) 
 
     // Raw width and height in the natural orientation.
     const ui::Size rawSize{mRawPointerAxes.getRawWidth(), mRawPointerAxes.getRawHeight()};
-    const int32_t rawXResolution = mRawPointerAxes.x.resolution;
-    const int32_t rawYResolution = mRawPointerAxes.y.resolution;
-    // Calculate the mean resolution when both x and y resolution are set, otherwise set it to 0.
-    const float rawMeanResolution =
-            (rawXResolution > 0 && rawYResolution > 0) ? (rawXResolution + rawYResolution) / 2 : 0;
 
     const DisplayViewport& newViewport = newViewportOpt.value_or(kUninitializedViewport);
     bool viewportChanged;
@@ -1393,6 +1390,9 @@ std::list<NotifyArgs> TouchInputMapper::sync(nsecs_t when, nsecs_t readTime) {
         std::string line;
         while (std::getline(stream, line, '\n')) {
             ALOGD(INDENT "%s", line.c_str());
+            // To prevent overwhelming liblog, add a small delay between each line to give it
+            // time to process the data written so far.
+            std::this_thread::sleep_for(1ms);
         }
     }
 
@@ -1484,6 +1484,7 @@ std::list<NotifyArgs> TouchInputMapper::cookAndDispatch(nsecs_t when, nsecs_t re
     bool consumed;
     out += consumeRawTouches(when, readTime, policyFlags, consumed /*byref*/);
     if (consumed) {
+        LOG_IF(INFO, debugRawEvents()) << "Touch consumed by consumeRawTouches, eventTime=" << when;
         mCurrentRawState.rawPointerData.clear();
     }
 
@@ -1724,6 +1725,7 @@ std::list<NotifyArgs> TouchInputMapper::consumeRawTouches(nsecs_t when, nsecs_t 
         }
         if (!hoveringPointersInFrame) {
             // All hovering pointers are outside the physical frame.
+            LOG(WARNING) << "Dropping hover, all pointers are outside the physical frame";
             outConsumed = true;
             return out;
         }
@@ -1762,6 +1764,8 @@ std::list<NotifyArgs> TouchInputMapper::consumeRawTouches(nsecs_t when, nsecs_t 
                     }
                 }
             }
+            LOG(WARNING) << "Dropping pointer " << id << " at (" << pointer.x << ", " << pointer.y
+                         << "), it is outside of the physical frame";
             outConsumed = true;
             return out;
         }

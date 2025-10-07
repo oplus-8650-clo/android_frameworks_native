@@ -16,6 +16,7 @@ aconfig_declarations {
         "surfaceflinger_flags.aconfig",
         "surfaceflinger_flags_new.aconfig",
     ],
+    exportable: true,
 }
 
 cc_aconfig_library {
@@ -28,6 +29,7 @@ cc_defaults {
     name: "surfaceflinger_defaults",
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
+        "-DLOG_TAG=\"SurfaceFlinger\"",
         "-Wall",
         "-Wconversion",
         "-Werror",
@@ -53,7 +55,6 @@ cc_defaults {
     cflags: [
         "-DEGL_EGLEXT_PROTOTYPES",
         "-DGL_GLEXT_PROTOTYPES",
-        "-DLOG_TAG=\"SurfaceFlinger\"",
     ],
     shared_libs: [
         "android.hardware.common-V2-ndk",
@@ -184,7 +185,11 @@ filegroup {
         "DisplayHardware/HWC2.cpp",
         "DisplayHardware/HWComposer.cpp",
         "DisplayHardware/HidlComposerHal.cpp",
+        "DisplayHardware/VirtualDisplay/SinkSurfaceHelper.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplayBufferSlotTracker.cpp",
         "DisplayHardware/VirtualDisplay/VirtualDisplaySurface2.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplayThread.cpp",
+        "DisplayHardware/VirtualDisplay/VirtualDisplayThreadManager.cpp",
         "DisplayHardware/VirtualDisplaySurface.cpp",
         "PowerAdvisor/*.cpp",
     ],
@@ -307,10 +312,12 @@ filegroup {
 
 cc_binary {
     name: "surfaceflinger",
+// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     defaults: [
         "libsurfaceflinger_binary",
         "libqtisurfaceflingerextension_defaults",
     ],
+// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     init_rc: ["surfaceflinger.rc"],
     srcs: [
         ":surfaceflinger_binary_sources",
@@ -321,11 +328,13 @@ cc_binary {
     shared_libs: [
         "libSurfaceFlingerProp",
     ],
+// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     static_libs: [
         "libqticompositionengineextension",
         "libqtisurfaceflingerextension",
 
     ],
+// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 
     logtags: ["surfaceflinger.logtags"],
 }

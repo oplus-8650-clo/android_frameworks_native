@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #define LOG_TAG "Surface"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 //#define LOG_NDEBUG 0
@@ -67,14 +65,10 @@
 
 #include <com_android_graphics_libgui_flags.h>
 
-// QTI_BEGIN: 2025-05-13: Performance: native: detect GPU big jank
 #include "QtiExtension/QtiFenceMonitorExtension.h"
-// QTI_END: 2025-05-13: Performance: native: detect GPU big jank
 
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #include <cutils/properties.h>
 
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 namespace android {
 
 using namespace com::android::graphics::libgui;
@@ -191,52 +185,30 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     mSwapIntervalZero = false;
     mMaxBufferCount = NUM_BUFFER_SLOTS;
     mSurfaceControlHandle = surfaceControlHandle;
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 
     char value[PROPERTY_VALUE_MAX];
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     int intValue = 0;
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     property_get("vendor.display.enable_optimal_refresh_rate", value, "0");
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     intValue = atoi(value);
     bool enableOptimalRefreshRate = (intValue == 1) ? true : false;
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
 
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     if (!mQtiSurfaceExtn && enableOptimalRefreshRate) {
         mQtiSurfaceExtn = new libguiextension::QtiSurfaceExtension(this);
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     }
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     property_get("vendor.gpp.create_frc_extension", value, "0");
     intValue = atoi(value);
     if (!mQtiSurfaceGPPExtn && intValue == 1) {
         mQtiSurfaceGPPExtn = std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
     }
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 }
 
 Surface::~Surface() {
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     if (mQtiSurfaceExtn) {
         delete mQtiSurfaceExtn;
     }
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     mQtiSurfaceGPPExtn = nullptr;
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
 
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     if (mConnectedToCpu) {
         Surface::disconnect(NATIVE_WINDOW_API_CPU);
     }
@@ -246,6 +218,10 @@ Surface::~Surface() {
         mSurfaceDeathListener = nullptr;
     }
 #endif // !defined(NO_BINDER)
+}
+
+sp<Surface> Surface::from(ANativeWindow* anw) {
+    return sp<Surface>::fromExisting(static_cast<Surface*>(anw));
 }
 
 #ifndef NO_BINDER
@@ -268,12 +244,10 @@ sp<IGraphicBufferProducer> Surface::getIGraphicBufferProducer() const {
 
 void Surface::setSidebandStream(const sp<NativeHandle>& stream) {
     mGraphicBufferProducer->setSidebandStream(stream);
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->setSidebandStream(stream);
     }
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 }
 
 void Surface::allocateBuffers() {
@@ -731,13 +705,11 @@ int Surface::dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd) {
     }
     SURF_LOGV("Surface::dequeueBuffer");
 
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->DynamicEnable(&mGraphicBufferProducer);
     }
 
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     IGraphicBufferProducer::DequeueBufferInput dqInput;
     {
         Mutex::Autolock lock(mMutex);
@@ -872,7 +844,7 @@ status_t Surface::queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& 
     if (buffer == nullptr) {
         return BAD_VALUE;
     }
-    return queueBuffer(buffer.get(), fd ? fd->get() : -1, output);
+    return queueBuffer(sp<GraphicBuffer>::fromExisting(buffer.get()), fd ? fd->get() : -1, output);
 }
 
 status_t Surface::detachBuffer(const sp<GraphicBuffer>& buffer) {
@@ -881,6 +853,14 @@ status_t Surface::detachBuffer(const sp<GraphicBuffer>& buffer) {
     }
 
     Mutex::Autolock lock(mMutex);
+
+    if (mLeakedBuffers.contains(buffer)) {
+        SURF_LOGE("Surface::detachBuffer given a leaked buffer! Deleting extra held reference.");
+        mLeakedBuffers.erase(buffer);
+        if (!mIsConnected) {
+            return OK;
+        }
+    }
 
     uint64_t bufferId = buffer->getId();
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
@@ -909,12 +889,10 @@ int Surface::dequeueBuffers(std::vector<BatchBuffer>* buffers) {
     ATRACE_CALL();
     SURF_LOGV("Surface::dequeueBuffers");
 
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->DynamicEnable(&mGraphicBufferProducer);
     }
 
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     if (buffers->size() == 0) {
         SURF_LOGE("%s: must dequeue at least 1 buffer!", __FUNCTION__);
         return BAD_VALUE;
@@ -1088,6 +1066,15 @@ int Surface::cancelBuffer(sp<GraphicBuffer>&& buffer, int fenceFd) {
     ATRACE_CALL();
     SURF_LOGV("Surface::cancelBuffer");
     Mutex::Autolock lock(mMutex);
+
+    if (mLeakedBuffers.contains(buffer)) {
+        SURF_LOGE("Surface::cancelBuffer given a leaked buffer! Deleting extra held reference.");
+        mLeakedBuffers.erase(buffer);
+        if (!mIsConnected) {
+            return OK;
+        }
+    }
+
     int i = getSlotFromBufferLocked(buffer);
     if (i < 0) {
         if (fenceFd >= 0) {
@@ -1127,8 +1114,24 @@ int Surface::cancelBuffers(const std::vector<BatchBuffer>& buffers) {
     std::vector<status_t> cancelBufferOutputs;
     size_t numBuffersCancelled = 0;
     int badSlotResult = 0;
+    std::vector<sp<GraphicBuffer>> deletedLeakedBuffers;
     {
         Mutex::Autolock _l(mMutex);
+
+        for (auto& batchBuffer : buffers) {
+            auto buffer = GraphicBuffer::from(batchBuffer.buffer);
+            if (mLeakedBuffers.contains(buffer)) {
+                SURF_LOGE("Surface::cancelBuffers given a leaked buffer! Deleting extra held "
+                          "reference.");
+                mLeakedBuffers.erase(buffer);
+                // Hold onto one last reference to the buffer until the end of the scope of this
+                // function in the rare case that it still needs to be sent to the client.
+                deletedLeakedBuffers.push_back(std::move(buffer));
+            }
+        }
+        if (!mIsConnected && !deletedLeakedBuffers.empty()) {
+            return OK;
+        }
 
         if (mSharedBufferMode) {
             SURF_LOGE("%s: batch operation is not supported in shared buffer mode!", __FUNCTION__);
@@ -1308,20 +1311,14 @@ void Surface::applyGrallocMetadataLocked(
         const sp<GraphicBuffer>& buffer,
         const IGraphicBufferProducer::QueueBufferInput& queueBufferInput) {
     ATRACE_CALL();
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     if (mQtiSurfaceExtn) {
-// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
         {
             std::scoped_lock _dl(mDebugMutex);
             mQtiSurfaceExtn->qtiSetBufferDequeueDuration(mDebugName.c_str(), buffer.get(), mLastDequeueDuration);
         }
     }
 
-// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     auto& mapper = GraphicBufferMapper::get();
     mapper.setDataspace(buffer->handle, static_cast<ui::Dataspace>(queueBufferInput.dataSpace));
     if (mHdrMetadataIsSet & HdrMetadata::SMPTE2086)
@@ -1379,9 +1376,8 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
     mQueueBufferCondition.broadcast();
 
     if (CC_UNLIKELY(atrace_is_tag_enabled(ATRACE_TAG_GRAPHICS))
-             /* QTI_BEGIN: 2025-05-13: Performance: native: detect GPU big jank */
              || libguiextension::QtiFenceMonitorExtension::qtiGetGPUBigJankEnabled()
-             /* QTI_END: 2025-05-13: Performance: native: detect GPU big jank */) {
+             ) {
         static gui::FenceMonitor gpuCompletionThread("GPU completion");
         gpuCompletionThread.queueFence(fence);
     }
@@ -1398,6 +1394,14 @@ int Surface::queueBuffer(sp<GraphicBuffer>&& buffer, int fenceFd,
     sp<Fence> fence;
     {
         Mutex::Autolock lock(mMutex);
+
+        if (mLeakedBuffers.contains(buffer)) {
+            SURF_LOGE("Surface::queueBuffer given a leaked buffer! Deleting extra held reference.");
+            mLeakedBuffers.erase(buffer);
+            if (!mIsConnected) {
+                return OK;
+            }
+        }
 
         slot = getSlotFromBufferLocked(buffer);
         if (slot < 0) {
@@ -1418,12 +1422,10 @@ int Surface::queueBuffer(sp<GraphicBuffer>&& buffer, int fenceFd,
         fence = input.fence;
     }
     nsecs_t now = systemTime();
-// QTI_BEGIN: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     if (mQtiSurfaceExtn) {
         mQtiSurfaceExtn->qtiTrackTransaction(mNextFrameNumber, now);
     }
 
-// QTI_END: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     // Drop the lock temporarily while we touch the underlying producer. In the case of a local
     // BufferQueue, the following should be allowable:
     //
@@ -1461,10 +1463,26 @@ int Surface::queueBuffers(const std::vector<BatchQueuedBuffer>& buffers,
     std::vector<IGraphicBufferProducer::QueueBufferOutput> igbpQueueBufferOutputs;
     std::vector<int> bufferSlots(numBuffers, -1);
     std::vector<sp<Fence>> bufferFences(numBuffers);
+    std::vector<sp<GraphicBuffer>> deletedLeakedBuffers;
 
     int err;
     {
         Mutex::Autolock lock(mMutex);
+
+        for (auto& batchBuffer : buffers) {
+            auto buffer = GraphicBuffer::from(batchBuffer.buffer);
+            if (mLeakedBuffers.contains(buffer)) {
+                SURF_LOGE("Surface::queueBuffers given a leaked buffer! Deleting extra held "
+                          "reference.");
+                mLeakedBuffers.erase(buffer);
+                // Hold onto one last reference to the buffer until the end of the scope of this
+                // function in the rare case that it still needs to be sent to the client.
+                deletedLeakedBuffers.push_back(std::move(buffer));
+            }
+        }
+        if (!mIsConnected && !deletedLeakedBuffers.empty()) {
+            return OK;
+        }
 
         if (mSharedBufferMode) {
             SURF_LOGE("%s: batched operation is not supported in shared buffer mode", __FUNCTION__);
@@ -1640,12 +1658,10 @@ int Surface::query(int what, int* value) const {
             }
         }
     }
-// QTI_BEGIN: 2024-08-01: Video: libgui: gpp extension latency optimization.
 
     if (mQtiSurfaceGPPExtn && mQtiSurfaceGPPExtn->IsGPPEnabled()) {
         return mQtiSurfaceGPPExtn->query(what, value);
     }
-// QTI_END: 2024-08-01: Video: libgui: gpp extension latency optimization.
     return mGraphicBufferProducer->query(what, value);
 }
 
@@ -2201,15 +2217,13 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
     Mutex::Autolock lock(mMutex);
     IGraphicBufferProducer::QueueBufferOutput output;
     mReportRemovedBuffers = reportBufferRemoval;
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->Connect(api, &mGraphicBufferProducer);
     }
 
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     if (listener != nullptr) {
-        mListenerProxy = sp<ProducerListenerProxy>::make(this, listener);
+        mListenerProxy = sp<ProducerListenerProxy>::make(wp<Surface>::fromExisting(this), listener);
     }
 
     int err =
@@ -2231,14 +2245,10 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
         }
 
         mConsumerRunningBehind = (output.numPendingBuffers >= 2);
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
         if (mQtiSurfaceGPPExtn) {
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
             mQtiSurfaceGPPExtn->StoreConnect(api, mListenerProxy, reportBufferRemoval);
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
         }
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
 #if !defined(NO_BINDER)
         if (listener && listener->needsDeathNotify()) {
@@ -2254,6 +2264,7 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
             mGraphicBufferProducer->getUniqueId(&mId);
         }
         SURF_LOGE_IF(idErr != NO_ERROR, "Unable to get ID from IGBP: %d", idErr);
+        mIsConnected = true;
     }
     if (!err && api == NATIVE_WINDOW_API_CPU) {
         mConnectedToCpu = true;
@@ -2274,7 +2285,7 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     mRemovedBuffers.clear();
     mSharedBufferSlot = BufferItem::INVALID_BUFFER_SLOT;
     mSharedBufferHasBeenQueued = false;
-    freeAllBuffersLocked();
+    clearBuffersForDisconnectLocked();
     int err = mGraphicBufferProducer->disconnect(api, mode);
     if (!err) {
         mReqFormat = 0;
@@ -2298,14 +2309,13 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
         // Keep the old name in case we get subsequent calls, for logging.
         mDebugName = mDebugName + "-DISCONNECTED";
         mId = 0;
+        mIsConnected = false;
     }
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->Disconnect(api, &mGraphicBufferProducer);
     }
 
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
 #if !defined(NO_BINDER)
     if (mSurfaceDeathListener != nullptr) {
@@ -2399,7 +2409,8 @@ int Surface::isBufferOwned(const sp<GraphicBuffer>& buffer, bool* outIsOwned) co
 int Surface::attachBuffer(ANativeWindowBuffer* buffer)
 {
     ATRACE_CALL();
-    sp<GraphicBuffer> graphicBuffer(static_cast<GraphicBuffer*>(buffer));
+    sp<GraphicBuffer> graphicBuffer(
+            sp<GraphicBuffer>::fromExisting(static_cast<GraphicBuffer*>(buffer)));
 
     SURF_LOGV("Surface::attachBuffer bufferId=%" PRIu64, graphicBuffer->getId());
 
@@ -2739,7 +2750,9 @@ void Surface::freeUndequeuedBuffersLocked() {
     }
 }
 
-void Surface::freeAllBuffersLocked() {
+void Surface::clearBuffersForDisconnectLocked() {
+    ATRACE_CALL();
+    SURF_LOGV("Surface::clearBuffersForDisconnectLocked");
     if (!mDequeuedSlots.empty()) {
         SURF_LOGE("%s: %zu buffers were freed while being dequeued!", __FUNCTION__,
                   mDequeuedSlots.size());
@@ -2749,6 +2762,13 @@ void Surface::freeAllBuffersLocked() {
 #else
     for (int i = 0; i < NUM_BUFFER_SLOTS; i++) {
 #endif
+        // Since we're ANW contractually oblicates us to be responsible for a reference to a
+        // dequeued buffer, hold onto a reference to the buffer even though we're disconnecting.
+        // This is especially important in the case of when some client is using ANW and someone
+        // else, having a reference to the Surface, disconnects it.
+        if (mDequeuedSlots.contains(i)) {
+            mLeakedBuffers.insert(mSlots[i].buffer);
+        }
         mSlots[i].buffer = nullptr;
         mSlots[i].dirtyRegion.clear();
         mSlots[i].requiresFreeOnReturn = false;
@@ -2980,7 +3000,7 @@ status_t Surface::unlockAndPost()
     status_t err = mLockedBuffer->unlockAsync(&fd);
     SURF_LOGE_IF(err, "failed unlocking buffer (%p)", mLockedBuffer->handle);
 
-    err = queueBuffer(mLockedBuffer.get(), fd);
+    err = queueBuffer(sp<GraphicBuffer>::fromExisting(mLockedBuffer.get()), fd);
     SURF_LOGE_IF(err, "queueBuffer (handle=%p) failed (%s)", mLockedBuffer->handle, strerror(-err));
 
     mPostedBuffer = mLockedBuffer;

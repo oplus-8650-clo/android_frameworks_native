@@ -36,7 +36,9 @@
 #include "InputListener.h"
 #include "InputReaderBase.h"
 #include "InputReaderContext.h"
+#include "InputReaderTracer.h"
 #include "InputThread.h"
+#include "InputTracingBackendInterface.h"
 
 namespace android {
 
@@ -59,7 +61,8 @@ class InputReader : public InputReaderInterface {
 public:
     InputReader(std::shared_ptr<EventHubInterface> eventHub,
                 const sp<InputReaderPolicyInterface>& policy, InputListenerInterface& listener,
-                JNIEnv* env);
+                JNIEnv* env,
+                std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend);
     virtual ~InputReader();
 
     void dump(std::string& dump) override;
@@ -284,6 +287,8 @@ private:
 
     // find an InputDevice from an InputDevice id
     InputDevice* findInputDeviceLocked(int32_t deviceId) const REQUIRES(mLock);
+
+    std::shared_ptr<InputReaderTracer> mTracer;
 };
 
 } // namespace android

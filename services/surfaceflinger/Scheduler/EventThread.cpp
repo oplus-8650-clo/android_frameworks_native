@@ -51,9 +51,6 @@
 
 #include "EventThread.h"
 
-#undef LOG_TAG
-#define LOG_TAG "EventThread"
-
 using namespace std::chrono_literals;
 
 namespace android {
@@ -232,10 +229,8 @@ EventThreadConnection::EventThreadConnection(EventThread* eventThread, uid_t cal
       : mOwnerUid(callingUid),
         mEventRegistration(eventRegistration),
         mEventThread(eventThread),
-// QTI_BEGIN: 2023-04-19: Display: SF: Add retry to EventThread postEvent
         mChannel(gui::BitTube(
                 8 * 1024 /* default size is 4KB, double it */)) {}
-// QTI_END: 2023-04-19: Display: SF: Add retry to EventThread postEvent
 
 EventThreadConnection::~EventThreadConnection() {
     // do nothing here -- clean-up will happen automatically
@@ -452,9 +447,7 @@ VsyncEventData EventThread::getLatestVsyncEventData(const sp<EventThreadConnecti
         return {vsyncTime, vsyncTime - mReadyDuration.count()};
     }();
     generateFrameTimeline(vsyncEventData, frameInterval.ns(), now, presentTime, deadline);
-    if (FlagManager::getInstance().vrr_config()) {
-        mCallback.onExpectedPresentTimePosted(TimePoint::fromNs(presentTime));
-    }
+    mCallback.onExpectedPresentTimePosted(TimePoint::fromNs(presentTime));
     return vsyncEventData;
 }
 
@@ -692,7 +685,8 @@ bool EventThread::shouldConsumeEvent(const DisplayEventReceiver::Event& event,
                     gui::ISurfaceComposer::EventRegistration::modeChanged);
 
         case DisplayEventType::DISPLAY_EVENT_MODE_REJECTION:
-            return true;
+            return connection->mEventRegistration.test(
+                    gui::ISurfaceComposer::EventRegistration::modeRejected);
 
         case DisplayEventType::DISPLAY_EVENT_VSYNC:
             switch (connection->vsyncRequest) {
@@ -822,9 +816,7 @@ void EventThread::dispatchEvent(const DisplayEventReceiver::Event& event,
                 removeDisplayEventConnectionLocked(consumer);
         }
     }
-
-    if (event.header.type == DisplayEventType::DISPLAY_EVENT_VSYNC &&
-        FlagManager::getInstance().vrr_config()) {
+    if (event.header.type == DisplayEventType::DISPLAY_EVENT_VSYNC) {
         mLastCommittedVsyncTime =
                 TimePoint::fromNs(event.vsync.vsyncData.preferredExpectedPresentationTime());
         mCallback.onExpectedPresentTimePosted(mLastCommittedVsyncTime);

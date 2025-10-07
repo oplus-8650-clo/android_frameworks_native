@@ -89,7 +89,7 @@ public:
     typedef std::function<bool(const LayerSnapshot& snapshot)> ConstPredicate;
     // Visit each snapshot that satisfies the predicate and move the snapshot if needed with visible
     // snapshots in z-order
-    void forEachSnapshot(const Visitor& visitor, const ConstPredicate& predicate);
+    void forEachNonNullSnapshot(const Visitor& visitor, const ConstPredicate& predicate);
 
     // Visit each snapshot
     void forEachSnapshot(const ConstVisitor& visitor) const;
@@ -120,6 +120,13 @@ private:
     static void resetRelativeState(LayerSnapshot& snapshot);
     static void updateRoundedCorner(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                                     const LayerSnapshot& parentSnapshot, const Args& args);
+    static void scaleRadii(gui::CornerRadii& radii, float scaleX, float scaleY);
+    static gui::CornerRadii getClippedClientRadii(const gui::CornerRadii& requestedRadii,
+                                                  const FloatRect& layerCropRect,
+                                                  const FloatRect& layerBounds);
+    static bool doesChildOverlapParentCornerRegion(const FloatRect& childCropRect,
+                                                   const FloatRect& parentCropRect,
+                                                   const gui::CornerRadii& parentRadii);
     static void updateBoundsForEdgeExtension(LayerSnapshot& snapshot);
     void updateLayerBounds(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                            const LayerSnapshot& parentSnapshot, uint32_t displayRotationFlags);

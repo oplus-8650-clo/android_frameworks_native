@@ -52,6 +52,7 @@ InputDevice::InputDevice(InputReaderContext* context, int32_t id, int32_t genera
         mSources(0),
         mIsWaking(false),
         mIsExternal(false),
+        mIsVirtualDevice(false),
         mHasMic(false),
         mDropUntilNextSync(false) {}
 
@@ -103,25 +104,36 @@ std::list<NotifyArgs> InputDevice::updateEnableState(nsecs_t when,
     // When resetting some devices, the driver needs to be queried to ensure that a proper reset is
     // performed. The querying must happen when the device is enabled, so we reset after enabling
     // but before disabling the device. See MultiTouchMotionAccumulator::reset for more information.
+    bool enableStateChanged = false;
     if (enable) {
-        for_each_subdevice([this, &readerConfig](auto& context) {
+        for_each_subdevice([this, &readerConfig, &enableStateChanged](auto& context) {
             uint32_t sources = 0;
             for_each_mapper_in_subdevice(context.getEventHubId(),
                                          [&](auto& mapper) { sources |= mapper.getSources(); });
-            if (!readerConfig.touchpadsEnabled && isFromSource(sources, AINPUT_SOURCE_TOUCHPAD)) {
+            const bool currentlyEnabled = context.isDeviceEnabled();
+            if (currentlyEnabled && !readerConfig.touchpadsEnabled &&
+                isFromSource(sources, AINPUT_SOURCE_TOUCHPAD)) {
                 ALOGI("Disabling subdevice of '%s' with eventHubId %d because touchpads are "
                       "disabled and it has source %s",
                       getName().c_str(), context.getEventHubId(),
                       inputEventSourceToString(sources).c_str());
                 context.disableDevice();
-            } else {
+                enableStateChanged = true;
+            } else if (!currentlyEnabled) {
                 context.enableDevice();
+                enableStateChanged = true;
             }
         });
-        out += reset(when);
     } else {
+        for_each_subdevice([&enableStateChanged](auto& context) {
+            if (context.isDeviceEnabled()) {
+                context.disableDevice();
+                enableStateChanged = true;
+            }
+        });
+    }
+    if (enableStateChanged) {
         out += reset(when);
-        for_each_subdevice([](auto& context) { context.disableDevice(); });
     }
     // Must change generation to flag this device as changed
     bumpGeneration();
@@ -136,6 +148,7 @@ void InputDevice::dump(std::string& dump, const std::string& eventHubDevStr) {
     dump += StringPrintf(INDENT "%s", eventHubDevStr.c_str());
     dump += StringPrintf(INDENT2 "Generation: %d\n", mGeneration);
     dump += StringPrintf(INDENT2 "IsExternal: %s\n", toString(mIsExternal));
+    dump += StringPrintf(INDENT2 "IsVirtualDevice: %s\n", toString(mIsVirtualDevice));
     dump += StringPrintf(INDENT2 "IsWaking: %s\n", toString(mIsWaking));
     dump += StringPrintf(INDENT2 "AssociatedDisplayPort: ");
     if (mAssociatedDisplayPort) {
@@ -287,6 +300,15 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
             mShouldSmoothScroll = mConfiguration.getBool("device.viewBehavior_smoothScroll");
         }
 
+        if (!changes.any() || changes.test(Change::VIRTUAL_DEVICES)) {
+            const bool isVirtualDevice =
+                    readerConfig.virtualDevicePorts.contains(mIdentifier.location);
+            if (mIsVirtualDevice != isVirtualDevice) {
+                mIsVirtualDevice = isVirtualDevice;
+                bumpGeneration();
+            }
+        }
+
         if (!changes.any() || changes.test(Change::DEVICE_ALIAS)) {
             if (!(mClasses.test(InputDeviceClass::VIRTUAL))) {
                 std::string alias = mContext->getPolicy()->getDeviceAlias(mIdentifier);
@@ -388,10 +410,11 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
         }
 
         if (!changes.any() || changes.test(InputReaderConfiguration::Change::KEY_REMAPPING)) {
-            const bool isFullKeyboard =
-                    (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD &&
-                    mKeyboardType == KeyboardType::ALPHABETIC;
-            if (isFullKeyboard) {
+            const bool isKeyboard =
+                    (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD;
+            const bool isFullKeyboard = isKeyboard && (mKeyboardType == KeyboardType::ALPHABETIC);
+            const bool isPhysicalKeyboard = isKeyboard && !mIsVirtualDevice;
+            if (isPhysicalKeyboard && isFullKeyboard) {
                 for_each_subdevice([&readerConfig](auto& context) {
                     context.setKeyRemapping(readerConfig.keyRemapping);
                 });
@@ -481,7 +504,7 @@ std::list<NotifyArgs> InputDevice::updateExternalStylusState(const StylusState& 
 InputDeviceInfo InputDevice::getDeviceInfo() {
     InputDeviceInfo outDeviceInfo;
     outDeviceInfo.initialize(mId, mGeneration, mControllerNumber, mIdentifier, mAlias, mIsExternal,
-                             mHasMic,
+                             mIsVirtualDevice, mHasMic,
                              getAssociatedDisplayId().value_or(ui::LogicalDisplayId::INVALID),
                              {mShouldSmoothScroll}, isEnabled());
     outDeviceInfo.setKeyboardType(static_cast<int32_t>(mKeyboardType));

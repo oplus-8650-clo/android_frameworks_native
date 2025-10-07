@@ -677,6 +677,10 @@ private:
             std::vector<std::variant<binder::unique_fd, binder::borrowed_fd>>&& ancillaryFds,
             release_func relFunc);
 
+    // This drops ownership of objects, as they are now taken by
+    // the remote object.
+    void rpcSend() const;
+
     status_t            finishWrite(size_t len);
     void                releaseObjects();
     void reacquireObjects(size_t objectSize);
@@ -696,6 +700,9 @@ private:
     void                scanForFds() const;
     status_t scanForBinders(bool* result) const;
 
+    // Only used to keep validateReadData function size down for performance
+    // in read* methods
+    status_t validateRpcReadData(size_t len) const;
     status_t            validateReadData(size_t len) const;
 
     void                updateWorkSourceRequestHeaderPosition() const;
@@ -704,6 +711,16 @@ private:
     status_t            finishUnflattenBinder(const sp<IBinder>& binder, sp<IBinder>* out) const;
     status_t            flattenBinder(const sp<IBinder>& binder);
     status_t            unflattenBinder(sp<IBinder>* out) const;
+    [[nodiscard]] status_t readRpcObjectType(int32_t* objectType) const;
+    [[nodiscard]] static constexpr size_t getRpcObjectSize(int32_t objectType);
+    [[nodiscard]] status_t readRpcBinderAddress(uint64_t* addr) const;
+    [[nodiscard]] status_t readRpcFdIndex(int32_t* addr) const;
+    // This is similar to readAligned without a call to validateReadData.
+    // validateReadData would cause the read to fail because we are reading
+    // over objects - but it's intentional in this case!
+    // Used only for the readRpc* methods directly above.
+    template <class T>
+    [[nodiscard]] status_t readPartialRpcObject(T* val) const;
 
     LIBBINDER_EXPORTED status_t readOutVectorSizeWithCheck(size_t elmSize, int32_t* size) const;
 
@@ -1355,7 +1372,7 @@ private:
         RpcFields(const sp<RpcSession>& session);
 
         // Should always be non-null.
-        const sp<RpcSession> mSession;
+        sp<RpcSession> mSession;
 
         enum ObjectType : int32_t {
             TYPE_BINDER_NULL = 0,
@@ -1364,15 +1381,57 @@ private:
             TYPE_NATIVE_FILE_DESCRIPTOR = 2,
         };
 
-        // Sorted.
-        std::vector<uint32_t> mObjectPositions;
+        // Boxed to save space. Lazy allocated. Due to Parcel ABI restrictions.
+        struct Impl {
+            // File descriptors referenced by the parcel data. Should be indexed
+            // using the offsets in the parcel data. Don't assume the list is in the
+            // same order as `mObjectPositions`.
+            std::vector<std::variant<binder::unique_fd, binder::borrowed_fd>> mFds;
 
-        // File descriptors referenced by the parcel data. Should be indexed
-        // using the offsets in the parcel data. Don't assume the list is in the
-        // same order as `mObjectPositions`.
+            // Any binder written to a Parcel is automatically acquired. However, when
+            // you receive a binder, you have to acquire it.
+            //
+            // Before RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS:
+            // - binders are acquired the first time they are read
+            // - there may be leaks if an error happens before they are acquired
+            //
+            // After RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS
+            // - binders are acquired in rpcSetDataReference
+            //
+            // In either case, the first time a binder object is read, it is acquired
+            // into this list, and after that point, it is pulled from this list.
+            //
+            // object position -> binder
+            mutable std::map<uint32_t, sp<IBinder>> mAcquiredEnteringBinders;
+        };
+        const Impl& maybeMakeImpl() const {
+            if (mImpl == nullptr) {
+                mImpl = std::make_unique<Impl>();
+            }
+            return *mImpl;
+        }
+
+        enum class RpcSendState {
+            NOT_SENT, // this is a Parcel that is just constructed.
+            SENT,     // this Parcel has been sent over RPC binder.
+            RECEIVED, // this Parcel has been received over RPC binder.
+        };
+
+        // Layout below
+
+        // Sorted list of offsets to objects. The first four bytes are always
+        // the ObjectType.
         //
-        // Boxed to save space. Lazy allocated.
-        std::unique_ptr<std::vector<std::variant<binder::unique_fd, binder::borrowed_fd>>> mFds;
+        // The contents vary depending on the protocol version. Binder objects
+        // are only added to the list when the protocol version is at least 2.
+        // File descriptors are always added to this list, but there will be an
+        // error at transaction time if the protocol version isn't at least 1.
+        std::vector<uint32_t> mObjectPositions;
+        mutable std::unique_ptr<Impl> mImpl;
+        // If this is NOT_SENT, then this object owns RPC resources and must clean them
+        // up. Otherwise, they must be acquired by the other side of the RPC
+        // connection.
+        mutable RpcSendState mSendState = RpcSendState::NOT_SENT;
     };
     std::variant<KernelFields, RpcFields> mVariantFields;
 
@@ -1399,6 +1458,7 @@ private:
 
     size_t mReserved;
 
+#ifndef BINDER_DISABLE_BLOB
     class Blob {
     public:
         LIBBINDER_EXPORTED Blob();
@@ -1418,11 +1478,12 @@ private:
         size_t mSize;
         bool mMutable;
     };
+#endif // BINDER_DISABLE_BLOB
 
-    #if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wweak-vtables"
-    #endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wweak-vtables"
+#endif
 
     // FlattenableHelperInterface and FlattenableHelper avoid generating a vtable entry in objects
     // following Flattenable template/protocol.
@@ -1469,6 +1530,7 @@ private:
     LIBBINDER_EXPORTED status_t read(FlattenableHelperInterface& val) const;
 
 public:
+#ifndef BINDER_DISABLE_BLOB
     class ReadableBlob : public Blob {
         friend class Parcel;
     public:
@@ -1481,6 +1543,7 @@ public:
     public:
         LIBBINDER_EXPORTED inline void* data() { return mData; }
     };
+#endif // BINDER_DISABLE_BLOB
 
     /**
      * Returns the total amount of ashmem memory owned by this object.

@@ -17,9 +17,6 @@
 // #define LOG_NDEBUG 0
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
-#undef LOG_TAG
-#define LOG_TAG "SurfaceFlinger"
-
 #include "LayerLifecycleManager.h"
 #include "Client.h" // temporarily needed for LayerCreationArgs
 #include "LayerLog.h"
@@ -70,14 +67,7 @@ void LayerLifecycleManager::addLayers(std::vector<std::unique_ptr<RequestedLayer
                 }
             }
         } else {
-            // Check if we are mirroring a single layer, and if so add it to the list of children
-            // to be mirrored.
             layer.layerIdToMirror = linkLayer(layer.layerIdToMirror, layer.id);
-            if (!FlagManager::getInstance().detached_mirror()) {
-                if (layer.layerIdToMirror != UNASSIGNED_LAYER_ID) {
-                    layer.mirrorIds.emplace_back(layer.layerIdToMirror);
-                }
-            }
         }
         layer.touchCropId = linkLayer(layer.touchCropId, layer.id);
         if (layer.isRoot()) {

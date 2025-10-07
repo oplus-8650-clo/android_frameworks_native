@@ -92,6 +92,9 @@ cc_test {
         ":libsurfaceflinger_mock_sources",
         ":libsurfaceflinger_sources",
     ],
+    static_libs: [
+        "libflagtest",
+    ],
 }
 
 cc_defaults {

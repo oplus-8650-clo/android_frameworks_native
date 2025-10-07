@@ -75,8 +75,14 @@ struct DispSyncIsSupportedVariant {
                     onDisplayModeChanged(DisplayModeFps(Fps::fromPeriodNsecs(DEFAULT_VSYNC_PERIOD)),
                                          false))
                 .Times(1);
-        EXPECT_CALL(static_cast<mock::VSyncTracker&>(vsyncSchedule->getTracker()), resetModel())
-                .Times(1);
+        if (FlagManager::getInstance().reset_model_flushes_fence()) {
+            EXPECT_CALL(static_cast<mock::VsyncController&>(vsyncSchedule->getController()),
+                        resetModel())
+                    .Times(1);
+        } else {
+            EXPECT_CALL(static_cast<mock::VSyncTracker&>(vsyncSchedule->getTracker()), resetModel())
+                    .Times(1);
+        }
     }
 };
 

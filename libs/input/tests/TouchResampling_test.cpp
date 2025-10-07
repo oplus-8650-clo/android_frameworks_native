@@ -95,10 +95,9 @@ status_t TouchResamplingTest::publishSimpleMotionEventWithCoords(
     }
     return mPublisher->publishMotionEvent(mSeq++, InputEvent::nextId(), /*deviceId=*/1,
                                           AINPUT_SOURCE_TOUCHSCREEN, displayId, INVALID_HMAC,
-                                          action, /*actionButton=*/0, /*flags=*/0,
-                                          /*edgeFlags=*/0, AMETA_NONE, /*buttonState=*/0,
-                                          MotionClassification::NONE, identityTransform,
-                                          /*xPrecision=*/0, /*yPrecision=*/0,
+                                          action, /*actionButton=*/0, /*flags=*/0, AMETA_NONE,
+                                          /*buttonState=*/0, MotionClassification::NONE,
+                                          identityTransform, /*xPrecision=*/0, /*yPrecision=*/0,
                                           AMOTION_EVENT_INVALID_CURSOR_POSITION,
                                           AMOTION_EVENT_INVALID_CURSOR_POSITION, identityTransform,
                                           downTime, eventTime, properties.size(), properties.data(),
