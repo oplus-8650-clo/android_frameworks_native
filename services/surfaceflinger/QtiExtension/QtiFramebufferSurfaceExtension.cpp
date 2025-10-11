@@ -8,7 +8,7 @@
 
 namespace android::surfaceflingerextension {
 
-QtiFramebufferSurfaceExtension::QtiFramebufferSurfaceExtension(FramebufferSurface* fbs)
+QtiFramebufferSurfaceExtension::QtiFramebufferSurfaceExtension(LegacyFramebufferSurface* fbs)
       : mQtiFBS(fbs) {
     if (!mQtiFBS) {
         ALOGW("Passed an invalid pointer to FramebufferSurface");

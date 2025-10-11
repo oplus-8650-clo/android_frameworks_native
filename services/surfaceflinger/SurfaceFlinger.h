@@ -47,8 +47,10 @@
 #include <cutils/atomic.h>
 #include <cutils/compiler.h>
 #include <ftl/algorithm.h>
+#include <ftl/finalizer.h>
 #include <ftl/future.h>
 #include <ftl/non_null.h>
+#include <ftl/small_map.h>
 #include <gui/BufferQueue.h>
 #include <gui/CompositorTiming.h>
 #include <gui/FrameTimestamps.h>
@@ -436,19 +438,7 @@ private:
 
         const LayerVector::StateSet stateSet = LayerVector::StateSet::Invalid;
 
-        // TODO(b/241285876): Replace deprecated DefaultKeyedVector with ftl::SmallMap.
-        DefaultKeyedVector<wp<IBinder>, DisplayDeviceState> displays;
-
-        std::optional<size_t> getDisplayIndex(PhysicalDisplayId displayId) const {
-            for (size_t i = 0; i < displays.size(); i++) {
-                const auto& state = displays.valueAt(i);
-                if (state.isPhysical() && state.getPhysical().id == displayId) {
-                    return i;
-                }
-            }
-
-            return {};
-        }
+        ui::DisplayMap<wp<IBinder>, DisplayDeviceState> displays;
 
         bool colorMatrixChanged = true;
         mat4 colorMatrix;
@@ -618,7 +608,9 @@ private:
     void setAutoLowLatencyMode(const sp<IBinder>& displayToken, bool on);
     void setGameContentType(const sp<IBinder>& displayToken, bool on);
     status_t getMaxLayerPictureProfiles(const sp<IBinder>& displayToken, int32_t* outMaxProfiles);
+    // TODO b/339477240 - Remove.
     void setPowerMode(const sp<IBinder>& displayToken, int mode);
+    void setPowerModeAsync(const sp<IBinder>& displayToken, int mode);
     status_t overrideHdrTypes(const sp<IBinder>& displayToken,
                               const std::vector<ui::Hdr>& hdrTypes);
     status_t onPullAtom(const int32_t atomId, std::vector<uint8_t>* pulledData, bool* success);
@@ -775,6 +767,12 @@ private:
 
     // Called on the main thread in response to setPowerMode()
     void setPhysicalDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
+            REQUIRES(mStateLock, kMainThreadContext);
+    // Returns a future for the slow hardware operation which can run on any
+    // thread and a finalizer whose function must be scheduled on the main
+    // thread.
+    [[nodiscard]] std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
+    setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display, hal::PowerMode mode)
             REQUIRES(mStateLock, kMainThreadContext);
     void setVirtualDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
             REQUIRES(mStateLock, kMainThreadContext);

@@ -209,16 +209,6 @@ bool Scheduler::designatePacesetterDisplay() {
     demotePacesetterDisplay(kPromotionParams);
     promotePacesetterDisplay(kPromotionParams, pacesetterId);
 
-    // Cancel the pending refresh rate change, if any, before updating the phase configuration.
-    mVsyncModulator->cancelRefreshRateChange();
-
-    {
-        std::scoped_lock lock{mVsyncConfigLock};
-        mVsyncConfiguration->reset();
-    }
-
-    updatePhaseConfiguration(pacesetterId, pacesetterSelectorPtr()->getActiveMode().fps);
-
     return true;
 }
 
@@ -369,24 +359,21 @@ void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
     demotePacesetterDisplay(promotionParams);
 
     RefreshRateSelector& selector = *selectorPtr;
-    auto [pacesetterVsyncSchedule, isNew] = [&]() REQUIRES(kMainThreadContext) {
+    const bool isNew = [&]() REQUIRES(kMainThreadContext) {
         std::scoped_lock lock(mDisplayLock);
-        const bool isNew = mDisplays
-                                   .emplace_or_replace(displayId, displayId, connectionType,
-                                                       std::move(selectorPtr),
-                                                       std::move(schedulePtr), mFeatures)
-                                   .second;
-
-        return std::make_pair(promotePacesetterDisplayLocked(promotionParams), isNew);
+        return mDisplays
+                .emplace_or_replace(displayId, displayId, connectionType, std::move(selectorPtr),
+                                    std::move(schedulePtr), mFeatures)
+                .second;
     }();
+
+    promotePacesetterDisplay(promotionParams);
 
     if (isNew && FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
         initializeIdleTimer(displayId);
         selector.startIdleTimer();
         startPowerTimer(displayId);
     }
-
-    applyNewVsyncSchedule(std::move(pacesetterVsyncSchedule));
 
     // Disable hardware VSYNC if the registration is new, as opposed to a renewal.
     if (isNew) {
@@ -404,7 +391,6 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId) {
                     !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()};
     demotePacesetterDisplay(kPromotionParams);
 
-    std::shared_ptr<VsyncSchedule> pacesetterVsyncSchedule;
     {
         std::scoped_lock lock(mDisplayLock);
 
@@ -423,10 +409,8 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId) {
         if (mForcedPacesetterDisplayId == displayId) {
             mForcedPacesetterDisplayId.reset();
         }
-
-        pacesetterVsyncSchedule = promotePacesetterDisplayLocked(kPromotionParams);
     }
-    applyNewVsyncSchedule(std::move(pacesetterVsyncSchedule));
+    promotePacesetterDisplay(kPromotionParams);
 
     {
         std::scoped_lock lock(mPolicyLock);
@@ -1367,69 +1351,72 @@ RefreshRateSelector* Scheduler::selectorPtrForLayerStack(ui::LayerStack stack) c
 
 void Scheduler::promotePacesetterDisplay(PromotionParams params,
                                          std::optional<PhysicalDisplayId> pacesetterId) {
-    std::shared_ptr<VsyncSchedule> pacesetterVsyncSchedule;
+    ftl::Optional<ConstDisplayRef> pacesetterOpt;
     {
         std::scoped_lock lock(mDisplayLock);
-        pacesetterVsyncSchedule = promotePacesetterDisplayLocked(params, pacesetterId);
+        pacesetterId = selectPacesetterDisplayLocked(pacesetterId);
+        mPacesetterDisplayId = *pacesetterId;
+        pacesetterOpt = pacesetterDisplayLocked();
     }
-
-    applyNewVsyncSchedule(std::move(pacesetterVsyncSchedule));
-}
-
-std::shared_ptr<VsyncSchedule> Scheduler::promotePacesetterDisplayLocked(
-        PromotionParams params, std::optional<PhysicalDisplayId> pacesetterId) {
-    pacesetterId = selectPacesetterDisplayLocked(pacesetterId);
-
-    mPacesetterDisplayId = *pacesetterId;
 
     ALOGI("Display %s is the pacesetter", to_string(*pacesetterId).c_str());
 
-    std::shared_ptr<VsyncSchedule> newVsyncSchedulePtr;
-    if (const auto pacesetterOpt = pacesetterDisplayLocked()) {
-        const Display& pacesetter = *pacesetterOpt;
-
-        if (params.toggleIdleTimer) {
-            pacesetter.selectorPtr->setIdleTimerCallbacks(
-                    {.platform = {.onReset =
-                                          [this, pacesetterId] {
-                                              idleTimerCallback(*pacesetterId, TimerState::Reset);
-                                          },
-                                  .onExpired =
-                                          [this, pacesetterId] {
-                                              idleTimerCallback(*pacesetterId, TimerState::Expired);
-                                          }},
-                     .kernel = {.onReset =
-                                        [this, pacesetterId] {
-                                            kernelIdleTimerCallback(*pacesetterId,
-                                                                    TimerState::Reset);
-                                        },
-                                .onExpired =
-                                        [this, pacesetterId] {
-                                            kernelIdleTimerCallback(*pacesetterId,
-                                                                    TimerState::Expired);
-                                        }},
-                     .vrr = {.onReset =
-                                     [this, pacesetterId] {
-                                         mSchedulerCallback.vrrDisplayIdle(*pacesetterId, false);
-                                     },
-                             .onExpired =
-                                     [this, pacesetterId] {
-                                         mSchedulerCallback.vrrDisplayIdle(*pacesetterId, true);
-                                     }}});
-
-            pacesetter.selectorPtr->startIdleTimer();
-        }
-
-        newVsyncSchedulePtr = pacesetter.schedulePtr;
-
-        constexpr bool kForce = true;
-        const auto pacesetterActiveModePtr = pacesetter.selectorPtr->getActiveMode().modePtr;
-        newVsyncSchedulePtr->onDisplayModeChanged(pacesetterActiveModePtr, kForce);
-
-        mSchedulerCallback.enableLayerCachingTexturePool(*pacesetterId, true);
-        onPacesetterDisplaySizeChanged(pacesetterActiveModePtr->getResolution());
+    if (!pacesetterOpt.has_value()) {
+        return;
     }
-    return newVsyncSchedulePtr;
+
+    const Display& pacesetter = *pacesetterOpt;
+    if (params.toggleIdleTimer) {
+        pacesetter.selectorPtr->setIdleTimerCallbacks(
+                {.platform = {.onReset =
+                                      [this, pacesetterId] {
+                                          idleTimerCallback(*pacesetterId, TimerState::Reset);
+                                      },
+                              .onExpired =
+                                      [this, pacesetterId] {
+                                          idleTimerCallback(*pacesetterId, TimerState::Expired);
+                                      }},
+                 .kernel = {.onReset =
+                                    [this, pacesetterId] {
+                                        kernelIdleTimerCallback(*pacesetterId, TimerState::Reset);
+                                    },
+                            .onExpired =
+                                    [this, pacesetterId] {
+                                        kernelIdleTimerCallback(*pacesetterId, TimerState::Expired);
+                                    }},
+                 .vrr = {.onReset =
+                                 [this, pacesetterId] {
+                                     mSchedulerCallback.vrrDisplayIdle(*pacesetterId, false);
+                                 },
+                         .onExpired =
+                                 [this, pacesetterId] {
+                                     mSchedulerCallback.vrrDisplayIdle(*pacesetterId, true);
+                                 }}});
+
+        pacesetter.selectorPtr->startIdleTimer();
+    }
+
+    constexpr bool kForce = true;
+    const auto pacesetterActiveModePtr = pacesetter.selectorPtr->getActiveMode().modePtr;
+    pacesetter.schedulePtr->onDisplayModeChanged(pacesetterActiveModePtr, kForce);
+
+    mSchedulerCallback.enableLayerCachingTexturePool(*pacesetterId, true);
+    onPacesetterDisplaySizeChanged(pacesetterActiveModePtr->getResolution());
+
+    // New pacesetter means that MessageQueue and EventThread need to use the new pacesetter's
+    // VsyncSchedule, and this must happen while mDisplayLock is *not* locked, or else we may
+    // deadlock with EventThread.
+    applyNewVsyncSchedule(pacesetter.schedulePtr);
+
+    // Cancel the pending refresh rate change, if any, before updating the phase configuration.
+    mVsyncModulator->cancelRefreshRateChange();
+
+    {
+        std::scoped_lock lock{mVsyncConfigLock};
+        mVsyncConfiguration->reset();
+    }
+
+    updatePhaseConfiguration(*pacesetterId, pacesetter.selectorPtr->getActiveMode().fps);
 }
 
 void Scheduler::applyNewVsyncSchedule(std::shared_ptr<VsyncSchedule> vsyncSchedule) {

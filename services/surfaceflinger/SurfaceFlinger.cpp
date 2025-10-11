@@ -75,6 +75,7 @@
 #include <ftl/algorithm.h>
 #include <ftl/concat.h>
 #include <ftl/fake_guard.h>
+#include <ftl/finalizer.h>
 #include <ftl/future.h>
 #include <ftl/match.h>
 #include <ftl/small_vector.h>
@@ -149,6 +150,7 @@
 #include "DisplayHardware/ComposerHal.h"
 #include "DisplayHardware/FramebufferSurface.h"
 #include "DisplayHardware/Hal.h"
+#include "DisplayHardware/LegacyFramebufferSurface.h"
 #include "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.h"
 #include "DisplayHardware/VirtualDisplay/VirtualDisplaySurface.h"
 #include "Effects/Daltonizer.h"
@@ -664,7 +666,7 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         virtual ~DisplayToken() {
             // no more references, this display must be terminated
             Mutex::Autolock _l(flinger->mStateLock);
-            flinger->mCurrentState.displays.removeItem(wp<IBinder>::fromExisting(this));
+            flinger->mCurrentState.displays.erase(wp<IBinder>::fromExisting(this));
             flinger->setTransactionFlags(eDisplayTransactionNeeded);
         }
 
@@ -676,8 +678,7 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
 
     Mutex::Autolock _l(mStateLock);
     // Display ID is assigned when virtual display is allocated by HWC.
-    DisplayDeviceState state;
-    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(ownerUid);
+    DisplayDeviceState state = DisplayDeviceState::createVirtual(ownerUid);
     state.isSecure = isSecure;
     // Set display as protected when marked as secure to ensure no behavior change
     // TODO (b/314820005): separate as a different arg when creating the display.
@@ -688,20 +689,20 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
     state.displayName = displayName;
     state.uniqueId = uniqueId;
     state.requestedRefreshRate = Fps::fromValue(requestedRefreshRate);
-    mCurrentState.displays.add(token, state);
+    mCurrentState.displays.emplace_or_replace(token, state);
     return token;
 }
 
 status_t SurfaceFlinger::destroyVirtualDisplay(const sp<IBinder>& displayToken) {
     Mutex::Autolock lock(mStateLock);
 
-    const ssize_t index = mCurrentState.displays.indexOfKey(displayToken);
-    if (index < 0) {
+    const auto stateOpt = mCurrentState.displays.get(displayToken);
+    if (!stateOpt) {
         ALOGE("%s: Invalid display token %p", __func__, displayToken.get());
         return NAME_NOT_FOUND;
     }
 
-    const DisplayDeviceState& state = mCurrentState.displays.valueAt(index);
+    const DisplayDeviceState& state = *stateOpt;
     if (state.isPhysical()) {
         ALOGE("%s: Invalid operation on physical display", __func__);
         return INVALID_OPERATION;
@@ -709,7 +710,7 @@ status_t SurfaceFlinger::destroyVirtualDisplay(const sp<IBinder>& displayToken) 
 
     ALOGD("Destroying virtual display: %s", state.displayName.c_str());
 
-    mCurrentState.displays.removeItemsAt(index);
+    mCurrentState.displays.erase(displayToken);
     setTransactionFlags(eDisplayTransactionNeeded);
     return NO_ERROR;
 }
@@ -1019,15 +1020,16 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     mFrontInternalDisplayId = getPrimaryDisplayIdLocked();
 
     // Commit primary display.
+    const auto frontInternalDisplayOpt =
+            ftl::find_if(mCurrentState.displays, [&](const auto& pair) {
+                return pair.second.isPhysical() &&
+                        pair.second.getPhysical().id == mFrontInternalDisplayId;
+            });
     sp<const DisplayDevice> display;
-    if (const auto indexOpt = mCurrentState.getDisplayIndex(mFrontInternalDisplayId)) {
-        const auto& displays = mCurrentState.displays;
-
-        const auto& token = displays.keyAt(*indexOpt);
-        const auto& state = displays.valueAt(*indexOpt);
-
+    if (frontInternalDisplayOpt) {
+        const auto& [token, state] = frontInternalDisplayOpt->get();
         processDisplayAdded(token, state);
-        mDrawingState.displays.add(token, state);
+        mDrawingState.displays.emplace_or_replace(token, state);
 
         display = getFrontInternalDisplayLocked();
     }
@@ -1601,10 +1603,10 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
                     mDisplayModeController.getActiveMode(displayId).modePtr->getResolution();
             oldResolution != activeMode.modePtr->getResolution()) {
             auto& state =
-                    mCurrentState.displays.editValueFor(getPhysicalDisplayTokenLocked(displayId));
+                    mCurrentState.displays.get(getPhysicalDisplayTokenLocked(displayId))->get();
             // We need to generate new sequenceId in order to recreate the display (and this
             // way the framebuffer).
-            state.sequenceId = DisplayDeviceState{}.sequenceId;
+            state.sequenceId = DisplayDeviceState::getNextSequenceId();
             state.getPhysical().activeMode = activeMode.modePtr.get();
             processDisplayChangesLocked();
 
@@ -4287,8 +4289,8 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
                                               std::move(displayModes), std::move(colorModes),
                                               std::move(deviceProductInfo));
 
-        auto& state = mCurrentState.displays.editValueFor(it->second.token());
-        state.sequenceId = DisplayDeviceState{}.sequenceId; // Generate new sequenceId.
+        auto& state = mCurrentState.displays.get(it->second.token())->get();
+        state.sequenceId = DisplayDeviceState::getNextSequenceId();
         state.getPhysical().activeMode = std::move(activeMode);
         state.getPhysical().port = port;
         ALOGI("Reconnecting %s", displayString);
@@ -4306,15 +4308,14 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
                                   connectionType, std::move(displayModes), std::move(colorModes),
                                   std::move(info.deviceProductInfo));
 
-    DisplayDeviceState state;
-    state.physicalOrVirtual.emplace<DisplayDeviceState::Physical>(displayId, hwcDisplayId,
+    DisplayDeviceState state = DisplayDeviceState::createPhysical(displayId, hwcDisplayId,
                                                                   info.port, std::move(activeMode));
     // TODO: b/349703362 - Remove first condition when HDCP aidl APIs are enforced
     state.isSecure = !mDisplayModeController.supportsHdcp() ||
             connectionType == ui::DisplayConnectionType::Internal;
     state.isProtected = true;
     state.displayName = std::move(info.name);
-    mCurrentState.displays.add(token, state);
+    mCurrentState.displays.emplace_or_replace(token, state);
     ALOGI("Connecting %s", displayString);
     return activeModeId;
 }
@@ -4327,10 +4328,7 @@ void SurfaceFlinger::processHotplugDisconnect(PhysicalDisplayId displayId,
     LOG_ALWAYS_FATAL_IF(!displayOpt);
     const auto& display = displayOpt->get();
 
-    if (const ssize_t index = mCurrentState.displays.indexOfKey(display.token()); index >= 0) {
-        mCurrentState.displays.removeItemsAt(index);
-    }
-
+    mCurrentState.displays.erase(display.token());
     mPhysicalDisplays.erase(displayId);
 }
 
@@ -4480,13 +4478,14 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     if (state.isPhysical()) {
         resolution = state.getPhysical().activeMode->getResolution();
         pixelFormat = static_cast<ui::PixelFormat>(PIXEL_FORMAT_RGBA_8888);
-    } else if (state.surface != nullptr) {
-        int status = state.surface->query(NATIVE_WINDOW_WIDTH, &resolution.width);
+    } else if (state.isVirtual() && state.getVirtual().surface != nullptr) {
+        const sp<Surface>& surface = state.getVirtual().surface;
+        int status = surface->query(NATIVE_WINDOW_WIDTH, &resolution.width);
         ALOGE_IF(status != NO_ERROR, "Unable to query width (%d)", status);
-        status = state.surface->query(NATIVE_WINDOW_HEIGHT, &resolution.height);
+        status = surface->query(NATIVE_WINDOW_HEIGHT, &resolution.height);
         ALOGE_IF(status != NO_ERROR, "Unable to query height (%d)", status);
         int format;
-        status = state.surface->query(NATIVE_WINDOW_FORMAT, &format);
+        status = surface->query(NATIVE_WINDOW_FORMAT, &format);
         ALOGE_IF(status != NO_ERROR, "Unable to query format (%d)", status);
         pixelFormat = static_cast<ui::PixelFormat>(format);
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
@@ -4540,29 +4539,35 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
             auto surface =
                     sp<VirtualDisplaySurface>::make(getHwComposer(), *virtualDisplayIdVariantOpt,
                                                     state.displayName, virtualState.ownerUid,
-                                                    state.surface);
+                                                    virtualState.surface);
             displaySurface = surface;
             compositionSurface = surface->getCompositionSurface();
         } else {
             auto surface = sp<LegacyVirtualDisplaySurface>::make(getHwComposer(),
                                                                  *virtualDisplayIdVariantOpt,
-                                                                 state.surface, state.displayName,
+                                                                 virtualState.surface, state.displayName,
                                                                  state.isSecure);
             displaySurface = surface;
             compositionSurface = sp<Surface>::make(std::move(surface));
         }
     } else {
-        ALOGE_IF(state.surface != nullptr,
-                 "adding a supported display, but rendering "
-                 "surface is provided (%p), ignoring it",
-                 state.surface.get());
         const auto& physical = state.getPhysical();
-        const auto frameBufferSurface =
-                sp<FramebufferSurface>::make(getHwComposer(), physical.id,
-                                             physical.activeMode->getResolution(),
-                                             ui::Size(maxGraphicsWidth, maxGraphicsHeight));
-        displaySurface = frameBufferSurface;
-        compositionSurface = frameBufferSurface->getSurface();
+        if (FlagManager::getInstance().wb_framebuffersurface2()) {
+            const auto frameBufferSurface =
+                    sp<FramebufferSurface>::make(getHwComposer(), physical.id,
+                                                 physical.activeMode->getResolution(),
+                                                 ui::Size(maxGraphicsWidth, maxGraphicsHeight));
+            displaySurface = frameBufferSurface;
+            compositionSurface = frameBufferSurface->getSurface();
+        } else {
+            const auto frameBufferSurface =
+                    sp<LegacyFramebufferSurface>::make(getHwComposer(), physical.id,
+                                                       physical.activeMode->getResolution(),
+                                                       ui::Size(maxGraphicsWidth,
+                                                                maxGraphicsHeight));
+            displaySurface = frameBufferSurface;
+            compositionSurface = frameBufferSurface->getSurface();
+        }
     }
 
     LOG_FATAL_IF(!displaySurface);
@@ -4697,9 +4702,15 @@ void SurfaceFlinger::processDisplayRemoved(const wp<IBinder>& displayToken) {
 void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
                                            const DisplayDeviceState& currentState,
                                            const DisplayDeviceState& drawingState) {
+    const bool didVirtualDisplaySurfaceChange = [&]() {
+        if (!currentState.isVirtual()) {
+            return false;
+        }
+        return !Surface::areSurfacesEquivalent(currentState.getVirtual().surface,
+                                               drawingState.getVirtual().surface);
+    }();
     // Recreate the DisplayDevice if the surface or sequence ID changed.
-    if (!Surface::areSurfacesEquivalent(currentState.surface, drawingState.surface) ||
-        currentState.sequenceId != drawingState.sequenceId) {
+    if (didVirtualDisplaySurfaceChange || currentState.sequenceId != drawingState.sequenceId) {
         if (const auto display = getDisplayDeviceLocked(displayToken)) {
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
             mQtiSFExtnIntf->qtiUpdateDisplaysList(display, /*addDisplay*/ false);
@@ -4823,43 +4834,26 @@ void SurfaceFlinger::resetPhaseConfiguration(Fps refreshRate) {
 }
 
 void SurfaceFlinger::processDisplayChangesLocked() {
-    // here we take advantage of Vector's copy-on-write semantics to
-    // improve performance by skipping the transaction entirely when
-    // know that the lists are identical
-    const KeyedVector<wp<IBinder>, DisplayDeviceState>& curr(mCurrentState.displays);
-    const KeyedVector<wp<IBinder>, DisplayDeviceState>& draw(mDrawingState.displays);
-    if (!curr.isIdenticalTo(draw)) {
-        mVisibleRegionsDirty = true;
-        mUpdateInputInfo = true;
+    const auto& currentDisplays = mCurrentState.displays;
+    const auto& drawingDisplays = mDrawingState.displays;
 
-        // Apply the current color matrix to any added or changed display.
-        mCurrentState.colorMatrixChanged = true;
+    mVisibleRegionsDirty = true;
+    mUpdateInputInfo = true;
 
-        // find the displays that were removed
-        // (ie: in drawing state but not in current state)
-        // also handle displays that changed
-        // (ie: displays that are in both lists)
-        for (size_t i = 0; i < draw.size(); i++) {
-            const wp<IBinder>& displayToken = draw.keyAt(i);
-            const ssize_t j = curr.indexOfKey(displayToken);
-            if (j < 0) {
-                // in drawing state but not in current state
-                processDisplayRemoved(displayToken);
-            } else {
-                // this display is in both lists. see if something changed.
-                const DisplayDeviceState& currentState = curr[j];
-                const DisplayDeviceState& drawingState = draw[i];
-                processDisplayChanged(displayToken, currentState, drawingState);
-            }
+    // Apply the current color matrix to any added or changed display.
+    mCurrentState.colorMatrixChanged = true;
+
+    for (const auto& [displayToken, drawingState] : drawingDisplays) {
+        if (const auto currentState = currentDisplays.get(displayToken)) {
+            processDisplayChanged(displayToken, *currentState, drawingState);
+        } else {
+            processDisplayRemoved(displayToken);
         }
+    }
 
-        // find displays that were added
-        // (ie: in current state but not in drawing state)
-        for (size_t i = 0; i < curr.size(); i++) {
-            const wp<IBinder>& displayToken = curr.keyAt(i);
-            if (draw.indexOfKey(displayToken) < 0) {
-                processDisplayAdded(displayToken, curr[i]);
-            }
+    for (const auto& [displayToken, currState] : currentDisplays) {
+        if (!drawingDisplays.contains(displayToken)) {
+            processDisplayAdded(displayToken, currState);
         }
     }
 
@@ -5955,17 +5949,17 @@ bool SurfaceFlinger::applyAndCommitDisplayTransactionStatesLocked(
 }
 
 uint32_t SurfaceFlinger::setDisplayStateLocked(const DisplayState& s) {
-    const ssize_t index = mCurrentState.displays.indexOfKey(s.token);
-    if (index < 0) return 0;
+    const auto stateOpt = mCurrentState.displays.get(s.token);
+    if (!stateOpt) return 0;
 
     uint32_t flags = 0;
-    DisplayDeviceState& state = mCurrentState.displays.editValueAt(index);
+    DisplayDeviceState& state = *stateOpt;
 
     const uint32_t what = s.what;
-    if (what & DisplayState::eSurfaceChanged) {
+    if (state.isVirtual() && (what & DisplayState::eSurfaceChanged)) {
         sp<Surface> sSurface = s.surface.toSurface();
-        if (!Surface::areSurfacesEquivalent(state.surface, sSurface)) {
-            state.surface = sSurface;
+        if (!Surface::areSurfacesEquivalent(state.getVirtual().surface, sSurface)) {
+            state.getVirtual().surface = sSurface;
             flags |= eDisplayTransactionNeeded;
         }
     }
@@ -6409,11 +6403,18 @@ void SurfaceFlinger::initializeDisplays() {
 
 void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& display,
                                                  hal::PowerMode mode) {
+    auto [future, _] = setPhysicalDisplayPowerModeAsync(display, mode);
+    future.get();
+}
+
+std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
+SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display,
+                                                 hal::PowerMode mode) {
     if (display->isVirtual()) {
         // TODO(b/241285876): This code path should not be reachable, so enforce this at compile
         // time.
         ALOGE("%s: Invalid operation on virtual display", __func__);
-        return;
+        return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     }
 
     const auto displayId = display->getPhysicalId();
@@ -6421,7 +6422,7 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
 
     const auto currentMode = display->getPowerMode();
     if (currentMode == mode) {
-        return;
+        return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     }
 
     const bool isInternalDisplay = mPhysicalDisplays.get(displayId)
@@ -6451,6 +6452,21 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
 
     const auto activeMode = display->refreshRateSelector().getActiveMode().modePtr;
     using OptimizationPolicy = gui::ISurfaceComposer::OptimizationPolicy;
+    auto commonFinalizer = [this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
+        if (displayId == mFrontInternalDisplayId) {
+            mTimeStats->setPowerMode(mode);
+            mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
+        }
+
+        ALOGD("Finished setting power mode %d on physical display %s", mode,
+              to_string(displayId).c_str());
+    };
+    if (display->isPrimary()) {
+        mQtiSFExtnIntf->qtiFbScalingOnPowerChange(display);
+    }
+
+    mQtiSFExtnIntf->qtiSetEarlyWakeUpConfig(display, mode, isInternalDisplay);
+
     if (currentMode == hal::PowerMode::OFF) {
         // Turn on the display
         const auto frontInternalDisplay = getFrontInternalDisplayLocked();
@@ -6469,22 +6485,31 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
                                      OptimizationPolicy::optimizeForPerformance);
         }
 
-        getHwComposer().setPowerMode(displayId, mode);
-        if (mode != hal::PowerMode::DOZE_SUSPEND) {
-            const bool enable =
-                    mScheduler->getVsyncSchedule(displayId)->getPendingHardwareVsyncState();
-            requestHardwareVsync(displayId, enable);
+        return {getHwComposer().setPowerMode(displayId, mode),
+                ftl::Finalizer([this, displayId, mode, shouldApplyOptimizationPolicy, activeMode,
+                                display, finalizer = std::move(commonFinalizer)]()
+                                       FTL_FAKE_GUARD(kMainThreadContext) {
+                                           const auto _ = ftl::Finalizer(std::move(finalizer));
+                                           if (mode != hal::PowerMode::DOZE_SUSPEND) {
+                                               const bool enable =
+                                                       mScheduler->getVsyncSchedule(displayId)
+                                                               ->getPendingHardwareVsyncState();
+                                               requestHardwareVsync(displayId, enable);
 
-            if (displayId == mFrontInternalDisplayId && !shouldApplyOptimizationPolicy) {
-                mScheduler->enableSyntheticVsync(false);
-            }
+                                               if (displayId == mFrontInternalDisplayId &&
+                                                   !shouldApplyOptimizationPolicy) {
+                                                   mScheduler->enableSyntheticVsync(false);
+                                               }
 
-            constexpr bool kAllowToEnable = true;
-            mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable, activeMode.get());
-        }
+                                               constexpr bool kAllowToEnable = true;
+                                               mScheduler->resyncToHardwareVsync(displayId,
+                                                                                 kAllowToEnable,
+                                                                                 activeMode.get());
+                                           }
 
-        mVisibleRegionsDirty = true;
-        scheduleComposite(FrameHint::kActive);
+                                           mVisibleRegionsDirty = true;
+                                           scheduleComposite(FrameHint::kActive);
+                                       })};
     } else if (mode == hal::PowerMode::OFF) {
         const bool currentModeNotDozeSuspend = (currentMode != hal::PowerMode::DOZE_SUSPEND);
         // Turn off the display
@@ -6516,25 +6541,37 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
         // call just updates the pending state, without actually disabling
         // VSYNC.
         requestHardwareVsync(displayId, false);
-        getHwComposer().setPowerMode(displayId, mode);
+        return {getHwComposer().setPowerMode(displayId, mode),
+                ftl::Finalizer([this, finalizer = std::move(commonFinalizer)]()
+                                       FTL_FAKE_GUARD(kMainThreadContext) {
+                                           const auto _ = ftl::Finalizer(std::move(finalizer));
+                                           mVisibleRegionsDirty = true;
+                                           // from this point on, SF will stop drawing on this
+                                           // display
+                                       })};
 
-        mVisibleRegionsDirty = true;
-        // from this point on, SF will stop drawing on this display
     } else if (mode == hal::PowerMode::DOZE || mode == hal::PowerMode::ON) {
         // Update display while dozing
-        getHwComposer().setPowerMode(displayId, mode);
-        if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
-            if (displayId == mFrontInternalDisplayId) {
-                ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
-                mVisibleRegionsDirty = true;
-                scheduleRepaint();
-                if (!shouldApplyOptimizationPolicy) {
-                    mScheduler->enableSyntheticVsync(false);
-                }
-            }
-            constexpr bool kAllowToEnable = true;
-            mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable, activeMode.get());
-        }
+        return {getHwComposer().setPowerMode(displayId, mode),
+                ftl::Finalizer(
+                        [this, currentMode, displayId, shouldApplyOptimizationPolicy, activeMode,
+                         finalizer =
+                                 std::move(commonFinalizer)]() FTL_FAKE_GUARD(kMainThreadContext) {
+                            const auto _ = ftl::Finalizer(std::move(finalizer));
+                            if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
+                                if (displayId == mFrontInternalDisplayId) {
+                                    ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
+                                    mVisibleRegionsDirty = true;
+                                    scheduleRepaint();
+                                    if (!shouldApplyOptimizationPolicy) {
+                                        mScheduler->enableSyntheticVsync(false);
+                                    }
+                                }
+                                constexpr bool kAllowToEnable = true;
+                                mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
+                                                                  activeMode.get());
+                            }
+                        })};
     } else if (mode == hal::PowerMode::DOZE_SUSPEND) {
         // Leave display going to doze
         constexpr bool kDisallow = true;
@@ -6543,25 +6580,14 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
         if (displayId == mFrontInternalDisplayId && !shouldApplyOptimizationPolicy) {
             mScheduler->enableSyntheticVsync();
         }
-        getHwComposer().setPowerMode(displayId, mode);
+        return {getHwComposer().setPowerMode(displayId, mode),
+                ftl::Finalizer(std::move(commonFinalizer))};
     } else {
         ALOGE("Attempting to set unknown power mode: %d\n", mode);
-        getHwComposer().setPowerMode(displayId, mode);
+        return {getHwComposer().setPowerMode(displayId, mode),
+                ftl::Finalizer(std::move(commonFinalizer))};
     }
 
-    if (display->isPrimary()) {
-        mQtiSFExtnIntf->qtiFbScalingOnPowerChange(display);
-    }
-
-    if (displayId == mFrontInternalDisplayId) {
-        mTimeStats->setPowerMode(mode);
-        mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
-    }
-
-    mQtiSFExtnIntf->qtiSetEarlyWakeUpConfig(display, mode, isInternalDisplay);
-
-    ALOGD("Finished setting power mode %d on physical display %s", mode,
-          to_string(displayId).c_str());
 }
 
 void SurfaceFlinger::setVirtualDisplayPowerMode(const sp<DisplayDevice>& display,
@@ -6624,15 +6650,15 @@ void SurfaceFlinger::applyOptimizationPolicy(const char* whence) {
     }
 }
 
+// TODO b/339477240 - Remove.
 void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
     auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) {
         mSkipPowerOnForQuiescent = false;
         const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayToken));
         if (!display) {
             Mutex::Autolock lock(mStateLock);
-            const ssize_t index = mCurrentState.displays.indexOfKey(displayToken);
-            if (index >= 0) {
-                auto& state = mCurrentState.displays.editValueFor(displayToken);
+            if (auto stateOpt = mCurrentState.displays.get(displayToken)) {
+                DisplayDeviceState& state = *stateOpt;
                 if (state.isVirtual()) {
                     ALOGD("Setting power mode %d for a dormant virtual display with token %p", mode,
                           displayToken.get());
@@ -6655,6 +6681,43 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
     });
 
     future.wait();
+}
+
+void SurfaceFlinger::setPowerModeAsync(const sp<IBinder>& displayToken, int mode) {
+    auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext)
+                                               -> std::pair<ftl::Future<status_t>,
+                                                            ftl::FinalizerStd> {
+        mSkipPowerOnForQuiescent = false;
+        const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayToken));
+        if (!display) {
+            Mutex::Autolock lock(mStateLock);
+            if (auto stateOpt = mCurrentState.displays.get(displayToken)) {
+                DisplayDeviceState& state = *stateOpt;
+                if (state.isVirtual()) {
+                    ALOGD("Setting power mode %d for a dormant virtual display with token %p", mode,
+                          displayToken.get());
+                    state.initialPowerMode = static_cast<hal::PowerMode>(mode);
+                    return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
+                }
+            }
+            ALOGE("Failed to set power mode %d for display token %p", mode, displayToken.get());
+        } else if (display->isVirtual()) {
+            if (FlagManager::getInstance().correct_virtual_display_power_state()) {
+                ftl::FakeGuard guard(mStateLock);
+                setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
+            } else {
+                ALOGW("Attempt to set power mode %d for virtual display", mode);
+            }
+        } else {
+            ftl::FakeGuard guard(mStateLock);
+            return setPhysicalDisplayPowerModeAsync(display, static_cast<hal::PowerMode>(mode));
+        }
+        return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
+    });
+
+    auto [hwcFuture, finalizer] = future.get();
+    hwcFuture.get();
+    mScheduler->schedule([c = std::move(finalizer)]() {}).wait();
 }
 
 status_t SurfaceFlinger::doDump(int fd, const DumpArgs& args, bool asProto) {
@@ -9667,9 +9730,6 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::addLayerSnapshotsToComp
 std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::copyMergedSnapshots(
         compositionengine::CompositionRefreshArgs& refreshArgs) {
     std::vector<std::pair<Layer*, LayerFE*>> layers;
-    nsecs_t currentTime = systemTime();
-    const bool needsMetadata = mCompositionEngine->getFeatureFlags().test(
-            compositionengine::Feature::kSnapshotLayerMetadata);
     mLayerSnapshotBuilder.forEachMergedSnapshot(
             [&](const frontend::LayerSnapshot& snapshot) FTL_FAKE_GUARD(kMainThreadContext) {
                 if (!snapshot.hasSomethingToDraw()) {

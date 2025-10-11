@@ -67,8 +67,8 @@ BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count12
     auto stats = BinderSpamStats();
     stats.clientUid = datum.senderUid;
     stats.interfaceDescriptor = datum.interfaceDescriptor;
-    std::string aidlMethod = "#" + std::to_string(datum.transactionCode);
-    stats.aidlMethod = String16(aidlMethod.c_str());
+    stats.aidlMethod = datum.aidlMethodName;
+
     stats.secondsWithAtLeast125Calls = count125;
     stats.secondsWithAtLeast250Calls = count250;
     return stats;
@@ -82,10 +82,7 @@ BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t
     auto stats = BinderCallsStats();
     stats.clientUid = datum.senderUid;
     stats.interfaceDescriptor = datum.interfaceDescriptor;
-
-    std::string aidlMethod = "#" + std::to_string(datum.transactionCode);
-    stats.aidlMethod = String16(aidlMethod.c_str());
-
+    stats.aidlMethod = datum.aidlMethodName;
     stats.callCount = callCount;
     stats.durationSumMicros = durationSumMicros;
     stats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
@@ -135,27 +132,6 @@ protected:
 // --- Test Cases ---
 
 // Unit Test
-TEST_F(BinderStatsPusherTest, ConvertTxnCodeToString16) {
-    uint32_t code = 14;
-    String16 expectedOutput("#14");
-    String16 output;
-    output = pusher.convertTxnCodeToString(code);
-    ASSERT_EQ(output, expectedOutput);
-
-    // edge cases: 0 and max int
-    code = 0;
-    expectedOutput = String16("#0");
-    String16 output2;
-    output2 = pusher.convertTxnCodeToString(code);
-    ASSERT_EQ(output2, expectedOutput);
-
-    code = std::numeric_limits<uint32_t>::max();
-    expectedOutput = String16("#4294967295");
-    String16 output3;
-    output3 = pusher.convertTxnCodeToString(code);
-    ASSERT_EQ(output3, expectedOutput);
-}
-
 TEST_F(BinderStatsPusherTest, GetBinderStatsService) {
     EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .Times(1)
@@ -170,11 +146,14 @@ TEST_F(BinderStatsPusherTest, AggregateSpamNoSpamBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 50; ++i) { // Less than kMinSpamCount (125)
-        data.push_back({.interfaceDescriptor = String16("IFoo"),
-                        .transactionCode = 1,
-                        .startTimeNanos = (currentTimeSec - 5) * 1000000000LL,
-                        .endTimeNanos = 0,
-                        .senderUid = 1001});
+        data.push_back({
+                .startTimeNanos = (currentTimeSec - 5) * 1000000000LL,
+                .endTimeNanos = 0,
+                .interfaceDescriptor = String16("IFoo"),
+                .aidlMethodName = String16("MethodName1"),
+                .transactionCode = 1,
+                .senderUid = 1001,
+        });
     }
 
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
@@ -190,11 +169,14 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
     int64_t currentTimeNanos = 9'100'000'000;
     // Create enough data in the *same second* to trigger spam, far enough in the past
     for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
-        data.push_back({.interfaceDescriptor = String16("IFoo"),
-                        .transactionCode = 1,
-                        .startTimeNanos = currentTimeNanos - 8000'000'000,
-                        .endTimeNanos = 0,
-                        .senderUid = 1001});
+        data.push_back({
+                .startTimeNanos = currentTimeNanos - 8000'000'000,
+                .endTimeNanos = 0,
+                .interfaceDescriptor = String16("IFoo"),
+                .aidlMethodName = String16("MethodName2"),
+                .transactionCode = 1,
+                .senderUid = 1001,
+        });
     }
 
     auto expectedStats = createExpectedSpamStats(data[0], 1, 0);
@@ -212,11 +194,14 @@ TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
 
     // Create spam data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 150; ++i) {
-        data.push_back({.interfaceDescriptor = String16("IBar"),
-                        .transactionCode = 2,
-                        .startTimeNanos = currentTimeNanos - 1000'000'000,
-                        .endTimeNanos = 0,
-                        .senderUid = 1002});
+        data.push_back({
+                .interfaceDescriptor = String16("IBar"),
+                .transactionCode = 2,
+                .startTimeNanos = currentTimeNanos - 1000'000'000,
+                .endTimeNanos = 0,
+                .senderUid = 1002,
+                .aidlMethodName = String16("MethodName2"),
+        });
     }
 
     // Expect no calls, data is delayed
@@ -231,19 +216,25 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
     int64_t currentTimeNanos = 9'100'000'000;
 
     for (int i = 0; i < 130; ++i) {
-        data.push_back({.interfaceDescriptor = String16("IBaz"),
-                        .transactionCode = 3,
-                        .startTimeNanos = currentTimeNanos - 8000'000'000,
-                        .endTimeNanos = 0,
-                        .senderUid = 1003});
+        data.push_back({
+                .interfaceDescriptor = String16("IBaz"),
+                .transactionCode = 3,
+                .startTimeNanos = currentTimeNanos - 8000'000'000,
+                .endTimeNanos = 0,
+                .senderUid = 1003,
+                .aidlMethodName = String16("MethodName3"),
+        });
     }
     // Delayed spam data (within kDelaySeconds)
     for (int i = 0; i < 140; ++i) {
-        data.push_back({.interfaceDescriptor = String16("IQux"),
-                        .transactionCode = 4,
-                        .startTimeNanos = currentTimeNanos - 1000'000'000,
-                        .endTimeNanos = 0,
-                        .senderUid = 1004});
+        data.push_back({
+                .interfaceDescriptor = String16("IQux"),
+                .transactionCode = 4,
+                .startTimeNanos = currentTimeNanos - 1000'000'000,
+                .endTimeNanos = 0,
+                .senderUid = 1004,
+                .aidlMethodName = String16("MethodName4"),
+        });
     }
 
     // Expect immediate spam to be reported now
@@ -263,11 +254,14 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
 
     // Create data exceeding the second watermark (250 calls/sec)
     for (int i = 0; i < 300; ++i) {
-        data.push_back({.interfaceDescriptor = String16("IHighVolume"),
-                        .transactionCode = 5,
-                        .startTimeNanos = spamTimeNanos,
-                        .endTimeNanos = 0,
-                        .senderUid = 1005});
+        data.push_back({
+                .interfaceDescriptor = String16("IHighVolume"),
+                .transactionCode = 5,
+                .startTimeNanos = spamTimeNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1005,
+                .aidlMethodName = String16("MethodName5"),
+        });
     }
 
     auto expectedStats = createExpectedSpamStats(data[0], 1, 1);
@@ -288,20 +282,26 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
 
     // Spam for the first second
     for (int i = 0; i < 150; ++i) {
-        data.push_back({.interfaceDescriptor = String16("IMultiSecond"),
-                        .transactionCode = 6,
-                        .startTimeNanos = firstSpamSecondNanos,
-                        .endTimeNanos = 0,
-                        .senderUid = 1006});
+        data.push_back({
+                .interfaceDescriptor = String16("IMultiSecond"),
+                .transactionCode = 6,
+                .startTimeNanos = firstSpamSecondNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1006,
+                .aidlMethodName = String16("MethodName6"),
+        });
     }
     // Spam for the second second
     for (int i = 0; i < 160; ++i) {
         // Use the same UID, code, desc for aggregation
-        data.push_back({.interfaceDescriptor = String16("IMultiSecond"),
-                        .transactionCode = 6,
-                        .startTimeNanos = secondSpamSecondNanos,
-                        .endTimeNanos = 0,
-                        .senderUid = 1006});
+        data.push_back({
+                .interfaceDescriptor = String16("IMultiSecond"),
+                .transactionCode = 6,
+                .startTimeNanos = secondSpamSecondNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1006,
+                .aidlMethodName = String16("MethodName6"),
+        });
     }
 
     // Expect one atom representing spam across 2 seconds
@@ -320,11 +320,14 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     int64_t spamDataTimeNanos = (callTimeSec1 - 2) * 1000'000'000LL; // 8s, will be delayed
 
     for (int i = 0; i < 150; ++i) {
-        callData1.push_back({.interfaceDescriptor = String16("IDelayed"),
-                             .transactionCode = 7,
-                             .startTimeNanos = spamDataTimeNanos,
-                             .endTimeNanos = 0,
-                             .senderUid = 1007});
+        callData1.push_back({
+                .interfaceDescriptor = String16("IDelayed"),
+                .transactionCode = 7,
+                .startTimeNanos = spamDataTimeNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1007,
+                .aidlMethodName = String16("MethodName7"),
+        });
     }
 
     // First push: data should be buffered as it's too recent
@@ -353,21 +356,27 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
             (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 4 + 5 + 1 = 10s
 
     // Spam for method 1
-    BinderCallData method1Spam = {.interfaceDescriptor = String16("IMultiMethod"),
-                                  .transactionCode = 8,
-                                  .startTimeNanos = spamTimeNanos,
-                                  .endTimeNanos = 0,
-                                  .senderUid = 1008};
+    BinderCallData method1Spam = {
+            .interfaceDescriptor = String16("IMultiMethod"),
+            .transactionCode = 8,
+            .startTimeNanos = spamTimeNanos,
+            .endTimeNanos = 0,
+            .senderUid = 1008,
+            .aidlMethodName = String16("MethodName8"),
+    };
     for (int i = 0; i < 200; ++i) {
         data.push_back(method1Spam);
     }
 
     // Spam for method 2 (different transaction code)
-    BinderCallData method2Spam = {.interfaceDescriptor = String16("IMultiMethod"),
-                                  .transactionCode = 9,
-                                  .startTimeNanos = spamTimeNanos,
-                                  .endTimeNanos = 0,
-                                  .senderUid = 1008};
+    BinderCallData method2Spam = {
+            .interfaceDescriptor = String16("IMultiMethod"),
+            .transactionCode = 9,
+            .startTimeNanos = spamTimeNanos,
+            .endTimeNanos = 0,
+            .senderUid = 1008,
+            .aidlMethodName = String16("MethodName9"),
+    };
     for (int i = 0; i < 200; ++i) {
         data.push_back(method2Spam);
     }
@@ -397,11 +406,14 @@ TEST_F(BinderStatsPusherTest, SkipPushForLocalBinderWithoutJvm) {
     int64_t currentTimeSec = (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 8s
 
     for (int i = 0; i < 150; ++i) {
-        data.push_back({.interfaceDescriptor = String16("ILocalSkipped"),
-                        .transactionCode = 10,
-                        .startTimeNanos = spamTimeNanos,
-                        .endTimeNanos = 0,
-                        .senderUid = 1009});
+        data.push_back({
+                .interfaceDescriptor = String16("ILocalSkipped"),
+                .transactionCode = 10,
+                .startTimeNanos = spamTimeNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1009,
+                .aidlMethodName = String16("MethodName10"),
+        });
     }
 
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
@@ -418,11 +430,14 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     int64_t spamDataTimeNanos = (timeSec1 - kSpamAggregationWindowSec) * 1000'000'000LL;
 
     for (int i = 0; i < 150; ++i) { // Enough to trigger kSpamFirstWatermark
-        spamCallData1.push_back({.interfaceDescriptor = String16("IServiceSkipped"),
-                                 .transactionCode = 11,
-                                 .startTimeNanos = spamDataTimeNanos,
-                                 .endTimeNanos = 0,
-                                 .senderUid = 1010});
+        spamCallData1.push_back({
+                .interfaceDescriptor = String16("IServiceSkipped"),
+                .transactionCode = 11,
+                .startTimeNanos = spamDataTimeNanos,
+                .endTimeNanos = 0,
+                .senderUid = 1010,
+                .aidlMethodName = String16("MethodName11"),
+        });
     }
 
     // First push: Service is unavailable
@@ -454,6 +469,13 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     pusher.pushLocked(spamCallData2, timeSec2);
 }
 
+TEST_F(BinderStatsPusherTest, sizeOfStruct) {
+#ifdef __LP64__
+    EXPECT_EQ(sizeof(android::BinderCallData), 40);
+#else
+    EXPECT_EQ(sizeof(android::BinderCallData), 32);
+#endif
+}
 // --- Latency Tests ---
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyNoLatencyBelowThreshold) {
@@ -461,14 +483,16 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyNoLatencyBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window
     for (int i = 0; i < 5; ++i) { // Less than kLatencyCountFirstWatermark (10)
-        data.push_back({.interfaceDescriptor = String16("ILatencyFoo"),
-                        .transactionCode = 1,
-                        .startTimeNanos =
-                                (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL,
-                        .endTimeNanos =
-                                (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL +
-                                1000000 /* 1ms */,
-                        .senderUid = 2001});
+        data.push_back({
+                .interfaceDescriptor = String16("ILatencyFoo"),
+                .transactionCode = 1,
+                .startTimeNanos =
+                        (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL,
+                .endTimeNanos = (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL +
+                        1000000 /* 1ms */,
+                .senderUid = 2001,
+                .aidlMethodName = String16("MethodName1"),
+        });
     }
 
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
@@ -488,11 +512,14 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
     // Create enough data in the *same second* to trigger latency reporting
     for (int i = 0; i < 15; ++i) {              // More than kLatencyCountFirstWatermark (10)
         int64_t durationMicros = (i + 1) * 100; // e.g. 100us, 200us ..
-        data.push_back({.interfaceDescriptor = String16("ILatencyBar"),
-                        .transactionCode = 2,
-                        .startTimeNanos = callTimeNanos,
-                        .endTimeNanos = callTimeNanos + durationMicros * 1000,
-                        .senderUid = 2002});
+        data.push_back({
+                .interfaceDescriptor = String16("ILatencyBar"),
+                .transactionCode = 2,
+                .startTimeNanos = callTimeNanos,
+                .endTimeNanos = callTimeNanos + durationMicros * 1000,
+                .senderUid = 2002,
+                .aidlMethodName = String16("MethodName2"),
+        });
         totalDurationMicros += durationMicros;
     }
 
@@ -511,11 +538,14 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyDelayedLatency) {
 
     // Create latency data within the aggregation window
     for (int i = 0; i < 15; ++i) {
-        data.push_back({.interfaceDescriptor = String16("ILatencyBaz"),
-                        .transactionCode = 3,
-                        .startTimeNanos = currentTimeNanos - 1000'000'000,
-                        .endTimeNanos = currentTimeNanos - 1000'000'000 + 500000 /* 0.5ms */,
-                        .senderUid = 2003});
+        data.push_back({
+                .interfaceDescriptor = String16("ILatencyBaz"),
+                .transactionCode = 3,
+                .startTimeNanos = currentTimeNanos - 1000'000'000,
+                .endTimeNanos = currentTimeNanos - 1000'000'000 + 500000 /* 0.5ms */,
+                .senderUid = 2003,
+                .aidlMethodName = String16("MethodName3"),
+        });
     }
 
     // Expect no calls, data is delayed
@@ -533,11 +563,14 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
 
     for (int i = 0; i < 15; ++i) {
         int64_t durationMicros = (i + 1) * 150;
-        callData1.push_back({.interfaceDescriptor = String16("ILatencyDelayed"),
-                             .transactionCode = 4,
-                             .startTimeNanos = latencyDataTimeNanos,
-                             .endTimeNanos = latencyDataTimeNanos + durationMicros * 1000,
-                             .senderUid = 2004});
+        callData1.push_back({
+                .interfaceDescriptor = String16("ILatencyDelayed"),
+                .transactionCode = 4,
+                .startTimeNanos = latencyDataTimeNanos,
+                .endTimeNanos = latencyDataTimeNanos + durationMicros * 1000,
+                .senderUid = 2004,
+                .aidlMethodName = String16("MethodName4"),
+        });
         totalDurationMicros1 += durationMicros;
     }
 
@@ -571,22 +604,28 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     // Data for the first second
     for (int i = 0; i < 12; ++i) { // 12 calls
         int64_t durationMicros = (i + 1) * 100;
-        data.push_back({.interfaceDescriptor = String16("ILatencyMultiSec"),
-                        .transactionCode = 5,
-                        .startTimeNanos = firstCallSecondNanos,
-                        .endTimeNanos = firstCallSecondNanos + durationMicros * 1000,
-                        .senderUid = 2005});
+        data.push_back({
+                .interfaceDescriptor = String16("ILatencyMultiSec"),
+                .transactionCode = 5,
+                .startTimeNanos = firstCallSecondNanos,
+                .endTimeNanos = firstCallSecondNanos + durationMicros * 1000,
+                .senderUid = 2005,
+                .aidlMethodName = String16("MethodName5"),
+        });
         totalDurationMicros += durationMicros;
     }
     // Data for the second second
     for (int i = 0; i < 8; ++i) { // 8 calls
         int64_t durationMicros = (i + 1) * 120;
         // Use the same UID, code, desc for aggregation
-        data.push_back({.interfaceDescriptor = String16("ILatencyMultiSec"),
-                        .transactionCode = 5,
-                        .startTimeNanos = secondCallSecondNanos,
-                        .endTimeNanos = secondCallSecondNanos + durationMicros * 1000,
-                        .senderUid = 2005});
+        data.push_back({
+                .interfaceDescriptor = String16("ILatencyMultiSec"),
+                .transactionCode = 5,
+                .startTimeNanos = secondCallSecondNanos,
+                .endTimeNanos = secondCallSecondNanos + durationMicros * 1000,
+                .senderUid = 2005,
+                .aidlMethodName = String16("MethodName5"),
+        });
         totalDurationMicros += durationMicros;
     }
 

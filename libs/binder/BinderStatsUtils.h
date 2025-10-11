@@ -20,11 +20,12 @@ namespace android {
 // Data for a monitored binder transaction.
 struct BinderCallData {
     // TODO(b/299356196): Use the receiver binder object instead and resolve interface lazily
-    String16 interfaceDescriptor;
-    uint32_t transactionCode;
     int64_t startTimeNanos;
     int64_t endTimeNanos;
-    uid_t senderUid;
+    String16 interfaceDescriptor;
+    String16 aidlMethodName;
+    uint32_t transactionCode;
+    uint32_t senderUid;
 
     bool hasLatencyData() const { return endTimeNanos > startTimeNanos; }
 };

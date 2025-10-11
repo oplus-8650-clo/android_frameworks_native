@@ -320,6 +320,9 @@ filegroup {
         "LayerState.cpp",
         "DisplayLuts.cpp",
         "OccupancyTracker.cpp",
+        "RenderCommandBuffer.cpp",
+        "RenderCommandBufferProducer.cpp",
+        "RenderCommandBufferConsumer.cpp",
         "StreamSplitter.cpp",
         "ScreenCaptureResults.cpp",
         "Surface.cpp",
@@ -335,6 +338,11 @@ filegroup {
         "bufferqueue/2.0/B2HProducerListener.cpp",
         "bufferqueue/2.0/H2BGraphicBufferProducer.cpp",
     ],
+}
+
+filegroup {
+    name: "rendercommandbuffer_sources",
+    srcs: ["RenderCommandBuffer.cpp"],
 }
 
 cc_defaults {

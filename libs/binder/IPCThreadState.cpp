@@ -1540,7 +1540,7 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
                     error = doTransactBinder(binder, tr.code, buffer, &reply, tr.flags);
                     binder->decStrong(this);
                 } else {
-                    error = doTransactBinder(nullptr, tr.code, buffer, &reply, tr.flags);
+                    error = UNKNOWN_TRANSACTION;
                 }
             } else {
                 BBinder* binder = the_context_object.get();
@@ -1679,12 +1679,12 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
 
 status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const Parcel& data,
                                           Parcel* reply, uint32_t flags) {
+    LOG_ALWAYS_FATAL_IF(binder == nullptr, "Calling transact on null Binder.");
 #ifdef BINDER_WITH_OBSERVERS
     BinderObserver::CallInfo callInfo =
             mProcess->mBinderObserver->onBeginTransaction(binder, code, getCallingUid());
 #endif
-    status_t error =
-            binder != nullptr ? binder->transact(code, data, reply, flags) : UNKNOWN_TRANSACTION;
+    status_t error = binder->transact(code, data, reply, flags);
 #ifdef BINDER_WITH_OBSERVERS
     mProcess->mBinderObserver->onEndTransaction(mBinderStatsQueue, callInfo);
 #endif

@@ -33,6 +33,7 @@ MODULE_LIBRARY_DEPS += \
 
 MODULE_RUSTFLAGS += \
 	--cfg 'trusty' \
+	--cfg 'feature="std"' \
 
 ifeq (false,$(call TOBOOL,$(USE_SYSTEM_BINDER)))
 MODULE_RUSTFLAGS += \

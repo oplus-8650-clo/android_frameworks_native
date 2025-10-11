@@ -445,16 +445,15 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAdded) {
     // surface(producer)
     sp<BBinder> displayToken = sp<BBinder>::make();
 
-    DisplayDeviceState state;
-    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
+    DisplayDeviceState state = DisplayDeviceState::createVirtual(kOwnerUid);
     state.isSecure = static_cast<bool>(Case::Display::SECURE);
 
     auto [consumer, surface] = BufferItemConsumer::create(0);
     ASSERT_EQ(OK, consumer->setDefaultBufferSize(Case::Display::WIDTH, Case::Display::HEIGHT));
     ASSERT_EQ(OK, consumer->setDefaultBufferFormat(DEFAULT_VIRTUAL_DISPLAY_SURFACE_FORMAT));
-    state.surface = surface;
+    state.getVirtual().surface = surface;
 
-    mFlinger.mutableCurrentState().displays.add(displayToken, state);
+    mFlinger.mutableCurrentState().displays.emplace_or_replace(displayToken, state);
 
     // --------------------------------------------------------------------
     // Call Expectations
@@ -481,8 +480,8 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAdded) {
             .WillOnce(Return(Error::NONE));
 
     // Cleanup
-    mFlinger.mutableCurrentState().displays.removeItem(displayToken);
-    mFlinger.mutableDrawingState().displays.removeItem(displayToken);
+    mFlinger.mutableCurrentState().displays.erase(displayToken);
+    mFlinger.mutableDrawingState().displays.erase(displayToken);
 
     // Deletion will happen on its own thread. Give it time to remove itself.
     std::this_thread::sleep_for(1s);
@@ -503,11 +502,10 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayAddedWithNoSurface) 
     // surface.
     sp<BBinder> displayToken = sp<BBinder>::make();
 
-    DisplayDeviceState state;
-    state.physicalOrVirtual.emplace<DisplayDeviceState::Virtual>(kOwnerUid);
+    DisplayDeviceState state = DisplayDeviceState::createVirtual(kOwnerUid);
     state.isSecure = static_cast<bool>(Case::Display::SECURE);
 
-    mFlinger.mutableCurrentState().displays.add(displayToken, state);
+    mFlinger.mutableCurrentState().displays.emplace_or_replace(displayToken, state);
 
     // --------------------------------------------------------------------
     // Call Expectations
@@ -542,7 +540,7 @@ TEST_F(DisplayTransactionCommitTest, processesVirtualDisplayRemoval) {
     Case::Display::injectHwcDisplay(this);
     auto existing = Case::Display::makeFakeExistingDisplayInjector(this);
     existing.inject();
-    mFlinger.mutableCurrentState().displays.removeItem(existing.token());
+    mFlinger.mutableCurrentState().displays.erase(existing.token());
 
     // --------------------------------------------------------------------
     // Invocation

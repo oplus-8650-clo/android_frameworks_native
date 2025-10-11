@@ -31,7 +31,8 @@
 // ---------------------------------------------------------------------------
 namespace android {
 
-#if defined(LIBBINDER_BINDER_OBSERVER) && defined(BINDER_WITH_KERNEL_IPC)
+#if defined(LIBBINDER_BINDER_OBSERVER) && defined(BINDER_WITH_KERNEL_IPC) && \
+        !defined(__ANDROID_VENDOR__)
 #define BINDER_WITH_OBSERVERS
 #endif
 

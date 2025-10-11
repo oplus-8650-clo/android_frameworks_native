@@ -101,21 +101,21 @@ const DisplayDevice& DisplayTransactionTest::getDisplayDevice(
 }
 
 bool DisplayTransactionTest::hasCurrentDisplayState(const sp<IBinder>& displayToken) const {
-    return mFlinger.currentState().displays.indexOfKey(displayToken) >= 0;
+    return mFlinger.currentState().displays.contains(displayToken);
 }
 
 const DisplayDeviceState& DisplayTransactionTest::getCurrentDisplayState(
         const sp<IBinder>& displayToken) const {
-    return mFlinger.currentState().displays.valueFor(displayToken);
+    return *mFlinger.currentState().displays.get(displayToken);
 }
 
 bool DisplayTransactionTest::hasDrawingDisplayState(const sp<IBinder>& displayToken) const {
-    return mFlinger.drawingState().displays.indexOfKey(displayToken) >= 0;
+    return mFlinger.drawingState().displays.contains(displayToken);
 }
 
 const DisplayDeviceState& DisplayTransactionTest::getDrawingDisplayState(
         const sp<IBinder>& displayToken) const {
-    return mFlinger.drawingState().displays.valueFor(displayToken);
+    return *mFlinger.drawingState().displays.get(displayToken);
 }
 
 } // namespace android

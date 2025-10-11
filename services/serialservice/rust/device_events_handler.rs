@@ -110,13 +110,9 @@ impl UsbDeviceId {
         let mut current_opt = device.parent_with_subsystem(subsystem);
         while let Some(current) = current_opt {
             let attrs = current.sysattrs();
-            let vendor_id = Self::read_hex_attr(&attrs, "idVendor");
-            if vendor_id.is_ok() {
+            if let Ok(vendor_id) = Self::read_hex_attr(&attrs, "idVendor") {
                 let product_id = Self::read_hex_attr(&attrs, "idProduct");
-                return Self {
-                    vendor_id: vendor_id.unwrap(),
-                    product_id: product_id.unwrap_or(-1),
-                };
+                return Self { vendor_id, product_id: product_id.unwrap_or(-1) };
             }
             current_opt = current.parent_with_subsystem(subsystem);
         }

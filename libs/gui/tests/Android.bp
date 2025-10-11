@@ -75,6 +75,8 @@ cc_test {
         "Malicious.cpp",
         "MultiTextureConsumer_test.cpp",
         "RegionSampling_test.cpp",
+        ":rendercommandbuffer_sources",
+        "RenderCommandBuffer_test.cpp",
         "StreamSplitter_test.cpp",
         "Surface_test.cpp",
         "SurfaceTextureClient_test.cpp",

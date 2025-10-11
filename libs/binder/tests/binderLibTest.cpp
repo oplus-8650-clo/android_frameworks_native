@@ -700,7 +700,6 @@ TEST_F(BinderLibTest, Freeze) {
     }
 
     EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
-    EXPECT_EQ(-EAGAIN, IPCThreadState::self()->freeze(pid, true, 0));
 
     // b/268232063 - succeeds ~0.08% of the time
     {

@@ -739,64 +739,71 @@ status_t HWComposer::executeCommands(HalDisplayId displayId) {
     return NO_ERROR;
 }
 
-status_t HWComposer::setPowerMode(PhysicalDisplayId displayId, hal::PowerMode mode) {
-    RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
+ftl::Future<status_t> HWComposer::setPowerMode(PhysicalDisplayId displayId, hal::PowerMode mode) {
+    RETURN_IF_INVALID_DISPLAY(displayId, ftl::yield<status_t>(BAD_INDEX));
 
     if (mode == hal::PowerMode::OFF) {
         setVsyncEnabled(displayId, hal::Vsync::DISABLE);
     }
 
     const auto& displayData = mDisplayData[displayId];
-    auto& hwcDisplay = displayData.hwcDisplay;
+    const auto& hwcDisplay = displayData.hwcDisplay;
     switch (mode) {
         case hal::PowerMode::OFF:
-        case hal::PowerMode::ON:
+        case hal::PowerMode::ON: {
             ALOGV("setPowerMode: Calling HWC %s", to_string(mode).c_str());
-            {
-                auto error = hwcDisplay->setPowerMode(mode);
+            return hwcDisplay->setPowerMode(mode).then([mode, displayId](auto error) -> status_t {
                 if (error != hal::Error::NONE) {
                     LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(), error,
                                   displayId);
                 }
-            }
-            break;
+                return NO_ERROR;
+            });
+        }
         case hal::PowerMode::DOZE:
-        case hal::PowerMode::DOZE_SUSPEND:
+        case hal::PowerMode::DOZE_SUSPEND: {
             ALOGV("setPowerMode: Calling HWC %s", to_string(mode).c_str());
-            {
-                bool supportsDoze = false;
-                const auto queryDozeError = hwcDisplay->supportsDoze(&supportsDoze);
+            bool supportsDoze = false;
+            const auto queryDozeError = hwcDisplay->supportsDoze(&supportsDoze);
 
-                // queryDozeError might be NO_RESOURCES, in the case of a display that has never
-                // been turned on. In that case, attempt to set to DOZE anyway.
-                if (!supportsDoze && queryDozeError == hal::Error::NONE) {
-                    mode = hal::PowerMode::ON;
-                }
+            // queryDozeError might be NO_RESOURCES, in the case of a display that has never
+            // been turned on. In that case, attempt to set to DOZE anyway.
+            if (!supportsDoze && queryDozeError == hal::Error::NONE) {
+                mode = hal::PowerMode::ON;
+            }
 
-                auto error = hwcDisplay->setPowerMode(mode);
-                if (error != hal::Error::NONE) {
-                    LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(), error,
-                                  displayId);
-                    // If the display had never been turned on, so its doze
-                    // support was unknown, it may truly not support doze. Try
-                    // switching it to ON instead.
-                    if (queryDozeError == hal::Error::NO_RESOURCES) {
+            return hwcDisplay->setPowerMode(mode).then(
+                    [displayId, mode, hwcDisplay,
+                     queryDozeError](hal::Error error) -> ftl::Future<status_t> {
+                        if (error == hal::Error::NONE) {
+                            return ftl::yield<status_t>(NO_ERROR);
+                        }
+                        LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(), error,
+                                      displayId);
+                        if (queryDozeError != hal::Error::NO_RESOURCES) {
+                            return ftl::yield<status_t>(NO_ERROR);
+                        }
+
+                        // If the display had never been turned on, so its doze
+                        // support was unknown, it may truly not support doze. Try
+                        // switching it to ON instead.
                         ALOGD("%s: failed to set %s to %s. Trying again with ON", __func__,
                               to_string(displayId).c_str(), to_string(mode).c_str());
-                        error = hwcDisplay->setPowerMode(hal::PowerMode::ON);
-                        if (error != hal::Error::NONE) {
-                            LOG_HWC_ERROR("setPowerMode(ON)", error, displayId);
-                        }
-                    }
-                }
-            }
-            break;
+                        return hwcDisplay->setPowerMode(hal::PowerMode::ON)
+                                .then([displayId](hal::Error error) -> status_t {
+                                    if (error != hal::Error::NONE) {
+                                        LOG_HWC_ERROR("setPowerMode(ON)", error, displayId);
+                                    }
+                                    return NO_ERROR;
+                                });
+                    });
+        }
         default:
             ALOGV("setPowerMode: Not calling HWC");
             break;
     }
 
-    return NO_ERROR;
+    return ftl::yield<status_t>(NO_ERROR);
 }
 
 status_t HWComposer::setActiveModeWithConstraints(

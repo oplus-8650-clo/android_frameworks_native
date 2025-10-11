@@ -595,10 +595,14 @@ const label* getValueLabelsForTypeAndCode(int32_t type, int32_t code) {
 
 } // namespace
 
+std::string InputEventLookup::getLinuxEvdevCodeLabel(int32_t type, int32_t code) {
+    return getLabel(getCodeLabelsForType(type), code);
+}
+
 EvdevEventLabel InputEventLookup::getLinuxEvdevLabel(int32_t type, int32_t code, int32_t value) {
     return {
             .type = getLabel(ev_labels, type),
-            .code = getLabel(getCodeLabelsForType(type), code),
+            .code = getLinuxEvdevCodeLabel(type, code),
             .value = getLabel(getValueLabelsForTypeAndCode(type, code), value),
     };
 }

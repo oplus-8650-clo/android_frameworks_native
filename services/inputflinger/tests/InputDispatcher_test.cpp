@@ -14808,7 +14808,8 @@ TEST_F(InputDispatcherTest, FocusedDisplayChangeIsNotified) {
 }
 
 TEST_F(InputDispatcherTest, DispatchSimultaneousActionOutsideAndHoverExit) {
-    SCOPED_FLAG_OVERRIDE(simultaneous_outside_and_hover_fix, true);
+    SCOPED_FLAG_OVERRIDE(enable_multi_device_same_window_stream, true);
+
     std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
     // Aim of this test is to create a situation where a window will receive simultaneous
     // ACTION_OUTSIDE and HOVER_EXIT event.
@@ -14846,6 +14847,20 @@ TEST_F(InputDispatcherTest, DispatchSimultaneousActionOutsideAndHoverExit) {
 
     left->consumeMotionEvent(WithMotionAction(ACTION_HOVER_ENTER));
     spy->consumeMotionEvent(WithMotionAction(ACTION_HOVER_ENTER));
+
+    // hover move into the right window with a different device
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(ACTION_HOVER_MOVE, AINPUT_SOURCE_MOUSE)
+                    .pointer(PointerBuilder(/*id=*/0, ToolType::MOUSE).x(150).y(50))
+                    .rawXCursorPosition(150)
+                    .rawYCursorPosition(50)
+                    .deviceId(SECOND_DEVICE_ID)
+                    .build());
+    // TODO(b/313689709): At present following behavior is incorrect, as both devices are
+    // controlling the same cursor, both spy and left windows should have received hover-exit here.
+    left->assertNoEvents();
+    right->consumeMotionEvent(WithMotionAction(ACTION_HOVER_ENTER));
+    spy->assertNoEvents();
 
     // click on right window, which is outside both spy and left window.
     mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_MOUSE)

@@ -43,6 +43,7 @@
 #include <configstore/Utils.h>
 #include <ftl/concat.h>
 #include <log/log.h>
+#include <scheduler/Fps.h>
 #include <system/window.h>
 
 // QTI_BEGIN: 2024-07-03: Display: sf: Align Display roi with fb scale
@@ -600,6 +601,17 @@ bool DisplayDevice::qtiGetPowerModeOverrideConfig() const {
 }
 
 // QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
+
+DisplayDeviceState DisplayDeviceState::createPhysical(PhysicalDisplayId id,
+                                                      hal::HWDisplayId hwcDisplayId, uint8_t port,
+                                                      DisplayModePtr activeMode) {
+    return DisplayDeviceState(Physical{id, hwcDisplayId, port, std::move(activeMode)});
+}
+
+DisplayDeviceState DisplayDeviceState::createVirtual(uid_t ownerUid) {
+    return DisplayDeviceState(Virtual{ownerUid});
+}
+
 std::atomic<int32_t> DisplayDeviceState::sNextSequenceId(1);
 
 }  // namespace android
