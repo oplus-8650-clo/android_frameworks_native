@@ -230,6 +230,21 @@ void ConsumerBase::onFrameDetached(const uint64_t bufferId) {
     }
 }
 
+void ConsumerBase::onSetFrameRate(float frameRate, int8_t compatibility,
+                                  int8_t changeFrameRateStrategy) {
+    CB_LOGV("onSetFrameRate");
+
+    sp<FrameAvailableListener> listener;
+    {
+        Mutex::Autolock lock(mFrameAvailableMutex);
+        listener = mFrameAvailableListener.promote();
+    }
+
+    if (listener != nullptr) {
+        listener->onSetFrameRate(frameRate, compatibility, changeFrameRateStrategy);
+    }
+}
+
 void ConsumerBase::onFrameAvailable(const BufferItem& item) {
     CB_LOGV("onFrameAvailable");
 

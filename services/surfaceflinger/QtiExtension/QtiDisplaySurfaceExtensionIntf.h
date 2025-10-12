@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../DisplayHardware/FramebufferSurface.h"
+#include "../DisplayHardware/LegacyFramebufferSurface.h"
 #include "../DisplayHardware/VirtualDisplay/VirtualDisplaySurface.h"
 
 namespace android {

@@ -67,6 +67,8 @@ public:
 
     static std::optional<int> getLedByLabel(const char* label);
 
+    static std::string getLinuxEvdevCodeLabel(int32_t type, int32_t code);
+
     static EvdevEventLabel getLinuxEvdevLabel(int32_t type, int32_t code, int32_t value);
 
     static std::optional<int> getLinuxEvdevEventTypeByLabel(const char* label);

@@ -165,7 +165,7 @@ public:
     [[nodiscard]] virtual hal::Error setOutputBuffer(
             const android::sp<android::GraphicBuffer>& buffer,
             const android::sp<android::Fence>& releaseFence) = 0;
-    [[nodiscard]] virtual hal::Error setPowerMode(hal::PowerMode mode) = 0;
+    [[nodiscard]] virtual ftl::Future<hal::Error> setPowerMode(hal::PowerMode mode) = 0;
     [[nodiscard]] virtual hal::Error setVsyncEnabled(hal::Vsync enabled) = 0;
     [[nodiscard]] virtual hal::Error validate(nsecs_t expectedPresentTime, int32_t frameIntervalNs,
                                               uint32_t* outNumTypes, uint32_t* outNumRequests) = 0;
@@ -246,7 +246,7 @@ public:
             hal::DisplayRequest* outDisplayRequests,
             std::unordered_map<HWC2::Layer*, hal::LayerRequest>* outLayerRequests) override;
     ftl::Expected<ui::DisplayConnectionType, hal::Error> getConnectionType() const override;
-    hal::Error supportsDoze(bool* outSupport) const override EXCLUDES(mDisplayCapabilitiesMutex);
+    hal::Error supportsDoze(bool* outSupport) const override EXCLUDES(DisplayCapabilities::mutex);
     hal::Error getHdrCapabilities(android::HdrCapabilities* outCapabilities) const override;
     hal::Error getOverlaySupport(aidl::android::hardware::graphics::composer3::OverlayProperties*
                                          outProperties) const override;
@@ -267,7 +267,7 @@ public:
     hal::Error setColorTransform(const android::mat4& matrix) override;
     hal::Error setOutputBuffer(const android::sp<android::GraphicBuffer>&,
                                const android::sp<android::Fence>& releaseFence) override;
-    hal::Error setPowerMode(hal::PowerMode) override;
+    [[nodiscard]] ftl::Future<hal::Error> setPowerMode(hal::PowerMode) override;
     hal::Error setVsyncEnabled(hal::Vsync enabled) override;
     hal::Error validate(nsecs_t expectedPresentTime, int32_t frameIntervalNs, uint32_t* outNumTypes,
                         uint32_t* outNumRequests) override;
@@ -317,7 +317,7 @@ public:
     bool isConnected() const override { return mIsConnected; }
     void setConnected(bool connected) override;
     bool hasCapability(aidl::android::hardware::graphics::composer3::DisplayCapability)
-            const override EXCLUDES(mDisplayCapabilitiesMutex);
+            const override EXCLUDES(DisplayCapabilities::mutex);
     bool isVsyncPeriodSwitchSupported() const override;
     bool hasDisplayIdleTimerCapability() const override;
     void onLayerDestroyed(hal::HWLayerId layerId) override;
@@ -326,8 +326,6 @@ public:
     std::optional<ui::Size> getPhysicalSizeInMm() const override { return mPhysicalSize; }
 
 private:
-    void loadDisplayCapabilities();
-
     // This may fail (and return a null pointer) if no layer with this ID exists
     // on this display
     std::shared_ptr<HWC2::Layer> getLayerById(hal::HWLayerId id) const;
@@ -352,11 +350,23 @@ private:
     using Layers = std::unordered_map<hal::HWLayerId, std::weak_ptr<HWC2::impl::Layer>>;
     Layers mLayers;
 
-    mutable std::mutex mDisplayCapabilitiesMutex;
-    std::once_flag mDisplayCapabilityQueryFlag;
-    std::optional<
-            std::unordered_set<aidl::android::hardware::graphics::composer3::DisplayCapability>>
-            mDisplayCapabilities GUARDED_BY(mDisplayCapabilitiesMutex);
+    class DisplayCapabilities {
+        using Capability = ::aidl::android::hardware::graphics::composer3::Capability;
+        using DisplayCapability = ::aidl::android::hardware::graphics::composer3::DisplayCapability;
+
+    public:
+        mutable std::mutex mutex;
+        std::optional<std::unordered_set<DisplayCapability>> mCapabilites GUARDED_BY(mutex);
+        void load(hal::HWDisplayId id, android::Hwc2::Composer& composer,
+                  const std::unordered_set<Capability>& capabilities);
+
+    private:
+        std::once_flag mQueryFlag;
+    };
+    // Passed into a future, so must remain valid even if Display itself is
+    // destroyed.
+    const std::shared_ptr<DisplayCapabilities> mDisplayCapabilities =
+            std::make_shared<DisplayCapabilities>();
     // Physical size in mm.
     std::optional<ui::Size> mPhysicalSize;
 };

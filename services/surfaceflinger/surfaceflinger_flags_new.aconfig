@@ -229,6 +229,13 @@ flag {
 } # increase_missed_frame_jank_threshold
 
 flag {
+  name: "jank_classification_v2"
+  namespace: "core_graphics"
+  description: "Refined jank classification"
+  bug: "416904263"
+} # jank_classification_v2
+
+flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"

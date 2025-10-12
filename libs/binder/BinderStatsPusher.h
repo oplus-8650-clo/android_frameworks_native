@@ -20,7 +20,6 @@
 #include "BinderStatsUtils.h"
 
 class BinderStatsPusherTest_GetBinderStatsService_Test;
-class BinderStatsPusherTest_ConvertTxnCodeToString16_Test;
 class BinderAllocation_BinderStatsPusher_aggregateStatsLocked_Test;
 
 namespace android {
@@ -42,7 +41,6 @@ public:
 private:
     friend ::BinderStatsPusherTest_GetBinderStatsService_Test;
     friend ::BinderAllocation_BinderStatsPusher_aggregateStatsLocked_Test;
-    friend ::BinderStatsPusherTest_ConvertTxnCodeToString16_Test;
     sp<os::binder::IBinderStatsConsumerService> getBinderStatsServiceLocked(const int64_t nowSec);
 
     // timeout for checking the service.
@@ -97,8 +95,6 @@ private:
     void aggregateStatsLocked(const std::vector<BinderCallData>& data,
                               const sp<os::binder::IBinderStatsConsumerService>& service,
                               const int64_t nowSec);
-    // Encodes the given transaction code to string, e.g. 15 -> "#15".
-    String16 convertTxnCodeToString(uint32_t txnCode);
     // The stats which are not sent to StatsBootStrap
     StatsBufferMap mStatsBuffer;
 

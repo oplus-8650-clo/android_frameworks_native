@@ -276,7 +276,7 @@ protected:
 
     /**
      * mEglDisplay is the EGLDisplay with which this EGLConsumer is currently
-     * associated.  It is intialized to EGL_NO_DISPLAY and gets set to the
+     * associated.  It is initialized to EGL_NO_DISPLAY and gets set to the
      * current display when updateTexImage is called for the first time and when
      * attachToContext is called.
      */

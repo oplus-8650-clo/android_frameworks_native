@@ -32,7 +32,7 @@ QtiSurfaceFlingerExtensionIntf* qtiCreateSurfaceFlingerExtension(SurfaceFlinger*
 QtiDisplaySurfaceExtensionIntf* qtiCreateDisplaySurfaceExtension(bool isVirtual,
                                                                  LegacyVirtualDisplaySurface* vds,
                                                                  bool secure, uint64_t sinkUsage,
-                                                                 FramebufferSurface* fbs) {
+                                                                 LegacyFramebufferSurface* fbs) {
 #ifdef QTI_DISPLAY_EXTENSION
     int qtiFirstApiLevel = android::base::GetIntProperty("ro.product.first_api_level", 0);
     bool mQtiEnableDisplayExtn = (qtiFirstApiLevel < __ANDROID_API_U__) ||

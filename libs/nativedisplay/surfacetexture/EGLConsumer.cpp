@@ -253,7 +253,7 @@ status_t EGLConsumer::updateAndReleaseLocked(const BufferItem& item, PendingRele
     }
 
     // Ensure we have a valid EglImageKHR for the slot, creating an EglImage
-    // if nessessary, for the gralloc buffer currently in the slot in
+    // if necessary, for the gralloc buffer currently in the slot in
     // ConsumerBase.
     // We may have to do this even when item.mGraphicBuffer == NULL (which
     // means the buffer was previously acquired).

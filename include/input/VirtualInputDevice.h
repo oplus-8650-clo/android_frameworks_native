@@ -30,6 +30,7 @@ enum class DeviceType {
     DPAD,
     STYLUS,
     ROTARY_ENCODER,
+    GAMEPAD,
 };
 
 android::base::unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t productId,
@@ -68,6 +69,16 @@ public:
     virtual ~VirtualKeyboard() override;
     bool writeKeyEvent(int32_t androidKeyCode, int32_t androidAction,
                        std::chrono::nanoseconds eventTime);
+};
+
+class VirtualGamepad : public VirtualInputDevice {
+public:
+    static const std::map<int, int> GAMEPAD_KEY_CODE_MAPPING;
+    VirtualGamepad(android::base::unique_fd fd);
+    ~VirtualGamepad() override;
+    bool writeKeyEvent(int32_t androidKeyCode, int32_t androidAction,
+                       std::chrono::nanoseconds eventTime);
+    bool writeMotionEvent(const std::map<int, float>& axes, std::chrono::nanoseconds eventTime);
 };
 
 class VirtualDpad : public VirtualInputDevice {

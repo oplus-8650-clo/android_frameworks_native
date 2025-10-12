@@ -611,8 +611,8 @@ binder_status_t AIBinder_DeathRecipient::linkToDeath(const sp<IBinder>& binder, 
     }
     if (!mOnUnlinked && cookie) {
         ALOGW("AIBinder_linkToDeath is being called with a non-null cookie and no onUnlink "
-              "callback set. This might not be intended. AIBinder_DeathRecipient_setOnUnlinked "
-              "should be called first.");
+              "callback set. Use AIBinder_DeathRecipient_setOnUnlinked to manage the lifetime "
+              "of the cookie. This will become an abort.");
     }
 
     sp<TransferDeathRecipient> recipient =

@@ -47,6 +47,8 @@ public:
         virtual void onFrameDequeued(const uint64_t){};
         virtual void onFrameCancelled(const uint64_t){};
         virtual void onFrameDetached(const uint64_t){};
+        virtual void onSetFrameRate(float /*frameRate*/, int8_t /*compatibility*/,
+                                    int8_t /*changeFrameRateStrategy*/) {}
     };
 
     ~ConsumerBase() override;
@@ -173,6 +175,8 @@ protected:
     virtual void onFrameDequeued(const uint64_t bufferId) override;
     virtual void onFrameCancelled(const uint64_t bufferId) override;
     virtual void onFrameDetached(const uint64_t bufferId) override;
+    virtual void onSetFrameRate(float frameRate, int8_t compatibility,
+                                int8_t changeFrameRateStrategy) override;
     virtual void onBuffersReleased() override;
     virtual void onSidebandStreamChanged() override;
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)

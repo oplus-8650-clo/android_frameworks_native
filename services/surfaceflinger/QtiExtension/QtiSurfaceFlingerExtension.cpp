@@ -1076,20 +1076,20 @@ bool QtiSurfaceFlingerExtension::qtiCanAllocateHwcDisplayIdForVDS(const DisplayD
     size_t maxVirtualDisplaySize = mQtiFlinger->getHwComposer().getMaxVirtualDisplayDimension();
 
     ui::Size resolution(0, 0);
-    status = state.surface->query(NATIVE_WINDOW_WIDTH, &resolution.width);
+    status = state.getVirtual().surface->query(NATIVE_WINDOW_WIDTH, &resolution.width);
     if (status != NO_ERROR) {
         ALOGE("Unable to query width (%d)", status);
         goto cleanup;
     }
 
-    status = state.surface->query(NATIVE_WINDOW_HEIGHT, &resolution.height);
+    status = state.getVirtual().surface->query(NATIVE_WINDOW_HEIGHT, &resolution.height);
     if (status != NO_ERROR) {
         ALOGE("Unable to query height (%d)", status);
         goto cleanup;
     }
 
     // Replace with native_window_get_consumer_usage ?
-    status = state.surface->getConsumerUsage(&usage);
+    status = state.getVirtual().surface->getConsumerUsage(&usage);
     if (status != NO_ERROR) {
         ALOGW("Unable to query usage (%d)", status);
         goto cleanup;
@@ -1153,14 +1153,14 @@ void QtiSurfaceFlingerExtension::qtiCheckVirtualDisplayHint(const Vector<Display
                         (mQtiFlinger->mFlagThread != std::this_thread::get_id()));
         ConditionalLock lock(mQtiFlinger->mStateLock, needLock == true);
         for (const DisplayState& s : displays) {
-            const ssize_t index = mQtiFlinger->mCurrentState.displays.indexOfKey(s.token);
-            if (index < 0) continue;
-
-            DisplayDeviceState& state =
-                    mQtiFlinger->mCurrentState.displays.editValueAt(static_cast<size_t>(index));
+            const auto stateOpt = mQtiFlinger->mCurrentState.displays.get(s.token);
+            if (!stateOpt) {
+                continue;
+            }
+            DisplayDeviceState& state = *stateOpt;
             const uint32_t what = s.what;
             if (what & DisplayState::eSurfaceChanged) {
-                if (!Surface::areSurfacesEquivalent(state.surface, s.surface.toSurface())) {
+                if (!state.isVirtual() || !Surface::areSurfacesEquivalent(state.getVirtual().surface, s.surface.toSurface())) {
                     if (state.isVirtual() && s.surface.graphicBufferProducer != nullptr) {
                         width = 0;
                         int status = s.surface.toSurface()->query(NATIVE_WINDOW_WIDTH, &width);
@@ -2169,16 +2169,14 @@ void QtiSurfaceFlingerExtension::qtiFbScalingOnBoot() {
     if (useFbScaling) {
         ALOGV("%s: Qti FrameBuffer Scaling is enabled %d", __func__, useFbScaling);
         Mutex::Autolock _l(mQtiFlinger->mStateLock);
-        ssize_t index = mQtiFlinger->mCurrentState.displays.indexOfKey(
-                mQtiFlinger->getPrimaryDisplayTokenLocked());
-        if (index < 0) {
-            ALOGE("%s: Invalid token %p", __func__,
-                  mQtiFlinger->getPrimaryDisplayTokenLocked().get());
+        const auto primaryDisplayToken = mQtiFlinger->getPrimaryDisplayTokenLocked();
+        const auto curStateOpt = mQtiFlinger->mCurrentState.displays.get(primaryDisplayToken);
+        const auto drawStateOpt = mQtiFlinger->mDrawingState.displays.get(primaryDisplayToken);
+        if (!curStateOpt || !drawStateOpt) {
+            ALOGE("%s: Invalid token %p", __func__, primaryDisplayToken.get());
         } else {
-            DisplayDeviceState& curState =
-                    mQtiFlinger->mCurrentState.displays.editValueAt(static_cast<size_t>(index));
-            DisplayDeviceState& drawState =
-                    mQtiFlinger->mDrawingState.displays.editValueAt(static_cast<size_t>(index));
+            DisplayDeviceState& curState = *curStateOpt;
+            DisplayDeviceState& drawState = *drawStateOpt;
             qtiSetFrameBufferSizeForScaling(mQtiFlinger->getFrontInternalDisplayLocked(), curState,
                                             drawState);
         }
@@ -2190,11 +2188,11 @@ bool QtiSurfaceFlingerExtension::qtiFbScalingOnDisplayChange(
         const DisplayDeviceState& drawingState) {
     bool useFbScaling = mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kFbScaling);
     if (mQtiFlinger->mBootFinished && useFbScaling && display->isPrimary()) {
-        const ssize_t index = mQtiFlinger->mCurrentState.displays.indexOfKey(displayToken);
-        DisplayDeviceState& curState =
-                mQtiFlinger->mCurrentState.displays.editValueAt(static_cast<size_t>(index));
-        qtiSetFrameBufferSizeForScaling(display, curState, drawingState);
-        return true;
+        if (const auto curStateOpt = mQtiFlinger->mCurrentState.displays.get(displayToken)) {
+            DisplayDeviceState& curState = *curStateOpt;
+            qtiSetFrameBufferSizeForScaling(display, curState, drawingState);
+            return true;
+        }
     }
 
     return false;

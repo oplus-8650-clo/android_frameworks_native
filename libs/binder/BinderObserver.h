@@ -47,11 +47,12 @@ class BinderObserver {
 public:
     // Initial data for tracking a binder call
     struct CallInfo {
+        int64_t startTimeNanos;
         String16 interfaceDescriptor;
+        String16 aidlMethodName;
         uint32_t code;
         uid_t callingUid;
         BinderObserverConfig::TrackingInfo trackingInfo;
-        int64_t startTimeNanos;
     };
 
     void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue);

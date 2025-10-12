@@ -337,7 +337,16 @@ struct DisplayDeviceState {
 
     struct Virtual {
         uid_t ownerUid = static_cast<uid_t>(-1);
+        sp<Surface> surface;
+
+        bool operator==(const Virtual&) const = default;
     };
+
+    static DisplayDeviceState createPhysical(
+            PhysicalDisplayId id, hardware::graphics::composer::hal::HWDisplayId hwcDisplayId,
+            uint8_t port, DisplayModePtr activeMode);
+
+    static DisplayDeviceState createVirtual(uid_t ownerUid);
 
     bool isPhysical() const { return std::holds_alternative<Physical>(physicalOrVirtual); }
     bool isVirtual() const { return std::holds_alternative<Virtual>(physicalOrVirtual); }
@@ -349,7 +358,6 @@ struct DisplayDeviceState {
 
     int32_t sequenceId = sNextSequenceId++;
     std::variant<Physical, Virtual> physicalOrVirtual;
-    sp<Surface> surface;
     ui::LayerStack layerStack;
     uint32_t flags = 0;
     Rect layerStackSpaceRect;
@@ -369,7 +377,12 @@ struct DisplayDeviceState {
     hardware::graphics::composer::hal::PowerMode initialPowerMode{
             hardware::graphics::composer::hal::PowerMode::OFF};
 
+    static int32_t getNextSequenceId() { return sNextSequenceId++; }
+
 private:
+    DisplayDeviceState(std::variant<Physical, Virtual>&& type)
+          : physicalOrVirtual(std::move(type)) {}
+
     static std::atomic<int32_t> sNextSequenceId;
 };
 

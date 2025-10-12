@@ -27,6 +27,7 @@ constexpr int kSendIntervalSec = 5;
 
 BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uint32_t code,
                                                             uid_t callingUid) {
+    LOG_ALWAYS_FATAL_IF(binder == nullptr, "Null binder sent to binder observer.");
     if (!mConfig->isEnabled()) {
         return {};
     }
@@ -34,19 +35,20 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
     // Sharding based on the pointer would be faster but would also increase the cardinality of
     // the different AIDLs that we report. Ideally, we want something stable within the
     // current boot session, so we use the interface descriptor.
-    [[clang::no_destroy]] static const StaticString16 kDeletedBinder(u"<deleted_binder>");
-    String16 interfaceDescriptor =
-            binder == nullptr ? kDeletedBinder : binder->getInterfaceDescriptor();
-
+    const String16& interfaceDescriptor = binder->getInterfaceDescriptor();
     BinderObserverConfig::TrackingInfo trackingInfo =
             mConfig->getTrackingInfo(interfaceDescriptor, code);
 
     return {
+            .startTimeNanos = trackingInfo.isTracked() ? uptimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
+            // TODO(b/299356196): Reduce std::string and String16 allocations.
+            .aidlMethodName = trackingInfo.isTracked()
+                    ? String16(binder->getFunctionName(code).c_str())
+                    : String16(),
             .code = code,
             .callingUid = callingUid,
             .trackingInfo = trackingInfo,
-            .startTimeNanos = trackingInfo.isTracked() ? uptimeNanos() : 0,
     };
 }
 
@@ -60,10 +62,11 @@ void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& que
         mBinderStatsCollector.registerQueue(queue);
     }
     BinderCallData observerData = {
-            .interfaceDescriptor = callInfo.interfaceDescriptor,
-            .transactionCode = callInfo.code,
             .startTimeNanos = callInfo.startTimeNanos,
             .endTimeNanos = callInfo.trackingInfo.trackLatency ? uptimeNanos() : 0,
+            .interfaceDescriptor = callInfo.interfaceDescriptor,
+            .aidlMethodName = callInfo.aidlMethodName,
+            .transactionCode = callInfo.code,
             .senderUid = callInfo.callingUid,
     };
     addStatMaybeFlush(queue, observerData);

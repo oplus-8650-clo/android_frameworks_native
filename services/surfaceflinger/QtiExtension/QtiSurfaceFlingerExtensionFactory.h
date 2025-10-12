@@ -16,6 +16,6 @@ QtiSurfaceFlingerExtensionIntf* qtiCreateSurfaceFlingerExtension(SurfaceFlinger*
 QtiDisplaySurfaceExtensionIntf* qtiCreateDisplaySurfaceExtension(bool isVirtual,
                                                                  LegacyVirtualDisplaySurface* vds,
                                                                  bool secure, uint64_t sinkUsage,
-                                                                 FramebufferSurface* fbs);
+                                                                 LegacyFramebufferSurface* fbs);
 
 } // namespace android::surfaceflingerextension

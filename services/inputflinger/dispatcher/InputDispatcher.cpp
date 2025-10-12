@@ -2979,11 +2979,9 @@ void InputDispatcher::DispatcherTouchState::addPointerWindowTarget(
     // This also occurs if a window is expected to receive both action_outside and HOVER_EXIT.
     // If we picked an existing input target above, but it's for HOVER_EXIT - let's use a new
     // target instead.
-    bool enable_action_outside_bug_fix = input_flags::simultaneous_outside_and_hover_fix();
     if (it != inputTargets.end() &&
         (it->dispatchMode == InputTarget::DispatchMode::HOVER_EXIT ||
-         (enable_action_outside_bug_fix &&
-          it->dispatchMode == InputTarget::DispatchMode::OUTSIDE))) {
+         it->dispatchMode == InputTarget::DispatchMode::OUTSIDE)) {
         // Force the code below to create a new input target
         it = inputTargets.end();
     }
@@ -6395,8 +6393,8 @@ InputDispatcher::DispatcherTouchState::pilferPointers(
     auto touchStateWindowAndDisplay = findTouchStateWindowAndDisplay(token);
     if (!touchStateWindowAndDisplay.has_value()) {
         LOG(WARNING)
-                << "Attempted to pilfer points from a channel without any on-going pointer streams."
-                   " Ignoring.";
+                << "Attempted to pilfer pointers from a channel without any on-going pointer "
+                   "streams. Ignoring.";
         return Error(BAD_VALUE);
     }
 

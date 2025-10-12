@@ -56,18 +56,6 @@ sp<os::binder::IBinderStatsConsumerService> BinderStatsPusher::getBinderStatsSer
     return service;
 }
 
-String16 BinderStatsPusher::convertTxnCodeToString(uint32_t txnCode) {
-    // Size: 1 for '#', 10 for max uint32_t digits.
-    char buffer[11];
-    buffer[0] = '#';
-    auto result = std::to_chars(buffer + 1, buffer + std::size(buffer), txnCode);
-    if (result.ec != std::errc()) {
-        LOG_FATAL("Error converting txnCode to String16");
-    }
-    // Construct the String16 from the char array and its length.
-    return String16(buffer, result.ptr - buffer);
-}
-
 __attribute__((no_sanitize("signed-integer-overflow"))) void
 BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
                                         const sp<os::binder::IBinderStatsConsumerService>& service,
@@ -151,8 +139,7 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             auto& callsStats = mCallStats.back();
             callsStats.clientUid = static_cast<int32_t>(datum.senderUid);
             callsStats.interfaceDescriptor = datum.interfaceDescriptor;
-            // TODO(b/299356196): use actual method name when available.
-            callsStats.aidlMethod = convertTxnCodeToString(datum.transactionCode);
+            callsStats.aidlMethod = datum.aidlMethodName;
             callsStats.callCount = static_cast<int64_t>(callsWithLatency);
             callsStats.durationSumMicros = static_cast<int64_t>(durationSumMicros);
             callsStats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
@@ -169,8 +156,7 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             auto& spamStats = mSpamStats.back();
             spamStats.clientUid = static_cast<int32_t>(datum.senderUid);
             spamStats.interfaceDescriptor = datum.interfaceDescriptor;
-            // TODO(b/299356196): replace with actual method name.
-            spamStats.aidlMethod = convertTxnCodeToString(datum.transactionCode);
+            spamStats.aidlMethod = datum.aidlMethodName;
             spamStats.secondsWithAtLeast125Calls = secondsWithAtLeast125Calls;
             spamStats.secondsWithAtLeast250Calls = secondsWithAtLeast250Calls;
         }
