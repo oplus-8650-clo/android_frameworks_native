@@ -108,6 +108,8 @@ mod service;
 mod state;
 #[cfg(not(any(android_vendor, android_ndk, android_vndk, trusty)))]
 mod system_only;
+#[macro_use]
+mod sync_utils;
 
 use binder_ndk_sys as sys;
 
@@ -162,6 +164,20 @@ pub mod binder_impl {
         NON_NULL_PARCELABLE_FLAG, NULL_PARCELABLE_FLAG,
     };
     pub use crate::proxy::{AssociateClass, Proxy};
+
+    pub use crate::panic_if_poisoned;
+
+    #[cfg(single_threaded)]
+    pub use spin::Mutex;
+
+    #[cfg(all(feature = "std", not(single_threaded)))]
+    pub use std::sync::Mutex;
+
+    #[cfg(single_threaded)]
+    pub use spin::Once;
+
+    #[cfg(all(feature = "std", not(single_threaded)))]
+    pub use std::sync::Once;
 }
 
 /// Unstable, in-development API that only allowlisted clients are allowed to use.

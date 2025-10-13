@@ -43,6 +43,8 @@ public:
 
     void reset();
 
+    size_t getRemainingSize() const { return sizeof(mBytes) - mUsed; }
+
     template <typename T>
     T* alloc(size_t count = 1) {
         size_t aligned = roundUp(mUsed, alignof(T));

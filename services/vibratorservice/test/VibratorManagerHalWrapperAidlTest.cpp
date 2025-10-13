@@ -108,6 +108,10 @@ static const std::vector<int32_t> kVibratorIds = {1, 2};
 static const VibrationSessionConfig kSessionConfig;
 static constexpr int kVibratorId = 1;
 
+TEST_F(VibratorManagerHalWrapperAidlTest, TestGetHal) {
+    ASSERT_EQ(mMockHal, mWrapper->getHal());
+}
+
 TEST_F(VibratorManagerHalWrapperAidlTest, TestGetCapabilitiesDoesNotCacheFailedResult) {
     EXPECT_CALL(*mMockHal.get(), getCapabilities(_))
             .Times(Exactly(3))

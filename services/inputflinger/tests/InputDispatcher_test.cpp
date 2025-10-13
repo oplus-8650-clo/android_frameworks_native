@@ -42,6 +42,7 @@
 #include <input/PrintTools.h>
 #include <linux/input.h>
 #include <sys/epoll.h>
+#include <utils/Timers.h>
 
 #include <cinttypes>
 #include <compare>
@@ -6699,9 +6700,11 @@ TEST_F(InputDispatcherDisplayProjectionTest, InjectionWithTransformInLogicalDisp
     const vec2 expectedPoint{75, 55}; // The injected point in the logical display space.
     const vec2 untransformedPoint = injectedEventTransform.inverse().transform(expectedPoint);
 
+    const nsecs_t time = systemTime(SYSTEM_TIME_MONOTONIC);
     MotionEvent event = MotionEventBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
                                 .displayId(ui::LogicalDisplayId::DEFAULT)
-                                .eventTime(systemTime(SYSTEM_TIME_MONOTONIC))
+                                .eventTime(time)
+                                .downTime(time)
                                 .pointer(PointerBuilder(/*id=*/0, ToolType::FINGER)
                                                  .x(untransformedPoint.x)
                                                  .y(untransformedPoint.y))
@@ -10000,9 +10003,11 @@ TEST_F(InputDispatcherOnPointerDownOutsideFocus, OnPointerDownOutsideFocus_OnAlr
 // Have two windows, one with focus. Injecting a trusted DOWN MotionEvent with the flag
 // NO_FOCUS_CHANGE on the unfocused window should not call the onPointerDownOutsideFocus callback.
 TEST_F(InputDispatcherOnPointerDownOutsideFocus, NoFocusChangeFlag) {
+    const nsecs_t time = systemTime(SYSTEM_TIME_MONOTONIC);
     const MotionEvent event =
             MotionEventBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
-                    .eventTime(systemTime(SYSTEM_TIME_MONOTONIC))
+                    .eventTime(time)
+                    .downTime(time)
                     .pointer(PointerBuilder(/*id=*/0, ToolType::FINGER).x(20).y(20))
                     .addFlag(MotionFlag::NO_FOCUS_CHANGE)
                     .build();

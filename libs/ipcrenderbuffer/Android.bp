@@ -21,6 +21,8 @@ cc_library_static {
         "src/RenderBufferOps.cpp",
         "src/RenderBufferDebugUtils.cpp",
         "src/RenderBufferShmemPaint.cpp",
+        "src/IPCRecordingCanvas.cpp",
+        ":rendercommandbuffer_sources",
     ],
 }
 

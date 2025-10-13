@@ -57,17 +57,23 @@ mod ffi {
         /// ```
         type InputVerifier;
         #[cxx_name = create]
-        fn create_input_verifier(name: String, verify_buttons: bool) -> Box<InputVerifier>;
+        fn create_input_verifier(
+            name: String,
+            verify_buttons: bool,
+            verify_down_time: bool,
+        ) -> Box<InputVerifier>;
         #[allow(clippy::too_many_arguments)]
         fn process_movement(
             verifier: &mut InputVerifier,
             device_id: i32,
+            event_time_nanos: i64,
             source: u32,
             action: u32,
             action_button: u32,
             pointer_properties: &[RustPointerProperties],
             flags: u32,
             button_state: u32,
+            down_time_nanos: i64,
         ) -> String;
         fn dump(verifier: &InputVerifier) -> String;
         fn reset_device(verifier: &mut InputVerifier, device_id: i32);
@@ -119,20 +125,31 @@ mod ffi {
 
 use crate::ffi::{RustInputDeviceIdentifier, RustPointerProperties};
 
-fn create_input_verifier(name: String, verify_buttons: bool) -> Box<InputVerifier> {
-    Box::new(InputVerifier::new(&name, ffi::shouldLog("InputVerifierLogEvents"), verify_buttons))
+fn create_input_verifier(
+    name: String,
+    verify_buttons: bool,
+    verify_down_time: bool,
+) -> Box<InputVerifier> {
+    Box::new(InputVerifier::new(
+        &name,
+        ffi::shouldLog("InputVerifierLogEvents"),
+        verify_buttons,
+        verify_down_time,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
 fn process_movement(
     verifier: &mut InputVerifier,
     device_id: i32,
+    event_time_nanos: i64,
     source: u32,
     action: u32,
     action_button: u32,
     pointer_properties: &[RustPointerProperties],
     flags: u32,
     button_state: u32,
+    down_time_nanos: i64,
 ) -> String {
     let Some(converted_source) = Source::from_bits(source) else {
         panic!(
@@ -173,12 +190,14 @@ fn process_movement(
         }
     }
     let result = verifier.process_movement(NotifyMotionArgs {
+        event_time_nanos,
         device_id: DeviceId(device_id),
         source: converted_source,
         action: motion_action,
         pointer_properties,
         flags: motion_flags,
         button_state: motion_button_state,
+        down_time_nanos,
     });
     match result {
         Ok(()) => "".to_string(),
@@ -261,14 +280,20 @@ mod tests {
 
     #[test]
     fn verify_nonbutton_action_with_action_button() {
-        let mut verifier = create_input_verifier("Test".to_string(), /*verify_buttons*/ true);
+        let mut verifier = create_input_verifier(
+            "Test".to_string(),
+            /*verify_buttons*/ true,
+            /*verify_down_times*/ true,
+        );
         assert!(process_movement(
             &mut verifier,
             1,
+            0,
             input_bindgen::AINPUT_SOURCE_MOUSE,
             input_bindgen::AMOTION_EVENT_ACTION_HOVER_ENTER,
             input_bindgen::AMOTION_EVENT_BUTTON_PRIMARY,
             &BASE_POINTER_PROPERTIES,
+            0,
             0,
             0,
         )
@@ -277,16 +302,22 @@ mod tests {
 
     #[test]
     fn verify_nonbutton_action_with_action_button_and_button_state() {
-        let mut verifier = create_input_verifier("Test".to_string(), /*verify_buttons*/ true);
+        let mut verifier = create_input_verifier(
+            "Test".to_string(),
+            /*verify_buttons*/ true,
+            /*verify_down_times*/ true,
+        );
         assert!(process_movement(
             &mut verifier,
             1,
+            0,
             input_bindgen::AINPUT_SOURCE_MOUSE,
             input_bindgen::AMOTION_EVENT_ACTION_HOVER_ENTER,
             input_bindgen::AMOTION_EVENT_BUTTON_PRIMARY,
             &BASE_POINTER_PROPERTIES,
             0,
             input_bindgen::AMOTION_EVENT_BUTTON_PRIMARY,
+            0,
         )
         .contains("button action"));
     }

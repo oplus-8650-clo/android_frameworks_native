@@ -589,6 +589,7 @@ private:
     std::optional<display::DisplayIdentificationInfo> onHotplugDisconnect(hal::HWDisplayId);
     std::optional<display::DisplayIdentificationInfo> onHotplugLinkTrainingFailure(
             hal::HWDisplayId);
+    bool shouldUseStableEdidIdsForHwcDisplay(hal::HWDisplayId hwcDisplayId) const;
     bool shouldIgnoreHotplugConnect(hal::HWDisplayId, uint8_t port,
                                     bool hasDisplayIdentificationData) const;
 

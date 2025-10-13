@@ -566,7 +566,7 @@ macro_rules! binder_fn_get_class {
 
     ($constructor:expr) => {
         fn get_class() -> $crate::binder_impl::InterfaceClass {
-            static CLASS_INIT: std::sync::Once = std::sync::Once::new();
+            static CLASS_INIT: $crate::binder_impl::Once = $crate::binder_impl::Once::new();
             static mut CLASS: Option<$crate::binder_impl::InterfaceClass> = None;
 
             // Safety: This assignment is guarded by the `CLASS_INIT` `Once`
@@ -969,7 +969,7 @@ macro_rules! declare_binder_interface {
             }
 
             fn get_class() -> $crate::binder_impl::InterfaceClass {
-                static CLASS_INIT: std::sync::Once = std::sync::Once::new();
+                static CLASS_INIT: $crate::binder_impl::Once = $crate::binder_impl::Once::new();
                 static mut CLASS: Option<$crate::binder_impl::InterfaceClass> = None;
 
                 // Safety: This assignment is guarded by the `CLASS_INIT` `Once`

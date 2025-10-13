@@ -22,6 +22,7 @@
 #include <cutils/properties.h>
 #include <ftl/enum.h>
 #include <log/log.h>
+#include <utils/Timers.h>
 #include <utils/Trace.h>
 
 #include <com_android_input_flags.h>
@@ -665,9 +666,10 @@ status_t InputPublisher::publishMotionEvent(
     const status_t status = mChannel->sendMessage(&msg);
 
     if (status == OK && verifyEvents()) {
-        Result<void> result = mInputVerifier.processMovement(deviceId, source, action, actionButton,
-                                                             pointerCount, pointerProperties,
-                                                             pointerCoords, flags, buttonState);
+        Result<void> result =
+                mInputVerifier.processMovement(deviceId, eventTime, source, action, actionButton,
+                                               pointerCount, pointerProperties, pointerCoords,
+                                               flags, buttonState, downTime);
         if (!result.ok()) {
             LOG(ERROR) << "Bad stream: " << result.error();
             return BAD_VALUE;

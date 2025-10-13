@@ -320,9 +320,6 @@ filegroup {
         "LayerState.cpp",
         "DisplayLuts.cpp",
         "OccupancyTracker.cpp",
-        "RenderCommandBuffer.cpp",
-        "RenderCommandBufferProducer.cpp",
-        "RenderCommandBufferConsumer.cpp",
         "StreamSplitter.cpp",
         "ScreenCaptureResults.cpp",
         "Surface.cpp",
@@ -342,7 +339,11 @@ filegroup {
 
 filegroup {
     name: "rendercommandbuffer_sources",
-    srcs: ["RenderCommandBuffer.cpp"],
+    srcs: [
+        "RenderCommandBuffer.cpp",
+        "RenderCommandBufferProducer.cpp",
+        "RenderCommandBufferConsumer.cpp",
+    ],
 }
 
 cc_defaults {

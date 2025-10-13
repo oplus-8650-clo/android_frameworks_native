@@ -4569,10 +4569,10 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
                                                 StringPrintf("display %s",
                                                              args.displayId.toString().c_str()));
         Result<void> result =
-                it->second.processMovement(args.deviceId, args.source, args.action,
+                it->second.processMovement(args.deviceId, args.eventTime, args.source, args.action,
                                            args.actionButton, args.getPointerCount(),
                                            args.pointerProperties.data(), args.pointerCoords.data(),
-                                           args.flags, args.buttonState);
+                                           args.flags, args.buttonState, args.downTime);
         if (!result.ok()) {
             LOG(FATAL) << "Bad stream: " << result.error() << " caused by " << args.dump();
         }
@@ -4763,11 +4763,12 @@ bool InputDispatcher::shouldRejectInjectedMotionLocked(const MotionEvent& motion
     InputVerifier& verifier = it->second;
 
     Result<void> result =
-            verifier.processMovement(deviceId, motionEvent.getSource(), motionEvent.getAction(),
-                                     motionEvent.getActionButton(), motionEvent.getPointerCount(),
+            verifier.processMovement(deviceId, motionEvent.getEventTime(), motionEvent.getSource(),
+                                     motionEvent.getAction(), motionEvent.getActionButton(),
+                                     motionEvent.getPointerCount(),
                                      motionEvent.getPointerProperties(),
                                      motionEvent.getSamplePointerCoords(), flags.get(),
-                                     motionEvent.getButtonState());
+                                     motionEvent.getButtonState(), motionEvent.getDownTime());
     if (!result.ok()) {
         logDispatchStateLocked();
         LOG(ERROR) << "Inconsistent event: " << motionEvent << ", reason: " << result.error();
@@ -6176,12 +6177,13 @@ void InputDispatcher::dumpDispatchStateLocked(std::string& dump) const {
     const nsecs_t currentTime = now();
 
     dump += addLinePrefix(mConnectionManager.dump(currentTime), INDENT);
-    if (!mInputFilterVerifiersByDisplay.empty()) {
-        for (const auto& [displayId, verifier] : mInputFilterVerifiersByDisplay) {
-            dump += addLinePrefix(std::string("Verifier on ") + displayId.toString() + " : " +
-                                          verifier.dump(),
-                                  INDENT);
-        }
+    for (const auto& [displayId, verifier] : mInputFilterVerifiersByDisplay) {
+        dump += INDENT "Filter verifier on display " + displayId.toString() + ":\n";
+        dump += addLinePrefix(verifier.dump(), INDENT2);
+    }
+    for (const auto& [displayId, verifier] : mVerifiersByDisplay) {
+        dump += INDENT "Verifier on display " + displayId.toString() + ":\n";
+        dump += addLinePrefix(verifier.dump(), INDENT2);
     }
 
     // Dump recently dispatched or dropped events from oldest to newest.

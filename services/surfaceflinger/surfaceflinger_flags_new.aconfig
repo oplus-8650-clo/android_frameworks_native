@@ -91,15 +91,15 @@ flag {
 } # deprecate_frame_tracker
 
 flag {
-  name: "deprecate_vsync_sf"
+  name: "deprecate_vsync_sf_v2"
   namespace: "core_graphics"
   description: "Depracate eVsyncSourceSurfaceFlinger and use vsync_app everywhere"
   bug: "162235855"
-  is_fixed_read_only: true
   metadata {
     purpose: PURPOSE_BUGFIX
   }
-} # deprecate_vsync_sf
+} # deprecate_vsync_sf_v2
+
 
 flag {
   name: "disable_synthetic_vsync_for_performance"
@@ -252,6 +252,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # md_degrade_hdr
+
+flag {
+  name: "mirror_uid_filtering"
+  namespace: "window_surfaces"
+  description: "Enables UID filtering when building layer snapshots of mirrors. Layers that have different UID from the mirror root's will be dropped "
+  bug: "437391557"
+} # mirror_uid_filtering
 
 flag {
   name: "modeset_state_machine"
