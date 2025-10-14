@@ -393,13 +393,15 @@ struct DrawPathOp final : IPCRenderBufferOp {
     ShmemPaint paint;
     RSpan<uint8_t> pathData;
 
-    static DrawPathOp* Create(RenderCommandBuffer* commandBuffer, uint8_t* blob, size_t bs,
+    static DrawPathOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path,
                               const SkPaint& p) {
         DrawPathOp* op = commandBuffer->alloc<DrawPathOp>();
         if (!op) return nullptr;
-        if (!SetRSpan(op->pathData, commandBuffer, blob, bs)) {
+        size_t pathSize = path.writeToMemory(nullptr);
+        if (!SetRSpan<uint8_t>(op->pathData, commandBuffer, nullptr, pathSize)) {
             return nullptr;
         }
+        path.writeToMemory(op->pathData.data.get());
         op->paint = toShmemPaint(p);
         op->type = kType;
         return op;
@@ -625,21 +627,35 @@ struct DrawTextBlobOp final : IPCRenderBufferOp {
     SkScalar y;
     RSpan<uint8_t> blobData;
 
-    static DrawTextBlobOp* Create(RenderCommandBuffer* commandBuffer, uint8_t* blob, size_t bs,
+    static DrawTextBlobOp* Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
                                   SkScalar x_in, SkScalar y_in, const SkPaint& p) {
-        DrawTextBlobOp* op = commandBuffer->alloc<DrawTextBlobOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->paint = toShmemPaint(p);
-        if (!SetRSpan(op->blobData, commandBuffer, blob, bs)) {
+        SkSerialProcs procs;
+        size_t blobSize = blob->serialize(procs, nullptr, 0);
+        if (blobSize == 0) {
             return nullptr;
         }
+        if (commandBuffer->getRemainingSize() < blobSize) {
+            return nullptr;
+        }
+
+        DrawTextBlobOp* op = commandBuffer->alloc<DrawTextBlobOp>();
+        if (!op) return nullptr;
+
+        op->type = kType;
+        op->paint = toShmemPaint(p);
         op->x = x_in;
         op->y = y_in;
+
+        if (!SetRSpan<uint8_t>(op->blobData, commandBuffer, nullptr, blobSize)) {
+            return nullptr;
+        }
+        blob->serialize(procs, op->blobData.data.get(), blobSize);
         return op;
     }
     void draw(SkCanvas* c, const SkMatrix&) {
-        IPCRENDERBUFFER_UNIMPLEMENTED;
+        SkDeserialProcs procs;
+        sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(blobData.data.get(), blobData.size, procs);
+        c->drawTextBlob(blob, x, y, fromShmemPaint(paint));
     }
     std::string toString() const { return "DrawTextBlobOp"; }
 

@@ -171,29 +171,6 @@ Result<void> setupGamepadStickAxis(const unique_fd& fd, uint16_t code) {
     return {};
 }
 
-Result<void> setupGamepadTriggerAxis(const unique_fd& fd, uint16_t code) {
-    uinput_abs_setup setup{
-            .code = code,
-            .absinfo =
-                    {
-                            .value = 0,
-                            .minimum = 0,
-                            .maximum = GAMEPAD_AXIS_MAX_VALUE,
-                            .fuzz = static_cast<int>(GAMEPAD_AXIS_MAX_VALUE *
-                                                     GAMEPAD_AXIS_FUZZ_FRACTION),
-                            .flat = static_cast<int>(GAMEPAD_AXIS_MAX_VALUE *
-                                                     GAMEPAD_AXIS_FLAT_FRACTION),
-                            .resolution = 0,
-                    },
-    };
-    if (ioctl(fd, UI_ABS_SETUP, &setup) != 0) {
-        return Error() << "Could not create gamepad uinput axis "
-                       << android::InputEventLookup::getLinuxEvdevCodeLabel(EV_ABS, code) << " ("
-                       << code << "): " << strerror(errno);
-    }
-    return {};
-}
-
 Result<void> setupGamepadHatAxis(const unique_fd& fd, uint16_t code) {
     uinput_abs_setup setup{
             .code = code,
@@ -220,8 +197,6 @@ Result<void> setupGamepadAxes(const unique_fd& fd) {
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_Y));
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_Z));
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_RZ));
-    RETURN_IF_ERROR(setupGamepadTriggerAxis(fd, ABS_GAS));
-    RETURN_IF_ERROR(setupGamepadTriggerAxis(fd, ABS_BRAKE));
     RETURN_IF_ERROR(setupGamepadHatAxis(fd, ABS_HAT0X));
     RETURN_IF_ERROR(setupGamepadHatAxis(fd, ABS_HAT0Y));
     return {};

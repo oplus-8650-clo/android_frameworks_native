@@ -421,7 +421,7 @@ private:
     bool hasEventThreads() const {
         return CC_LIKELY(
                 mRenderEventThread &&
-                (FlagManager::getInstance().deprecate_vsync_sf() || mLastCompositeEventThread));
+                (FlagManager::getInstance().deprecate_vsync_sf_v2() || mLastCompositeEventThread));
     }
 
     EventThread& eventThreadFor(Cycle cycle) const {

@@ -15,6 +15,9 @@
  */
 #pragma once
 
+#include <android/ipcrenderbuffer/RenderBufferOps.h>
+#include <gui/RenderCommandBufferConsumer.h>
+
 namespace android {
 void renderOpToCanvas(const std::shared_ptr<RenderCommandBufferConsumer>& consumer,
                       IPCRenderBufferOp* op, SkCanvas* canvas);

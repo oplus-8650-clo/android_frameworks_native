@@ -1242,6 +1242,19 @@ std::optional<hal::HWDisplayId> HWComposer::fromPhysicalDisplayId(
     return {};
 }
 
+bool HWComposer::shouldUseStableEdidIdsForHwcDisplay(hal::HWDisplayId hwcDisplayId) const {
+    const bool optInForExternalDisplays =
+            FlagManager::getInstance().stable_edid_ids_for_external_displays_optin();
+    static const bool kVendorApiLevelSupportsStableEdidIds =
+            base::GetIntProperty("ro.vendor.api_level", -1) >= 202604;
+    const bool isExternalDisplay =
+            getHwcDisplayConnectionType(hwcDisplayId) == ui::DisplayConnectionType::External;
+
+    return isExternalDisplay &&
+            (optInForExternalDisplays || kVendorApiLevelSupportsStableEdidIds) &&
+            FlagManager::getInstance().stable_edid_ids();
+}
+
 bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId, uint8_t port,
                                             bool hasDisplayIdentificationData) const {
     if (mHasMultiDisplaySupport && mActivePorts.contains(port)) {
@@ -1268,9 +1281,7 @@ bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId, uint8
 
 std::optional<display::DisplayIdentificationInfo> HWComposer::onHotplugConnect(
         hal::HWDisplayId hwcDisplayId) {
-    const bool useStableEdidIds =
-            getHwcDisplayConnectionType(hwcDisplayId) == ui::DisplayConnectionType::External &&
-            FlagManager::getInstance().stable_edid_ids();
+    const bool useStableEdidIds = shouldUseStableEdidIdsForHwcDisplay(hwcDisplayId);
     std::optional<display::DisplayIdentificationInfo> info;
     if (const auto displayId = toPhysicalDisplayId(hwcDisplayId)) {
         info = display::DisplayIdentificationInfo{.id = *displayId,

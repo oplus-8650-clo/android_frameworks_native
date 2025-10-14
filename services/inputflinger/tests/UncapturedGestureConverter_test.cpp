@@ -1723,9 +1723,10 @@ protected:
     }
 
     base::Result<void> processMotionArgs(NotifyMotionArgs arg) {
-        return mVerifier->processMovement(arg.deviceId, arg.source, arg.action, arg.actionButton,
-                                          arg.getPointerCount(), arg.pointerProperties.data(),
-                                          arg.pointerCoords.data(), arg.flags, arg.buttonState);
+        return mVerifier->processMovement(arg.deviceId, arg.eventTime, arg.source, arg.action,
+                                          arg.actionButton, arg.getPointerCount(),
+                                          arg.pointerProperties.data(), arg.pointerCoords.data(),
+                                          arg.flags, arg.buttonState, arg.downTime);
     }
 
     void verifyArgsFromGesture(const Gesture& gesture, size_t gestureIndex) {

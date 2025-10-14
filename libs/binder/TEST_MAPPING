@@ -79,6 +79,9 @@
       "name": "libbinder_rs-internal_test"
     },
     {
+      "name": "libbinder_rs_nostd-internal_test"
+    },
+    {
       "name": "rustBinderTest"
     },
     {

@@ -1336,8 +1336,6 @@ VkResult EnumerateInstanceExtensionProperties(
         }
     });
 
-    // TODO(b/143293104): Parse debug.vulkan.layers properties
-
     // Expose extensions from driver implementation.
     {
         uint32_t count = 0;
@@ -1436,8 +1434,6 @@ VkResult EnumerateDeviceExtensionProperties(
             }
         }
     });
-
-    // TODO(b/143293104): Parse debug.vulkan.layers properties
 
     // Expose extensions from driver implementation.
     {

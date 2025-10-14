@@ -1173,6 +1173,9 @@ struct ANativeWindowFrameTimelineInfo {
 
     // The start time of a frame that was not drawn and squashed into this frame.
     int64_t skippedFrameStartTimeNanos;
+
+    // The amount of fixup added to the vsync time by the app to correct for jitter.
+    int64_t vsyncResyncedJitterNanos;
 };
 
 static inline int native_window_set_frame_timeline_info(
