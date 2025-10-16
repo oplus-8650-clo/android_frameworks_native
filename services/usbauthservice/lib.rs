@@ -17,3 +17,9 @@ pub mod rules;
 
 /// Defines the parser for USB authorization rules.
 pub mod parser;
+
+/// Provides functionality for retrieving device information.
+pub mod device_info;
+
+/// Handles the core authorization logic based on defined rules.
+pub mod authorization;
