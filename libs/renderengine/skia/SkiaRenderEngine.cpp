@@ -733,10 +733,10 @@ private:
 
 static SkRRect getBlurRRect(const BlurRegion& region) {
     const auto rect = SkRect::MakeLTRB(region.left, region.top, region.right, region.bottom);
-    const SkVector radii[4] = {SkVector::Make(region.cornerRadiusTL, region.cornerRadiusTL),
-                               SkVector::Make(region.cornerRadiusTR, region.cornerRadiusTR),
-                               SkVector::Make(region.cornerRadiusBR, region.cornerRadiusBR),
-                               SkVector::Make(region.cornerRadiusBL, region.cornerRadiusBL)};
+    const SkVector radii[4] = {SkVector::Make(region.cornerRadiusTLX, region.cornerRadiusTLY),
+                               SkVector::Make(region.cornerRadiusTRX, region.cornerRadiusTRY),
+                               SkVector::Make(region.cornerRadiusBRX, region.cornerRadiusBRY),
+                               SkVector::Make(region.cornerRadiusBLX, region.cornerRadiusBLY)};
     SkRRect roundedRect;
     roundedRect.setRectRadii(rect, radii);
     return roundedRect;

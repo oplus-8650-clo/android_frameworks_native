@@ -219,6 +219,7 @@ private:
     std::optional<std::string> mAssociatedDisplayUniqueIdByDescriptor;
     std::optional<std::string> mAssociatedDeviceType;
     std::optional<DisplayViewport> mAssociatedViewport;
+    std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> mKeyRemapping;
     bool mHasMic;
     bool mDropUntilNextSync;
     std::optional<bool> mShouldSmoothScroll;

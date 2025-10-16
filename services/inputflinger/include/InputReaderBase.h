@@ -213,6 +213,10 @@ struct InputReaderConfiguration {
     // Keycodes to be remapped.
     std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
 
+    // Keycodes to be remapped for device.
+    std::map<DeviceId, std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */>>
+            keyRemappingPerDevice;
+
     // True if the external mouse should have its vertical scrolling reversed, so that rotating the
     // wheel downwards scrolls the content upwards.
     bool mouseReverseVerticalScrollingEnabled;

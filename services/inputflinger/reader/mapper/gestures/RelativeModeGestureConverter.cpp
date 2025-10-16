@@ -78,8 +78,9 @@ std::list<NotifyArgs> RelativeModeGestureConverter::handleGesture(nsecs_t when, 
             return handleMove(when, readTime, gestureStartTime, gesture);
         case kGestureTypeButtonsChange:
             return handleButtonsChange(when, readTime, gesture);
+        case kGestureTypeScroll:
+            return handleScroll(when, readTime, gesture);
         default:
-            // TODO(b/403531245): handle other types of gesture.
             return {};
     }
 }
@@ -165,6 +166,19 @@ std::list<NotifyArgs> RelativeModeGestureConverter::handleButtonsChange(nsecs_t 
     return out;
 }
 
+std::list<NotifyArgs> RelativeModeGestureConverter::handleScroll(nsecs_t when, nsecs_t readTime,
+                                                                 const Gesture& gesture) {
+    PointerCoords coords;
+    coords.clear();
+    // TODO(b/403531245): scale the scroll values to be similar to those from a captured mouse.
+    coords.setAxisValue(AMOTION_EVENT_AXIS_VSCROLL, gesture.details.scroll.dy);
+    coords.setAxisValue(AMOTION_EVENT_AXIS_HSCROLL, gesture.details.scroll.dx);
+    coords.setAxisValue(AMOTION_EVENT_AXIS_PRESSURE, isPointerDown(mButtonState) ? 1.0f : 0.0f);
+
+    return {makeMotionArgs(when, readTime, AMOTION_EVENT_ACTION_SCROLL, /*actionButton=*/0,
+                           mButtonState, &coords)};
+}
+
 NotifyMotionArgs RelativeModeGestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime,
                                                               int32_t action, int32_t actionButton,
                                                               int32_t buttonState,
@@ -179,7 +193,6 @@ NotifyMotionArgs RelativeModeGestureConverter::makeMotionArgs(nsecs_t when, nsec
     pointerProperties.id = 0;
     pointerProperties.toolType = ToolType::MOUSE;
 
-    // TODO(b/403531245): set the down time once we handle button gestures.
     return NotifyMotionArgs(mReaderContext.getNextId(), when, readTime, mDeviceId, SOURCE,
                             ui::LogicalDisplayId::INVALID, POLICY_FLAG_WAKE, action, actionButton,
                             flags, mReaderContext.getGlobalMetaState(), buttonState,

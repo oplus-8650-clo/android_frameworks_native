@@ -473,13 +473,18 @@ private:
                                           std::string str;
                                           base::StringAppendF(&str,
                                                               "{radius=%du, cornerRadii=[%f, %f, "
-                                                              "%f, %f], alpha=%f, rect=[%d, "
+                                                              "%f, %f, %f, %f, %f, %f], alpha=%f, "
+                                                              "rect=[%d, "
                                                               "%d, %d, %d]",
                                                               region.blurRadius,
-                                                              region.cornerRadiusTL,
-                                                              region.cornerRadiusTR,
-                                                              region.cornerRadiusBL,
-                                                              region.cornerRadiusBR, region.alpha,
+                                                              region.cornerRadiusTLX,
+                                                              region.cornerRadiusTLY,
+                                                              region.cornerRadiusTRX,
+                                                              region.cornerRadiusTRY,
+                                                              region.cornerRadiusBLX,
+                                                              region.cornerRadiusBLY,
+                                                              region.cornerRadiusBRX,
+                                                              region.cornerRadiusBRY, region.alpha,
                                                               region.left, region.top, region.right,
                                                               region.bottom);
                                           result.push_back(str);

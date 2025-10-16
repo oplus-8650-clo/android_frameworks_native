@@ -262,7 +262,10 @@ public:
     }
 
     void resync(ResyncCaller) override EXCLUDES(mDisplayLock);
-    void forceNextResync() { mLastResyncTime = 0; }
+    void forceNextResync() {
+        mLastResyncTime = 0;
+        mLastResyncTimeOnTx = 0;
+    }
 
     // Passes a vsync sample to VsyncController. Returns true if
     // VsyncController detected that the vsync period changed and false
@@ -552,6 +555,7 @@ private:
     std::unique_ptr<EventThread> mLastCompositeEventThread;
 
     std::atomic<nsecs_t> mLastResyncTime = 0;
+    std::atomic<nsecs_t> mLastResyncTimeOnTx = 0;
 
     const FeatureFlags mFeatures;
 
