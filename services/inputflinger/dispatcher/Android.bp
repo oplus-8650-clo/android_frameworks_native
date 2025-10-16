@@ -60,6 +60,9 @@ cc_defaults {
     srcs: [
         ":libinputdispatcher_sources",
     ],
+    defaults: [
+        "protolog_all_deps",
+    ],
     cflags: [
         "-Wno-ambiguous-reversed-operator",
     ],

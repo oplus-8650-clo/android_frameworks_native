@@ -57,8 +57,8 @@ void Log(perfetto::protos::ProtoLogLevel level, const char* group, const char* f
 
 #else
 // Stub out ProtoLog for host builds
-void Initialize() {}
-void Destroy() {}
+inline void Initialize() {}
+inline void Destroy() {}
 
 #define PROTOLOG_D(...) (void)0
 #define PROTOLOG_V(...) (void)0

@@ -50,6 +50,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ProtoLog.h"
+#include "perfetto/tracing/backend_type.h"
+#include "perfetto/tracing/tracing.h"
+
 using android::base::StringPrintf;
 using android::gui::FocusRequest;
 using android::gui::TouchOcclusionMode;
@@ -175,6 +179,11 @@ protected:
     std::shared_ptr<input_trace::VerifyingTrace> mVerifyingTrace;
 
     void SetUp() override {
+        perfetto::TracingInitArgs args;
+        args.backends |= perfetto::kInProcessBackend;
+        perfetto::Tracing::Initialize(args);
+
+        protolog::Initialize();
         mVerifyingTrace = std::make_shared<input_trace::VerifyingTrace>();
         FakeWindowHandle::sOnEventReceivedCallback = [this](const auto& _1, const auto& _2) {
             handleEventReceivedByWindow(_1, _2);

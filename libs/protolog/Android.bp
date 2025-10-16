@@ -52,6 +52,7 @@ cc_defaults {
         android: {
             shared_libs: [
                 "libutilscallstack",
+                "libc++",
             ],
             static_libs: [
                 "protolog-cpp",
