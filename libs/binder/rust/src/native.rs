@@ -261,6 +261,10 @@ impl<T: Remotable> Interface for Binder<T> {
             SpIBinder::from_raw(self.ibinder).unwrap()
         }
     }
+
+    fn dump(&self, writer: &mut dyn Write, args: &[&CStr]) -> Result<()> {
+        self.on_dump(writer, args)
+    }
 }
 
 impl<T: Remotable> InterfaceClassMethods for Binder<T> {
@@ -502,3 +506,41 @@ impl Remotable for () {
 }
 
 impl Interface for () {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestRemotable;
+
+    impl Remotable for TestRemotable {
+        fn get_descriptor() -> &'static str {
+            "test"
+        }
+
+        fn on_transact(
+            &self,
+            _code: TransactionCode,
+            _data: &BorrowedParcel<'_>,
+            _reply: &mut BorrowedParcel<'_>,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_dump(&self, writer: &mut dyn Write, args: &[&CStr]) -> Result<()> {
+            write!(writer, "TestRemotable dumped with {:?}", args).unwrap();
+            Ok(())
+        }
+
+        binder_fn_get_class!(Binder::<Self>);
+    }
+
+    #[test]
+    fn dump() {
+        let binder_object = Binder::new(TestRemotable);
+
+        let mut buffer: Vec<u8> = Vec::new();
+        binder_object.dump(&mut buffer, &[c"arg1", c"arg2"]).unwrap();
+        assert_eq!(str::from_utf8(&buffer), Ok("TestRemotable dumped with [\"arg1\", \"arg2\"]"));
+    }
+}

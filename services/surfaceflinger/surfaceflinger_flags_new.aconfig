@@ -329,6 +329,16 @@ flag {
 } # readback_screenshot
 
 flag {
+  name: "resync_on_tx_separate_timer"
+  namespace: "core_graphics"
+  description: "Keep a seaprate resync timer for resync triggered by transactions"
+  bug: "439654802"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # resync_on_tx_separate_timer
+
+flag {
   name: "set_client_drawn_corner_radii"
   namespace: "window_surfaces"
   description: "Add support for API to set distinct radii for each corner"

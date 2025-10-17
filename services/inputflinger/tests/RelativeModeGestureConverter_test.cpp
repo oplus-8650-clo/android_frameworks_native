@@ -204,6 +204,33 @@ TEST_F(RelativeModeGestureConverterTest, Tap) {
                         AllOf(WithCoords(0, 0), WithToolType(ToolType::MOUSE)))));
 }
 
+TEST_F(RelativeModeGestureConverterTest, Scroll) {
+    Gesture scrollGesture(kGestureScroll, GESTURE_TIME, GESTURE_TIME, /*dx=*/10, /*dy=*/-5);
+    std::list<NotifyArgs> args =
+            mConverter.handleGesture(ARBITRARY_TIME, READ_TIME, ARBITRARY_TIME, scrollGesture);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(10, -5),
+                              WithButtonState(0), WithSource(AINPUT_SOURCE_MOUSE_RELATIVE),
+                              WithPressure(0.0f)))));
+}
+
+TEST_F(RelativeModeGestureConverterTest, ScrollWithButtonPressed) {
+    Gesture downGesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
+                        /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_NONE,
+                        /*is_tap=*/false);
+    (void)mConverter.handleGesture(ARBITRARY_TIME, READ_TIME, ARBITRARY_TIME, downGesture);
+
+    Gesture scrollGesture(kGestureScroll, GESTURE_TIME, GESTURE_TIME, /*dx=*/10, /*dy=*/-5);
+    std::list<NotifyArgs> args =
+            mConverter.handleGesture(ARBITRARY_TIME, READ_TIME, ARBITRARY_TIME, scrollGesture);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(10, -5),
+                              WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY),
+                              WithSource(AINPUT_SOURCE_MOUSE_RELATIVE), WithPressure(1.0f)))));
+}
+
 TEST_F(RelativeModeGestureConverterTest, ResetWithButtonPressed) {
     Gesture downGesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
                         /*down=*/GESTURES_BUTTON_LEFT | GESTURES_BUTTON_RIGHT,

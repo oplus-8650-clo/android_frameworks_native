@@ -428,10 +428,24 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD;
             const bool isFullKeyboard = isKeyboard && (mKeyboardType == KeyboardType::ALPHABETIC);
             const bool isPhysicalKeyboard = isKeyboard && !mIsVirtualDevice;
+            std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
             if (isPhysicalKeyboard && isFullKeyboard) {
-                for_each_subdevice([&readerConfig](auto& context) {
-                    context.setKeyRemapping(readerConfig.keyRemapping);
-                });
+                for (const auto& [fromKeyCode, toKeyCode] : readerConfig.keyRemapping) {
+                    keyRemapping.insert_or_assign(fromKeyCode, toKeyCode);
+                }
+            }
+            const bool isPhysicalButtonDevice = !mIsVirtualDevice &&
+                    (mSources & AINPUT_SOURCE_CLASS_BUTTON) == AINPUT_SOURCE_CLASS_BUTTON;
+            if (isPhysicalButtonDevice && readerConfig.keyRemappingPerDevice.contains(mId)) {
+                const auto& keyRemappingForDevice = readerConfig.keyRemappingPerDevice.at(mId);
+                for (const auto& [fromKeyCode, toKeyCode] : keyRemappingForDevice) {
+                    keyRemapping.insert_or_assign(fromKeyCode, toKeyCode);
+                }
+            }
+            if (mKeyRemapping != keyRemapping) {
+                mKeyRemapping = keyRemapping;
+                for_each_subdevice(
+                        [this](auto& context) { context.setKeyRemapping(mKeyRemapping); });
                 bumpGeneration();
             }
         }

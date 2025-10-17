@@ -257,6 +257,113 @@ void BM_homescreen_blur(benchmark::State& benchState,
     benchDrawLayers(*re, layers, benchState, "homescreen_blurred");
 }
 
+void BM_region_blur(benchmark::State& benchState, const RenderEngineCreationArgs& creationArgs) {
+    auto re = RenderEngine::create(creationArgs);
+
+    auto [width, height] = getDisplaySize();
+    auto srcBuffer = createTexture(*re, kHomescreenPath);
+
+    const FloatRect layerRect(0, 0, width, height);
+    LayerSettings layer{
+            .geometry =
+                    Geometry{
+                            .boundaries = layerRect,
+                    },
+            .source =
+                    PixelSource{
+                            .buffer =
+                                    Buffer{
+                                            .buffer = srcBuffer,
+                                    },
+                    },
+            .alpha = half(1.0f),
+    };
+
+    int blurSize = 300;
+    int blurOffset = 200;
+    LayerSettings blurRegion{
+            .geometry =
+                    Geometry{
+                            .boundaries = layerRect,
+                    },
+            .alpha = 1.0f,
+            .skipContentDraw = true,
+            .blurRegions = std::vector<BlurRegion>({BlurRegion{
+                    .blurRadius = 30,
+                    .cornerRadiusTLX = 1.0f,
+                    .cornerRadiusTLY = 1.0f,
+                    .cornerRadiusTRX = 2.0f,
+                    .cornerRadiusTRY = 2.0f,
+                    .cornerRadiusBLX = 3.0f,
+                    .cornerRadiusBLY = 3.0f,
+                    .cornerRadiusBRX = 4.0f,
+                    .cornerRadiusBRY = 4.0f,
+                    .alpha = 1.0f,
+                    .left = blurOffset,
+                    .top = blurOffset,
+                    .right = blurOffset + blurSize,
+                    .bottom = blurOffset + blurSize,
+            }}),
+    };
+
+    auto layers = std::vector<LayerSettings>{layer, blurRegion};
+    benchDrawLayers(*re, layers, benchState, "region_blurred");
+}
+
+void BM_region_blur_8_radii(benchmark::State& benchState,
+                            const RenderEngineCreationArgs& creationArgs) {
+    auto re = RenderEngine::create(creationArgs);
+
+    auto [width, height] = getDisplaySize();
+    auto srcBuffer = createTexture(*re, kHomescreenPath);
+
+    const FloatRect layerRect(0, 0, width, height);
+    LayerSettings layer{
+            .geometry =
+                    Geometry{
+                            .boundaries = layerRect,
+                    },
+            .source =
+                    PixelSource{
+                            .buffer =
+                                    Buffer{
+                                            .buffer = srcBuffer,
+                                    },
+                    },
+            .alpha = half(1.0f),
+    };
+
+    int blurSize = 300;
+    int blurOffset = 200;
+    LayerSettings blurRegion{
+            .geometry =
+                    Geometry{
+                            .boundaries = layerRect,
+                    },
+            .alpha = 1.0f,
+            .skipContentDraw = true,
+            .blurRegions = std::vector<BlurRegion>({BlurRegion{
+                    .blurRadius = 30,
+                    .cornerRadiusTLX = 1.0f,
+                    .cornerRadiusTLY = 2.0f,
+                    .cornerRadiusTRX = 3.0f,
+                    .cornerRadiusTRY = 4.0f,
+                    .cornerRadiusBLX = 5.0f,
+                    .cornerRadiusBLY = 6.0f,
+                    .cornerRadiusBRX = 7.0f,
+                    .cornerRadiusBRY = 8.0f,
+                    .alpha = 1.0f,
+                    .left = blurOffset,
+                    .top = blurOffset,
+                    .right = blurOffset + blurSize,
+                    .bottom = blurOffset + blurSize,
+            }}),
+    };
+
+    auto layers = std::vector<LayerSettings>{layer, blurRegion};
+    benchDrawLayers(*re, layers, benchState, "region_blurred_8_radii");
+}
+
 void BM_homescreen_edgeExtension(benchmark::State& benchState,
                                  const RenderEngineCreationArgs& creationArgs) {
     auto re = RenderEngine::create(creationArgs);
@@ -347,11 +454,15 @@ void registerBenchmarks() {
             argBuilder.setSkiaBackend(skiaBackend);
 
             // BM_homescreen_blur
+            // BM_region_blur
+            // BM_region_blur_8_radii
             for (RenderEngine::BlurAlgorithm blurAlgorithm :
                  ftl::enum_range<RenderEngine::BlurAlgorithm>()) {
                 if (blurAlgorithm == RenderEngine::BlurAlgorithm::None) continue;
                 argBuilder.setBlurAlgorithm(blurAlgorithm);
                 REGISTER_BM_IF_VALID(BM_homescreen_blur, argBuilder.build());
+                REGISTER_BM_IF_VALID(BM_region_blur, argBuilder.build());
+                REGISTER_BM_IF_VALID(BM_region_blur_8_radii, argBuilder.build());
             }
             argBuilder.setBlurAlgorithm(RenderEngine::BlurAlgorithm::None);
 

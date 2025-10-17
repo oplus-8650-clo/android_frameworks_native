@@ -959,7 +959,10 @@ void Scheduler::resync(ResyncCaller caller) {
     static constexpr nsecs_t kRequestNextVsyncIgnoreDelay = ms2ns(750);
 
     const nsecs_t now = systemTime();
-    const nsecs_t last = mLastResyncTime.exchange(now);
+    const nsecs_t last = (FlagManager::getInstance().resync_on_tx_separate_timer() &&
+                          caller == ResyncCaller::Transaction)
+            ? mLastResyncTimeOnTx.exchange(now)
+            : mLastResyncTime.exchange(now);
 
     const auto ignoreDelay = caller == ResyncCaller::Transaction
             ? VSyncTracker::kPredictorThreshold.ns()

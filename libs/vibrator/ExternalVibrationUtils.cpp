@@ -109,16 +109,14 @@ float applyHapticScale(float value, float scaleFactor) {
 
 // TODO(b/345186129): remove this once flag android_os_vibrator_haptics_scale_v2_enabled removed
 float applyHapticScale(float value, HapticScale scale, float scaleFactor) {
-    if (android_os_vibrator_vibration_scale_device_config_enabled()) {
-        if (scale.getScaleFactor() >= 0) {
-            // Has device configured scale factor, use scale v2 for it.
-            scaleFactor = scale.getScaleFactor();
-            float scaledValue = (scaleFactor <= 1 || value == 0)
-                    ? (value * scaleFactor)
-                    : (value * scaleFactor) / (1 + (scaleFactor - 1) * value * value);
-            return std::clamp(scaledValue, -1.0f, 1.0f);
-        } // else apply regular scaling
-    }
+    if (scale.getScaleFactor() >= 0) {
+        // Has device configured scale factor, use scale v2 for it.
+        scaleFactor = scale.getScaleFactor();
+        float scaledValue = (scaleFactor <= 1 || value == 0)
+                ? (value * scaleFactor)
+                : (value * scaleFactor) / (1 + (scaleFactor - 1) * value * value);
+        return std::clamp(scaledValue, -1.0f, 1.0f);
+    } // else apply regular scaling
     if (scale.getLevel() == HapticLevel::NONE) {
         return value;
     }

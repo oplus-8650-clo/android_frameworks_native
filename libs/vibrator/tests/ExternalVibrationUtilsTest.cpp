@@ -167,9 +167,7 @@ TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleV2ToScaleFactorIgnoresLev
     EXPECT_FLOATS_NEARLY_EQ(expectedVeryLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
 }
 
-TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleConfigWithScaleFactorAppliesFactor,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_NS,
-                                                      vibration_scale_device_config_enabled))) {
+TEST_F(ExternalVibrationUtilsTest, TestWithScaleFactorAppliesFactor) {
     constexpr float adaptiveScaleNone = 1.0f;
 
     float expectedVeryHigh[TEST_BUFFER_LENGTH] = {1, -1, 1, -0.55f};
@@ -189,10 +187,8 @@ TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleConfigWithScaleFactorAppl
     EXPECT_FLOATS_NEARLY_EQ(expectedVeryLow, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
 }
 
-TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestScaleConfigWithoutScaleFactorAppliesScaleLevel,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled)),
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_NS,
-                                                      vibration_scale_device_config_enabled))) {
+TEST_F_WITH_FLAGS(ExternalVibrationUtilsTest, TestWithoutScaleFactorAppliesScaleLevel,
+                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(FLAG_NS, haptics_scale_v2_enabled))) {
     float expectedVeryHigh[TEST_BUFFER_LENGTH] = {1, -1, 0.79f, -0.39f};
     scaleBuffer(HapticLevel::VERY_HIGH);
     EXPECT_FLOATS_NEARLY_EQ(expectedVeryHigh, mBuffer, TEST_BUFFER_LENGTH, TEST_TOLERANCE);
