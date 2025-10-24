@@ -4569,10 +4569,16 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
     }
 
     if (DEBUG_VERIFY_EVENTS) {
+        std::scoped_lock _l(mLock);
+        ui::LogicalDisplayId resolvedDisplayId = args.displayId;
+        if (InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(args.source)) {
+            resolvedDisplayId = mWindowInfos.getPrimaryDisplayId(args.displayId);
+        }
+
         auto [it, _] =
-                mVerifiersByDisplay.try_emplace(args.displayId,
+                mVerifiersByDisplay.try_emplace(resolvedDisplayId,
                                                 StringPrintf("display %s",
-                                                             args.displayId.toString().c_str()));
+                                                             resolvedDisplayId.toString().c_str()));
         Result<void> result =
                 it->second.processMovement(args.deviceId, args.eventTime, args.source, args.action,
                                            args.actionButton, args.getPointerCount(),

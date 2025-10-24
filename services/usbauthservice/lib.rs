@@ -23,3 +23,9 @@ pub mod device_info;
 
 /// Handles the core authorization logic based on defined rules.
 pub mod authorization;
+
+/// Handles the core logic for the USB authorization service.
+pub mod manager;
+
+/// Handles the core logic for the USB authorization service.
+pub mod service;

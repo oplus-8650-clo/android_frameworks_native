@@ -3046,15 +3046,9 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         return false;
     }
 
-    bool hasFrameTargetWithPowerModeOn = false;
     {
         Mutex::Autolock lock(mStateLock);
-
         for (const auto [displayId, _] : frameTargets) {
-            const auto display = getDisplayDeviceLocked(displayId);
-            if (display && display->getPowerMode() == hal::PowerMode::ON) {
-                hasFrameTargetWithPowerModeOn = true;
-            }
             if (mDisplayModeController.isModeSetPending(displayId)) {
                 if (!finalizeDisplayModeChange(displayId)) {
                     mScheduler->scheduleFrame();
@@ -3076,9 +3070,15 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     SFTRACE_NAME_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Commit");
     const Period vsyncPeriod = mScheduler->getVsyncSchedule()->period();
 
-    // Save this once per commit + composite to ensure consistency
-    mPowerHintSessionEnabled =
-            mPowerAdvisor->usePowerHintSession() && hasFrameTargetWithPowerModeOn;
+    // Determine if any displays, either physical or virtual, are on so that
+    // power hints may be reported for performance boosts.
+    const bool hasDisplayWithPowerModeOn =
+            FTL_FAKE_GUARD(mStateLock, hasDisplay([](const DisplayDevice& display) {
+                               return display.getPowerMode() == hal::PowerMode::ON;
+                           }));
+
+    // Save this once per commit + composite to ensure consistency.
+    mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && hasDisplayWithPowerModeOn;
     if (mPowerHintSessionEnabled) {
         mPowerAdvisor->setCommitStart(pacesetterFrameTarget.frameBeginTime());
         mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTarget.expectedPresentTime());
@@ -6125,8 +6125,8 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
         layer->setTransformHint(transformHint);
         std::optional<gui::CornerRadii> cornerRadii = std::nullopt;
         if (snapshot) {
-            cornerRadii = std::make_optional<gui::CornerRadii>(
-                    snapshot->roundedCorner.croppedRequestedRadii);
+            cornerRadii =
+                    std::make_optional<gui::CornerRadii>(snapshot->roundedCorner.reportedRadii);
         }
         layer->setCornerRadii(cornerRadii);
         if (layer->setBuffer(composerState.externalTexture, *s.bufferData, postTime,

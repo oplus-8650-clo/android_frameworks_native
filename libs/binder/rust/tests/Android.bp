@@ -81,6 +81,7 @@ rust_ffi_static {
     ],
     rustlibs: [
         "libbinder_rs",
+        "libbinder_rs_ndk_compat",
         "IBinderRustNdkInteropTest-rust",
     ],
 }
@@ -94,7 +95,7 @@ cc_test {
         "libbase",
     ],
     static_libs: [
-        "libbinder_rs_serialization_test"
+        "libbinder_rs_serialization_test",
     ],
     srcs: [
         "serialization.cpp",
@@ -109,8 +110,10 @@ rust_bindgen {
     wrapper_src: "serialization.hpp",
     source_stem: "bindings",
     bindgen_flags: [
-        "--allowlist-type", "Transaction",
-        "--allowlist-var", "TESTDATA_.*",
+        "--allowlist-type",
+        "Transaction",
+        "--allowlist-var",
+        "TESTDATA_.*",
     ],
 
     shared_libs: [

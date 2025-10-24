@@ -35,7 +35,8 @@ enum class DeviceType {
 
 android::base::unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t productId,
                                     const char* phys, DeviceType deviceType,
-                                    std::optional<ui::Size> screenSize);
+                                    std::optional<ui::Size> screenSize,
+                                    bool registerTriggerAxes = false);
 
 enum class UinputAction {
     RELEASE = 0,

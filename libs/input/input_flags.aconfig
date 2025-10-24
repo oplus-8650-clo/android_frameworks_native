@@ -26,6 +26,16 @@ flag {
 }
 
 flag {
+  name: "enable_down_time_verification"
+  namespace: "input"
+  description: "Set to true to enable crashing whenever inbound events with bad down times are going into InputDispatcher"
+  bug: "452569734"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"

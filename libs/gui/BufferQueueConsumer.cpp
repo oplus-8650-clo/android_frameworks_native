@@ -576,7 +576,9 @@ status_t BufferQueueConsumer::connect(
     }
 
     mCore->mConsumerListener = consumerListener;
+#if !COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(REMOVE_CONTROLLED_BY_APP)
     mCore->mConsumerControlledByApp = controlledByApp;
+#endif
 
     return NO_ERROR;
 }

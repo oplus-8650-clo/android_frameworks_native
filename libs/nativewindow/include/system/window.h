@@ -260,6 +260,8 @@ enum {
     NATIVE_WINDOW_SET_FRAME_TIMELINE_INFO         = 48,    /* private */
     NATIVE_WINDOW_GET_LAST_QUEUED_BUFFER2         = 49,    /* private */
     NATIVE_WINDOW_SET_BUFFERS_ADDITIONAL_OPTIONS  = 50,
+    NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED = 51,
+    NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED = 52,
     // clang-format on
 };
 
@@ -1149,6 +1151,19 @@ static inline int native_window_set_frame_rate(struct ANativeWindow* window, flo
                                         int8_t compatibility, int8_t changeFrameRateStrategy) {
     return window->perform(window, NATIVE_WINDOW_SET_FRAME_RATE, (double)frameRate,
                            (int)compatibility, (int)changeFrameRateStrategy);
+}
+
+/*
+ * Control BufferQueueProducer throttling when queuing a buffer
+ */
+static inline int native_window_set_producer_throttling_enabled(struct ANativeWindow* window,
+                                                                bool enabled) {
+    return window->perform(window, NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED, enabled);
+}
+
+static inline int native_window_is_producer_throttling_enabled(struct ANativeWindow* window,
+                                                               bool* outEnabled) {
+    return window->perform(window, NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED, outEnabled);
 }
 
 struct ANativeWindowFrameTimelineInfo {

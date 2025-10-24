@@ -42,14 +42,13 @@ struct RoundedCornerState {
     // Radius drawn by client for the rounded rectangle
     gui::CornerRadii clientDrawnRadii;
     // Radius reported to client based on layerCropRect and bounds
-    gui::CornerRadii croppedRequestedRadii;
+    gui::CornerRadii reportedRadii;
+    // The "true" radius (from request or inheritance) used as the source for children.
+    gui::CornerRadii effectiveRadii;
 
     bool hasClientDrawnRadius() const { return radii.isEmpty() && !clientDrawnRadii.isEmpty(); }
     bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }
-    bool hasRoundedCorners() const {
-        return !radii.isEmpty() ||
-                (!clientDrawnRadii.isEmpty() && clientDrawnRadii == requestedRadii);
-    }
+    bool hasRoundedCorners() const { return !effectiveRadii.isEmpty(); }
 
     bool operator==(RoundedCornerState const& rhs) const {
         return cropRect == rhs.cropRect && radii == rhs.radii &&

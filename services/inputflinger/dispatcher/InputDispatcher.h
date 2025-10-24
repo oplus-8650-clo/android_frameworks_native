@@ -930,6 +930,9 @@ private:
                                   const std::string& reason) REQUIRES(mLock);
     void updateLastAnrStateLocked(const std::string& windowLabel, const std::string& reason)
             REQUIRES(mLock);
+    // Input verifiers for each display.
+    // In the case of mouse/touchpad cursor events, the verifier on the primary display
+    // in the topology group will be used.
     std::map<ui::LogicalDisplayId, InputVerifier> mVerifiersByDisplay;
     // Returns a fallback KeyEntry that should be sent to the connection, if required.
     std::unique_ptr<const KeyEntry> afterKeyEventLockedInterruptable(

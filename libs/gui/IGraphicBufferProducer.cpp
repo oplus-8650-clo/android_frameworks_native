@@ -82,6 +82,8 @@ enum {
     SET_FRAME_RATE,
     SET_ADDITIONAL_OPTIONS,
     SET_MAX_BUFER_COUNT_EXTENDED,
+    SET_PRODUCER_THROTTLING_ENABLED,
+    GET_PRODUCER_THROTTLING_ENABLED,
 };
 
 class BpGraphicBufferProducer : public BpInterface<IGraphicBufferProducer>
@@ -794,6 +796,27 @@ public:
         return result;
     }
 
+    virtual status_t setProducerThrottlingEnabled(bool enabled) override {
+        Parcel data, reply;
+        data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
+        data.writeBool(enabled);
+        status_t result = remote()->transact(SET_PRODUCER_THROTTLING_ENABLED, data, &reply);
+        if (result == NO_ERROR) {
+            result = reply.readInt32();
+        }
+        return result;
+    }
+
+    virtual status_t isProducerThrottlingEnabled(bool* outEnabled) const override {
+        Parcel data, reply;
+        data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_PRODUCER_THROTTLING_ENABLED, data, &reply);
+        if (result != NO_ERROR) {
+            return result;
+        }
+        return reply.readBool(outEnabled);
+    }
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
     virtual status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options) {
         Parcel data, reply;
@@ -1020,6 +1043,16 @@ status_t IGraphicBufferProducer::setAutoPrerotation(bool autoPrerotation) {
 
 status_t IGraphicBufferProducer::setFrameRate(float /*frameRate*/, int8_t /*compatibility*/,
                                               int8_t /*changeFrameRateStrategy*/) {
+    // No-op for IGBP other than BufferQueue.
+    return INVALID_OPERATION;
+}
+
+status_t IGraphicBufferProducer::setProducerThrottlingEnabled(bool /*enabled*/) {
+    // No-op for IGBP other than BufferQueue.
+    return INVALID_OPERATION;
+}
+
+status_t IGraphicBufferProducer::isProducerThrottlingEnabled(bool* /*outEnabled*/) const {
     // No-op for IGBP other than BufferQueue.
     return INVALID_OPERATION;
 }
@@ -1580,6 +1613,22 @@ status_t BnGraphicBufferProducer::onTransact(
             status_t result = setFrameRate(frameRate, compatibility, changeFrameRateStrategy);
             reply->writeInt32(result);
             return NO_ERROR;
+        }
+        case SET_PRODUCER_THROTTLING_ENABLED: {
+            CHECK_INTERFACE(IGraphicBuffer, data, reply);
+            bool enabled = data.readBool();
+            status_t result = setProducerThrottlingEnabled(enabled);
+            reply->writeInt32(result);
+            return NO_ERROR;
+        }
+        case GET_PRODUCER_THROTTLING_ENABLED: {
+            CHECK_INTERFACE(IGraphicBuffer, data, reply);
+            bool outEnabled = false;
+            status_t result = isProducerThrottlingEnabled(&outEnabled);
+            if (result != NO_ERROR) {
+                return result;
+            }
+            return reply->writeBool(outEnabled);
         }
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
         case SET_ADDITIONAL_OPTIONS: {

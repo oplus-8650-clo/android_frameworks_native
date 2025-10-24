@@ -149,9 +149,9 @@ pub type Result<T> = std::result::Result<T, Status>;
 /// without AIDL.
 pub mod binder_impl {
     pub use crate::binder::{
-        IBinderInternal, InterfaceClass, LocalStabilityType, Remotable, Stability, StabilityType,
-        ToAsyncInterface, ToSyncInterface, TransactionCode, TransactionFlags, VintfStabilityType,
-        FIRST_CALL_TRANSACTION, FLAG_ONEWAY, LAST_CALL_TRANSACTION,
+        FunctionNames, IBinderInternal, InterfaceClass, LocalStabilityType, Remotable, Stability,
+        StabilityType, ToAsyncInterface, ToSyncInterface, TransactionCode, TransactionFlags,
+        VintfStabilityType, FIRST_CALL_TRANSACTION, FLAG_ONEWAY, LAST_CALL_TRANSACTION,
     };
     #[cfg(not(android_ndk))]
     pub use crate::binder::{FLAG_CLEAR_BUF, FLAG_PRIVATE_LOCAL};

@@ -169,6 +169,8 @@ void BufferQueueCore::dumpState(const String8& prefix, String8* outResult) const
                             mTransformHint, mFrameCounter);
     outResult->appendFormat("%s  mTransformHintInUse=%02x mAutoPrerotation=%d\n", prefix.c_str(),
                             mTransformHintInUse, mAutoPrerotation);
+    outResult->appendFormat("%s  mProducerThrottlingEnabled=%s\n", prefix.c_str(),
+                            mProducerThrottlingEnabled ? "true" : "false");
 
     outResult->appendFormat("%sFIFO(%zu):\n", prefix.c_str(), mQueue.size());
 

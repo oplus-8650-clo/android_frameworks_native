@@ -519,7 +519,7 @@ void AIBinder_Class_setTransactionCodeToFunctionNameMap(
                         "transactionCodeToFunction already set?");
 }
 
-const char* AIBinder_Class_getFunctionName(AIBinder_Class* clazz, transaction_code_t code) {
+const char* AIBinder_Class_getFunctionName(const AIBinder_Class* clazz, transaction_code_t code) {
     LOG_ALWAYS_FATAL_IF(
             clazz == nullptr,
             "Valid clazz is needed to get function name for requested transaction code");

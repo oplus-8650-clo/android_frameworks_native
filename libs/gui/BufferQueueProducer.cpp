@@ -1106,10 +1106,27 @@ status_t BufferQueueProducer::queueBuffer(int slot,
         item.mSlot = slot;
         item.mFence = acquireFence;
         item.mFenceTime = acquireFenceTime;
-        item.mIsDroppable = mCore->mAsyncMode ||
-                (mConsumerIsSurfaceFlinger && mCore->mQueueBufferCanDrop) ||
-                (mCore->mLegacyBufferDrop && mCore->mQueueBufferCanDrop) ||
-                (mCore->mSharedBufferMode && mCore->mSharedBufferSlot == slot);
+        if (mCore->mAsyncMode) {
+            item.mIsDroppable = true;
+            BQ_LOGV("queueBuffer: slot %d is droppable (mAsyncMode)", slot);
+        } else if (mConsumerIsSurfaceFlinger && mCore->mQueueBufferCanDrop) {
+            item.mIsDroppable = true;
+            BQ_LOGV("queueBuffer: slot %d is droppable (mConsumerIsSurfaceFlinger && "
+                    "mQueueBufferCanDrop)",
+                    slot);
+        } else if (mCore->mLegacyBufferDrop && mCore->mQueueBufferCanDrop) {
+            item.mIsDroppable = true;
+            BQ_LOGV("queueBuffer: slot %d is droppable (mLegacyBufferDrop && mQueueBufferCanDrop)",
+                    slot);
+        } else if (mCore->mSharedBufferMode && mCore->mSharedBufferSlot == slot) {
+            item.mIsDroppable = true;
+            BQ_LOGV("queueBuffer: slot %d is droppable (mSharedBufferMode && mSharedBufferSlot == "
+                    "slot)",
+                    slot);
+        } else {
+            item.mIsDroppable = false;
+        }
+
         item.mSurfaceDamage = surfaceDamage;
         item.mQueuedBuffer = true;
         item.mAutoRefresh = mCore->mSharedBufferMode && mCore->mAutoRefresh;
@@ -1195,8 +1212,16 @@ status_t BufferQueueProducer::queueBuffer(int slot,
         VALIDATE_CONSISTENCY();
 
         connectedApi = mCore->mConnectedApi;
-        if (flags::bq_producer_throttles_only_async_mode()) {
-            enableEglCpuThrottling = mCore->mAsyncMode || mCore->mDequeueBufferCannotBlock;
+        if (com::android::graphics::libgui::flags::bq_producer_backpressure_control()) {
+            if (mCore->mProducerThrottlingEnabled) {
+                // throttling is enabled via setProducerThrottlingEnabled(true) [default]
+                enableEglCpuThrottling = true;
+            } else {
+                // throttling is disabled via setProducerThrottlingEnabled(false), in this case
+                // we disable it only if we're not in async mode (since async mode doesn't
+                // throttle in dequeueBuffer()) or if mDequeueBufferCannotBlock is set.
+                enableEglCpuThrottling = mCore->mAsyncMode || mCore->mDequeueBufferCannotBlock;
+            }
         }
         lastQueuedFence = std::move(mLastQueueBufferFence);
 
@@ -1391,6 +1416,9 @@ int BufferQueueProducer::query(int what, int *outValue) {
 status_t BufferQueueProducer::connect(const sp<IProducerListener>& listener,
         int api, bool producerControlledByApp, QueueBufferOutput *output) {
     ATRACE_CALL();
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(REMOVE_CONTROLLED_BY_APP)
+    producerControlledByApp = false;
+#endif
     std::lock_guard<std::mutex> lock(mCore->mMutex);
     mConsumerName = mCore->mConsumerName;
     BQ_LOGV("connect: api=%d producerControlledByApp=%s", api,
@@ -1954,6 +1982,24 @@ status_t BufferQueueProducer::setFrameRate(float frameRate, int8_t compatibility
     if (listener != nullptr) {
         listener->onSetFrameRate(frameRate, compatibility, changeFrameRateStrategy);
     }
+    return NO_ERROR;
+}
+
+status_t BufferQueueProducer::setProducerThrottlingEnabled(bool enabled) {
+    ATRACE_FORMAT("%s(%s)", __func__, enabled ? "true" : "false");
+    BQ_LOGV("setProducerThrottlingEnabled: %s", enabled ? "true" : "false");
+    std::lock_guard<std::mutex> lock(mCore->mMutex);
+    mCore->mProducerThrottlingEnabled = enabled;
+    return NO_ERROR;
+}
+
+status_t BufferQueueProducer::isProducerThrottlingEnabled(bool* outEnabled) const {
+    ATRACE_FORMAT("%s(%p)", __func__, outEnabled);
+    if (!outEnabled) {
+        return BAD_VALUE;
+    }
+    std::lock_guard<std::mutex> lock(mCore->mMutex);
+    *outEnabled = mCore->mProducerThrottlingEnabled;
     return NO_ERROR;
 }
 
