@@ -83,7 +83,7 @@ struct InputTargetInfo {
 
 InputTargetInfo getTargetInfo(const InputTarget& target) {
     if (target.windowHandle == nullptr) {
-        if (!target.connection->monitor) {
+        if (!target.connection->isFocusMonitor) {
             LOG(FATAL) << __func__ << ": Window is not set for non-monitor target";
         }
         // This is a global monitor, assume its target is the system.

@@ -37,4 +37,9 @@ parcelable PackageInfoNative {
      * certificates no longer used after signing certificate rotation.
      */
     @nullable SigningInfoNative signingInfo;
+
+    /**
+     * Source directory of this application package.
+     */
+    @nullable String sourceDir;
 }

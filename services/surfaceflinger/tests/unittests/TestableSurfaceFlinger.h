@@ -45,7 +45,6 @@
 #include "FrontEnd/LayerHandle.h"
 #include "FrontEnd/RequestedLayerState.h"
 #include "Layer.h"
-#include "NativeWindowSurface.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/VSyncTracker.h"
 #include "Scheduler/VsyncController.h"
@@ -105,22 +104,6 @@ public:
         return sp<GraphicBuffer>::make(width, height, format, layerCount, usage, requestorName);
     }
 
-    void createBufferQueue(sp<IGraphicBufferProducer>* outProducer,
-                           sp<IGraphicBufferConsumer>* outConsumer,
-                           bool consumerIsSurfaceFlinger) override {
-        if (!mCreateBufferQueue) {
-            BufferQueue::createBufferQueue(outProducer, outConsumer, consumerIsSurfaceFlinger);
-            return;
-        }
-        mCreateBufferQueue(outProducer, outConsumer, consumerIsSurfaceFlinger);
-    }
-
-    std::unique_ptr<surfaceflinger::NativeWindowSurface> createNativeWindowSurface(
-            const sp<IGraphicBufferProducer>& producer) override {
-        if (!mCreateNativeWindowSurface) return nullptr;
-        return mCreateNativeWindowSurface(producer);
-    }
-
     std::unique_ptr<compositionengine::CompositionEngine> createCompositionEngine() override {
         return compositionengine::impl::createCompositionEngine();
     }
@@ -139,17 +122,6 @@ public:
             std::shared_ptr<TimeStats> timeStats, pid_t surfaceFlingerPid = 0) override {
         return std::make_unique<mock::FrameTimeline>(timeStats, surfaceFlingerPid);
     }
-
-    using CreateBufferQueueFunction =
-            std::function<void(sp<IGraphicBufferProducer>* /* outProducer */,
-                               sp<IGraphicBufferConsumer>* /* outConsumer */,
-                               bool /* consumerIsSurfaceFlinger */)>;
-    CreateBufferQueueFunction mCreateBufferQueue;
-
-    using CreateNativeWindowSurfaceFunction =
-            std::function<std::unique_ptr<surfaceflinger::NativeWindowSurface>(
-                    const sp<IGraphicBufferProducer>&)>;
-    CreateNativeWindowSurfaceFunction mCreateNativeWindowSurface;
 
     using CreateCompositionEngineFunction =
             std::function<std::unique_ptr<compositionengine::CompositionEngine>()>;
@@ -171,6 +143,8 @@ public:
         if (!mFlinger) {
             mFlinger = sp<SurfaceFlinger>::make(mFactory, SurfaceFlinger::SkipInitialization);
         }
+
+        mFlinger->mBootStage = SurfaceFlinger::BootStage::FINISHED;
     }
 
     SurfaceFlinger* flinger() { return mFlinger.get(); }
@@ -291,17 +265,6 @@ public:
 
     scheduler::TestableScheduler& mutableScheduler() { return *mScheduler; }
     scheduler::mock::SchedulerCallback& mockSchedulerCallback() { return mSchedulerCallback; }
-
-    using CreateBufferQueueFunction = surfaceflinger::test::Factory::CreateBufferQueueFunction;
-    void setCreateBufferQueueFunction(CreateBufferQueueFunction f) {
-        mFactory.mCreateBufferQueue = f;
-    }
-
-    using CreateNativeWindowSurfaceFunction =
-            surfaceflinger::test::Factory::CreateNativeWindowSurfaceFunction;
-    void setCreateNativeWindowSurface(CreateNativeWindowSurfaceFunction f) {
-        mFactory.mCreateNativeWindowSurface = f;
-    }
 
     void setInternalDisplayPrimaries(const ui::DisplayPrimaries& primaries) {
         memcpy(&mFlinger->mInternalDisplayPrimaries, &primaries, sizeof(ui::DisplayPrimaries));
@@ -437,9 +400,9 @@ public:
             std::shared_ptr<compositionengine::Display> compositionDisplay,
             const DisplayDeviceState& state,
             const sp<compositionengine::DisplaySurface>& dispSurface,
-            const sp<IGraphicBufferProducer>& producer) NO_THREAD_SAFETY_ANALYSIS {
+            const sp<Surface>& compositionSurface) NO_THREAD_SAFETY_ANALYSIS {
         return mFlinger->setupNewDisplayDeviceInternal(displayToken, compositionDisplay, state,
-                                                       dispSurface, producer);
+                                                       dispSurface, compositionSurface);
     }
 
     void commitTransactionsLocked(uint32_t transactionFlags, bool modeset = false) {
@@ -697,6 +660,9 @@ public:
 
     const auto& hwcPhysicalDisplayIdMap() const { return getHwComposer().mPhysicalDisplayIdMap; }
     const auto& hwcDisplayData() const { return getHwComposer().mDisplayData; }
+
+    using BootStage = SurfaceFlinger::BootStage;
+    auto& mutableBootStage() { return mFlinger->mBootStage; }
 
     auto& mutableSupportsWideColor() { return mFlinger->mSupportsWideColor; }
 
@@ -1164,10 +1130,10 @@ public:
                                                                       refreshRate, refreshRate);
 
                 if (mFlinger.scheduler() && mSchedulerRegistration) {
-                    mFlinger.scheduler()
-                            ->registerDisplay(*physicalId, mCreationArgs.refreshRateSelector,
-                                              std::move(controller), std::move(tracker),
-                                              mFlinger.flinger()->getDefaultPacesetterDisplay());
+                    mFlinger.scheduler()->registerDisplay(*physicalId, *mConnectionType,
+                                                          mCreationArgs.refreshRateSelector,
+                                                          std::move(controller),
+                                                          std::move(tracker));
                 }
             }
 

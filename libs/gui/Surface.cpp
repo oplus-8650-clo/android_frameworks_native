@@ -199,7 +199,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     property_get("vendor.gpp.create_frc_extension", value, "0");
     intValue = atoi(value);
     if (!mQtiSurfaceGPPExtn && intValue == 1) {
-        mQtiSurfaceGPPExtn = std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
+        mQtiSurfaceGPPExtn = std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(
+            this, IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
     }
 }
 
@@ -1337,6 +1338,10 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
         mSlots[slot].requiresFreeOnReturn = false;
     }
 
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setQueuedBufferSlot(slot);
+    }
+
     if (mEnableFrameTimestamps) {
         mFrameEventHistory->applyDelta(output.frameTimestamps);
         // Update timestamps with the local acquire fence.
@@ -2281,41 +2286,50 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
 int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     ATRACE_CALL();
     SURF_LOGV("Surface::disconnect");
+    int err = mGraphicBufferProducer->disconnect(api, mode);
+    if (err == BAD_VALUE) {
+        SURF_LOGE("Surface failed to disconnect with error %d (%s). Likely the wrong API was "
+                  "requested (%d). Not cleaning up internals.",
+                  err, statusToString(err).c_str(), api);
+        return err;
+    }
+
+    // In this case the surface is either already disconnected or the process is dead.
+    SURF_LOGE_IF(err != NO_ERROR,
+                 "Surface failed to disconnect. Cleaning up internals anyway. Error %d (%s).", err,
+                 statusToString(err).c_str());
+
     Mutex::Autolock lock(mMutex);
     mRemovedBuffers.clear();
     mSharedBufferSlot = BufferItem::INVALID_BUFFER_SLOT;
     mSharedBufferHasBeenQueued = false;
     clearBuffersForDisconnectLocked();
-    int err = mGraphicBufferProducer->disconnect(api, mode);
-    if (!err) {
-        mReqFormat = 0;
-        mReqWidth = 0;
-        mReqHeight = 0;
-        mReqUsage = 0;
-        mCrop.clear();
-        mDataSpace = Dataspace::UNKNOWN;
-        mScalingMode = NATIVE_WINDOW_SCALING_MODE_FREEZE;
-        mTransform = 0;
-        mStickyTransform = 0;
-        mAutoPrerotation = false;
-        mEnableFrameTimestamps = false;
-        mMaxBufferCount = NUM_BUFFER_SLOTS;
+    mReqFormat = 0;
+    mReqWidth = 0;
+    mReqHeight = 0;
+    mReqUsage = 0;
+    mCrop.clear();
+    mDataSpace = Dataspace::UNKNOWN;
+    mScalingMode = NATIVE_WINDOW_SCALING_MODE_FREEZE;
+    mTransform = 0;
+    mStickyTransform = 0;
+    mAutoPrerotation = false;
+    mEnableFrameTimestamps = false;
+    mMaxBufferCount = NUM_BUFFER_SLOTS;
 
-        if (api == NATIVE_WINDOW_API_CPU) {
-            mConnectedToCpu = false;
-        }
-
-        std::scoped_lock _dl(mDebugMutex);
-        // Keep the old name in case we get subsequent calls, for logging.
-        mDebugName = mDebugName + "-DISCONNECTED";
-        mId = 0;
-        mIsConnected = false;
+    if (api == NATIVE_WINDOW_API_CPU) {
+        mConnectedToCpu = false;
     }
 
     if (mQtiSurfaceGPPExtn) {
         mQtiSurfaceGPPExtn->Disconnect(api, &mGraphicBufferProducer);
     }
 
+    std::scoped_lock _dl(mDebugMutex);
+    // Keep the old name in case we get subsequent calls, for logging.
+    mDebugName = mDebugName + "-DISCONNECTED";
+    mId = 0;
+    mIsConnected = false;
 
 #if !defined(NO_BINDER)
     if (mSurfaceDeathListener != nullptr) {
@@ -2336,17 +2350,17 @@ int Surface::detachNextBuffer(sp<GraphicBuffer>* outBuffer,
         return BAD_VALUE;
     }
 
-    Mutex::Autolock lock(mMutex);
-    if (mReportRemovedBuffers) {
-        mRemovedBuffers.clear();
-    }
-
     sp<GraphicBuffer> buffer(nullptr);
     sp<Fence> fence(nullptr);
     status_t result = mGraphicBufferProducer->detachNextBuffer(
             &buffer, &fence);
     if (result != NO_ERROR) {
         return result;
+    }
+
+    Mutex::Autolock lock(mMutex);
+    if (mReportRemovedBuffers) {
+        mRemovedBuffers.clear();
     }
 
     *outBuffer = buffer;
@@ -2472,6 +2486,9 @@ int Surface::setBufferCount(int bufferCount)
     ATRACE_CALL();
     SURF_LOGV("Surface::setBufferCount");
     Mutex::Autolock lock(mMutex);
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setBufferCount(bufferCount);
+    }
 
     status_t err = NO_ERROR;
     if (bufferCount == 0) {
@@ -3111,6 +3128,10 @@ status_t Surface::setFrameRate(float frameRate, int8_t compatibility,
                                                         changeFrameRateStrategy);
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setFrameRate(%.2f) returned %s", frameRate,
                  strerror(-err));
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setFrameRate(frameRate, compatibility,
+                                         changeFrameRateStrategy);
+    }
     return err;
 }
 
@@ -3142,16 +3163,14 @@ void Surface::destroy() {
 }
 
 bool Surface::IsCursorPlaneCompatibilitySupported() {
-    if (com::android::graphics::libgui::flags::cursor_plane_compatibility()) {
-        const AHardwareBuffer_Desc testDesc{.width = 64,
-                                            .height = 64,
-                                            .layers = 1,
-                                            .format = AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
-                                            .usage = GRALLOC_USAGE_CURSOR};
-        return AHardwareBuffer_isSupported(&testDesc);
-    }
-
-    return false;
+    const AHardwareBuffer_Desc testDesc{.width = 64,
+                                        .height = 64,
+                                        .layers = 1,
+                                        .format = AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
+                                        .usage = GRALLOC_USAGE_CURSOR};
+    const bool ret = AHardwareBuffer_isSupported(&testDesc);
+    ALOGW_IF(!ret, "Required cursor plane buffer format not supported");
+    return ret;
 }
 
 }; // namespace android

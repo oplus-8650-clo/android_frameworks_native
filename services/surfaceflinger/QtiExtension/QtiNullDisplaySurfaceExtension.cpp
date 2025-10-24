@@ -8,7 +8,7 @@
 
 namespace android::surfaceflingerextension {
 
-QtiNullDisplaySurfaceExtension::QtiNullDisplaySurfaceExtension(VirtualDisplaySurface* vds,
+QtiNullDisplaySurfaceExtension::QtiNullDisplaySurfaceExtension(LegacyVirtualDisplaySurface* vds,
                                                                bool secure, uint64_t sinkUsage)
       : mQtiVDS(vds) {
     if (!mQtiVDS) {

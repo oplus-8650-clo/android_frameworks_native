@@ -36,22 +36,20 @@
 #include <gui/BufferItem.h>
 #include <gui/BufferQueue.h>
 #include <gui/IProducerListener.h>
+#include <gui/Surface.h>
 #include <system/window.h>
 
-#include "HWComposer.h"
+#include "DisplayHardware/HWComposer.h"
+#include "LegacyVirtualDisplaySurface.h"
 #include "SurfaceFlinger.h"
-#include "VirtualDisplaySurface.h"
 
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #include "../QtiExtension/QtiSurfaceFlingerExtensionFactory.h"
 
 // QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
-#define VDS_LOGE(msg, ...) ALOGE("[%s] " msg, \
-        mDisplayName.c_str(), ##__VA_ARGS__)
-#define VDS_LOGW_IF(cond, msg, ...) ALOGW_IF(cond, "[%s] " msg, \
-        mDisplayName.c_str(), ##__VA_ARGS__)
-#define VDS_LOGV(msg, ...) ALOGV("[%s] " msg, \
-        mDisplayName.c_str(), ##__VA_ARGS__)
+#define VDS_LOGE(msg, ...) ALOGE("[%s] " msg, mDisplayName.c_str(), ##__VA_ARGS__)
+#define VDS_LOGW_IF(cond, msg, ...) ALOGW_IF(cond, "[%s] " msg, mDisplayName.c_str(), ##__VA_ARGS__)
+#define VDS_LOGV(msg, ...) ALOGV("[%s] " msg, mDisplayName.c_str(), ##__VA_ARGS__)
 
 #define UNSUPPORTED()                                               \
     VDS_LOGE("%s: Invalid operation on virtual display", __func__); \
@@ -59,16 +57,11 @@
 
 namespace android {
 
-VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
-                                             VirtualDisplayIdVariant virtualIdVariant,
-                                             const sp<IGraphicBufferProducer>& sink,
-                                             const sp<IGraphicBufferProducer>& bqProducer,
-                                             const sp<IGraphicBufferConsumer>& bqConsumer,
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
-                                             const std::string& name,
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-                                             bool qtiSecure)
-      : ConsumerBase(bqProducer, bqConsumer),
+LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(HWComposer& hwc,
+                                                         VirtualDisplayIdVariant virtualIdVariant,
+                                                         const sp<IGraphicBufferProducer>& sink,
+                                                         const std::string& name, bool qtiSecure)
+      : ConsumerBase(),
         mHwc(hwc),
         mVirtualIdVariant(virtualIdVariant),
         mDisplayName(name),
@@ -91,7 +84,7 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
 // QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mForceHwcCopy(SurfaceFlinger::useHwcForRgbToYuv) {
     mSource[SOURCE_SINK] = sink;
-    mSource[SOURCE_SCRATCH] = bqProducer;
+    mSource[SOURCE_SCRATCH] = mSurface->getIGraphicBufferProducer();
 
     resetPerFrameState();
 
@@ -135,25 +128,25 @@ VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwc,
     }
 }
 
-void VirtualDisplaySurface::initializeConsumer() {
+void LegacyVirtualDisplaySurface::initializeConsumer() {
     ConsumerBase::mName = String8::format("VDS: %s", mDisplayName.c_str());
     mConsumer->setConsumerName(ConsumerBase::mName);
     mConsumer->setConsumerUsageBits(GRALLOC_USAGE_HW_COMPOSER);
     mConsumer->setDefaultBufferSize(mSinkBufferWidth, mSinkBufferHeight);
 }
 
-void VirtualDisplaySurface::initializeProducer() {
+void LegacyVirtualDisplaySurface::initializeProducer() {
     IGraphicBufferProducer::QueueBufferOutput output;
     mSource[SOURCE_SCRATCH]->connect(nullptr, NATIVE_WINDOW_API_EGL, false, &output);
 }
 
-void VirtualDisplaySurface::onFirstRef() {
+void LegacyVirtualDisplaySurface::onFirstRef() {
     ConsumerBase::onFirstRef();
     initializeConsumer();
     initializeProducer();
 }
 
-VirtualDisplaySurface::~VirtualDisplaySurface() {
+LegacyVirtualDisplaySurface::~LegacyVirtualDisplaySurface() {
     mSource[SOURCE_SCRATCH]->disconnect(NATIVE_WINDOW_API_EGL);
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 
@@ -161,7 +154,7 @@ VirtualDisplaySurface::~VirtualDisplaySurface() {
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 }
 
-status_t VirtualDisplaySurface::beginFrame(bool mustRecompose) {
+status_t LegacyVirtualDisplaySurface::beginFrame(bool mustRecompose) {
     if (isBackedByGpu()) {
         return NO_ERROR;
     }
@@ -183,7 +176,7 @@ status_t VirtualDisplaySurface::beginFrame(bool mustRecompose) {
     return refreshOutputBuffer();
 }
 
-status_t VirtualDisplaySurface::prepareFrame(CompositionType compositionType) {
+status_t LegacyVirtualDisplaySurface::prepareFrame(CompositionType compositionType) {
     if (isBackedByGpu()) {
         return NO_ERROR;
     }
@@ -236,7 +229,7 @@ status_t VirtualDisplaySurface::prepareFrame(CompositionType compositionType) {
     return NO_ERROR;
 }
 
-status_t VirtualDisplaySurface::advanceFrame(float hdrSdrRatio) {
+status_t LegacyVirtualDisplaySurface::advanceFrame(float hdrSdrRatio) {
     const auto halVirtualDisplayId = ftl::match(
             mVirtualIdVariant, [](HalVirtualDisplayId id) { return ftl::Optional(id); },
             [](auto) { return ftl::Optional<HalVirtualDisplayId>(); });
@@ -293,7 +286,7 @@ status_t VirtualDisplaySurface::advanceFrame(float hdrSdrRatio) {
     return result;
 }
 
-void VirtualDisplaySurface::onFrameCommitted() {
+void LegacyVirtualDisplaySurface::onFrameCommitted() {
     const auto halDisplayId = asHalDisplayId(mVirtualIdVariant);
     if (!halDisplayId.has_value()) {
         return;
@@ -318,14 +311,17 @@ void VirtualDisplaySurface::onFrameCommitted() {
         QueueBufferOutput qbo;
         VDS_LOGV("%s: queue sink sslot=%d", __func__, sslot);
         if (retireFence->isValid() && mMustRecompose) {
-            status_t result = mSource[SOURCE_SINK]->queueBuffer(sslot,
-                    QueueBufferInput(
-                        systemTime(), false /* isAutoTimestamp */,
-                        HAL_DATASPACE_UNKNOWN,
-                        Rect(mSinkBufferWidth, mSinkBufferHeight),
-                        NATIVE_WINDOW_SCALING_MODE_FREEZE, 0 /* transform */,
-                        retireFence),
-                    &qbo);
+            status_t result =
+                    mSource[SOURCE_SINK]
+                            ->queueBuffer(sslot,
+                                          QueueBufferInput(systemTime(),
+                                                           false /* isAutoTimestamp */,
+                                                           HAL_DATASPACE_UNKNOWN,
+                                                           Rect(mSinkBufferWidth,
+                                                                mSinkBufferHeight),
+                                                           NATIVE_WINDOW_SCALING_MODE_FREEZE,
+                                                           0 /* transform */, retireFence),
+                                          &qbo);
             if (result == NO_ERROR) {
                 updateQueueBufferOutput(std::move(qbo));
             }
@@ -341,22 +337,20 @@ void VirtualDisplaySurface::onFrameCommitted() {
     resetPerFrameState();
 }
 
-void VirtualDisplaySurface::dumpAsString(String8& /* result */) const {
-}
+void LegacyVirtualDisplaySurface::dumpAsString(String8& /* result */) const {}
 
-void VirtualDisplaySurface::resizeBuffers(const ui::Size& newSize) {
+void LegacyVirtualDisplaySurface::resizeBuffers(const ui::Size& newSize) {
     mQueueBufferOutput.width = newSize.width;
     mQueueBufferOutput.height = newSize.height;
     mSinkBufferWidth = newSize.width;
     mSinkBufferHeight = newSize.height;
 }
 
-const sp<Fence>& VirtualDisplaySurface::getClientTargetAcquireFence() const {
+const sp<Fence>& LegacyVirtualDisplaySurface::getClientTargetAcquireFence() const {
     return mFbFence;
 }
 
-status_t VirtualDisplaySurface::requestBuffer(int pslot,
-        sp<GraphicBuffer>* outBuf) {
+status_t LegacyVirtualDisplaySurface::requestBuffer(int pslot, sp<GraphicBuffer>* outBuf) {
     if (isBackedByGpu()) {
         return mSource[SOURCE_SINK]->requestBuffer(pslot, outBuf);
     }
@@ -368,17 +362,16 @@ status_t VirtualDisplaySurface::requestBuffer(int pslot,
     return NO_ERROR;
 }
 
-status_t VirtualDisplaySurface::setMaxDequeuedBufferCount(
-        int maxDequeuedBuffers) {
+status_t LegacyVirtualDisplaySurface::setMaxDequeuedBufferCount(int maxDequeuedBuffers) {
     return mSource[SOURCE_SINK]->setMaxDequeuedBufferCount(maxDequeuedBuffers);
 }
 
-status_t VirtualDisplaySurface::setAsyncMode(bool async) {
+status_t LegacyVirtualDisplaySurface::setAsyncMode(bool async) {
     return mSource[SOURCE_SINK]->setAsyncMode(async);
 }
 
-status_t VirtualDisplaySurface::dequeueBuffer(Source source,
-        PixelFormat format, uint64_t usage, int* sslot, sp<Fence>* fence) {
+status_t LegacyVirtualDisplaySurface::dequeueBuffer(Source source, PixelFormat format,
+                                                    uint64_t usage, int* sslot, sp<Fence>* fence) {
     LOG_ALWAYS_FATAL_IF(isBackedByGpu());
 
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
@@ -390,8 +383,7 @@ status_t VirtualDisplaySurface::dequeueBuffer(Source source,
     status_t result =
             mSource[source]->dequeueBuffer(sslot, fence, mSinkBufferWidth, mSinkBufferHeight,
                                            format, usage, nullptr, nullptr);
-    if (result < 0)
-        return result;
+    if (result < 0) return result;
     int pslot = mapSource2ProducerSlot(source, *sslot);
     VDS_LOGV("%s(%s): sslot=%d pslot=%d result=%d", __func__, ftl::enum_string(source).c_str(),
              *sslot, pslot, result);
@@ -411,8 +403,7 @@ status_t VirtualDisplaySurface::dequeueBuffer(Source source,
 
     if (result & RELEASE_ALL_BUFFERS) {
         for (uint32_t i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
-            if ((mProducerSlotSource & (1ULL << i)) == sourceBit)
-                mProducerBuffers[i].clear();
+            if ((mProducerSlotSource & (1ULL << i)) == sourceBit) mProducerBuffers[i].clear();
         }
     }
     if (result & BUFFER_NEEDS_REALLOCATION) {
@@ -433,10 +424,10 @@ status_t VirtualDisplaySurface::dequeueBuffer(Source source,
     return result;
 }
 
-status_t VirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint32_t w, uint32_t h,
-                                              PixelFormat format, uint64_t usage,
-                                              uint64_t* outBufferAge,
-                                              FrameEventHistoryDelta* outTimestamps) {
+status_t LegacyVirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint32_t w,
+                                                    uint32_t h, PixelFormat format, uint64_t usage,
+                                                    uint64_t* outBufferAge,
+                                                    FrameEventHistoryDelta* outTimestamps) {
     if (isBackedByGpu()) {
         return mSource[SOURCE_SINK]->dequeueBuffer(pslot, fence, w, h, format, usage, outBufferAge,
                                                    outTimestamps);
@@ -452,7 +443,6 @@ status_t VirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint
     Source source = fbSourceForCompositionType(mCompositionType);
 
     if (source == SOURCE_SINK) {
-
         if (mOutputProducerSlot < 0) {
             // Last chance bailout if something bad happened earlier. For example,
             // in a graphics API configuration, if the sink disappears then dequeueBuffer
@@ -471,10 +461,8 @@ status_t VirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint
 
         usage |= GRALLOC_USAGE_HW_COMPOSER;
         const sp<GraphicBuffer>& buf = mProducerBuffers[mOutputProducerSlot];
-        if ((usage & ~buf->getUsage()) != 0 ||
-                (format != 0 && format != buf->getPixelFormat()) ||
-                (w != 0 && w != mSinkBufferWidth) ||
-                (h != 0 && h != mSinkBufferHeight)) {
+        if ((usage & ~buf->getUsage()) != 0 || (format != 0 && format != buf->getPixelFormat()) ||
+            (w != 0 && w != mSinkBufferWidth) || (h != 0 && h != mSinkBufferHeight)) {
             VDS_LOGV("%s: dequeueing new output buffer: "
                      "want %dx%d fmt=%d use=%#" PRIx64 ", "
                      "have %dx%d fmt=%d use=%#" PRIx64,
@@ -485,8 +473,7 @@ status_t VirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint
             mOutputUsage = mQtiDSExtnIntf->qtiSetOutputUsage(usage);
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
             result = refreshOutputBuffer();
-            if (result < 0)
-                return result;
+            if (result < 0) return result;
         }
     }
 
@@ -511,20 +498,20 @@ status_t VirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence, uint
     return result;
 }
 
-status_t VirtualDisplaySurface::detachBuffer(int) {
+status_t LegacyVirtualDisplaySurface::detachBuffer(int) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::detachNextBuffer(sp<GraphicBuffer>*, sp<Fence>*) {
+status_t LegacyVirtualDisplaySurface::detachNextBuffer(sp<GraphicBuffer>*, sp<Fence>*) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::attachBuffer(int*, const sp<GraphicBuffer>&) {
+status_t LegacyVirtualDisplaySurface::attachBuffer(int*, const sp<GraphicBuffer>&) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::queueBuffer(int pslot,
-        const QueueBufferInput& input, QueueBufferOutput* output) {
+status_t LegacyVirtualDisplaySurface::queueBuffer(int pslot, const QueueBufferInput& input,
+                                                  QueueBufferOutput* output) {
     if (isBackedByGpu()) {
         return mSource[SOURCE_SINK]->queueBuffer(pslot, input, output);
     }
@@ -541,16 +528,14 @@ status_t VirtualDisplaySurface::queueBuffer(int pslot,
         QueueBufferOutput scratchQBO;
         int sslot = mapProducer2SourceSlot(SOURCE_SCRATCH, pslot);
         result = mSource[SOURCE_SCRATCH]->queueBuffer(sslot, input, &scratchQBO);
-        if (result != NO_ERROR)
-            return result;
+        if (result != NO_ERROR) return result;
 
         // Now acquire the buffer from the scratch pool -- should be the same
         // slot and fence as we just queued.
         Mutex::Autolock lock(mMutex);
         BufferItem item;
         result = acquireBufferLocked(&item, 0);
-        if (result != NO_ERROR)
-            return result;
+        if (result != NO_ERROR) return result;
         VDS_LOGW_IF(item.mSlot != sslot,
                     "%s: acquired sslot %d from SCRATCH after queueing sslot %d", __func__,
                     item.mSlot, sslot);
@@ -572,8 +557,8 @@ status_t VirtualDisplaySurface::queueBuffer(int pslot,
         Rect crop;
         int scalingMode;
         uint32_t transform;
-        input.deflate(&timestamp, &isAutoTimestamp, &dataSpace, &crop,
-                &scalingMode, &transform, &mFbFence);
+        input.deflate(&timestamp, &isAutoTimestamp, &dataSpace, &crop, &scalingMode, &transform,
+                      &mFbFence);
 
         mFbProducerSlot = pslot;
         mOutputFence = mFbFence;
@@ -584,21 +569,20 @@ status_t VirtualDisplaySurface::queueBuffer(int pslot,
     return NO_ERROR;
 }
 
-status_t VirtualDisplaySurface::cancelBuffer(int pslot,
-        const sp<Fence>& fence) {
+status_t LegacyVirtualDisplaySurface::cancelBuffer(int pslot, const sp<Fence>& fence) {
     if (isBackedByGpu()) {
-        return mSource[SOURCE_SINK]->cancelBuffer(mapProducer2SourceSlot(SOURCE_SINK, pslot), fence);
+        return mSource[SOURCE_SINK]->cancelBuffer(mapProducer2SourceSlot(SOURCE_SINK, pslot),
+                                                  fence);
     }
 
     VDS_LOGW_IF(mDebugState != DebugState::Gpu, "Unexpected %s(pslot=%d) in %s state", __func__,
                 pslot, ftl::enum_string(mDebugState).c_str());
     VDS_LOGV("%s pslot=%d", __func__, pslot);
     Source source = fbSourceForCompositionType(mCompositionType);
-    return mSource[source]->cancelBuffer(
-            mapProducer2SourceSlot(source, pslot), fence);
+    return mSource[source]->cancelBuffer(mapProducer2SourceSlot(source, pslot), fence);
 }
 
-int VirtualDisplaySurface::query(int what, int* value) {
+int LegacyVirtualDisplaySurface::query(int what, int* value) {
     switch (what) {
         case NATIVE_WINDOW_WIDTH:
             *value = mSinkBufferWidth;
@@ -612,12 +596,11 @@ int VirtualDisplaySurface::query(int what, int* value) {
     return NO_ERROR;
 }
 
-status_t VirtualDisplaySurface::connect(const sp<IProducerListener>& listener,
-        int api, bool producerControlledByApp,
-        QueueBufferOutput* output) {
+status_t LegacyVirtualDisplaySurface::connect(const sp<IProducerListener>& listener, int api,
+                                              bool producerControlledByApp,
+                                              QueueBufferOutput* output) {
     QueueBufferOutput qbo;
-    status_t result = mSource[SOURCE_SINK]->connect(listener, api,
-            producerControlledByApp, &qbo);
+    status_t result = mSource[SOURCE_SINK]->connect(listener, api, producerControlledByApp, &qbo);
     if (result == NO_ERROR) {
         updateQueueBufferOutput(std::move(qbo));
         // This moves the frame timestamps and keeps a copy of all other fields.
@@ -626,62 +609,62 @@ status_t VirtualDisplaySurface::connect(const sp<IProducerListener>& listener,
     return result;
 }
 
-status_t VirtualDisplaySurface::disconnect(int api, DisconnectMode mode) {
+status_t LegacyVirtualDisplaySurface::disconnect(int api, DisconnectMode mode) {
     return mSource[SOURCE_SINK]->disconnect(api, mode);
 }
 
-status_t VirtualDisplaySurface::setSidebandStream(const sp<NativeHandle>&) {
+status_t LegacyVirtualDisplaySurface::setSidebandStream(const sp<NativeHandle>&) {
     UNSUPPORTED();
 }
 
-void VirtualDisplaySurface::allocateBuffers(uint32_t /* width */,
-        uint32_t /* height */, PixelFormat /* format */, uint64_t /* usage */) {
+void LegacyVirtualDisplaySurface::allocateBuffers(uint32_t /* width */, uint32_t /* height */,
+                                                  PixelFormat /* format */, uint64_t /* usage */) {
     // TODO: Should we actually allocate buffers for a virtual display?
 }
 
-status_t VirtualDisplaySurface::allowAllocation(bool /* allow */) {
+status_t LegacyVirtualDisplaySurface::allowAllocation(bool /* allow */) {
     return INVALID_OPERATION;
 }
 
-status_t VirtualDisplaySurface::setGenerationNumber(uint32_t) {
+status_t LegacyVirtualDisplaySurface::setGenerationNumber(uint32_t) {
     UNSUPPORTED();
 }
 
-String8 VirtualDisplaySurface::getConsumerName() const {
-    return String8("VirtualDisplaySurface");
+String8 LegacyVirtualDisplaySurface::getConsumerName() const {
+    return String8("LegacyVirtualDisplaySurface");
 }
 
-status_t VirtualDisplaySurface::setSharedBufferMode(bool) {
+status_t LegacyVirtualDisplaySurface::setSharedBufferMode(bool) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::setAutoRefresh(bool) {
+status_t LegacyVirtualDisplaySurface::setAutoRefresh(bool) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::setDequeueTimeout(nsecs_t) {
+status_t LegacyVirtualDisplaySurface::setDequeueTimeout(nsecs_t) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::getLastQueuedBuffer(sp<GraphicBuffer>*, sp<Fence>*, float[16]) {
+status_t LegacyVirtualDisplaySurface::getLastQueuedBuffer(sp<GraphicBuffer>*, sp<Fence>*,
+                                                          float[16]) {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::getUniqueId(uint64_t*) const {
+status_t LegacyVirtualDisplaySurface::getUniqueId(uint64_t*) const {
     UNSUPPORTED();
 }
 
-status_t VirtualDisplaySurface::getConsumerUsage(uint64_t* outUsage) const {
+status_t LegacyVirtualDisplaySurface::getConsumerUsage(uint64_t* outUsage) const {
     return mSource[SOURCE_SINK]->getConsumerUsage(outUsage);
 }
 
-void VirtualDisplaySurface::updateQueueBufferOutput(
-        QueueBufferOutput&& qbo) {
+void LegacyVirtualDisplaySurface::updateQueueBufferOutput(QueueBufferOutput&& qbo) {
     mQueueBufferOutput = std::move(qbo);
     mQueueBufferOutput.transformHint = 0;
 }
 
-void VirtualDisplaySurface::resetPerFrameState() {
+void LegacyVirtualDisplaySurface::resetPerFrameState() {
     mCompositionType = CompositionType::Unknown;
     mFbFence = Fence::NO_FENCE;
     mOutputFence = Fence::NO_FENCE;
@@ -692,23 +675,21 @@ void VirtualDisplaySurface::resetPerFrameState() {
 // QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
 }
 
-status_t VirtualDisplaySurface::refreshOutputBuffer() {
+status_t LegacyVirtualDisplaySurface::refreshOutputBuffer() {
     const auto halVirtualDisplayId = ftl::match(
             mVirtualIdVariant, [](HalVirtualDisplayId id) { return ftl::Optional(id); },
             [](auto) { return ftl::Optional<HalVirtualDisplayId>(); });
     LOG_ALWAYS_FATAL_IF(!halVirtualDisplayId);
 
     if (mOutputProducerSlot >= 0) {
-        mSource[SOURCE_SINK]->cancelBuffer(
-                mapProducer2SourceSlot(SOURCE_SINK, mOutputProducerSlot),
-                mOutputFence);
+        mSource[SOURCE_SINK]->cancelBuffer(mapProducer2SourceSlot(SOURCE_SINK, mOutputProducerSlot),
+                                           mOutputFence);
     }
 
     int sslot;
-    status_t result = dequeueBuffer(SOURCE_SINK, mOutputFormat, mOutputUsage,
-            &sslot, &mOutputFence);
-    if (result < 0)
-        return result;
+    status_t result =
+            dequeueBuffer(SOURCE_SINK, mOutputFormat, mOutputUsage, &sslot, &mOutputFence);
+    if (result < 0) return result;
     mOutputProducerSlot = mapSource2ProducerSlot(SOURCE_SINK, sslot);
 
     // On GPU-only frames, we don't have the right output buffer acquire fence
@@ -721,29 +702,29 @@ status_t VirtualDisplaySurface::refreshOutputBuffer() {
     return result;
 }
 
-bool VirtualDisplaySurface::isBackedByGpu() const {
+bool LegacyVirtualDisplaySurface::isBackedByGpu() const {
     return std::holds_alternative<GpuVirtualDisplayId>(mVirtualIdVariant);
 }
 
 // This slot mapping function is its own inverse, so two copies are unnecessary.
 // Both are kept to make the intent clear where the function is called, and for
 // the (unlikely) chance that we switch to a different mapping function.
-int VirtualDisplaySurface::mapSource2ProducerSlot(Source source, int sslot) {
+int LegacyVirtualDisplaySurface::mapSource2ProducerSlot(Source source, int sslot) {
     if (source == SOURCE_SCRATCH) {
         return BufferQueue::NUM_BUFFER_SLOTS - sslot - 1;
     } else {
         return sslot;
     }
 }
-int VirtualDisplaySurface::mapProducer2SourceSlot(Source source, int pslot) {
+int LegacyVirtualDisplaySurface::mapProducer2SourceSlot(Source source, int pslot) {
     return mapSource2ProducerSlot(source, pslot);
 }
 
-auto VirtualDisplaySurface::fbSourceForCompositionType(CompositionType type) -> Source {
+auto LegacyVirtualDisplaySurface::fbSourceForCompositionType(CompositionType type) -> Source {
     return type == CompositionType::Mixed ? SOURCE_SCRATCH : SOURCE_SINK;
 }
 
-std::string VirtualDisplaySurface::toString(CompositionType type) {
+std::string LegacyVirtualDisplaySurface::toString(CompositionType type) {
     using namespace std::literals;
     return type == CompositionType::Unknown ? "Unknown"s : ftl::Flags(type).string();
 }

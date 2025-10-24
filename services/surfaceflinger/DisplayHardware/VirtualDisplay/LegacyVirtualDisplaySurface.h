@@ -69,13 +69,13 @@ class IProducerListener;
  *
  * In GPU-only composition, the GPU driver is given a buffer from the sink to
  * render into. When the GPU driver queues the buffer to the
- * VirtualDisplaySurface, the VirtualDisplaySurface holds onto it instead of
+ * LegacyVirtualDisplaySurface, the LegacyVirtualDisplaySurface holds onto it instead of
  * immediately queueing it to the sink. The buffer is used as both the FB
  * target and output buffer for HWC, though on these frames the HWC doesn't
  * do any work for this display and doesn't write to the output buffer. After
  * composition is complete, the buffer is queued to the sink.
  *
- * In HWC-only composition, the VirtualDisplaySurface dequeues a buffer from
+ * In HWC-only composition, the LegacyVirtualDisplaySurface dequeues a buffer from
  * the sink and passes it to HWC as both the FB target buffer and output
  * buffer. The HWC doesn't need to read from the FB target buffer, but does
  * write to the output buffer. After composition is complete, the buffer is
@@ -86,14 +86,14 @@ class IProducerListener;
  * an internal BufferQueue that it uses as a scratch buffer pool. The GPU
  * driver is given a scratch buffer to render into. When it finishes rendering,
  * the buffer is queued and then immediately acquired by the
- * VirtualDisplaySurface. The scratch buffer is then used as the FB target
+ * LegacyVirtualDisplaySurface. The scratch buffer is then used as the FB target
  * buffer for HWC, and a separate buffer is dequeued from the sink and used as
  * the HWC output buffer. When HWC composition is complete, the scratch buffer
  * is released and the output buffer is queued to the sink.
  */
-class VirtualDisplaySurface : public compositionengine::DisplaySurface,
-                              public BnGraphicBufferProducer,
-                              private ConsumerBase {
+class LegacyVirtualDisplaySurface : public compositionengine::DisplaySurface,
+                                    public BnGraphicBufferProducer,
+                                    private ConsumerBase {
 public:
     //
     // DisplaySurface interface
@@ -119,13 +119,11 @@ public:
 
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 private:
-    VirtualDisplaySurface(HWComposer&, VirtualDisplayIdVariant,
-                          const sp<IGraphicBufferProducer>& sink,
-                          const sp<IGraphicBufferProducer>& bqProducer,
-                          const sp<IGraphicBufferConsumer>& bqConsumer, const std::string& name,
-                          bool qtiSecure = false);
+    LegacyVirtualDisplaySurface(HWComposer&, VirtualDisplayIdVariant,
+                                const sp<IGraphicBufferProducer>& sink,
+                                const std::string& name, bool qtiSecure = false);
 
-    friend class sp<VirtualDisplaySurface>;
+    friend class sp<LegacyVirtualDisplaySurface>;
 
     enum Source : size_t {
         SOURCE_SINK = 0,
@@ -138,7 +136,7 @@ private:
     void initializeConsumer();
     void initializeProducer();
 
-    virtual ~VirtualDisplaySurface();
+    virtual ~LegacyVirtualDisplaySurface();
 
     //
     // IGraphicBufferProducer interface, used by the GPU driver.
@@ -166,8 +164,8 @@ private:
     virtual status_t setSharedBufferMode(bool sharedBufferMode) override;
     virtual status_t setAutoRefresh(bool autoRefresh) override;
     virtual status_t setDequeueTimeout(nsecs_t timeout) override;
-    virtual status_t getLastQueuedBuffer(sp<GraphicBuffer>* outBuffer,
-            sp<Fence>* outFence, float outTransformMatrix[16]) override;
+    virtual status_t getLastQueuedBuffer(sp<GraphicBuffer>* outBuffer, sp<Fence>* outFence,
+                                         float outTransformMatrix[16]) override;
     virtual status_t getUniqueId(uint64_t* outId) const override;
     virtual status_t getConsumerUsage(uint64_t* outUsage) const override;
 

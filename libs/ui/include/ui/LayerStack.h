@@ -62,3 +62,12 @@ inline bool operator<(LayerStack lhs, LayerStack rhs) {
 }
 
 } // namespace android::ui
+
+namespace std {
+template <>
+struct hash<android::ui::LayerStack> {
+    size_t operator()(const android::ui::LayerStack& layerStack) const {
+        return hash<uint32_t>()(layerStack.id);
+    }
+};
+} // namespace std

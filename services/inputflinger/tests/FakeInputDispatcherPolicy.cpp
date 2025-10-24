@@ -380,16 +380,17 @@ void FakeInputDispatcherPolicy::notifyInputChannelBroken(const sp<IBinder>& conn
 
 void FakeInputDispatcherPolicy::notifyFocusChanged(const sp<IBinder>&, const sp<IBinder>&) {}
 
-void FakeInputDispatcherPolicy::notifySensorEvent(int32_t deviceId,
+void FakeInputDispatcherPolicy::notifySensorEvent(DeviceId deviceId,
                                                   InputDeviceSensorType sensorType,
                                                   InputDeviceSensorAccuracy accuracy,
                                                   nsecs_t timestamp,
                                                   const std::vector<float>& values) {}
 
-void FakeInputDispatcherPolicy::notifySensorAccuracy(int deviceId, InputDeviceSensorType sensorType,
+void FakeInputDispatcherPolicy::notifySensorAccuracy(DeviceId deviceId,
+                                                     InputDeviceSensorType sensorType,
                                                      InputDeviceSensorAccuracy accuracy) {}
 
-void FakeInputDispatcherPolicy::notifyVibratorState(int32_t deviceId, bool isOn) {}
+void FakeInputDispatcherPolicy::notifyVibratorState(DeviceId deviceId, bool isOn) {}
 
 bool FakeInputDispatcherPolicy::filterInputEvent(const InputEvent& inputEvent,
                                                  uint32_t policyFlags) {

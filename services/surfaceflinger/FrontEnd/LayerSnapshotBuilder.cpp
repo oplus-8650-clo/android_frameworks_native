@@ -433,13 +433,21 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         }
     }
 
+    std::optional<caching::MergeableHierarchy::Accumulator> accumulator = std::nullopt;
+
+    if (args.mergeableHierarchyManager) {
+        accumulator = caching::MergeableHierarchy::Accumulator();
+        accumulator->add(&args.root);
+    }
+
     LayerHierarchy::TraversalPath root = LayerHierarchy::TraversalPath::ROOT;
     if (args.root.getLayer()) {
         // The hierarchy can have a root layer when used for screenshots otherwise, it will have
         // multiple children.
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
-        updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
+        updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0,
+                                   accumulator);
         if (FlagManager::getInstance().stop_layer()) {
             applyStopLayers(args.root, childPath);
         }
@@ -447,10 +455,20 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
-            updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
+            updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0,
+                                       accumulator);
             if (FlagManager::getInstance().stop_layer()) {
                 applyStopLayers(*childHierarchy, childPath);
             }
+        }
+    }
+
+    if (accumulator) {
+        if (accumulator->canBuild()) {
+            uint32_t id = args.root.getLayer() ? args.root.getLayer()->id : UNASSIGNED_LAYER_ID;
+            auto mergeableHierarchy = accumulator->build(id);
+            args.mergeableHierarchyManager->remove(id);
+            args.mergeableHierarchyManager->add(std::move(mergeableHierarchy));
         }
     }
 
@@ -516,10 +534,19 @@ void LayerSnapshotBuilder::update(const Args& args) {
 const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
         const Args& args, const LayerHierarchy& hierarchy,
         const LayerHierarchy::TraversalPath& traversalPath, const LayerSnapshot& parentSnapshot,
-        int depth) {
+        int depth, std::optional<caching::MergeableHierarchy::Accumulator>& accumulator) {
     LLOG_ALWAYS_FATAL_WITH_TRACE_IF(depth > 50,
                                     "Cycle detected in LayerSnapshotBuilder. See "
                                     "builder_stack_overflow_transactions.winscope");
+
+    if (accumulator) {
+        if (!accumulator->add(&hierarchy) && accumulator->canBuild()) {
+            uint32_t id = args.root.getLayer() ? args.root.getLayer()->id : UNASSIGNED_LAYER_ID;
+            auto mergeableHierarchy = accumulator->build(id);
+            args.mergeableHierarchyManager->remove(id);
+            args.mergeableHierarchyManager->add(std::move(mergeableHierarchy));
+        }
+    }
 
     const RequestedLayerState* layer = hierarchy.getLayer();
     LayerSnapshot* snapshot = getSnapshot(traversalPath);
@@ -547,7 +574,8 @@ const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
         LayerHierarchy::TraversalPath childPath =
                 traversalPath.makeChild(childHierarchy->getLayer()->id, variant);
         const LayerSnapshot& childSnapshot =
-                updateSnapshotsInHierarchy(args, *childHierarchy, childPath, *snapshot, depth + 1);
+                updateSnapshotsInHierarchy(args, *childHierarchy, childPath, *snapshot, depth + 1,
+                                           accumulator);
         updateFrameRateFromChildSnapshot(*snapshot, childSnapshot, *childHierarchy->getLayer(),
                                          args, &childHasValidFrameRate);
     }
@@ -1011,68 +1039,74 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
         snapshot.roundedCorner = RoundedCornerState();
         return;
     }
+
     snapshot.roundedCorner = RoundedCornerState();
-    RoundedCornerState parentRoundedCorner;
-    if (parentSnapshot.roundedCorner.hasRequestedRadius()) {
-        parentRoundedCorner = parentSnapshot.roundedCorner;
+
+    // Populate parent settings to inherit
+    RoundedCornerState parentSettings = RoundedCornerState();
+    if (parentSnapshot.roundedCorner.hasRequestedRadius() ||
+        parentSnapshot.roundedCorner.hasRoundedCorners()) {
+        // Check for both radii and requestedRadii because parent's radii may be set to 0.f
+        // due to client rounding.
         ui::Transform t = snapshot.localTransform.inverse();
-        parentRoundedCorner.cropRect = t.transform(parentRoundedCorner.cropRect);
-        parentRoundedCorner.radii.transform(t);
-        parentRoundedCorner.requestedRadii.transform(t);
+        parentSettings.cropRect = t.transform(parentSnapshot.roundedCorner.cropRect);
+
+        // If the parent has client drawn radii, then we should inherit the requested radii,
+        // otherwise, you can simply inherit the radii.
+        parentSettings.radii = parentSnapshot.roundedCorner.hasClientDrawnRadius()
+                ? parentSnapshot.roundedCorner.requestedRadii
+                : parentSnapshot.roundedCorner.radii;
+        parentSettings.radii.transform(t);
     }
+    const bool parentSettingsValid = parentSettings.hasRoundedCorners();
+
+    // Populate layer settings
+    RoundedCornerState layerSettings;
+    layerSettings.radii = requested.cornerRadii;
+    layerSettings.requestedRadii = requested.cornerRadii;
 
     FloatRect layerCropRect = snapshot.croppedBufferSize;
-    const gui::CornerRadii requestedRadii(requested.cornerRadii);
-    const gui::CornerRadii clientDrawnRadii(requested.clientDrawnCornerRadii);
-
-    RoundedCornerState layerSettings;
     layerSettings.cropRect = layerCropRect;
-    layerSettings.requestedRadii = requestedRadii;
-    layerSettings.clientDrawnRadii = clientDrawnRadii;
 
     const bool layerSettingsValid = layerSettings.hasRequestedRadius() && !layerCropRect.isEmpty();
-    const bool parentRoundedCornerValid = parentRoundedCorner.hasRequestedRadius();
 
-    if (layerSettingsValid && parentRoundedCornerValid) {
+    if (layerSettingsValid && parentSettingsValid) {
         // If the parent and the layer have rounded corner settings, use the parent settings if
         // the parent crop is entirely inside the layer crop. This has limitations and cause
         // rendering artifacts. See b/200300845 for correct fix.
-        if (parentRoundedCorner.cropRect.left > layerCropRect.left &&
-            parentRoundedCorner.cropRect.top > layerCropRect.top &&
-            parentRoundedCorner.cropRect.right < layerCropRect.right &&
-            parentRoundedCorner.cropRect.bottom < layerCropRect.bottom) {
-            snapshot.roundedCorner = parentRoundedCorner;
+        if (parentSettings.cropRect.left > layerCropRect.left &&
+            parentSettings.cropRect.top > layerCropRect.top &&
+            parentSettings.cropRect.right < layerCropRect.right &&
+            parentSettings.cropRect.bottom < layerCropRect.bottom) {
+            snapshot.roundedCorner = parentSettings;
         } else {
             snapshot.roundedCorner = layerSettings;
         }
     } else if (layerSettingsValid) {
         snapshot.roundedCorner = layerSettings;
-    } else if (parentRoundedCornerValid) {
-        if (doesChildOverlapParentCornerRegion(layerCropRect, parentRoundedCorner.cropRect,
-                                               parentRoundedCorner.requestedRadii)) {
-            snapshot.roundedCorner = parentRoundedCorner;
-        }
+    } else if (parentSettingsValid &&
+               childOverlapsParentCornerRegion(layerCropRect, parentSettings.cropRect,
+                                               parentSettings.radii)) {
+        snapshot.roundedCorner = parentSettings;
     }
-
+    snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
     snapshot.roundedCorner.croppedRequestedRadii =
-            getClippedClientRadii(snapshot.roundedCorner.requestedRadii,
-                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+            getClippedClientRadii(snapshot.roundedCorner.radii, snapshot.roundedCorner.cropRect,
+                                  snapshot.sourceBounds());
 
-    if (!clientDrawnRadii.isEmpty() &&
-        clientDrawnRadii == snapshot.roundedCorner.croppedRequestedRadii &&
+    if (!requested.clientDrawnCornerRadii.isEmpty() &&
+        requested.clientDrawnCornerRadii == snapshot.roundedCorner.croppedRequestedRadii &&
         snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop) {
         // If the client drawn radius matches the inherited/requested radius
         // and the geometric layer bounds match the client crop then surfaceflinger
         // does not need to draw rounded corners for this layer
         snapshot.roundedCorner.radii = gui::CornerRadii(0.f);
-    } else {
-        snapshot.roundedCorner.radii = snapshot.roundedCorner.requestedRadii;
     }
 }
 
-bool LayerSnapshotBuilder::doesChildOverlapParentCornerRegion(const FloatRect& childCropRect,
-                                                              const FloatRect& parentCropRect,
-                                                              const gui::CornerRadii& parentRadii) {
+bool LayerSnapshotBuilder::childOverlapsParentCornerRegion(const FloatRect& childCropRect,
+                                                           const FloatRect& parentCropRect,
+                                                           const gui::CornerRadii& parentRadii) {
     if (childCropRect.isEmpty()) {
         // If either child crop is empty then assume there is overlap
         // so that child can inherit parent rounded corner state. Otherwise, the

@@ -54,9 +54,6 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool add_first_vsync_to_tracker() const;
     bool adpf_gpu_sf() const;
-    bool adpf_native_session_manager() const;
-    bool adpf_use_fmq_channel() const;
-    bool adpf_use_fmq_channel_fixed() const;
     bool anchor_list() const;
     bool buffer_stuffing_fix() const;
     bool connected_displays_cursor() const;
@@ -65,6 +62,7 @@ public:
     bool filter_refresh_rates_within_config_group() const;
     bool frontend_caching_v0() const;
     bool graphite_renderengine_preview_rollout() const;
+    bool graphite_renderengine_desktop_rollout() const;
     bool increase_missed_frame_jank_threshold() const;
     bool monitor_buffer_fences() const;
     bool offload_gpu_composition() const;
@@ -72,7 +70,8 @@ public:
     bool refresh_rate_overlay_on_external_display() const;
     bool reset_model_flushes_fence() const;
     bool resync_on_tx() const;
-    bool unify_refresh_rate_callbacks() const;
+    bool supported_refresh_rate_update() const;
+    bool use_at_least_60_for_min_vote() const;
     bool vsync_predictor_predicts_within_threshold() const;
 
     /// Trunk stable readonly flags ///
@@ -90,6 +89,8 @@ public:
     bool enable_small_area_detection() const;
     bool flush_buffer_slots_to_uncache() const;
     bool follower_arbitrary_refresh_rate_selection() const;
+    bool follower_display_backpressure() const;
+    bool force_slower_follower_gpu_composition() const;
     bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;
     bool game_default_frame_rate() const;
@@ -99,8 +100,8 @@ public:
     bool idle_screen_refresh_rate_timeout() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
+    bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
-    bool pacesetter_selection() const;
     bool parse_edid_version_and_input_type() const;
     bool protected_if_client() const;
     bool renderable_buffer_usage() const;

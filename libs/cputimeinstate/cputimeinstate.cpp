@@ -182,6 +182,13 @@ static bool attachTracepointProgram(const std::string &eventType, const std::str
     return bpf_attach_tracepoint(prog_fd, eventType.c_str(), eventName.c_str()) >= 0;
 }
 
+// TODO(b/442884281): Remove this once autoattach is enabled for TimeInState programs
+static bool attachRawTracepointProgram(const std::string &eventType, const std::string &eventName) {
+    int prog_fd = retrieveProgramFd(eventType, eventName);
+    if (prog_fd < 0) return false;
+    return bpf_attach_raw_tracepoint(prog_fd, eventName.c_str()) >= 0;
+}
+
 static std::optional<uint32_t> getPolicyFreqIdx(uint32_t policy) {
     auto path = StringPrintf("/sys/devices/system/cpu/cpufreq/policy%u/scaling_cur_freq",
                              gPolicyCpus[policy][0]);
@@ -268,7 +275,7 @@ bool startTrackingUidTimes() {
 
     gTracking = attachTracepointProgram("sched", "sched_switch") &&
             attachTracepointProgram("power", "cpu_frequency") &&
-            attachTracepointProgram("sched", "sched_process_free");
+            attachRawTracepointProgram("sched", "sched_process_free");
     return gTracking;
 }
 

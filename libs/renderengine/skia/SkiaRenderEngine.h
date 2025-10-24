@@ -34,6 +34,7 @@
 
 #include "AutoBackendTexture.h"
 #include "BoxShadowUtils.h"
+#include "RenderDocUtils.h"
 #include "android-base/macros.h"
 #include "compat/SkiaGpuContext.h"
 #include "debug/SkiaCapture.h"
@@ -107,6 +108,8 @@ protected:
     SkiaGpuContext* getActiveContext();
 
     bool isProtected() const { return mInProtectedContext; }
+
+    void rdocCaptureNextFrame() override { mRenderDocCaptureNextFrame = true; }
 
     // Implements PersistentCache as a way to monitor what SkSL shaders Skia has
     // cached.
@@ -223,6 +226,9 @@ private:
 
     bool mInitializedDiskCache = false;
     SkSLCacheMonitor mSkSLCacheMonitor;
+
+    std::atomic<bool> mRenderDocCaptureNextFrame;
+    RenderDocUtils mRenderDoc;
 };
 
 } // namespace skia

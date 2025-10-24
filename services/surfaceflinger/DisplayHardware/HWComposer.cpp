@@ -312,6 +312,21 @@ DisplayConfiguration::Dpi HWComposer::getEstimatedDotsPerInchFromSize(
     return {-1, -1};
 }
 
+ui::DisplayConnectionType HWComposer::getHwcDisplayConnectionType(uint64_t hwcDisplayId) const {
+    using ConnectionType = Hwc2::IComposerClient::DisplayConnectionType;
+    ConnectionType connectionType;
+
+    if (const auto error = static_cast<hal::Error>(
+                mComposer->getDisplayConnectionType(hwcDisplayId, &connectionType));
+        error != hal::Error::NONE) {
+        LOG_HWC_DISPLAY_ERROR(hwcDisplayId, "Cannot get display connection type.");
+        return ui::DisplayConnectionType::Internal;
+    }
+
+    return connectionType == ConnectionType::INTERNAL ? ui::DisplayConnectionType::Internal
+                                                      : ui::DisplayConnectionType::External;
+}
+
 DisplayConfiguration::Dpi HWComposer::correctedDpiIfneeded(
         DisplayConfiguration::Dpi dpi, DisplayConfiguration::Dpi estimatedDpi) const {
     // hwc can be unreliable when it comes to dpi. A rough estimated dpi may yield better
@@ -510,13 +525,11 @@ status_t HWComposer::setClientTarget(HalDisplayId displayId, uint32_t slot,
                                      ui::Dataspace dataspace, float hdrSdrRatio) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     auto& displayData = mDisplayData[displayId];
     if (displayData.validateWasSkipped) {
         return NO_ERROR;
     }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ALOGV("%s for display %s", __FUNCTION__, to_string(displayId).c_str());
     auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
     auto error = hwcDisplay->setClientTarget(slot, target, acquireFence, dataspace, hdrSdrRatio);
@@ -551,32 +564,24 @@ status_t HWComposer::getDeviceCompositionChanges(
     // client target buffer.
     const bool canSkipValidate = [&] {
         // We must call validate if we have client composition
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         //        if (frameUsesClientComposition) {
         //            return false;
         //        }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         // If composer supports getting the expected present time, we can skip
         // as composer will make sure to prevent early presentation
-// QTI_BEGIN: 2023-06-09: Display: sf: Always select canskipvaliate as true
         //if (!earliestPresentTime) {
         //    return true;
         // }
-// QTI_END: 2023-06-09: Display: sf: Always select canskipvaliate as true
 
         // composer doesn't support getting the expected present time. We can only
         // skip validate if we know that we are not going to present early.
-// QTI_BEGIN: 2023-06-09: Display: sf: Always select canskipvaliate as true
         //return std::chrono::steady_clock::now() >= *earliestPresentTime;
         return true;
-// QTI_END: 2023-06-09: Display: sf: Always select canskipvaliate as true
     }();
 
     displayData.validateWasSkipped = false;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     bool acceptChanges = true;
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     SFTRACE_FORMAT("NextFrameInterval %d_Hz", frameInterval.getIntValue());
     if (canSkipValidate) {
@@ -587,32 +592,26 @@ status_t HWComposer::getDeviceCompositionChanges(
         if (!hasChangesError(error)) {
             RETURN_IF_HWC_ERROR_FOR("presentOrValidate", error, displayId, UNKNOWN_ERROR);
         }
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         // state = 0 --> Only Validate.
         // state = 1 --> Validate and commit succeeded. Skip validate case. No comp changes.
         // state = 2 --> Validate and commit succeeded. Query Comp changes.
         if (state == 1 || state == 2) { // Present Succeeded.
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             std::unordered_map<HWC2::Layer*, sp<Fence>> releaseFences;
             error = hwcDisplay->getReleaseFences(&releaseFences);
             displayData.releaseFences = std::move(releaseFences);
             displayData.lastPresentFence = outPresentFence;
             displayData.validateWasSkipped = true;
             displayData.presentError = error;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             ALOGV("Retrieving fences");
             //            return NO_ERROR;
         }
 
         if (state == 1) {
             ALOGV("skip validate case present succeeded");
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             return NO_ERROR;
         }
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         acceptChanges = (state != 2);
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         // Present failed but Validate ran.
     } else {
         error = hwcDisplay->validate(expectedPresentTime, frameInterval.getPeriodNsecs(), &numTypes,
@@ -646,12 +645,10 @@ status_t HWComposer::getDeviceCompositionChanges(
                                                std::move(layerRequests),
                                                std::move(clientTargetProperty),
                                                std::move(layerLuts)});
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (acceptChanges) {
         error = hwcDisplay->acceptChanges();
         RETURN_IF_HWC_ERROR_FOR("acceptChanges", error, displayId, BAD_INDEX);
     }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     return NO_ERROR;
 }
@@ -688,9 +685,7 @@ status_t HWComposer::presentAndGetReleaseFences(
     auto& hwcDisplay = displayData.hwcDisplay;
 
     if (displayData.validateWasSkipped) {
-// QTI_BEGIN: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
         displayData.validateWasSkipped = false;
-// QTI_END: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
         // explicitly flush all pending commands
         auto error = static_cast<hal::Error>(mComposer->executeCommands(hwcDisplay->getId()));
         RETURN_IF_HWC_ERROR_FOR("executeCommands", error, displayId, UNKNOWN_ERROR);
@@ -1222,7 +1217,7 @@ std::optional<hal::HWDisplayId> HWComposer::fromPhysicalDisplayId(
 
 bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId, uint8_t port,
                                             bool hasDisplayIdentificationData) const {
-    if (mActivePorts.contains(port)) {
+    if (mHasMultiDisplaySupport && mActivePorts.contains(port)) {
         ALOGE("Ignoring connection of display %" PRIu64 ". Port %" PRIu8
               " is already in active use.",
               hwcDisplayId, port);
@@ -1246,6 +1241,9 @@ bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId, uint8
 
 std::optional<display::DisplayIdentificationInfo> HWComposer::onHotplugConnect(
         hal::HWDisplayId hwcDisplayId) {
+    const bool useStableEdidIds =
+            getHwcDisplayConnectionType(hwcDisplayId) == ui::DisplayConnectionType::External &&
+            FlagManager::getInstance().stable_edid_ids();
     std::optional<display::DisplayIdentificationInfo> info;
     if (const auto displayId = toPhysicalDisplayId(hwcDisplayId)) {
         info = display::DisplayIdentificationInfo{.id = *displayId,
@@ -1258,8 +1256,8 @@ std::optional<display::DisplayIdentificationInfo> HWComposer::onHotplugConnect(
             display::DisplayIdentificationData data;
             android::ScreenPartStatus screenPartStatus;
             getDisplayIdentificationData(hwcDisplayId, &port, &data, &screenPartStatus);
-            if (auto newInfo =
-                        display::parseDisplayIdentificationData(port, data, screenPartStatus)) {
+            if (auto newInfo = display::parseDisplayIdentificationData(port, data, screenPartStatus,
+                                                                       useStableEdidIds)) {
                 info->deviceProductInfo = std::move(newInfo->deviceProductInfo);
                 info->preferredDetailedTimingDescriptor =
                         std::move(newInfo->preferredDetailedTimingDescriptor);
@@ -1283,11 +1281,13 @@ std::optional<display::DisplayIdentificationInfo> HWComposer::onHotplugConnect(
             return {};
         }
 
-        info = [this, hwcDisplayId, &port, &data, &screenPartStatus, hasDisplayIdentificationData] {
+        info = [this, hwcDisplayId, useStableEdidIds, &port, &data, &screenPartStatus,
+                hasDisplayIdentificationData] {
             const bool isPrimary = !mPrimaryHwcDisplayId;
             if (mHasMultiDisplaySupport) {
                 if (auto info =
-                            display::parseDisplayIdentificationData(port, data, screenPartStatus)) {
+                            display::parseDisplayIdentificationData(port, data, screenPartStatus,
+                                                                    useStableEdidIds)) {
                     if (FlagManager::getInstance().stable_edid_ids() &&
                         hasDisplayWithId(info->id)) {
                         info->id = display::resolveDisplayIdCollision(info->id, info->port);

@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "TestConstants.h"
+#include "input/Input.h"
 #include "ui/Rotation.h"
 
 namespace android {
@@ -76,7 +77,7 @@ void FakeInputReaderPolicy::assertInputDevicesNotChanged() {
             INPUT_DEVICES_DIDNT_CHANGE_TIMEOUT);
 }
 
-void FakeInputReaderPolicy::assertStylusGestureNotified(int32_t deviceId) {
+void FakeInputReaderPolicy::assertStylusGestureNotified(DeviceId deviceId) {
     std::unique_lock lock(mLock);
     base::ScopedLockAssertion assumeLocked(mLock);
 
@@ -173,6 +174,12 @@ void FakeInputReaderPolicy::addInputUniqueIdAssociation(const std::string& input
     mConfig.inputPortToDisplayUniqueIdAssociations.insert({inputUniqueId, displayUniqueId});
 }
 
+void FakeInputReaderPolicy::addDeviceDescriptorToDisplayUniqueIdAssociation(
+        const std::string& inputDeviceDescriptor, const std::string& displayUniqueId) {
+    mConfig.inputDeviceDescriptorToDisplayUniqueIdAssociations.insert(
+            {inputDeviceDescriptor, displayUniqueId});
+}
+
 void FakeInputReaderPolicy::addKeyboardLayoutAssociation(const std::string& inputPort,
                                                          const KeyboardLayoutInfo& layoutInfo) {
     mConfig.keyboardLayoutAssociations.insert({inputPort, layoutInfo});
@@ -186,11 +193,11 @@ void FakeInputReaderPolicy::removeVirtualDevice(const std::string& inputPort) {
     mConfig.virtualDevicePorts.erase(inputPort);
 }
 
-void FakeInputReaderPolicy::addDisabledDevice(int32_t deviceId) {
+void FakeInputReaderPolicy::addDisabledDevice(DeviceId deviceId) {
     mConfig.disabledDevices.insert(deviceId);
 }
 
-void FakeInputReaderPolicy::removeDisabledDevice(int32_t deviceId) {
+void FakeInputReaderPolicy::removeDisabledDevice(DeviceId deviceId) {
     mConfig.disabledDevices.erase(deviceId);
 }
 
@@ -298,7 +305,7 @@ void FakeInputReaderPolicy::waitForInputDevices(std::function<void(bool)> proces
     mInputDevicesChanged = false;
 }
 
-void FakeInputReaderPolicy::notifyStylusGestureStarted(int32_t deviceId, nsecs_t eventTime) {
+void FakeInputReaderPolicy::notifyStylusGestureStarted(DeviceId deviceId, nsecs_t eventTime) {
     std::scoped_lock lock(mLock);
     mDeviceIdOfNotifiedStylusGesture = deviceId;
     mStylusGestureNotifiedCondition.notify_all();

@@ -17,8 +17,9 @@
 #pragma once
 
 #include <include/core/SkSurface.h>
-#include <include/gpu/ganesh/GrDirectContext.h>
+#include <include/effects/SkRuntimeEffect.h>
 #include <include/gpu/ganesh/GrContextOptions.h>
+#include <include/gpu/ganesh/GrDirectContext.h>
 #include <include/gpu/ganesh/gl/GrGLInterface.h>
 #include <include/gpu/graphite/Context.h>
 #include <include/gpu/vk/VulkanBackendContext.h>
@@ -60,7 +61,8 @@ public:
      * vulkanBackendContext must remain valid until after SkiaGpuContext is destroyed.
      */
     static std::unique_ptr<SkiaGpuContext> MakeVulkan_Graphite(
-            const skgpu::VulkanBackendContext& vulkanBackendContext);
+            const skgpu::VulkanBackendContext& vulkanBackendContext,
+            SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects);
 
     virtual ~SkiaGpuContext() = default;
 

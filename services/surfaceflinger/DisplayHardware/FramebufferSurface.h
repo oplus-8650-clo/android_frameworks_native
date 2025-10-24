@@ -35,13 +35,11 @@ class Rect;
 class String8;
 class HWComposer;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace surfaceflingerextension {
 class QtiDisplaySurfaceExtensionIntf;
 class QtiFramebufferSurfaceExtension;
 } // namespace surfaceflingerextension
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 // ---------------------------------------------------------------------------
 
 class FramebufferSurface : public ConsumerBase, public compositionengine::DisplaySurface {
@@ -57,24 +55,16 @@ public:
     virtual const sp<Fence>& getClientTargetAcquireFence() const override;
 
     void onFirstRef() override;
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     virtual surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() {
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         return mQtiDSExtnIntf;
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     }
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 
 private:
     friend class FramebufferSurfaceTest;
     friend class sp<FramebufferSurface>;
 
-    FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displayId,
-                       const sp<IGraphicBufferProducer>& producer,
-                       const sp<IGraphicBufferConsumer>& consumer, const ui::Size& size,
+    FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displayId, const ui::Size& size,
                        const ui::Size& maxSize);
 
     void initializeConsumer();
@@ -129,11 +119,9 @@ private:
     bool mHasPendingRelease;
     int mPreviousBufferSlot;
     sp<GraphicBuffer> mPreviousBuffer;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     friend class android::surfaceflingerextension::QtiFramebufferSurfaceExtension;
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr;
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 };
 
 // ---------------------------------------------------------------------------

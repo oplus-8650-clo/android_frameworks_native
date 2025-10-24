@@ -23,11 +23,14 @@
 #include <android-base/stringprintf.h>
 #include <common/trace.h>
 #include <ftl/concat.h>
+#include <ftl/enum.h>
 #include <log/log.h>
 #include <math/mat4.h>
 #include <shaders/shaders.h>
 #include <ui/DebugUtils.h>
 #include <mutex>
+
+#include "skia/ColorSpaces.h"
 
 namespace android {
 namespace renderengine {
@@ -135,6 +138,9 @@ void RuntimeEffectManager::createAndStoreKnownEffects() {
 }
 
 void RuntimeEffectManager::dump(std::string& result) {
+    StringAppendF(&result, "RenderEngine chosen blur algorithm: %s\n",
+                  ftl::enum_string(getChosenBlurAlgorithm()).c_str());
+
     // LinearEffects are ordered (by hash value) when dumped to reduce churn when iterating on the
     // set of precompiled effects.
     std::vector<shaders::LinearEffect> orderedLinearEffects;
@@ -213,7 +219,27 @@ sk_sp<SkShader> RuntimeEffectManager::createLinearEffectShader(
         effectBuilder.uniform(uniform.name.c_str()).set(uniform.value.data(), uniform.value.size());
     }
 
-    return effectBuilder.makeShader();
+    shader = effectBuilder.makeShader();
+    if (shader) {
+        // The linear effect SkSL assumes it operates in with a linear gamma in the source gamut.
+        // Wrapping it in a working color space shader satisfies this requirement and will
+        // automatically convert the linear effect's output (in the linear source space) to
+        // linearEffect.outputDataspace (which is assumed to be the dst CS of the SkSurface this
+        // shader will be drawn into).
+        //
+        // The only exception is when there is a custom OETF, in which case the working color space
+        // should be the final output data space, since the linear effect will manage converting to
+        // the output gamut and apply the custom OETF. Using the final output space disables Skia's
+        // color management post OETF.
+        sk_sp<SkColorSpace> inputSpace =
+                toSkColorSpace(linearEffect.inputDataspace)->makeLinearGamma();
+        sk_sp<SkColorSpace> outputSpace = nullptr;
+        if ((linearEffect.fakeOutputDataspace & HAL_DATASPACE_TRANSFER_MASK)) {
+            outputSpace = toSkColorSpace(linearEffect.fakeOutputDataspace);
+        }
+        shader = shader->makeWithWorkingColorSpace(inputSpace, outputSpace);
+    }
+    return shader;
 }
 
 } // namespace skia

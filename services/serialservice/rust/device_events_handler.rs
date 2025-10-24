@@ -94,6 +94,9 @@ impl DeviceEventsHandler {
             EventType::Remove => {
                 self.callback.on_device_removed(name);
             }
+            EventType::Change => {
+                // We don't care about change events for now.
+            }
         }
     }
 }

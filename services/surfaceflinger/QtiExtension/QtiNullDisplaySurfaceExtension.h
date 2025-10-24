@@ -4,6 +4,7 @@
 #pragma once
 
 #include "QtiDisplaySurfaceExtensionIntf.h"
+#include "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.h"
 
 namespace android {
 
@@ -12,7 +13,7 @@ namespace surfaceflingerextension {
 class QtiNullDisplaySurfaceExtension : public QtiDisplaySurfaceExtensionIntf {
 public:
     QtiNullDisplaySurfaceExtension() {}
-    QtiNullDisplaySurfaceExtension(VirtualDisplaySurface* vds, bool secure, uint64_t sinkUsage);
+    QtiNullDisplaySurfaceExtension(LegacyVirtualDisplaySurface* vds, bool secure, uint64_t sinkUsage);
     ~QtiNullDisplaySurfaceExtension() = default;
 
     int getClientTargetCurrentSlot() override;
@@ -24,7 +25,7 @@ public:
     uint64_t qtiExcludeVideoFromScratchBuffer(std::string source, uint64_t usage) override;
 
 private:
-    VirtualDisplaySurface* mQtiVDS = nullptr;
+    LegacyVirtualDisplaySurface* mQtiVDS = nullptr;
 
     bool mQtiSecure = false;
     uint64_t mQtiSinkUsage = 0;

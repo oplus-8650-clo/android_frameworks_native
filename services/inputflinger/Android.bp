@@ -34,6 +34,7 @@ cc_defaults {
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         "-Wall",
         "-Werror",
+        "-Werror=reorder-init-list",
         "-Wextra",
         "-Wno-unused-parameter",
         "-Wshadow",
@@ -188,9 +189,6 @@ cc_library_shared {
     ],
     export_header_lib_headers: [
         "libinputflinger_headers",
-    ],
-    export_shared_lib_headers: [
-        "packagemanager_aidl-cpp",
     ],
     sdclang: false,
 }

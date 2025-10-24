@@ -124,13 +124,9 @@ private:
     void dispatchModeChangedWithFrameRateOverrides(
             nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId, nsecs_t vsyncPeriod,
             nsecs_t appVsyncOffset, nsecs_t presentationDeadline,
-            std::vector<FrameRateOverride> overrides) override;
-    void dispatchModeChanged(nsecs_t timestamp, PhysicalDisplayId displayId, int32_t modeId,
-                             nsecs_t vsyncPeriod, nsecs_t appVsyncOffset,
-                             nsecs_t presentationDeadline) override;
+            std::vector<FrameRateOverride> overrides,
+            std::vector<SupportedRefreshRate> supportedRefreshRates) override;
     void dispatchNullEvent(nsecs_t, PhysicalDisplayId) override;
-    void dispatchFrameRateOverrides(nsecs_t timestamp, PhysicalDisplayId displayId,
-                                    std::vector<FrameRateOverride> overrides) override;
     void dispatchHdcpLevelsChanged(PhysicalDisplayId displayId, int32_t connectedLevel,
                                    int32_t maxLevel) override;
     void dispatchModeRejected(PhysicalDisplayId displayId, int32_t modeId) override;

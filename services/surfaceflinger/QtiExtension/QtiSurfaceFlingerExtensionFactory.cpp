@@ -4,6 +4,7 @@
 
 #include "QtiSurfaceFlingerExtensionFactory.h"
 #include <android-base/properties.h>
+#include "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.h"
 
 #ifdef QTI_DISPLAY_EXTENSION
 #include "QtiVirtualDisplaySurfaceExtension.h"
@@ -29,7 +30,7 @@ QtiSurfaceFlingerExtensionIntf* qtiCreateSurfaceFlingerExtension(SurfaceFlinger*
 }
 
 QtiDisplaySurfaceExtensionIntf* qtiCreateDisplaySurfaceExtension(bool isVirtual,
-                                                                 VirtualDisplaySurface* vds,
+                                                                 LegacyVirtualDisplaySurface* vds,
                                                                  bool secure, uint64_t sinkUsage,
                                                                  FramebufferSurface* fbs) {
 #ifdef QTI_DISPLAY_EXTENSION

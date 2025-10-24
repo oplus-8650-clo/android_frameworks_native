@@ -20,7 +20,7 @@ import android.os.IDumpstateListener;
 
 /**
  * Binder interface for the currently running dumpstate process.
- * {@hide}
+ * @hide
  */
 interface IDumpstate {
 

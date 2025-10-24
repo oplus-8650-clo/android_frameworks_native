@@ -284,6 +284,7 @@ public:
 
     // See mActiveModeOpt for thread safety.
     FrameRateMode getActiveMode() const EXCLUDES(mLock);
+    bool hasActiveMode() const EXCLUDES(mLock);
 
     // Returns a known frame rate that is the closest to frameRate
     Fps findClosestKnownFrameRate(Fps frameRate) const;
@@ -384,11 +385,6 @@ public:
         mIdleTimerCallbacks = std::move(callbacks);
     }
 
-    void clearIdleTimerCallbacks() EXCLUDES(mIdleTimerCallbacksMutex) {
-        std::scoped_lock lock(mIdleTimerCallbacksMutex);
-        mIdleTimerCallbacks.reset();
-    }
-
     void startIdleTimer() {
         mIdleTimerStarted = true;
         if (mIdleTimer) {
@@ -396,11 +392,14 @@ public:
         }
     }
 
-    void stopIdleTimer() {
+    void stopIdleTimer() EXCLUDES(mIdleTimerCallbacksMutex) {
         mIdleTimerStarted = false;
         if (mIdleTimer) {
             mIdleTimer->stop();
         }
+
+        std::scoped_lock lock(mIdleTimerCallbacksMutex);
+        mIdleTimerCallbacks.reset();
     }
 
     void resetKernelIdleTimer() {
@@ -419,7 +418,7 @@ public:
 
     std::chrono::milliseconds getIdleTimerTimeout();
 
-    bool isVrrDevice() const;
+    bool isVrrDisplay() const;
 
     std::pair<Fps, Fps> getFrameRateCategoryRates() const { return kFrameRateCategoryRates; }
 
@@ -501,13 +500,13 @@ private:
     void updateDisplayModes(DisplayModes, DisplayModeId activeModeId) EXCLUDES(mLock)
             REQUIRES(kMainThreadContext);
 
-    void initializeIdleTimer(std::chrono::milliseconds timeout);
+    void createIdleTimer(std::chrono::milliseconds timeout);
 
     std::optional<IdleTimerCallbacks::Callbacks> getIdleTimerCallbacks() const
             REQUIRES(mIdleTimerCallbacksMutex) {
         if (!mIdleTimerCallbacks) return {};
 
-        if (mIsVrrDevice) return mIdleTimerCallbacks->vrr;
+        if (mIsVrrDisplay) return mIdleTimerCallbacks->vrr;
 
         return mConfig.kernelIdleTimerController.has_value() ? mIdleTimerCallbacks->kernel
                                                              : mIdleTimerCallbacks->platform;
@@ -516,6 +515,11 @@ private:
     std::vector<FrameRateMode> createFrameRateModes(
             const Policy&, std::function<bool(const DisplayMode&)>&& filterModes,
             const FpsRange&) const REQUIRES(mLock);
+
+    using PreferredFpsForMode = ftl::SmallMap<DisplayModeId, Fps, 8>;
+    PreferredFpsForMode getPreferredFpsForMode(std::optional<int> anchorGroupOpt,
+                                               RefreshRateOrder) const REQUIRES(mLock);
+    PreferredFpsForMode getMaxFpsForMode(std::optional<int> anchorGroupOpt) const REQUIRES(mLock);
 
     // The display modes of the active display. The DisplayModeIterators below are pointers into
     // this container, so must be invalidated whenever the DisplayModes change. The Policy below
@@ -532,8 +536,8 @@ private:
     std::vector<FrameRateMode> mAppRequestFrameRates GUARDED_BY(mLock);
     std::vector<FrameRateMode> mAllFrameRates GUARDED_BY(mLock);
 
-    // Caches whether the device is VRR-compatible based on the active display mode.
-    std::atomic_bool mIsVrrDevice = false;
+    // Caches whether the display is VRR-compatible based on the active display mode.
+    std::atomic_bool mIsVrrDisplay = false;
 
     Policy mDisplayManagerPolicy GUARDED_BY(mLock);
     std::optional<Policy> mOverridePolicy GUARDED_BY(mLock);

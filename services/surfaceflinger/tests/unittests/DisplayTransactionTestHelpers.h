@@ -49,7 +49,6 @@
 #include "mock/DisplayHardware/MockComposer.h"
 #include "mock/DisplayHardware/MockDisplayMode.h"
 #include "mock/MockEventThread.h"
-#include "mock/MockNativeWindowSurface.h"
 #include "mock/PowerAdvisor/MockPowerAdvisor.h"
 #include "mock/system/window/MockNativeWindow.h"
 
@@ -87,8 +86,6 @@ public:
 
     void injectMockScheduler(PhysicalDisplayId);
     void injectMockComposer(int virtualDisplayCount);
-    void injectFakeBufferQueueFactory();
-    void injectFakeNativeWindowSurfaceFactory();
 
     sp<DisplayDevice> injectDefaultInternalDisplay(
             std::function<void(TestableSurfaceFlinger::FakeDisplayDeviceInjector&)> injectExtra) {
@@ -134,11 +131,6 @@ public:
 
     mock::EventThread* mEventThread = new mock::EventThread;
     mock::EventThread* mSFEventThread = new mock::EventThread;
-
-    // These mocks are created only when expected to be created via a factory.
-    sp<mock::GraphicBufferConsumer> mConsumer;
-    sp<mock::GraphicBufferProducer> mProducer;
-    surfaceflinger::mock::NativeWindowSurface* mNativeWindowSurface = nullptr;
 
 protected:
     DisplayTransactionTest(bool withMockScheduler = true);
@@ -190,10 +182,15 @@ struct DisplayIdGetter<PhysicalDisplayIdType<PhysicalDisplay>> {
                                                        ? LEGACY_DISPLAY_TYPE_PRIMARY
                                                        : LEGACY_DISPLAY_TYPE_EXTERNAL);
         }
+
+        const bool useStableEdidIds =
+                PhysicalDisplay::CONNECTION_TYPE == ui::DisplayConnectionType::External &&
+                FlagManager::getInstance().stable_edid_ids();
         const auto info =
                 display::parseDisplayIdentificationData(PhysicalDisplay::PORT,
                                                         PhysicalDisplay::GET_IDENTIFICATION_DATA(),
-                                                        android::ScreenPartStatus::UNSUPPORTED);
+                                                        android::ScreenPartStatus::UNSUPPORTED,
+                                                        useStableEdidIds);
         return info ? info->id : PhysicalDisplayId::fromPort(PhysicalDisplay::PORT);
     }
 };
@@ -317,40 +314,6 @@ struct DisplayVariant {
                 .WillRepeatedly(Return(0));
 
         return injector;
-    }
-
-    // Called by tests to set up any native window creation call expectations.
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        EXPECT_CALL(*test->mNativeWindowSurface, getNativeWindow())
-                .WillOnce(Return(test->mNativeWindow));
-
-        EXPECT_CALL(*test->mNativeWindow, query(NATIVE_WINDOW_WIDTH, _))
-                .WillRepeatedly(DoAll(SetArgPointee<1>(WIDTH), Return(0)));
-        EXPECT_CALL(*test->mNativeWindow, query(NATIVE_WINDOW_HEIGHT, _))
-                .WillRepeatedly(DoAll(SetArgPointee<1>(HEIGHT), Return(0)));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_SET_BUFFERS_FORMAT))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_API_CONNECT))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_SET_USAGE64))
-                .WillRepeatedly(Return(0));
-        EXPECT_CALL(*test->mNativeWindow, perform(NATIVE_WINDOW_API_DISCONNECT))
-                .WillRepeatedly(Return(0));
-    }
-
-    static void setupFramebufferConsumerBufferQueueCallExpectations(DisplayTransactionTest* test) {
-        EXPECT_CALL(*test->mConsumer, consumerConnect(_, false)).WillOnce(Return(NO_ERROR));
-        EXPECT_CALL(*test->mConsumer, setConsumerName(_)).WillRepeatedly(Return(NO_ERROR));
-        EXPECT_CALL(*test->mConsumer, setConsumerUsageBits(GRALLOC_USAGE))
-                .WillRepeatedly(Return(NO_ERROR));
-        EXPECT_CALL(*test->mConsumer, setDefaultBufferSize(WIDTH, HEIGHT))
-                .WillRepeatedly(Return(NO_ERROR));
-        EXPECT_CALL(*test->mConsumer, setMaxAcquiredBufferCount(_))
-                .WillRepeatedly(Return(NO_ERROR));
-    }
-
-    static void setupFramebufferProducerBufferQueueCallExpectations(DisplayTransactionTest* test) {
-        EXPECT_CALL(*test->mProducer, allocateBuffers(0, 0, 0, 0)).WillRepeatedly(Return());
     }
 };
 
@@ -547,8 +510,7 @@ struct SecondaryDisplay {
     static constexpr HWDisplayId HWC_DISPLAY_ID = hwDisplayId;
     static constexpr HasIdentificationData HAS_IDENTIFICATION_DATA = hasIdentificationData;
     static constexpr auto GET_IDENTIFICATION_DATA =
-            connectionType == ui::DisplayConnectionType::Internal ? getInternalEdid
-                                                                  : getExternalEdid;
+            connectionType == ui::DisplayConnectionType::Internal ? getOuterEdid : getExternalEdid;
 };
 
 template <Secure secure>
@@ -634,11 +596,6 @@ struct NonHwcVirtualDisplayVariant
     static void setupHwcGetActiveConfigCallExpectations(DisplayTransactionTest* test) {
         EXPECT_CALL(*test->mComposer, getActiveConfig(_, _)).Times(0);
     }
-
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        Base::setupNativeWindowSurfaceCreationCallExpectations(test);
-        EXPECT_CALL(*test->mNativeWindow, setSwapInterval(0)).Times(1);
-    }
 };
 
 // A virtual display supported by the HWC.
@@ -683,11 +640,6 @@ struct HwcVirtualDisplayVariant
         test->mFlinger.mutableHwcDisplayData().try_emplace(*displayId);
 
         return compositionDisplay;
-    }
-
-    static void setupNativeWindowSurfaceCreationCallExpectations(DisplayTransactionTest* test) {
-        Base::setupNativeWindowSurfaceCreationCallExpectations(test);
-        EXPECT_CALL(*test->mNativeWindow, setSwapInterval(0)).Times(1);
     }
 
     static void setupHwcVirtualDisplayCreationCallExpectations(DisplayTransactionTest* test) {

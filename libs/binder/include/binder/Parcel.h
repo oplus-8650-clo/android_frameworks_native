@@ -1073,8 +1073,8 @@ private:
         using T = first_template_type_t<CT>;  // The T in CT == C<T, ...>
         if (c.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max())) return BAD_VALUE;
         const auto size = static_cast<int32_t>(c.size());
-        writeData(size);
         if constexpr (is_pointer_equivalent_array_v<T>) {
+            writeData(size);
             constexpr size_t limit = std::numeric_limits<size_t>::max() / sizeof(T);
             if (c.size() > limit) return BAD_VALUE;
             // is_pointer_equivalent types do not have gaps which could leak info,
@@ -1085,13 +1085,34 @@ private:
             return write(c.data(), c.size() * sizeof(T));
         } else if constexpr (std::is_same_v<T, bool>
                 || std::is_same_v<T, char16_t>) {
+            writeData(size);
             // reserve data space to write to
             auto data = reinterpret_cast<int32_t*>(writeInplace(c.size() * sizeof(int32_t)));
             if (data == nullptr) return BAD_VALUE;
             for (const auto t: c) {
                 *data++ = static_cast<int32_t>(t);
             }
+        } else if constexpr (std::is_same_v<T, std::string>) {
+            size_t totalSize = 4; // 4 bytes for the size of the vector
+            for (const auto& t : c) {
+                // String.length() * 2 because each char is at least one
+                // UTF-16 code point (2 bytes)
+                // + 2 for null char
+                // The string + null is padded for 4 byte alignment
+                // + 4 byte int32 for len
+                totalSize += ((t.size() * 2u + 2u + 3u) & ~3u) + 4u;
+            }
+            totalSize += mDataPos;
+            if (dataCapacity() < totalSize) {
+                setDataCapacity(totalSize / 2u * 3u);
+            }
+            writeData(size);
+            for (const auto& t : c) {
+                const status_t status = writeData(t);
+                if (status != OK) return status;
+            }
         } else /* constexpr */ {
+            writeData(size);
             for (const auto &t : c) {
                 const status_t status = writeData(t);
                 if (status != OK) return status;

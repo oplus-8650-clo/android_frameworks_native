@@ -155,15 +155,15 @@ sk_sp<SkImage> MouriMap::downchunk(SkiaGpuContext* context, sk_sp<SkShader> inpu
     // not need to be so precise. So, it's possible that we could use A8 or R8 instead. If we want
     // to be really conservative we can try to use R16 or even RGBA1010102 to fake an R10 surface,
     // which would cut write bandwidth significantly.
-    // TODO(b/426601394): Linear sRGB is used currently to preserve behavior of the original
-    // implementation calling to/fromLinearSrgb. In follow up work, it should be adjusted to be
-    // image->imageInfo().colorSpace()->makeLinearGamma().
+
+    sk_sp<SkColorSpace> linearCS = image->imageInfo().colorSpace()->makeLinearGamma();
+
     static constexpr auto kFirstDownscaleAmount = 16;
     sk_sp<SkSurface> firstDownsampledSurface = context->createRenderTarget(
             image->imageInfo()
                     .makeWH(std::max(1, image->width() / kFirstDownscaleAmount),
                             std::max(1, image->height() / kFirstDownscaleAmount))
-                    .makeColorSpace(SkColorSpace::MakeSRGBLinear())
+                    .makeColorSpace(linearCS)
                     .makeColorType(kRGBA_F16_SkColorType));
     LOG_ALWAYS_FATAL_IF(!firstDownsampledSurface, "%s: Failed to create surface!", __func__);
     auto firstDownsampledImage =

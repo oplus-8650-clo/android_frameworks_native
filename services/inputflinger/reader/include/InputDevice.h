@@ -18,6 +18,7 @@
 
 #include <ftl/flags.h>
 #include <input/DisplayViewport.h>
+#include <input/Input.h>
 #include <input/InputDevice.h>
 #include <input/PropertyMap.h>
 
@@ -49,12 +50,12 @@ class InputMapper;
 /* Represents the state of a single input device. */
 class InputDevice {
 public:
-    InputDevice(InputReaderContext* context, int32_t id, int32_t generation,
+    InputDevice(InputReaderContext* context, DeviceId id, int32_t generation,
                 const InputDeviceIdentifier& identifier);
     virtual ~InputDevice();
 
     inline InputReaderContext* getContext() { return mContext; }
-    inline int32_t getId() const { return mId; }
+    inline DeviceId getId() const { return mId; }
     inline int32_t getControllerNumber() const { return mControllerNumber; }
     inline virtual int32_t getGeneration() const { return mGeneration; }
     inline const std::string getName() const { return mIdentifier.name; }
@@ -95,10 +96,10 @@ public:
     bool isEnabled();
 
     void dump(std::string& dump, const std::string& eventHubDevStr);
-    void addEmptyEventHubDevice(int32_t eventHubId);
+    void addEmptyEventHubDevice(RawDeviceId eventHubId);
     [[nodiscard]] std::list<NotifyArgs> addEventHubDevice(
-            nsecs_t when, int32_t eventHubId, const InputReaderConfiguration& readerConfig);
-    void removeEventHubDevice(int32_t eventHubId);
+            nsecs_t when, RawDeviceId eventHubId, const InputReaderConfiguration& readerConfig);
+    void removeEventHubDevice(RawDeviceId eventHubId);
     [[nodiscard]] std::list<NotifyArgs> configure(nsecs_t when,
                                                   const InputReaderConfiguration& readerConfig,
                                                   ConfigurationChanges changes);
@@ -154,7 +155,7 @@ public:
 
     // construct and add a mapper to the input device
     template <class T, typename... Args>
-    T& addMapper(int32_t eventHubId, Args... args) {
+    T& addMapper(RawDeviceId eventHubId, Args... args) {
         // ensure a device entry exists for this eventHubId
         addEmptyEventHubDevice(eventHubId);
 
@@ -168,7 +169,7 @@ public:
     }
 
     template <class T, typename... Args>
-    T& constructAndAddMapper(int32_t eventHubId, Args... args) {
+    T& constructAndAddMapper(RawDeviceId eventHubId, Args... args) {
         // create mapper
         auto& devicePair = mDevices[eventHubId];
         auto& deviceContext = devicePair.first;
@@ -179,7 +180,7 @@ public:
 
     // construct and add a controller to the input device
     template <class T>
-    T& addController(int32_t eventHubId) {
+    T& addController(RawDeviceId eventHubId) {
         // ensure a device entry exists for this eventHubId
         addEmptyEventHubDevice(eventHubId);
 
@@ -193,7 +194,7 @@ public:
 
 private:
     InputReaderContext* mContext;
-    int32_t mId;
+    DeviceId mId;
     int32_t mGeneration;
     int32_t mControllerNumber;
     InputDeviceIdentifier mIdentifier;
@@ -204,7 +205,7 @@ private:
     using MapperVector = std::vector<std::unique_ptr<InputMapper>>;
     using DevicePair = std::pair<std::unique_ptr<InputDeviceContext>, MapperVector>;
     // Map from EventHub ID to pair of device context and vector of mapper.
-    std::unordered_map<int32_t, DevicePair> mDevices;
+    std::unordered_map<RawDeviceId, DevicePair> mDevices;
     // Misc devices controller for lights, battery, etc.
     std::unique_ptr<PeripheralControllerInterface> mController;
 
@@ -255,7 +256,7 @@ private:
     }
 
     // run a function against every mapper on a specific subdevice
-    inline void for_each_mapper_in_subdevice(int32_t eventHubDevice,
+    inline void for_each_mapper_in_subdevice(RawDeviceId eventHubDevice,
                                              std::function<void(InputMapper&)> f) {
         auto deviceIt = mDevices.find(eventHubDevice);
         if (deviceIt != mDevices.end()) {
@@ -302,12 +303,12 @@ private:
  */
 class InputDeviceContext {
 public:
-    InputDeviceContext(InputDevice& device, int32_t eventHubId);
+    InputDeviceContext(InputDevice& device, RawDeviceId eventHubId);
     virtual ~InputDeviceContext();
 
     inline InputReaderContext* getContext() { return mContext; }
-    inline int32_t getId() { return mDeviceId; }
-    inline int32_t getEventHubId() { return mId; }
+    inline DeviceId getId() { return mDeviceId; }
+    inline RawDeviceId getEventHubId() { return mId; }
 
     inline ftl::Flags<InputDeviceClass> getDeviceClasses() const {
         return mEventHub->getDeviceClasses(mId);
@@ -496,8 +497,8 @@ private:
     InputDevice& mDevice;
     InputReaderContext* mContext;
     EventHubInterface* mEventHub;
-    int32_t mId;
-    int32_t mDeviceId;
+    RawDeviceId mId;
+    DeviceId mDeviceId;
 };
 
 } // namespace android

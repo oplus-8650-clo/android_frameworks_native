@@ -25,6 +25,7 @@
 #include <InputReaderBase.h>
 #include <MapperHelpers.h>
 #include <TouchpadInputMapper.h>
+#include <input/Input.h>
 
 namespace android {
 
@@ -48,7 +49,7 @@ void maybeSetAxisInfo(ThreadSafeFuzzedDataProvider& fdp, FuzzEventHub& eventHub,
     }
 }
 
-void setAxisInfos(ThreadSafeFuzzedDataProvider& fdp, FuzzEventHub& eventHub, int32_t id) {
+void setAxisInfos(ThreadSafeFuzzedDataProvider& fdp, FuzzEventHub& eventHub, DeviceId id) {
     maybeSetAxisInfo(fdp, eventHub, id, ABS_MT_SLOT);
     setAxisInfo(fdp, eventHub, id, ABS_MT_POSITION_X);
     setAxisInfo(fdp, eventHub, id, ABS_MT_POSITION_Y);

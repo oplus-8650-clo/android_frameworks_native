@@ -16,7 +16,7 @@
 
 #include "../Macros.h"
 
-#include "gestures/GestureConverter.h"
+#include "gestures/UncapturedGestureConverter.h"
 
 #include <ios>
 #include <optional>
@@ -78,8 +78,9 @@ bool isGestureNoFocusChange(MotionClassification classification) {
 
 } // namespace
 
-GestureConverter::GestureConverter(InputReaderContext& readerContext,
-                                   const InputDeviceContext& deviceContext, int32_t deviceId)
+UncapturedGestureConverter::UncapturedGestureConverter(InputReaderContext& readerContext,
+                                                       const InputDeviceContext& deviceContext,
+                                                       DeviceId deviceId)
       : mDeviceId(deviceId),
         mReaderContext(readerContext),
         // We can safely assume that ABS_MT_POSITION_X and _Y axes will be available, as EventHub
@@ -87,7 +88,7 @@ GestureConverter::GestureConverter(InputReaderContext& readerContext,
         mXAxisInfo(deviceContext.getAbsoluteAxisInfo(ABS_MT_POSITION_X).value()),
         mYAxisInfo(deviceContext.getAbsoluteAxisInfo(ABS_MT_POSITION_Y).value()) {}
 
-std::string GestureConverter::dump() const {
+std::string UncapturedGestureConverter::dump() const {
     std::stringstream out;
     out << "Orientation: " << ftl::enum_string(mOrientation) << "\n";
     out << "Axis info:\n";
@@ -103,7 +104,7 @@ std::string GestureConverter::dump() const {
     return out.str();
 }
 
-std::list<NotifyArgs> GestureConverter::reset(nsecs_t when) {
+std::list<NotifyArgs> UncapturedGestureConverter::reset(nsecs_t when) {
     std::list<NotifyArgs> out;
     switch (mCurrentClassification) {
         case MotionClassification::TWO_FINGER_SWIPE:
@@ -131,7 +132,8 @@ std::list<NotifyArgs> GestureConverter::reset(nsecs_t when) {
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::setEnableSystemGestures(nsecs_t when, bool enable) {
+std::list<NotifyArgs> UncapturedGestureConverter::setEnableSystemGestures(nsecs_t when,
+                                                                          bool enable) {
     std::list<NotifyArgs> out;
     if (!enable && mCurrentClassification == MotionClassification::MULTI_FINGER_SWIPE) {
         out += handleMultiFingerSwipeLift(when, when);
@@ -140,7 +142,7 @@ std::list<NotifyArgs> GestureConverter::setEnableSystemGestures(nsecs_t when, bo
     return out;
 }
 
-void GestureConverter::populateMotionRanges(InputDeviceInfo& info) const {
+void UncapturedGestureConverter::populateMotionRanges(InputDeviceInfo& info) const {
     info.addMotionRange(AMOTION_EVENT_AXIS_PRESSURE, SOURCE, 0.0f, 1.0f, 0, 0, 0);
 
     if (!mBoundsInLogicalDisplay.isEmpty()) {
@@ -162,9 +164,9 @@ void GestureConverter::populateMotionRanges(InputDeviceInfo& info) const {
     // would be orders of magnitude too high, so probably not very useful.)
 }
 
-std::list<NotifyArgs> GestureConverter::handleGesture(nsecs_t when, nsecs_t readTime,
-                                                      nsecs_t gestureStartTime,
-                                                      const Gesture& gesture) {
+std::list<NotifyArgs> UncapturedGestureConverter::handleGesture(nsecs_t when, nsecs_t readTime,
+                                                                nsecs_t gestureStartTime,
+                                                                const Gesture& gesture) {
     if (!mDisplayId) {
         // Ignore gestures when there is no target display configured.
         return {};
@@ -195,9 +197,9 @@ std::list<NotifyArgs> GestureConverter::handleGesture(nsecs_t when, nsecs_t read
     }
 }
 
-std::list<NotifyArgs> GestureConverter::handleMove(nsecs_t when, nsecs_t readTime,
-                                                   nsecs_t gestureStartTime,
-                                                   const Gesture& gesture) {
+std::list<NotifyArgs> UncapturedGestureConverter::handleMove(nsecs_t when, nsecs_t readTime,
+                                                             nsecs_t gestureStartTime,
+                                                             const Gesture& gesture) {
     float deltaX = gesture.details.move.dx;
     float deltaY = gesture.details.move.dy;
     if (ENABLE_TOUCHPAD_PALM_REJECTION_V2) {
@@ -245,8 +247,9 @@ std::list<NotifyArgs> GestureConverter::handleMove(nsecs_t when, nsecs_t readTim
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::handleButtonsChange(nsecs_t when, nsecs_t readTime,
-                                                            const Gesture& gesture) {
+std::list<NotifyArgs> UncapturedGestureConverter::handleButtonsChange(nsecs_t when,
+                                                                      nsecs_t readTime,
+                                                                      const Gesture& gesture) {
     std::list<NotifyArgs> out = {};
 
     if (mCurrentClassification != MotionClassification::NONE) {
@@ -349,7 +352,8 @@ std::list<NotifyArgs> GestureConverter::handleButtonsChange(nsecs_t when, nsecs_
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::releaseAllButtons(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::releaseAllButtons(nsecs_t when,
+                                                                    nsecs_t readTime) {
     std::list<NotifyArgs> out;
 
     PointerCoords coords;
@@ -377,8 +381,8 @@ std::list<NotifyArgs> GestureConverter::releaseAllButtons(nsecs_t when, nsecs_t 
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::handleScroll(nsecs_t when, nsecs_t readTime,
-                                                     const Gesture& gesture) {
+std::list<NotifyArgs> UncapturedGestureConverter::handleScroll(nsecs_t when, nsecs_t readTime,
+                                                               const Gesture& gesture) {
     std::list<NotifyArgs> out;
     PointerCoords& coords = mFakeFingerCoords[0];
     if (mCurrentClassification != MotionClassification::TWO_FINGER_SWIPE) {
@@ -409,9 +413,9 @@ std::list<NotifyArgs> GestureConverter::handleScroll(nsecs_t when, nsecs_t readT
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::handleFling(nsecs_t when, nsecs_t readTime,
-                                                    nsecs_t gestureStartTime,
-                                                    const Gesture& gesture) {
+std::list<NotifyArgs> UncapturedGestureConverter::handleFling(nsecs_t when, nsecs_t readTime,
+                                                              nsecs_t gestureStartTime,
+                                                              const Gesture& gesture) {
     switch (gesture.details.fling.fling_state) {
         case GESTURES_FLING_START:
             if (mCurrentClassification == MotionClassification::TWO_FINGER_SWIPE) {
@@ -471,7 +475,7 @@ std::list<NotifyArgs> GestureConverter::handleFling(nsecs_t when, nsecs_t readTi
     return {};
 }
 
-std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::endScroll(nsecs_t when, nsecs_t readTime) {
     std::list<NotifyArgs> out;
     mFakeFingerCoords[0].setAxisValue(AMOTION_EVENT_AXIS_GESTURE_SCROLL_X_DISTANCE, 0);
     mFakeFingerCoords[0].setAxisValue(AMOTION_EVENT_AXIS_GESTURE_SCROLL_Y_DISTANCE, 0);
@@ -484,10 +488,8 @@ std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime
     return out;
 }
 
-[[nodiscard]] std::list<NotifyArgs> GestureConverter::handleMultiFingerSwipe(nsecs_t when,
-                                                                             nsecs_t readTime,
-                                                                             uint32_t fingerCount,
-                                                                             float dx, float dy) {
+[[nodiscard]] std::list<NotifyArgs> UncapturedGestureConverter::handleMultiFingerSwipe(
+        nsecs_t when, nsecs_t readTime, uint32_t fingerCount, float dx, float dy) {
     std::list<NotifyArgs> out = {};
     if (!mEnableSystemGestures) {
         return out;
@@ -550,8 +552,8 @@ std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime
     return out;
 }
 
-[[nodiscard]] std::list<NotifyArgs> GestureConverter::handleMultiFingerSwipeLift(nsecs_t when,
-                                                                                 nsecs_t readTime) {
+[[nodiscard]] std::list<NotifyArgs> UncapturedGestureConverter::handleMultiFingerSwipeLift(
+        nsecs_t when, nsecs_t readTime) {
     std::list<NotifyArgs> out = {};
     if (mCurrentClassification != MotionClassification::MULTI_FINGER_SWIPE) {
         return out;
@@ -576,8 +578,8 @@ std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime
     return out;
 }
 
-[[nodiscard]] std::list<NotifyArgs> GestureConverter::handlePinch(nsecs_t when, nsecs_t readTime,
-                                                                  const Gesture& gesture) {
+[[nodiscard]] std::list<NotifyArgs> UncapturedGestureConverter::handlePinch(
+        nsecs_t when, nsecs_t readTime, const Gesture& gesture) {
     // Pinch gesture phases are reported a little differently from others, in that the same details
     // struct is used for all phases of the gesture, just with different zoom_state values. When
     // zoom_state is START or END, dz will always be 1, so we don't need to move the pointers in
@@ -627,7 +629,7 @@ std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime
                            mButtonState, /*pointerCount=*/2, mFakeFingerCoords.data())};
 }
 
-std::list<NotifyArgs> GestureConverter::endPinch(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::endPinch(nsecs_t when, nsecs_t readTime) {
     std::list<NotifyArgs> out;
 
     mFakeFingerCoords[0].setAxisValue(AMOTION_EVENT_AXIS_GESTURE_PINCH_SCALE_FACTOR, 1.0);
@@ -644,7 +646,7 @@ std::list<NotifyArgs> GestureConverter::endPinch(nsecs_t when, nsecs_t readTime)
     return out;
 }
 
-std::list<NotifyArgs> GestureConverter::enterHover(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::enterHover(nsecs_t when, nsecs_t readTime) {
     if (!mIsHovering) {
         mIsHovering = true;
         return {makeHoverEvent(when, readTime, AMOTION_EVENT_ACTION_HOVER_ENTER)};
@@ -653,7 +655,7 @@ std::list<NotifyArgs> GestureConverter::enterHover(nsecs_t when, nsecs_t readTim
     }
 }
 
-std::list<NotifyArgs> GestureConverter::exitHover(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::exitHover(nsecs_t when, nsecs_t readTime) {
     if (mIsHovering) {
         mIsHovering = false;
         return {makeHoverEvent(when, readTime, AMOTION_EVENT_ACTION_HOVER_EXIT)};
@@ -662,8 +664,8 @@ std::list<NotifyArgs> GestureConverter::exitHover(nsecs_t when, nsecs_t readTime
     }
 }
 
-std::list<NotifyArgs> GestureConverter::prepareForFakeFingerGesture(nsecs_t when,
-                                                                    nsecs_t readTime) {
+std::list<NotifyArgs> UncapturedGestureConverter::prepareForFakeFingerGesture(nsecs_t when,
+                                                                              nsecs_t readTime) {
     std::list<NotifyArgs> out;
     if (isPointerDown(mButtonState)) {
         out += releaseAllButtons(when, readTime);
@@ -672,7 +674,8 @@ std::list<NotifyArgs> GestureConverter::prepareForFakeFingerGesture(nsecs_t when
     return out;
 }
 
-NotifyMotionArgs GestureConverter::makeHoverEvent(nsecs_t when, nsecs_t readTime, int32_t action) {
+NotifyMotionArgs UncapturedGestureConverter::makeHoverEvent(nsecs_t when, nsecs_t readTime,
+                                                            int32_t action) {
     PointerCoords coords;
     coords.clear();
     coords.setAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X, 0);
@@ -681,10 +684,11 @@ NotifyMotionArgs GestureConverter::makeHoverEvent(nsecs_t when, nsecs_t readTime
                           /*pointerCount=*/1, &coords);
 }
 
-NotifyMotionArgs GestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime, int32_t action,
-                                                  int32_t actionButton, int32_t buttonState,
-                                                  uint32_t pointerCount,
-                                                  const PointerCoords* pointerCoords) {
+NotifyMotionArgs UncapturedGestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime,
+                                                            int32_t action, int32_t actionButton,
+                                                            int32_t buttonState,
+                                                            uint32_t pointerCount,
+                                                            const PointerCoords* pointerCoords) {
     int32_t flags = 0;
     if (action == AMOTION_EVENT_ACTION_CANCEL) {
         flags |= AMOTION_EVENT_FLAG_CANCELED;
@@ -721,7 +725,7 @@ NotifyMotionArgs GestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime
             /* videoFrames= */ {}};
 }
 
-void GestureConverter::enableTapToClick(nsecs_t when) {
+void UncapturedGestureConverter::enableTapToClick(nsecs_t when) {
     if (mReaderContext.isPreventingTouchpadTaps()) {
         mWhenToEnableTapToClick = when + TAP_ENABLE_DELAY_NANOS.count();
         mReaderContext.setPreventingTouchpadTaps(false);

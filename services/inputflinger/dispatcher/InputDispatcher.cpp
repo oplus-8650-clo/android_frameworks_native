@@ -486,7 +486,7 @@ KeyEvent createKeyEvent(const KeyEntry& entry) {
 bool shouldReportMetricsForConnection(const Connection& connection) {
     // Do not keep track of gesture monitors. They receive every event and would disproportionately
     // affect the statistics.
-    if (connection.monitor) {
+    if (connection.isFocusMonitor) {
         return false;
     }
     // If the connection is experiencing ANR, let's skip it. We have separate ANR metrics
@@ -1083,7 +1083,7 @@ void InputDispatcher::processLatencyStatisticsLocked() {
 
 std::chrono::nanoseconds InputDispatcher::getDispatchingTimeoutLocked(
         const std::shared_ptr<Connection>& connection) {
-    if (connection->monitor) {
+    if (connection->isFocusMonitor) {
         return mMonitorDispatchingTimeout;
     }
     const sp<WindowInfoHandle> window = mWindowInfos.findWindowHandle(connection->getToken());
@@ -2223,7 +2223,7 @@ void InputDispatcher::cancelEventsForAnrLocked(const std::shared_ptr<Connection>
                                "application not responding", traceContext.getTracker());
 
     sp<WindowInfoHandle> windowHandle;
-    if (!connection->monitor) {
+    if (!connection->isFocusMonitor) {
         windowHandle = mWindowInfos.findWindowHandle(connection->getToken());
         if (windowHandle == nullptr) {
             // The window that is receiving this ANR was removed, so there is no need to generate
@@ -3395,7 +3395,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                                                  const InputTarget& inputTarget) {
     const bool isKeyOrMotion = eventEntry->type == EventEntry::Type::KEY ||
             eventEntry->type == EventEntry::Type::MOTION;
-    if (isKeyOrMotion && !inputTarget.windowHandle && !connection->monitor) {
+    if (isKeyOrMotion && !inputTarget.windowHandle && !connection->isFocusMonitor) {
         LOG(FATAL) << "All InputTargets for non-monitors must be associated with a window; target: "
                    << inputTarget << " connection: " << connection->getInputChannelName()
                    << " entry: " << eventEntry->getDescription();
@@ -3469,7 +3469,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                 bool shouldCreateNewMotionEntry = resolvedAction != motionEntry.action;
 
                 ui::LogicalDisplayId resolvedDisplayId = motionEntry.displayId;
-                if (input_flags::use_topology_aware_flag() && !connection->monitor) {
+                if (input_flags::use_topology_aware_flag() && !connection->isFocusMonitor) {
                     const WindowInfo& windowInfo = *inputTarget.windowHandle->getInfo();
                     if (motionEntry.displayId.isValid() &&
                         motionEntry.displayId != windowInfo.displayId &&
@@ -3624,7 +3624,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
  */
 void InputDispatcher::processInteractionsLocked(const EventEntry& entry,
                                                 const std::vector<InputTarget>& targets) {
-    int32_t deviceId;
+    DeviceId deviceId;
     nsecs_t eventTime;
     // Skip ACTION_UP events, and all events other than keys and motions
     if (entry.type == EventEntry::Type::KEY) {
@@ -4049,7 +4049,7 @@ int InputDispatcher::handleReceiveCallback(int events, sp<IBinder> connectionTok
             }
         }
 
-        notify = status != DEAD_OBJECT || !connection->monitor;
+        notify = status != DEAD_OBJECT || !connection->isFocusMonitor;
         if (notify) {
             ALOGE("channel '%s' ~ Failed to receive finished signal.  status=%s(%d)",
                   connection->getInputChannelName().c_str(), statusToString(status).c_str(),
@@ -4060,7 +4060,7 @@ int InputDispatcher::handleReceiveCallback(int events, sp<IBinder> connectionTok
         // We do it automatically when the remote endpoint is closed so don't warn about them.
         const bool stillHaveWindowHandle =
                 mWindowInfos.findWindowHandle(connection->getToken()) != nullptr;
-        notify = !connection->monitor && stillHaveWindowHandle;
+        notify = !connection->isFocusMonitor && stillHaveWindowHandle;
         if (notify) {
             ALOGW("channel '%s' ~ Consumer closed input channel or an error occurred.  events=0x%x",
                   connection->getInputChannelName().c_str(), events);
@@ -4152,7 +4152,7 @@ void InputDispatcher::synthesizeCancelationEventsForWindowLocked(
 void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
         const std::shared_ptr<Connection>& connection, const CancelationOptions& options,
         const sp<WindowInfoHandle>& window) {
-    if (!connection->monitor && window == nullptr) {
+    if (!connection->isFocusMonitor && window == nullptr) {
         LOG(FATAL) << __func__
                    << ": Cannot send event to non-monitor channel without a window - channel: "
                    << connection->getInputChannelName();
@@ -4363,10 +4363,18 @@ void InputDispatcher::synthesizePointerDownEventsForConnectionLocked(
 std::unique_ptr<MotionEntry> InputDispatcher::splitMotionEvent(
         const MotionEntry& originalMotionEntry, std::bitset<MAX_POINTER_ID + 1> pointerIds,
         nsecs_t splitDownTime) {
-    const auto& [action, pointerProperties, pointerCoords] =
+    const auto& result =
             MotionEvent::split(originalMotionEntry.action, originalMotionEntry.flags,
                                /*historySize=*/0, originalMotionEntry.pointerProperties,
                                originalMotionEntry.pointerCoords, pointerIds);
+    if (!result.ok()) {
+        logDispatchStateLocked();
+        LOG(FATAL) << "Could not split motion: " << originalMotionEntry
+                   << ", pointers: " << pointerIds << " : " << result.error();
+        return nullptr;
+    }
+    const auto& [action, pointerProperties, pointerCoords] = *result;
+
     if (pointerIds.count() != pointerCoords.size()) {
         // TODO(b/329107108): Determine why some IDs in pointerIds were not in originalMotionEntry.
         // This is bad.  We are missing some of the pointers that we expected to deliver.
@@ -5383,6 +5391,12 @@ bool InputDispatcher::DispatcherTouchState::canWindowReceiveMotion(
         const sp<android::gui::WindowInfoHandle>& window,
         const android::inputdispatcher::MotionEntry& motionEntry) const {
     const WindowInfo& info = *window->getInfo();
+
+    if (info.touchOcclusionMode == TouchOcclusionMode::USE_OPACITY && info.alpha < 0.5f) {
+        LOG(INFO) << "Not sending motion to " << window->getName() << ", window opacity="
+            << info.alpha << " is below the threshold";
+        return false;
+    }
 
     // Skip spy window targets that are not valid for targeted injection.
     if (const auto err = verifyTargetedInjection(window, motionEntry); err) {
@@ -6621,6 +6635,10 @@ void InputDispatcher::onAnrLocked(const std::shared_ptr<Connection>& connection)
      * most useful.
      */
     DispatchEntry& oldestEntry = *connection->waitQueue.front();
+    ATRACE_NAME_IF(ATRACE_ENABLED(),
+                   StringPrintf("onAnrLocked(inputChannel=%s, id=0x%" PRIx32 ")",
+                                connection->getInputChannelName().c_str(),
+                                oldestEntry.eventEntry->id));
     const nsecs_t currentWait = now() - oldestEntry.deliveryTime;
     std::string reason =
             android::base::StringPrintf("%s is not responding. Waited %" PRId64 "ms for %s",
@@ -6732,7 +6750,7 @@ void InputDispatcher::processConnectionUnresponsiveLocked(const Connection& conn
                                                           std::string reason) {
     const sp<IBinder>& connectionToken = connection.getToken();
     std::optional<gui::Pid> pid;
-    if (connection.monitor) {
+    if (connection.isFocusMonitor) {
         ALOGW("Monitor %s is unresponsive: %s", connection.getInputChannelName().c_str(),
               reason.c_str());
         pid = mConnectionManager.findMonitorPidByToken(connectionToken);
@@ -6754,7 +6772,7 @@ void InputDispatcher::processConnectionUnresponsiveLocked(const Connection& conn
 void InputDispatcher::processConnectionResponsiveLocked(const Connection& connection) {
     const sp<IBinder>& connectionToken = connection.getToken();
     std::optional<gui::Pid> pid;
-    if (connection.monitor) {
+    if (connection.isFocusMonitor) {
         pid = mConnectionManager.findMonitorPidByToken(connectionToken);
     } else {
         // The connection is a window
@@ -7424,7 +7442,8 @@ void InputDispatcher::ConnectionManager::createFocusInputMonitor(
         const android::IdGenerator& idGenerator, gui::Pid pid, std::function<int(int)> callback) {
     const int fd = inputChannel->getFd();
     std::shared_ptr<Connection> connection =
-            std::make_shared<Connection>(std::move(inputChannel), /*monitor=*/true, idGenerator);
+            std::make_shared<Connection>(std::move(inputChannel), /*isFocusMonitor=*/true,
+                                         idGenerator);
     sp<IBinder> token = connection->getToken();
     auto [_, inserted] = mConnectionsByToken.emplace(token, connection);
     if (!inserted) {
@@ -7440,7 +7459,8 @@ void InputDispatcher::ConnectionManager::createConnection(
         std::function<int(int)> callback) {
     const int fd = inputChannel->getFd();
     std::shared_ptr<Connection> connection =
-            std::make_shared<Connection>(std::move(inputChannel), /*monitor=*/false, idGenerator);
+            std::make_shared<Connection>(std::move(inputChannel), /*isFocusMonitor=*/false,
+                                         idGenerator);
     sp<IBinder> token = connection->getToken();
     auto [_, inserted] = mConnectionsByToken.try_emplace(token, connection);
     if (!inserted) {
@@ -7454,7 +7474,7 @@ status_t InputDispatcher::ConnectionManager::removeConnection(
         const std::shared_ptr<Connection>& connection) {
     mConnectionsByToken.erase(connection->getToken());
 
-    if (connection->monitor) {
+    if (connection->isFocusMonitor) {
         removeMonitorChannel(connection->getToken());
     }
 
@@ -7486,11 +7506,12 @@ std::string InputDispatcher::ConnectionManager::dump(nsecs_t currentTime) const 
         dump += "Connections:\n";
         for (const auto& [token, connection] : mConnectionsByToken) {
             dump += StringPrintf(INDENT "%i: channelName='%s', "
-                                        "status=%s, monitor=%s, responsive=%s\n",
+                                        "status=%s, isFocusMonitor=%s, responsive=%s\n",
                                  connection->inputPublisher.getChannel().getFd(),
                                  connection->getInputChannelName().c_str(),
                                  ftl::enum_string(connection->status).c_str(),
-                                 toString(connection->monitor), toString(connection->responsive));
+                                 toString(connection->isFocusMonitor),
+                                 toString(connection->responsive));
 
             if (!connection->outboundQueue.empty()) {
                 dump += StringPrintf(INDENT2 "OutboundQueue: length=%zu\n",
@@ -7550,7 +7571,7 @@ ftl::Flags<InputTarget::Flags> InputDispatcher::DispatcherTouchState::getTargetF
 }
 
 bool InputDispatcher::DispatcherTouchState::hasTouchingOrHoveringPointers(
-        ui::LogicalDisplayId displayId, int32_t deviceId) const {
+        ui::LogicalDisplayId displayId, DeviceId deviceId) const {
     bool hasTouchingOrHoveringPointers = false;
     forTouchAndCursorStatesOnDisplay(displayId, [&](const TouchState& state) {
         hasTouchingOrHoveringPointers =

@@ -1527,6 +1527,7 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
     // ├── 1 (crop rect set to contain child layer)
     // │   ├── 11
     static constexpr float RADIUS = 123.f;
+    static gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
 
     setBuffer(1,
               std::make_shared<renderengine::mock::FakeExternalTexture>(1000 /*width*/,
@@ -1564,23 +1565,7 @@ TEST_F(LayerSnapshotTest, childInheritsParentScaledSettings) {
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomLeft.y, RADIUS * t.getScaleY());
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomRight.x, RADIUS * t.getScaleX());
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.radii.bottomRight.y, RADIUS * t.getScaleY());
-
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topLeft.x,
-              RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topLeft.y,
-              RADIUS * t.getScaleY());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topRight.x,
-              RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.topRight.y,
-              RADIUS * t.getScaleY());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomLeft.x,
-              RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomLeft.y,
-              RADIUS * t.getScaleY());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomRight.x,
-              RADIUS * t.getScaleX());
-    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii.bottomRight.y,
-              RADIUS * t.getScaleY());
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.requestedRadii, ZERO_RADIUS);
 }
 
 TEST_F(LayerSnapshotTest, childDoesNotInheritParentSettingsWhenNoCornerOverlap) {

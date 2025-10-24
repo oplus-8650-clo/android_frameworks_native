@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 #include <SurfaceFlingerProperties.sysprop.h>
 #include <android-base/stringprintf.h>
 #include <common/FlagManager.h>
@@ -66,11 +64,9 @@
 
 #include "TracedOrdinal.h"
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include "../QtiExtension/QtiOutputExtension.h"
 using android::compositionengineextension::QtiOutputExtension;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 using aidl::android::hardware::graphics::composer3::Composition;
 
 namespace android::compositionengine {
@@ -119,11 +115,9 @@ std::shared_ptr<Output> createOutput(
     return createOutputTemplated<Output>(compositionEngine);
 }
 
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 Output::Output() {
 }
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 Output::~Output() = default;
 
 bool Output::isValid() const {
@@ -893,9 +887,13 @@ void Output::updateCompositionState(const compositionengine::CompositionRefreshA
     auto* properties = getOverlaySupport();
 
     for (auto* layer : getOutputLayersOrderedByZ()) {
+        const ui::LayerStack outputLayerStack =
+                layer->getOutput().getState().layerFilter.layerStack;
+        const bool layerForceClientComposition =
+                refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack);
+
         layer->updateCompositionState(refreshArgs.updatingGeometryThisFrame,
-                                      refreshArgs.devOptForceClientComposition ||
-                                              forceClientComposition,
+                                      layerForceClientComposition || forceClientComposition,
                                       refreshArgs.internalDisplayRotationFlags,
                                       properties ? properties->lutProperties : std::nullopt);
 
@@ -998,11 +996,9 @@ void Output::writeCompositionState(const compositionengine::CompositionRefreshAr
                     z, includeGeometry, overrideZ, isPeekingThrough,
                     layer->requiresClientComposition());
         }
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
         QtiOutputExtension::qtiWriteLayerFlagToHWC(layer->getHwcLayer(), this);
         // QTI_END
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
     editState().outputLayerHash = outputLayerHash;
 
@@ -1076,14 +1072,14 @@ ui::Dataspace Output::getBestDataspace(ui::Dataspace* outHdrDataSpace,
                 break;
             case ui::Dataspace::BT2020_PQ:
             case ui::Dataspace::BT2020_ITU_PQ:
-                bestDataSpace = ui::Dataspace::DISPLAY_P3;
+                bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
                 *outHdrDataSpace = ui::Dataspace::BT2020_PQ;
                 *outIsHdrClientComposition =
                         layer->getLayerFE().getCompositionState()->forceClientComposition;
                 break;
             case ui::Dataspace::BT2020_HLG:
             case ui::Dataspace::BT2020_ITU_HLG:
-                bestDataSpace = ui::Dataspace::DISPLAY_P3;
+                bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
                 // When there's mixed PQ content and HLG content, we set the HDR
                 // data space to be BT2020_HLG and convert PQ to HLG.
                 if (*outHdrDataSpace == ui::Dataspace::UNKNOWN) {
@@ -1116,28 +1112,25 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
         case ui::ColorMode::DISPLAY_P3:
             bestDataSpace = ui::Dataspace::DISPLAY_P3;
             break;
+        case ui::ColorMode::DISPLAY_BT2020:
+            bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
+            break;
         default:
             break;
     }
 
     // respect hdrDataSpace only when there is no legacy HDR support
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     bool isHdr = hdrDataSpace != ui::Dataspace::UNKNOWN &&
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
             !mDisplayColorProfile->hasLegacyHdrSupport(hdrDataSpace) && !isHdrClientComposition;
     if (isHdr) {
         bestDataSpace = hdrDataSpace;
     }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (QtiOutputExtension::qtiHasSecureDisplay(this)) {
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         bestDataSpace = ui::Dataspace::V0_SRGB;
         isHdr = false;
     }
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     ui::RenderIntent intent;
     switch (refreshArgs.outputColorSetting) {
         case OutputColorSetting::kManaged:
@@ -1364,11 +1357,9 @@ void Output::finishFrame(GpuCompositionResult&& result) {
 void Output::updateProtectedContentState() {
     const auto& outputState = getState();
     auto& renderEngine = getCompositionEngine().getRenderEngine();
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 
     bool supportsProtectedContent = renderEngine.supportsProtectedContent();
 
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     // We need to set the render surface as protected (DRM) if all the following conditions are met:
     // 1. The display is protected (in legacy, check if the display is secure)
     // 2. Protected content is supported
@@ -1449,9 +1440,7 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     OutputCompositionState& outputCompositionState = editState();
     // Check if the client composition requests were rendered into the provided graphic buffer. If
     // so, we can reuse the buffer and avoid client composition.
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (mClientCompositionRequestCache
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         && (!QtiOutputExtension::qtiUseSpecFence() || mLayerRequestingBackgroundBlur != nullptr)
         ) {
         if (mClientCompositionRequestCache->exists(tex->getBuffer()->getId(),
@@ -1731,6 +1720,8 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
 
     mRenderSurface->onPresentDisplayCompleted();
 
+    const bool force_slower_follower_gpu_composition =
+            FlagManager::getInstance().force_slower_follower_gpu_composition();
     for (auto* layer : getOutputLayersOrderedByZ()) {
         // The layer buffer from the previous frame (if any) is released
         // by HWC only when the release fence from this frame (if any) is
@@ -1745,13 +1736,26 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
 
         // If the layer was client composited in the previous frame, we
         // need to merge with the previous client target acquire fence.
-        // Since we do not track that, always merge with the current
-        // client target acquire fence when it is available, even though
-        // this is suboptimal.
-        // TODO(b/121291683): Track previous frame client target acquire fence.
-        if (outputState.usesClientComposition) {
+        if (force_slower_follower_gpu_composition) {
             releaseFence =
-                    Fence::merge("LayerRelease", releaseFence, frame.clientTargetAcquireFence);
+                    Fence::merge("LayerRelease", releaseFence,
+                                 layer->getLayerFE().getAndClearLastClientTargetAcquireFence());
+
+            // If there's no present fence nor last composition acquire fence, then return the
+            // current acquire fence rather than a NO_FENCE which would release immediately.
+            if (releaseFence == Fence::NO_FENCE) {
+                releaseFence = frame.clientTargetAcquireFence;
+            }
+
+            layer->getLayerFE().setLastClientTargetAcquireFence(frame.clientTargetAcquireFence);
+        } else {
+            // Since we do not track that, always merge with the current
+            // client target acquire fence when it is available, even though
+            // this is suboptimal.
+            if (outputState.usesClientComposition) {
+                releaseFence =
+                        Fence::merge("LayerRelease", releaseFence, frame.clientTargetAcquireFence);
+            }
         }
         layer->getLayerFE().setReleaseFence(releaseFence);
         layer->getLayerFE().setReleasedBuffer(layer->getLayerFE().getCompositionState()->buffer);

@@ -28,10 +28,12 @@
 #include "Scheduler/VSyncReactor.h"
 #include "TestableScheduler.h"
 #include "TestableSurfaceFlinger.h"
+#include "fake/FakeClock.h"
 #include "mock/DisplayHardware/MockDisplayMode.h"
 #include "mock/MockEventThread.h"
 #include "mock/MockLayer.h"
 #include "mock/MockSchedulerCallback.h"
+#include "mock/MockVSyncTracker.h"
 
 #include <FrontEnd/LayerHierarchy.h>
 #include <scheduler/FrameTime.h>
@@ -66,6 +68,11 @@ public:
 };
 
 class SchedulerTest : public testing::Test {
+public:
+    static constexpr PhysicalDisplayId kDisplayId1 = PhysicalDisplayId::fromPort(255u);
+    static constexpr PhysicalDisplayId kDisplayId2 = PhysicalDisplayId::fromPort(254u);
+    static constexpr PhysicalDisplayId kDisplayId3 = PhysicalDisplayId::fromPort(253u);
+
 protected:
     class MockEventThreadConnection : public android::EventThreadConnection {
     public:
@@ -82,7 +89,6 @@ protected:
 
     static constexpr RefreshRateSelector::LayerRequirement kLayer = {.weight = 1.f};
 
-    static constexpr PhysicalDisplayId kDisplayId1 = PhysicalDisplayId::fromPort(255u);
     static inline const ftl::NonNull<DisplayModePtr> kDisplay1Mode60 =
             ftl::as_non_null(createDisplayMode(kDisplayId1, DisplayModeId(0), 60_Hz));
     static inline const ftl::NonNull<DisplayModePtr> kDisplay1Mode120 =
@@ -92,7 +98,6 @@ protected:
     static inline FrameRateMode kDisplay1Mode60_60{60_Hz, kDisplay1Mode60};
     static inline FrameRateMode kDisplay1Mode120_120{120_Hz, kDisplay1Mode120};
 
-    static constexpr PhysicalDisplayId kDisplayId2 = PhysicalDisplayId::fromPort(254u);
     static inline const ftl::NonNull<DisplayModePtr> kDisplay2Mode60 =
             ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(0), 60_Hz));
     static inline const ftl::NonNull<DisplayModePtr> kDisplay2Mode120 =
@@ -105,7 +110,6 @@ protected:
     static inline FrameRateMode kDisplay2Mode60_60{60_Hz, kDisplay2Mode60};
     static inline FrameRateMode kDisplay2Mode120_120{120_Hz, kDisplay2Mode120};
 
-    static constexpr PhysicalDisplayId kDisplayId3 = PhysicalDisplayId::fromPort(253u);
     static inline const ftl::NonNull<DisplayModePtr> kDisplay3Mode60 =
             ftl::as_non_null(createDisplayMode(kDisplayId3, DisplayModeId(0), 60_Hz));
     static inline const DisplayModes kDisplay3Modes = makeModes(kDisplay3Mode60);
@@ -141,12 +145,83 @@ SchedulerTest::SchedulerTest() {
     mFlinger.resetScheduler(mScheduler);
 }
 
+using VsyncIds = std::vector<std::pair<PhysicalDisplayId, VsyncId>>;
+
+struct FakeMultiDisplayCompositor final : ICompositor {
+    explicit FakeMultiDisplayCompositor(TestableScheduler& scheduler) : scheduler(scheduler) {}
+
+    TestableScheduler& scheduler;
+
+    struct {
+        PhysicalDisplayId commit;
+        PhysicalDisplayId composite;
+    } pacesetterIds;
+
+    struct {
+        VsyncIds commit;
+        VsyncIds composite;
+    } vsyncIds;
+
+    bool committed = true;
+    bool changePacesetter = false;
+
+    struct PresentationFence {
+        sp<Fence> fence;
+        FenceTimePtr fenceTime;
+        VsyncId vsyncId;
+    };
+    std::unordered_map<PhysicalDisplayId, PresentationFence> lastPresentationFences;
+    FenceToFenceTimeMap fenceMap;
+
+    void configure() override {}
+
+    bool commit(PhysicalDisplayId pacesetterId, const scheduler::FrameTargets& targets) override {
+        pacesetterIds.commit = pacesetterId;
+
+        vsyncIds.commit.clear();
+        vsyncIds.composite.clear();
+
+        for (const auto& [id, target] : targets) {
+            vsyncIds.commit.emplace_back(id, target->vsyncId());
+        }
+
+        if (changePacesetter) {
+            FTL_FAKE_GUARD(kMainThreadContext,
+                           scheduler.forcePacesetterDisplay(SchedulerTest::kDisplayId2));
+        }
+
+        return committed;
+    }
+
+    CompositeResultsPerDisplay composite(PhysicalDisplayId pacesetterId,
+                                         const scheduler::FrameTargeters& targeters) override {
+        pacesetterIds.composite = pacesetterId;
+
+        CompositeResultsPerDisplay results;
+
+        for (const auto& [id, targeter] : targeters) {
+            vsyncIds.composite.emplace_back(id, targeter->target().vsyncId());
+            results.try_emplace(id,
+                                CompositeResult{.compositionCoverage = CompositionCoverage::Hwc});
+
+            auto [fence, fenceTime] = fenceMap.makePendingFenceForTest();
+            lastPresentationFences[id] = {fence, fenceTime, targeter->target().vsyncId()};
+            scheduler.setPresentFenceForFrameTargeter(targeter, fence, fenceTime);
+        }
+
+        return results;
+    }
+
+    void sample() override {}
+    void sendNotifyExpectedPresentHint(PhysicalDisplayId) override {}
+};
+
 } // namespace
 
 TEST_F(SchedulerTest, registerDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
     // Hardware VSYNC should not change if the display is already registered.
     EXPECT_CALL(mSchedulerCallback, requestHardwareVsync(kDisplayId1, false)).Times(0);
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
 
@@ -158,10 +233,10 @@ TEST_F(SchedulerTest, registerDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
     EXPECT_CALL(mSchedulerCallback, requestHardwareVsync(kDisplayId3, false)).Times(1);
 #endif
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()));
-    mScheduler->registerDisplay(kDisplayId3,
+    mScheduler->registerDisplay(kDisplayId3, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay3Modes,
                                                                       kDisplay3Mode60->getId()));
 
@@ -207,7 +282,7 @@ TEST_F(SchedulerTest, updateDisplayModes) {
     ASSERT_EQ(1u, mScheduler->layerHistorySize());
 
     // Replace `mSelector` with a new `RefreshRateSelector` that has different display modes.
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
 
@@ -227,58 +302,19 @@ TEST_F(SchedulerTest, updateDisplayModes) {
 }
 
 TEST_F(SchedulerTest, emitModeChangeEvent) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto selectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
-    selectorPtr->setLayerFilter({.layerStack = {.id = 0}});
-    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal, selectorPtr);
     mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
 
     mScheduler->setContentRequirements({kLayer});
 
     // No event is emitted in response to idle.
-    EXPECT_CALL(*mEventThread, onModeChanged(_, _)).Times(0);
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, _, _, _, _)).Times(0);
 
     using TimerState = TestableScheduler::TimerState;
 
-    mScheduler->idleTimerCallback(TimerState::Expired);
-    selectorPtr->setActiveMode(kDisplay1Mode60->getId(), 60_Hz);
-
-    auto layer = kLayer;
-    layer.vote = RefreshRateSelector::LayerVoteType::ExplicitExact;
-    layer.desiredRefreshRate = 60_Hz;
-    layer.layerFilter = {.layerStack = {.id = 0}};
-    mScheduler->setContentRequirements({layer});
-
-    // An event is emitted implicitly despite choosing the same mode as when idle.
-    EXPECT_CALL(*mEventThread, onModeChanged(kDisplay1Mode60_60, _)).Times(1);
-
-    mScheduler->idleTimerCallback(TimerState::Reset);
-
-    mScheduler->setContentRequirements({kLayer});
-
-    // An event is emitted explicitly for the mode change.
-    EXPECT_CALL(*mEventThread, onModeChanged(kDisplay1Mode120_120, _)).Times(1);
-
-    mScheduler->touchTimerCallback(TimerState::Reset);
-    mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
-}
-
-TEST_F(SchedulerTest, emitModeChangeEvent_unifyRefreshRateCallbacksEnabled) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
-    const auto selectorPtr =
-            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
-    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
-    mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
-
-    mScheduler->setContentRequirements({kLayer});
-
-    // No event is emitted in response to idle.
-    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, _, _, _)).Times(0);
-
-    using TimerState = TestableScheduler::TimerState;
-
-    mScheduler->idleTimerCallback(TimerState::Expired);
+    mScheduler->idleTimerCallback(kDisplayId1, TimerState::Expired);
     selectorPtr->setActiveMode(kDisplay1Mode60->getId(), 60_Hz);
 
     auto layer = kLayer;
@@ -287,27 +323,26 @@ TEST_F(SchedulerTest, emitModeChangeEvent_unifyRefreshRateCallbacksEnabled) {
     mScheduler->setContentRequirements({layer});
 
     // An event is emitted implicitly despite choosing the same mode as when idle.
-    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode60_60, _, _))
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode60_60, _, _, _))
             .Times(1);
 
-    mScheduler->idleTimerCallback(TimerState::Reset);
+    mScheduler->idleTimerCallback(kDisplayId1, TimerState::Reset);
 
     mScheduler->setContentRequirements({kLayer});
 
     // An event is emitted explicitly for the mode change.
-    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _, _))
             .Times(1);
 
     mScheduler->touchTimerCallback(TimerState::Reset);
 }
 
 TEST_F(SchedulerTest, emitModeAndFrameRateOverrideChangeEvent) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
     const auto selectorPtr = std::make_shared<
             RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId(),
                                  RefreshRateSelector::Config{.enableFrameRateOverride = true,
                                                              .kernelIdleTimerController = {}});
-    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal, selectorPtr);
     std::vector<RefreshRateSelector::LayerRequirement> layers = {kLayer, kLayer};
     auto& lr1 = layers[0];
     auto& lr2 = layers[1];
@@ -319,36 +354,21 @@ TEST_F(SchedulerTest, emitModeAndFrameRateOverrideChangeEvent) {
     lr2.name = "60Hz ExplicitExactOrMultiple";
 
     // Emit Mode and Frame Rate override changed call
-    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _, _))
             .Times(1);
     mScheduler->setContentRequirements(layers);
     mScheduler->touchTimerCallback(TestableScheduler::TimerState::Reset);
 }
 
 TEST_F(SchedulerTest, emitModeChangeEventOnReloadPhaseConfiguration) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, false);
     const auto selectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
-    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal, selectorPtr);
     constexpr auto kMinSfDuration = Duration::fromNs(1000000);
     constexpr auto kMaxSfDuration = Duration::fromNs(2000000);
     constexpr auto kAppDuration = Duration::fromNs(1500000);
 
-    EXPECT_CALL(*mEventThread, onModeChanged(kDisplay1Mode120_120, _)).Times(1);
-    mScheduler->reloadPhaseConfiguration(kDisplay1Mode120_120, kMinSfDuration, kMaxSfDuration,
-                                         kAppDuration);
-}
-
-TEST_F(SchedulerTest, emitModeChangeEventOnReloadPhaseConfiguration_unifyRefreshRateCallbacks) {
-    SET_FLAG_FOR_TEST(flags::unify_refresh_rate_callbacks, true);
-    const auto selectorPtr =
-            std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
-    mScheduler->registerDisplay(kDisplayId1, selectorPtr);
-    constexpr auto kMinSfDuration = Duration::fromNs(1000000);
-    constexpr auto kMaxSfDuration = Duration::fromNs(2000000);
-    constexpr auto kAppDuration = Duration::fromNs(1500000);
-
-    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _))
+    EXPECT_CALL(*mEventThread, onModeAndFrameRateOverridesChanged(_, kDisplay1Mode120_120, _, _, _))
             .Times(1);
     mScheduler->reloadPhaseConfiguration(kDisplay1Mode120_120, kMinSfDuration, kMaxSfDuration,
                                          kAppDuration);
@@ -400,7 +420,7 @@ MATCHER(Is120Hz, "") {
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
     auto selector = std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId());
-    mScheduler->registerDisplay(kDisplayId1, selector);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal, selector);
 
     const sp<MockLayer> layer = sp<MockLayer>::make(mFlinger.flinger());
     scheduler::LayerProps layerProps = {
@@ -433,7 +453,6 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
 }
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
 
     // Configure pacesetter display to 120Hz.
@@ -441,7 +460,8 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
     const auto pacesetterSelectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode120->getId());
     pacesetterSelectorPtr->setLayerFilter(pacesetterLayerStack);
-    mScheduler->registerDisplay(kDisplayId1, pacesetterSelectorPtr);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                pacesetterSelectorPtr);
     FTL_FAKE_GUARD(kMainThreadContext,
                    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON));
     mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
@@ -451,7 +471,8 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
     const auto followerSelectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
     followerSelectorPtr->setLayerFilter(followerLayerStack);
-    mScheduler->registerDisplay(kDisplayId2, followerSelectorPtr);
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
+                                followerSelectorPtr);
     FTL_FAKE_GUARD(kMainThreadContext,
                    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
     mScheduler->onDisplayModeChanged(kDisplayId2, kDisplay2Mode60_60, true);
@@ -480,7 +501,6 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
 }
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacesetterCantSwitch) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
 
     // Configure pacesetter display to 120Hz.
@@ -492,7 +512,8 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacese
 
     const LayerFilter pacesetterLayerStack = {.layerStack = {.id = 0}};
     pacesetterSelectorPtr->setLayerFilter(pacesetterLayerStack);
-    mScheduler->registerDisplay(kDisplayId1, pacesetterSelectorPtr);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                pacesetterSelectorPtr);
     FTL_FAKE_GUARD(kMainThreadContext,
                    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON));
     mScheduler->onDisplayModeChanged(kDisplayId1, kDisplay1Mode120_120, true);
@@ -502,7 +523,8 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacese
     const auto followerSelectorPtr =
             std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
     followerSelectorPtr->setLayerFilter(followerLayerStack);
-    mScheduler->registerDisplay(kDisplayId2, followerSelectorPtr);
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
+                                followerSelectorPtr);
     FTL_FAKE_GUARD(kMainThreadContext,
                    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
     mScheduler->onDisplayModeChanged(kDisplayId2, kDisplay2Mode60_60, true);
@@ -536,13 +558,13 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacese
 }
 
 TEST_F(SchedulerTest, chooseDisplayModes) {
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
 
     mScheduler->setContentRequirements({kLayer, kLayer});
     GlobalSignals globalSignals = {.idle = true};
-    mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
+    mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
 
     using DisplayModeChoice = TestableScheduler::DisplayModeChoice;
 
@@ -554,7 +576,7 @@ TEST_F(SchedulerTest, chooseDisplayModes) {
     EXPECT_EQ(choice->get(), DisplayModeChoice({60_Hz, kDisplay1Mode60}, globalSignals));
 
     globalSignals = {.idle = false};
-    mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
+    mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
 
     modeChoices = mScheduler->chooseDisplayModes();
     ASSERT_EQ(1u, modeChoices.size());
@@ -565,7 +587,7 @@ TEST_F(SchedulerTest, chooseDisplayModes) {
 
     globalSignals = {.touch = true};
     mScheduler->replaceTouchTimer(10);
-    mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
+    mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
 
     modeChoices = mScheduler->chooseDisplayModes();
     ASSERT_EQ(1u, modeChoices.size());
@@ -576,7 +598,7 @@ TEST_F(SchedulerTest, chooseDisplayModes) {
 }
 
 TEST_F(SchedulerTest, chooseDisplayModesHighHintTouchSignal) {
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
 
@@ -630,15 +652,143 @@ TEST_F(SchedulerTest, chooseDisplayModesHighHintTouchSignal) {
 }
 
 TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
-    mScheduler->registerDisplay(kDisplayId2,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay2Mode60->getId()));
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    using DisplayModeChoice = TestableScheduler::DisplayModeChoice;
+    TestableScheduler::DisplayModeChoiceMap expectedChoices;
+
+    const bool follower_arbitrary_refresh_rate =
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+    {
+        const GlobalSignals globalSignals = {.idle = true};
+        const GlobalSignals display2GlobalSignals = GlobalSignals{};
+        const FrameRateMode display2Mode = follower_arbitrary_refresh_rate
+                ? FrameRateMode{120_Hz, kDisplay2Mode120}
+                : FrameRateMode{60_Hz, kDisplay2Mode60};
+        expectedChoices =
+                ftl::init::map<const PhysicalDisplayId&,
+                               DisplayModeChoice>(kDisplayId1,
+                                                  FrameRateMode{60_Hz, kDisplay1Mode60},
+                                                  globalSignals)(kDisplayId2, display2Mode,
+                                                                 display2GlobalSignals);
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, display2GlobalSignals);
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        const GlobalSignals globalSignals = {.idle = false};
+        const GlobalSignals display2GlobalSignals = GlobalSignals{};
+        expectedChoices =
+                ftl::init::map<const PhysicalDisplayId&,
+                               DisplayModeChoice>(kDisplayId1,
+                                                  FrameRateMode{120_Hz, kDisplay1Mode120},
+                                                  globalSignals)(kDisplayId2,
+                                                                 FrameRateMode{120_Hz,
+                                                                               kDisplay2Mode120},
+                                                                 display2GlobalSignals);
+
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, display2GlobalSignals);
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        const GlobalSignals globalSignals = {.touch = true};
+        const GlobalSignals display2GlobalSignals =
+                follower_arbitrary_refresh_rate ? globalSignals : GlobalSignals{};
+
+        mScheduler->replaceTouchTimer(10);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
+
+        expectedChoices =
+                ftl::init::map<const PhysicalDisplayId&,
+                               DisplayModeChoice>(kDisplayId1,
+                                                  FrameRateMode{120_Hz, kDisplay1Mode120},
+                                                  globalSignals)(kDisplayId2,
+                                                                 FrameRateMode{120_Hz,
+                                                                               kDisplay2Mode120},
+                                                                 display2GlobalSignals);
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        // The kDisplayId3 does not support 120Hz, The pacesetter display rate is chosen to be 120
+        // Hz. In this case only the display kDisplayId3 choose 60Hz as it does not support 120Hz.
+        mScheduler
+                ->registerDisplay(kDisplayId3, ui::DisplayConnectionType::Internal,
+                                  std::make_shared<RefreshRateSelector>(kDisplay3Modes,
+                                                                        kDisplay3Mode60->getId()));
+        mScheduler->setDisplayPowerMode(kDisplayId3, hal::PowerMode::ON);
+
+        const GlobalSignals globalSignals = {.touch = true};
+        mScheduler->replaceTouchTimer(10);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId3, globalSignals);
+
+        expectedChoices = ftl::init::map<const PhysicalDisplayId&, DisplayModeChoice>(
+                kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
+                globalSignals)(kDisplayId2, FrameRateMode{120_Hz, kDisplay2Mode120},
+                               follower_arbitrary_refresh_rate
+                                       ? globalSignals
+                                       : GlobalSignals{})(kDisplayId3,
+                                                          FrameRateMode{60_Hz, kDisplay3Mode60},
+                                                          follower_arbitrary_refresh_rate
+                                                                  ? globalSignals
+                                                                  : GlobalSignals{});
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        // We should choose 60Hz despite the touch signal as pacesetter only supports 60Hz
+        FTL_FAKE_GUARD(kMainThreadContext, mScheduler->forcePacesetterDisplay(kDisplayId3));
+        const GlobalSignals globalSignals = {.touch = true};
+        const GlobalSignals followerSignals =
+                follower_arbitrary_refresh_rate ? globalSignals : GlobalSignals{};
+        mScheduler->replaceTouchTimer(10);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId3, globalSignals);
+
+        const FrameRateMode display1Mode = follower_arbitrary_refresh_rate
+                ? FrameRateMode{120_Hz, kDisplay1Mode120}
+                : FrameRateMode{60_Hz, kDisplay1Mode60};
+        const FrameRateMode display2Mode = follower_arbitrary_refresh_rate
+                ? FrameRateMode{120_Hz, kDisplay2Mode120}
+                : FrameRateMode{60_Hz, kDisplay2Mode60};
+        expectedChoices = ftl::init::map<
+                const PhysicalDisplayId&,
+                DisplayModeChoice>(kDisplayId1, display1Mode,
+                                   followerSignals)(kDisplayId2, display2Mode,
+                                                    followerSignals)(kDisplayId3,
+                                                                     FrameRateMode{60_Hz,
+                                                                                   kDisplay3Mode60},
+                                                                     globalSignals);
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+}
+
+TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplaysArbitraryFollowersIdle) {
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()));
 
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
@@ -655,89 +805,112 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                                                   globalSignals)(kDisplayId2,
                                                                  FrameRateMode{60_Hz,
                                                                                kDisplay2Mode60},
-                                                                 GlobalSignals{});
+                                                                 globalSignals);
 
         mScheduler->setContentRequirements({kLayer, kLayer});
-        mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, globalSignals);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, globalSignals);
 
         const auto actualChoices = mScheduler->chooseDisplayModes();
         EXPECT_EQ(expectedChoices, actualChoices);
     }
     {
-        const GlobalSignals globalSignals = {.idle = false};
-        expectedChoices =
-                ftl::init::map<const PhysicalDisplayId&,
-                               DisplayModeChoice>(kDisplayId1,
-                                                  FrameRateMode{120_Hz, kDisplay1Mode120},
-                                                  globalSignals)(kDisplayId2,
-                                                                 FrameRateMode{120_Hz,
-                                                                               kDisplay2Mode120},
-                                                                 GlobalSignals{});
-
-        mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
-
-        const auto actualChoices = mScheduler->chooseDisplayModes();
-        EXPECT_EQ(expectedChoices, actualChoices);
-    }
-    {
-        const GlobalSignals globalSignals = {.touch = true};
-        mScheduler->replaceTouchTimer(10);
-        mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
-
-        expectedChoices =
-                ftl::init::map<const PhysicalDisplayId&,
-                               DisplayModeChoice>(kDisplayId1,
-                                                  FrameRateMode{120_Hz, kDisplay1Mode120},
-                                                  globalSignals)(kDisplayId2,
-                                                                 FrameRateMode{120_Hz,
-                                                                               kDisplay2Mode120},
-                                                                 GlobalSignals{});
-
-        const auto actualChoices = mScheduler->chooseDisplayModes();
-        EXPECT_EQ(expectedChoices, actualChoices);
-    }
-    {
-        // The kDisplayId3 does not support 120Hz, The pacesetter display rate is chosen to be 120
-        // Hz. In this case only the display kDisplayId3 choose 60Hz as it does not support 120Hz.
-        mScheduler->registerDisplay(kDisplayId3,
-                                    std::make_shared<RefreshRateSelector>(kDisplay3Modes,
-                                                                          kDisplay3Mode60->getId()),
-                                    kActiveDisplayId);
-        mScheduler->setDisplayPowerMode(kDisplayId3, hal::PowerMode::ON);
-
-        const GlobalSignals globalSignals = {.touch = true};
-        mScheduler->replaceTouchTimer(10);
-        mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
-
-        expectedChoices = ftl::init::map<
-                const PhysicalDisplayId&,
-                DisplayModeChoice>(kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
-                                   globalSignals)(kDisplayId2,
-                                                  FrameRateMode{120_Hz, kDisplay2Mode120},
-                                                  GlobalSignals{})(kDisplayId3,
-                                                                   FrameRateMode{60_Hz,
-                                                                                 kDisplay3Mode60},
-                                                                   GlobalSignals{});
-
-        const auto actualChoices = mScheduler->chooseDisplayModes();
-        EXPECT_EQ(expectedChoices, actualChoices);
-    }
-    {
-        // We should choose 60Hz despite the touch signal as pacesetter only supports 60Hz
-        mScheduler->designatePacesetterDisplay(kDisplayId3);
-        const GlobalSignals globalSignals = {.touch = true};
-        mScheduler->replaceTouchTimer(10);
-        mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
-
         expectedChoices = ftl::init::map<
                 const PhysicalDisplayId&,
                 DisplayModeChoice>(kDisplayId1, FrameRateMode{60_Hz, kDisplay1Mode60},
-                                   GlobalSignals{})(kDisplayId2,
-                                                    FrameRateMode{60_Hz, kDisplay2Mode60},
-                                                    GlobalSignals{})(kDisplayId3,
-                                                                     FrameRateMode{60_Hz,
-                                                                                   kDisplay3Mode60},
-                                                                     globalSignals);
+                                   GlobalSignals{.idle = true})(kDisplayId2,
+                                                                FrameRateMode{120_Hz,
+                                                                              kDisplay2Mode120},
+                                                                GlobalSignals{.idle = false});
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, {.idle = true});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, {.idle = false});
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        expectedChoices = ftl::init::map<
+                const PhysicalDisplayId&,
+                DisplayModeChoice>(kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
+                                   GlobalSignals{.idle = false})(kDisplayId2,
+                                                                 FrameRateMode{60_Hz,
+                                                                               kDisplay2Mode60},
+                                                                 GlobalSignals{.idle = true});
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, {.idle = false});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, {.idle = true});
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        expectedChoices = ftl::init::map<
+                const PhysicalDisplayId&,
+                DisplayModeChoice>(kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
+                                   GlobalSignals{.idle = false})(kDisplayId2,
+                                                                 FrameRateMode{120_Hz,
+                                                                               kDisplay2Mode120},
+                                                                 GlobalSignals{.idle = false});
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, {.idle = false});
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, {.idle = false});
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+}
+
+TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplaysArbitraryFollowersPowerMode) {
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()));
+
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    using DisplayModeChoice = TestableScheduler::DisplayModeChoice;
+    TestableScheduler::DisplayModeChoiceMap expectedChoices;
+
+    {
+        expectedChoices = ftl::init::map<
+                const PhysicalDisplayId&,
+                DisplayModeChoice>(kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
+                                   GlobalSignals{.powerOnImminent =
+                                                         true})(kDisplayId2,
+                                                                FrameRateMode{60_Hz,
+                                                                              kDisplay2Mode60},
+                                                                GlobalSignals{.idle = true});
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setPowerTimerPolicy(kDisplayId1, TestableScheduler::TimerState::Reset);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, {.idle = true});
+
+        const auto actualChoices = mScheduler->chooseDisplayModes();
+        EXPECT_EQ(expectedChoices, actualChoices);
+    }
+    {
+        expectedChoices = ftl::init::map<
+                const PhysicalDisplayId&,
+                DisplayModeChoice>(kDisplayId1, FrameRateMode{60_Hz, kDisplay1Mode60},
+                                   GlobalSignals{
+                                           .idle = true})(kDisplayId2,
+                                                          FrameRateMode{120_Hz, kDisplay2Mode120},
+                                                          GlobalSignals{.powerOnImminent = true});
+
+        mScheduler->setContentRequirements({kLayer, kLayer});
+        mScheduler->setPowerTimerPolicy(kDisplayId1, TestableScheduler::TimerState::Expired);
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId1, {.idle = true});
+
+        mScheduler->setTouchStateAndIdleTimerPolicy(kDisplayId2, {.idle = false});
+        mScheduler->setPowerTimerPolicy(kDisplayId2, TestableScheduler::TimerState::Reset);
 
         const auto actualChoices = mScheduler->chooseDisplayModes();
         EXPECT_EQ(expectedChoices, actualChoices);
@@ -745,15 +918,12 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
 }
 
 TEST_F(SchedulerTest, forcePacesetterDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
-    constexpr PhysicalDisplayId kFrontInternalDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode120->getId()),
-                                kFrontInternalDisplayId);
-    mScheduler->registerDisplay(kDisplayId2,
+                                                                      kDisplay1Mode120->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode60->getId()),
-                                kFrontInternalDisplayId);
+                                                                      kDisplay2Mode60->getId()));
 
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
@@ -766,20 +936,17 @@ TEST_F(SchedulerTest, forcePacesetterDisplay) FTL_FAKE_GUARD(kMainThreadContext)
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
 
     // Try to set display 1 as pacesetter without forcing, check that it failed.
-    EXPECT_FALSE(mScheduler->designatePacesetterDisplay(kDisplayId1));
+    EXPECT_FALSE(mScheduler->designatePacesetterDisplay());
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
 }
 
 TEST_F(SchedulerTest, resetForcedPacesetterDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
-    constexpr PhysicalDisplayId kFrontInternalDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode120->getId()),
-                                kFrontInternalDisplayId);
-    mScheduler->registerDisplay(kDisplayId2,
+                                                                      kDisplay1Mode120->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode60->getId()),
-                                kFrontInternalDisplayId);
+                                                                      kDisplay2Mode60->getId()));
 
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
@@ -788,7 +955,7 @@ TEST_F(SchedulerTest, resetForcedPacesetterDisplay) FTL_FAKE_GUARD(kMainThreadCo
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 
     // Since no display was forced a pacesetter, resetForcedPacesetterDisplay() should be a no-op.
-    EXPECT_FALSE(mScheduler->resetForcedPacesetterDisplay(kDisplayId2));
+    EXPECT_FALSE(mScheduler->resetForcedPacesetterDisplay());
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 
     // Force set display 2 as pacesetter.
@@ -796,80 +963,21 @@ TEST_F(SchedulerTest, resetForcedPacesetterDisplay) FTL_FAKE_GUARD(kMainThreadCo
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
 
     // The forced pacesetter display should be reset to display 1.
-    EXPECT_TRUE(mScheduler->resetForcedPacesetterDisplay(kDisplayId1));
+    EXPECT_TRUE(mScheduler->resetForcedPacesetterDisplay());
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 }
 
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure, false);
+
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
-    mScheduler->registerDisplay(kDisplayId2,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay2Mode60->getId()));
 
-    using VsyncIds = std::vector<std::pair<PhysicalDisplayId, VsyncId>>;
-
-    struct Compositor final : ICompositor {
-        explicit Compositor(TestableScheduler& scheduler) : scheduler(scheduler) {}
-
-        TestableScheduler& scheduler;
-
-        struct {
-            PhysicalDisplayId commit;
-            PhysicalDisplayId composite;
-        } pacesetterIds;
-
-        struct {
-            VsyncIds commit;
-            VsyncIds composite;
-        } vsyncIds;
-
-        bool committed = true;
-        bool changePacesetter = false;
-
-        void configure() override {}
-
-        bool commit(PhysicalDisplayId pacesetterId,
-                    const scheduler::FrameTargets& targets) override {
-            pacesetterIds.commit = pacesetterId;
-
-            vsyncIds.commit.clear();
-            vsyncIds.composite.clear();
-
-            for (const auto& [id, target] : targets) {
-                vsyncIds.commit.emplace_back(id, target->vsyncId());
-            }
-
-            if (changePacesetter) {
-                scheduler.designatePacesetterDisplay(kDisplayId2);
-            }
-
-            return committed;
-        }
-
-        CompositeResultsPerDisplay composite(PhysicalDisplayId pacesetterId,
-                                             const scheduler::FrameTargeters& targeters) override {
-            pacesetterIds.composite = pacesetterId;
-
-            CompositeResultsPerDisplay results;
-
-            for (const auto& [id, targeter] : targeters) {
-                vsyncIds.composite.emplace_back(id, targeter->target().vsyncId());
-                results.try_emplace(id,
-                                    CompositeResult{.compositionCoverage =
-                                                            CompositionCoverage::Hwc});
-            }
-
-            return results;
-        }
-
-        void sample() override {}
-        void sendNotifyExpectedPresentHint(PhysicalDisplayId) override {}
-    } compositor(*mScheduler);
+    FakeMultiDisplayCompositor compositor(*mScheduler);
 
     mScheduler->doFrameSignal(compositor, VsyncId(42));
 
@@ -906,6 +1014,272 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
     EXPECT_EQ(makeVsyncIds(VsyncId(44), true), compositor.vsyncIds.composite);
 }
 
+TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBackpressure) {
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+
+    constexpr Fps k120Hz = 120_Hz;
+    auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
+    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return(k120Hz.getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode120->getId()),
+                                mockVsyncTracker1);
+    auto mockVsyncTracker2 = std::make_shared<android::mock::VSyncTracker>();
+    constexpr Fps k60Hz = 60_Hz;
+    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return(k60Hz.getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()),
+                                mockVsyncTracker2);
+
+    FakeMultiDisplayCompositor compositor(*mScheduler);
+
+    fake::FakeClock* fakeClock = mScheduler->injectFakeClock();
+    TimePoint now(fakeClock->now());
+    TimePoint expectedPacesetterPresentTime(now + k120Hz.getPeriod());
+    TimePoint expectedFollowerPresentTime(now + k60Hz.getPeriod());
+
+    // Advance time by some offset to simulate wakeup.
+    fakeClock->advanceTime(1ms);
+
+    auto advanceMockVsyncTrackers = [&]() {
+        EXPECT_CALL(*mockVsyncTracker1,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedPacesetterPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(TimePoint(fakeClock->now()).ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+    };
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(42), expectedPacesetterPresentTime);
+
+    EXPECT_EQ(kDisplayId1, compositor.pacesetterIds.commit);
+    EXPECT_EQ(kDisplayId1, compositor.pacesetterIds.composite);
+    VsyncIds expectedTargets = {{kDisplayId1, VsyncId(42)}, {kDisplayId2, VsyncId(42)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // pending presentation due to slower nature of the second display.
+    }
+
+    // Advance to the next pacestter vsync wakeup time.
+    fakeClock->advanceTime(k120Hz.getPeriod());
+
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    // `expectedFollowerPresentTime` remains the same
+
+    advanceMockVsyncTrackers();
+    // Only the pacesetter should commit/composite as there's follower backpressure.
+    compositor.committed = true;
+    mScheduler->doFrameSignal(compositor, VsyncId(43), expectedPacesetterPresentTime);
+
+    expectedTargets = {{kDisplayId1, VsyncId(43)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [_, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(43));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [_, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        fenceTimePtr->signalForTest(expectedFollowerPresentTime.ns());
+    }
+
+    // Advance to the next pacestter vsync wakeup time.
+    fakeClock->advanceTime(k120Hz.getPeriod());
+
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+
+    advanceMockVsyncTrackers();
+    // Both pacesetter and follower should commit
+    compositor.committed = true;
+    mScheduler->doFrameSignal(compositor, VsyncId(44), expectedPacesetterPresentTime);
+
+    expectedTargets = {{kDisplayId1, VsyncId(44)}, {kDisplayId2, VsyncId(44)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+}
+
+TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMissedPresentation) {
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+
+    constexpr Fps k120Hz = 120_Hz;
+    auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
+    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return(k120Hz.getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode120->getId()),
+                                mockVsyncTracker1);
+    auto mockVsyncTracker2 = std::make_shared<android::mock::VSyncTracker>();
+    constexpr Fps k60Hz = 60_Hz;
+    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return(k60Hz.getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()),
+                                mockVsyncTracker2);
+
+    FakeMultiDisplayCompositor compositor(*mScheduler);
+
+    fake::FakeClock* fakeClock = mScheduler->injectFakeClock();
+    TimePoint now(fakeClock->now());
+    TimePoint expectedPacesetterPresentTime(now + k120Hz.getPeriod());
+    TimePoint expectedFollowerPresentTime(now + k60Hz.getPeriod());
+
+    // Advance time by some offset to simulate wakeup.
+    fakeClock->advanceTime(1ms);
+
+    auto advanceMockVsyncTrackers = [&]() {
+        EXPECT_CALL(*mockVsyncTracker1,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedPacesetterPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(TimePoint(fakeClock->now()).ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+    };
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(42), expectedPacesetterPresentTime);
+
+    VsyncIds expectedTargets = {{kDisplayId1, VsyncId(42)}, {kDisplayId2, VsyncId(42)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // pending presentation due to slower nature of the second display.
+    }
+
+    // Advance to the next pacestter vsync wakeup time.
+    fakeClock->advanceTime(k120Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(43), expectedPacesetterPresentTime);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(43));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // pending presentation due to slower nature of the second display.
+    }
+    expectedTargets = {{kDisplayId1, VsyncId(43)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(43));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    FenceTimePtr firstFollowerPresentFenceTime;
+    sp<Fence> firstFollowerPresentFence;
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // Don't fire the follower's presentation fence to simulate a miss.
+        firstFollowerPresentFence = fence;
+        firstFollowerPresentFenceTime = fenceTimePtr;
+    }
+
+    fakeClock->advanceTime(k120Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(44), expectedPacesetterPresentTime);
+
+    // Follower backpressure mitigation kicks in.
+    expectedTargets = {{kDisplayId1, VsyncId(44)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(44));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // pending presentation due to slower nature of the second display.
+    }
+
+    // Advance to the next pacestter vsync wakeup time.
+    fakeClock->advanceTime(k120Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(45), expectedPacesetterPresentTime);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(45));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // Fire the first present fence here instead to simulate backpressure. with 300us of slop.
+        firstFollowerPresentFenceTime->signalForTest(expectedFollowerPresentTime.ns() + 300000);
+    }
+
+    fakeClock->advanceTime(k120Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(46), expectedPacesetterPresentTime);
+
+    // Follower backpressure mitigation should not kick in for display 2.
+    expectedTargets = {{kDisplayId1, VsyncId(46)}, {kDisplayId2, VsyncId(46)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(46));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(46));
+        // pending presentation due to slower nature of the second display.
+    }
+}
+
 TEST_F(SchedulerTest, nextFrameIntervalTest) {
     static constexpr size_t kHistorySize = 10;
     static constexpr size_t kMinimumSamplesForPrediction = 6;
@@ -932,8 +1306,8 @@ TEST_F(SchedulerTest, nextFrameIntervalTest) {
                                 mFlinger.getTimeStats(),
                                 mSchedulerCallback};
 
-    scheduler.registerDisplay(kMode->getPhysicalDisplayId(), vrrSelectorPtr, std::nullopt,
-                              vrrTracker);
+    scheduler.registerDisplay(kMode->getPhysicalDisplayId(), ui::DisplayConnectionType::Internal,
+                              vrrSelectorPtr, vrrTracker);
     vrrSelectorPtr->setActiveMode(kMode->getId(), frameRate);
     scheduler.setRenderRate(kMode->getPhysicalDisplayId(), frameRate, /*applyImmediately*/ false);
     vrrTracker->addVsyncTimestamp(0);
@@ -972,7 +1346,7 @@ TEST_F(SchedulerTest, resyncAllToHardwareVsync) FTL_FAKE_GUARD(kMainThreadContex
     EXPECT_CALL(mScheduler->mockRequestHardwareVsync, Call(kDisplayId1, true)).Times(1);
     EXPECT_CALL(mScheduler->mockRequestHardwareVsync, Call(kDisplayId2, true)).Times(1);
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
@@ -1008,7 +1382,7 @@ TEST_F(SchedulerTest, resyncAllSkipsOffDisplays) FTL_FAKE_GUARD(kMainThreadConte
 
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()));
     ASSERT_EQ(hal::PowerMode::OFF, mScheduler->getDisplayPowerMode(kDisplayId2));
@@ -1022,10 +1396,8 @@ TEST_F(SchedulerTest, resyncAllSkipsOffDisplays) FTL_FAKE_GUARD(kMainThreadConte
 }
 
 TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode120->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
@@ -1042,8 +1414,6 @@ TEST_F(SchedulerTest, enablesLayerCachingTexturePoolForPacesetter) {
 }
 
 TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
     EXPECT_FALSE(mScheduler->layerHistoryModeChangePending());
@@ -1056,9 +1426,7 @@ TEST_F(SchedulerTest, pendingModeChangeSingleDisplay) {
 }
 
 TEST_F(SchedulerTest, pendingModeChangeMultiDisplay) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
@@ -1080,8 +1448,6 @@ TEST_F(SchedulerTest, pendingModeChangeMultiDisplay) {
 }
 
 TEST_F(SchedulerTest, pendingModeChangeInvalidDisplay) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
     EXPECT_FALSE(mScheduler->layerHistoryModeChangePending());
 
     PhysicalDisplayId invalidDisplayId = PhysicalDisplayId::fromPort(123);
@@ -1431,13 +1797,9 @@ TEST_F(AttachedChoreographerTest, setsFrameRateChildNotOverriddenByParent) {
 class SelectPacesetterDisplayTest : public SchedulerTest {};
 
 TEST_F(SelectPacesetterDisplayTest, SingleDisplay) FTL_FAKE_GUARD(kMainThreadContext) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay1Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
     mScheduler->designatePacesetterDisplay();
 
@@ -1446,19 +1808,14 @@ TEST_F(SelectPacesetterDisplayTest, SingleDisplay) FTL_FAKE_GUARD(kMainThreadCon
 
 TEST_F(SelectPacesetterDisplayTest, TwoDisplaysDifferentRefreshRates)
 FTL_FAKE_GUARD(kMainThreadContext) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay1Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode120->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay2Mode120->getId()));
     // setDisplayPowerMode() should trigger pacesetter migration to display 2.
     EXPECT_TRUE(mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON));
 
@@ -1468,19 +1825,14 @@ FTL_FAKE_GUARD(kMainThreadContext) {
 
 TEST_F(SelectPacesetterDisplayTest, TwoDisplaysHigherIgnoredPowerOff)
 FTL_FAKE_GUARD(kMainThreadContext) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay1Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode120->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay2Mode120->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
 
     mScheduler->designatePacesetterDisplay();
@@ -1490,19 +1842,14 @@ FTL_FAKE_GUARD(kMainThreadContext) {
 }
 
 TEST_F(SelectPacesetterDisplayTest, TwoDisplaysAllOffFirstUsed) FTL_FAKE_GUARD(kMainThreadContext) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay1Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::OFF);
 
-    mScheduler->registerDisplay(kDisplayId2,
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
-                                                                      kDisplay2Mode120->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay2Mode120->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::OFF);
 
     mScheduler->designatePacesetterDisplay();
@@ -1512,18 +1859,14 @@ TEST_F(SelectPacesetterDisplayTest, TwoDisplaysAllOffFirstUsed) FTL_FAKE_GUARD(k
 }
 
 TEST_F(SelectPacesetterDisplayTest, TwoDisplaysWithinEpsilon) FTL_FAKE_GUARD(kMainThreadContext) {
-    SET_FLAG_FOR_TEST(flags::pacesetter_selection, true);
-
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1,
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode60->getId()),
-                                kActiveDisplayId);
+                                                                      kDisplay1Mode60->getId()));
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
     auto selector2 =
             std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
-    mScheduler->registerDisplay(kDisplayId2, selector2, kActiveDisplayId);
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal, selector2);
     mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
 
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
@@ -1534,6 +1877,21 @@ TEST_F(SelectPacesetterDisplayTest, TwoDisplaysWithinEpsilon) FTL_FAKE_GUARD(kMa
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId1);
 }
 
+TEST_F(SelectPacesetterDisplayTest, SameRefreshRateOneInternalOneExternal)
+FTL_FAKE_GUARD(kMainThreadContext) {
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()));
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    auto selector2 =
+            std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External, selector2);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+}
+
 TEST_F(SchedulerTest, selectorPtrForLayerStack) FTL_FAKE_GUARD(kMainThreadContext) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
 
@@ -1542,15 +1900,14 @@ TEST_F(SchedulerTest, selectorPtrForLayerStack) FTL_FAKE_GUARD(kMainThreadContex
     ui::LayerStack stack1 = ui::LayerStack::fromValue(123);
     selector1->setLayerFilter({stack1, false});
 
-    constexpr PhysicalDisplayId kActiveDisplayId = kDisplayId1;
-    mScheduler->registerDisplay(kDisplayId1, selector1, kActiveDisplayId);
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal, selector1);
     mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
 
     auto selector2 =
             std::make_shared<RefreshRateSelector>(kDisplay2Modes, kDisplay2Mode60->getId());
     ui::LayerStack stack2 = ui::LayerStack::fromValue(467);
     selector2->setLayerFilter({stack2, false});
-    mScheduler->registerDisplay(kDisplayId2, selector2, kActiveDisplayId);
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal, selector2);
 
     EXPECT_EQ(mScheduler->selectorPtrForLayerStack(stack1), selector1.get());
 

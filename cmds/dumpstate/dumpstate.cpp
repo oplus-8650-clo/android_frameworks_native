@@ -1890,10 +1890,14 @@ Dumpstate::RunStatus Dumpstate::dumpstate() {
     /* Binder state is expensive to look at as it uses a lot of memory. */
     std::string binder_logs_dir = access("/dev/binderfs/binder_logs", R_OK) ?
             "/sys/kernel/debug/binder" : "/dev/binderfs/binder_logs";
+    std::string binder_transactions_path = binder_logs_dir + "/transactions";
+    if (access(binder_transactions_path.c_str(), R_OK) != 0) {
+        binder_transactions_path += "_hashed";
+    }
 
     DumpFile("BINDER FAILED TRANSACTION LOG", binder_logs_dir + "/failed_transaction_log");
     DumpFile("BINDER TRANSACTION LOG", binder_logs_dir + "/transaction_log");
-    DumpFile("BINDER TRANSACTIONS", binder_logs_dir + "/transactions");
+    DumpFile("BINDER TRANSACTIONS", binder_transactions_path);
     DumpFile("BINDER STATS", binder_logs_dir + "/stats");
     DumpFile("BINDER STATE", binder_logs_dir + "/state");
 

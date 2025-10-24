@@ -21,13 +21,6 @@ flag {
 } # adpf_gpu_sf
 
 flag {
-  name: "adpf_native_session_manager"
-  namespace: "game"
-  description: "Controls ADPF SessionManager being enabled in SF"
-  bug: "367803904"
-} # adpf_sessionmanager
-
-flag {
   name: "anchor_list"
   namespace: "core_graphics"
   description: "Use an anchor list for frame rate selection"
@@ -175,6 +168,20 @@ flag {
 } # follower_arbitrary_refresh_rate_selection
 
 flag {
+  name: "follower_display_backpressure"
+  namespace: "desktop_display"
+  description: "Skips presentation on a follower display if there is a pending present for the next follower vsync. Enables follower displays to present even when their refresh rate does not match the pacesetter display."
+  bug: "374072507"
+} # follower_display_backpressure
+
+flag {
+  name: "force_slower_follower_gpu_composition"
+  namespace: "desktop_display"
+  description: "Force slower connected displays to be GPU composited."
+  bug: "389982803"
+} # force_slower_follower_gpu_composition
+
+flag {
   name: "force_compile_graphite_renderengine"
   namespace: "core_graphics"
   description: "Compile Skia's Graphite Vulkan backend in RenderEngine, but do NOT enable it, unless graphite_renderengine is also set. It can also be enabled with the debug.renderengine.graphite system property for testing. In contrast, the graphite_renderengine flag both compiles AND enables Graphite in RenderEngine."
@@ -208,6 +215,13 @@ flag {
 } # graphite_renderengine_preview_rollout
 
 flag {
+  name: "graphite_renderengine_desktop_rollout"
+  namespace: "core_graphics"
+  description: "R/W flag to enable Skia's Graphite Vulkan backend in RenderEngine for Desktop devices, IF the debug.renderengine.graphite_desktop_optin sysprop is set to true."
+  bug: "436872839"
+} # graphite_renderengine_desktop_rollout
+
+flag {
   name: "hdcp_negotiation"
   namespace: "core_graphics"
   description: "detect secure layers to start HDCP negotiation"
@@ -233,6 +247,16 @@ flag {
 } # local_tonemap_screenshots
 
 flag {
+  name: "modeset_state_machine"
+  namespace: "core_graphics"
+  description: "Prevent data races causing modeset failures and deadlocks"
+  bug: "434757601"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # modeset_state_machine
+
+flag {
   name: "monitor_buffer_fences"
   namespace: "core_graphics"
   description: "Monitors fences for each buffer"
@@ -254,13 +278,6 @@ flag {
   bug: "428611036"
   is_fixed_read_only: true
 } # offload_gpu_composition
-
-flag {
-  name: "pacesetter_selection"
-  namespace: "desktop_display"
-  description: "Moves pacesetter designation to the display with highest refresh rate. Prefers to keep the same display as pacesetter if there are multiple displays of the same highest refresh rate."
-  bug: "374072507"
-} # pacesetter_selection
 
 flag {
   name: "parse_edid_version_and_input_type"
@@ -343,6 +360,16 @@ flag {
 } # stop_layer
 
 flag {
+    name: "supported_refresh_rate_update"
+    namespace: "core_graphics"
+    description: "Update the supported refresh rate list"
+    bug: "431061528"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+} # supported_refresh_rate_update
+
+flag {
   name: "synced_resolution_switch"
   namespace: "core_graphics"
   description: "Synchronize resolution modeset with framebuffer resizing"
@@ -358,14 +385,14 @@ flag {
 } # true_hdr_screenshots
 
 flag {
-    name: "unify_refresh_rate_callbacks"
+    name: "use_at_least_60_for_min_vote"
     namespace: "core_graphics"
-    description: "Unifies mode changed and FrameRateOverride callbacks"
-    bug: "399482301"
+    description: "Chooses the lowest >= 60 render rate when all voters want Min frame rate"
+    bug: "441896528"
     metadata {
         purpose: PURPOSE_BUGFIX
     }
-} # unify_refresh_rate_callbacks
+} # use_at_least_60_for_min_vote
 
 flag {
   name: "vsync_predictor_predicts_within_threshold"

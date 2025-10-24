@@ -43,38 +43,40 @@
 
 #include "SinkSurfaceHelper.h"
 #include "VirtualDisplayBufferSlotTracker.h"
-#include "VirtualDisplaySurface2.h"
+#include "VirtualDisplaySurface.h"
 
 namespace android {
 
-class VirtualDisplaySurface2::RenderConsumerListener
+class VirtualDisplaySurface::RenderConsumerListener
       : public BufferItemConsumer::FrameAvailableListener {
 public:
-    RenderConsumerListener(const sp<VirtualDisplaySurface2>& virtualDisplay)
+    RenderConsumerListener(const sp<VirtualDisplaySurface>& virtualDisplay)
           : mVirtualDisplay(virtualDisplay) {}
 
     // BufferItemConsumer::FrameAvailableListener
     virtual void onFrameAvailable(const BufferItem&) override {
-        sp<VirtualDisplaySurface2> virtualDisplay = mVirtualDisplay.promote();
+        sp<VirtualDisplaySurface> virtualDisplay = mVirtualDisplay.promote();
         if (virtualDisplay) {
             virtualDisplay->onRenderFrameAvailable();
         }
     }
 
 private:
-    wp<VirtualDisplaySurface2> mVirtualDisplay;
+    wp<VirtualDisplaySurface> mVirtualDisplay;
 };
 
-VirtualDisplaySurface2::VirtualDisplaySurface2(HWComposer& hwComposer,
-                                               VirtualDisplayIdVariant displayId,
-                                               const std::string& name, uid_t creatorUid,
-                                               const sp<Surface>& sinkSurface)
+VirtualDisplaySurface::VirtualDisplaySurface(HWComposer& hwComposer,
+                                             VirtualDisplayIdVariant displayId,
+                                             const std::string& name, uid_t creatorUid,
+                                             const sp<Surface>& sinkSurface)
       : mHWC(hwComposer),
         mDisplayId(displayId),
         mName(name),
         mSinkHelper(sp<SinkSurfaceHelper>::make(sinkSurface, creatorUid)) {}
 
-VirtualDisplaySurface2::~VirtualDisplaySurface2() {
+VirtualDisplaySurface::~VirtualDisplaySurface() {
+    ALOGI("Shutting down VirtualDisplaySurface %s", mName.c_str());
+
     mSinkHelper->abandon();
     mRendererConsumer->abandon();
     if (mOutputConsumer) {
@@ -85,9 +87,15 @@ VirtualDisplaySurface2::~VirtualDisplaySurface2() {
     }
 }
 
-void VirtualDisplaySurface2::onFirstRef() {
+void VirtualDisplaySurface::onFirstRef() {
     ATRACE_CALL();
     std::scoped_lock _l(mMutex);
+
+    std::tie(mRendererConsumer, mRendererSurface) = BufferItemConsumer::create(getRendererUsage());
+    mRendererListener =
+            sp<RenderConsumerListener>::make(sp<VirtualDisplaySurface>::fromExisting(this));
+    mRendererConsumer->setFrameAvailableListener(mRendererListener);
+    mRendererConsumer->setName(String8(mName + "-RenderBQ"));
 
     mSinkSurfaceDataFuture = mSinkHelper->connectSinkSurface();
 
@@ -100,8 +108,6 @@ void VirtualDisplaySurface2::onFirstRef() {
     // conditions, but we're on the main thread.
     constexpr auto timeToWait = std::chrono::milliseconds(1);
     if (mSinkSurfaceDataFuture.wait_for(timeToWait) == std::future_status::ready) {
-        // This has to be done in onFirstRef instead of the ctor because this function uses
-        // sp<>::fromExisting.
         prepareSurfacesLocked();
     } else {
         ALOGW("%s: waited for the sink surface to connect for %lldms and it's not ready.",
@@ -109,7 +115,7 @@ void VirtualDisplaySurface2::onFirstRef() {
     }
 }
 
-void VirtualDisplaySurface2::prepareSurfacesLocked() {
+void VirtualDisplaySurface::prepareSurfacesLocked() {
     ATRACE_CALL();
 
     LOG_ALWAYS_FATAL_IF(!mSinkSurfaceDataFuture.valid(), "%s: called without a valid future.",
@@ -123,20 +129,9 @@ void VirtualDisplaySurface2::prepareSurfacesLocked() {
     mSinkUsage = data.usage;
     mSinkDataSpace = data.dataSpace;
 
-    // If we might be rendering to the HAL, this buffer could be used in HWComposer::setClientTarget
-    // in Mixed mode.
-    uint64_t rendererUsage = isHalDisplay() ? (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER)
-                                            : GRALLOC_USAGE_HW_RENDER;
-
     // Since the renderer can be used for GPU compositing at any point, make sure we are generating
     // buffers we can send over to the app.
-    rendererUsage |= mSinkUsage;
-
-    std::tie(mRendererConsumer, mRendererSurface) = BufferItemConsumer::create(rendererUsage);
-    mRendererListener =
-            sp<RenderConsumerListener>::make(sp<VirtualDisplaySurface2>::fromExisting(this));
-    mRendererConsumer->setFrameAvailableListener(mRendererListener);
-    mRendererConsumer->setName(String8(mName + "-RenderBQ"));
+    mRendererConsumer->setConsumerUsageBits(getRendererUsage() | mSinkUsage);
 
     if (isHalDisplay()) {
         std::tie(mOutputConsumer, mOutputSurface) =
@@ -156,11 +151,11 @@ void VirtualDisplaySurface2::prepareSurfacesLocked() {
     mIsReady = true;
 }
 
-sp<Surface> VirtualDisplaySurface2::getCompositionSurface() const {
+sp<Surface> VirtualDisplaySurface::getCompositionSurface() const {
     return mRendererSurface;
 }
 
-status_t VirtualDisplaySurface2::beginFrame(bool mustRecompose) {
+status_t VirtualDisplaySurface::beginFrame(bool mustRecompose) {
     ATRACE_CALL();
 
     std::scoped_lock _l(mMutex);
@@ -197,7 +192,7 @@ status_t VirtualDisplaySurface2::beginFrame(bool mustRecompose) {
     return OK;
 }
 
-status_t VirtualDisplaySurface2::prepareFrame(CompositionType compositionType) {
+status_t VirtualDisplaySurface::prepareFrame(CompositionType compositionType) {
     ATRACE_CALL();
 
     if (isGpuDisplay() &&
@@ -238,7 +233,7 @@ status_t VirtualDisplaySurface2::prepareFrame(CompositionType compositionType) {
     return OK;
 }
 
-status_t VirtualDisplaySurface2::advanceFrame(float hdrSdrRatio) {
+status_t VirtualDisplaySurface::advanceFrame(float hdrSdrRatio) {
     ATRACE_CALL();
 
     std::scoped_lock _l(mMutex);
@@ -305,7 +300,7 @@ status_t VirtualDisplaySurface2::advanceFrame(float hdrSdrRatio) {
     return OK;
 }
 
-void VirtualDisplaySurface2::onFrameCommitted() {
+void VirtualDisplaySurface::onFrameCommitted() {
     ATRACE_CALL();
 
     std::scoped_lock _l(mMutex);
@@ -349,13 +344,13 @@ void VirtualDisplaySurface2::onFrameCommitted() {
     mSinkHelper->sendBuffer(frameInfo.outputBuffer, frameInfo.outputFence);
 }
 
-void VirtualDisplaySurface2::dumpAsString(String8& result) const {
+void VirtualDisplaySurface::dumpAsString(String8& result) const {
     std::scoped_lock _l(mMutex);
 
     std::string displayIdStr = std::visit([](auto&& arg) { return to_string(arg); }, mDisplayId);
     std::string type = isGpuDisplay() ? "GPU" : "HWC";
 
-    result.append("    VirtualDisplaySurface2\n");
+    result.append("    VirtualDisplaySurface\n");
     result.appendFormat("        type=%s\n", type.c_str());
     result.appendFormat("        mName=%s\n", mName.c_str());
     result.appendFormat("        mDisplayId=%s\n", displayIdStr.c_str());
@@ -367,7 +362,7 @@ void VirtualDisplaySurface2::dumpAsString(String8& result) const {
     result.appendFormat("        mSinkHeight=%d\n", mSinkHeight);
 }
 
-void VirtualDisplaySurface2::resizeBuffers(const ui::Size& newSize) {
+void VirtualDisplaySurface::resizeBuffers(const ui::Size& newSize) {
     ATRACE_CALL();
 
     std::scoped_lock _l(mMutex);
@@ -378,7 +373,14 @@ void VirtualDisplaySurface2::resizeBuffers(const ui::Size& newSize) {
     }
 }
 
-void VirtualDisplaySurface2::applyResizeLocked(const ui::Size& newSize) {
+uint64_t VirtualDisplaySurface::getRendererUsage() const {
+    // If we might be rendering to the HAL, this buffer could be used in HWComposer::setClientTarget
+    // in Mixed mode.
+    return isHalDisplay() ? (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER)
+                          : GRALLOC_USAGE_HW_RENDER;
+}
+
+void VirtualDisplaySurface::applyResizeLocked(const ui::Size& newSize) {
     if (newSize.width < 0 || newSize.height < 0) {
         ALOGE("%s: Called with invalid size %dx%d", __func__, newSize.width, newSize.height);
         return;
@@ -411,7 +413,7 @@ void VirtualDisplaySurface2::applyResizeLocked(const ui::Size& newSize) {
     }
 }
 
-const sp<Fence>& VirtualDisplaySurface2::getClientTargetAcquireFence() const {
+const sp<Fence>& VirtualDisplaySurface::getClientTargetAcquireFence() const {
     std::scoped_lock _l(mMutex);
 
     if (!mCurrentFrame) {
@@ -423,7 +425,7 @@ const sp<Fence>& VirtualDisplaySurface2::getClientTargetAcquireFence() const {
             : Fence::NO_FENCE;
 }
 
-void VirtualDisplaySurface2::onRenderFrameAvailable() {
+void VirtualDisplaySurface::onRenderFrameAvailable() {
     ATRACE_CALL();
 
     std::scoped_lock _l(mMutex);

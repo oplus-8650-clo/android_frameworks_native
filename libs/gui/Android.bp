@@ -99,6 +99,31 @@ cc_library_headers {
     ],
 }
 
+filegroup {
+    name: "box_shadow_aidl",
+    srcs: [
+        "android/gui/BoxShadowSettings.aidl",
+        "android/gui/BorderSettings.aidl",
+    ],
+}
+
+aidl_interface {
+    name: "android.gui.boxshadow",
+    unstable: true,
+    vendor_available: true,
+    srcs: [":box_shadow_aidl"],
+    local_include_dir: ".",
+    backend: {
+        java: {
+            enabled: true,
+            sdk_version: "current",
+            apex_available: [
+                "//apex_available:platform",
+            ],
+        },
+    },
+}
+
 // AIDL files that should be exposed to java
 filegroup {
     name: "guiconstants_aidl",
@@ -551,14 +576,11 @@ cc_library_static {
     ],
 }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 soong_config_module_type_import {
     from: "frameworks/native/services/surfaceflinger/QtiExtension/Android.bp",
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     module_types: [
         "qtidisplayextension_cc_library_static",
         "qtidisplayextension_cc_defaults",],
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 qtidisplayextension_cc_library_static {
@@ -566,14 +588,10 @@ qtidisplayextension_cc_library_static {
     vendor_available: true,
     defaults: [
         "libgui_bufferqueue-defaults",
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         "libguiextension_defaults",
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     header_libs: [
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         "jni_headers",
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         "libgui_aidl_headers",
     ],
     static_libs: [
@@ -584,26 +602,21 @@ qtidisplayextension_cc_library_static {
             cflags: [
                 "-DQTI_DISPLAY_EXTENSION",
             ],
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             srcs: [
                 "QtiExtension/QtiBufferQueueProducerExtension.cpp",
             ],
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
        },
     },
     srcs: [
         "QtiExtension/QtiBLASTBufferQueueExtension.cpp",
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         "QtiExtension/QtiDolphinWrapper.cpp",
         "QtiExtension/QtiFenceMonitorExtension.cpp",
         "QtiExtension/QtiSurfaceExtension.cpp",
         "QtiExtension/QtiSurfaceExtensionGPP.cpp",
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     local_include_dirs: ["QtiExtension"],
     export_include_dirs: ["QtiExtension"],
 }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
 qtidisplayextension_cc_defaults {
     name: "guicommonsys_defaults",

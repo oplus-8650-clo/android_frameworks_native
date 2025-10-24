@@ -37,7 +37,7 @@ NotifyInputDevicesChangedArgs::NotifyInputDevicesChangedArgs(int32_t id,
 
 // --- NotifyKeyArgs ---
 
-NotifyKeyArgs::NotifyKeyArgs(int32_t id, nsecs_t eventTime, nsecs_t readTime, int32_t deviceId,
+NotifyKeyArgs::NotifyKeyArgs(int32_t id, nsecs_t eventTime, nsecs_t readTime, DeviceId deviceId,
                              uint32_t source, ui::LogicalDisplayId displayId, uint32_t policyFlags,
                              int32_t action, int32_t flags, int32_t keyCode, int32_t scanCode,
                              int32_t metaState, nsecs_t downTime)
@@ -58,7 +58,7 @@ NotifyKeyArgs::NotifyKeyArgs(int32_t id, nsecs_t eventTime, nsecs_t readTime, in
 // --- NotifyMotionArgs ---
 
 NotifyMotionArgs::NotifyMotionArgs(
-        int32_t id, nsecs_t eventTime, nsecs_t readTime, int32_t deviceId, uint32_t source,
+        int32_t id, nsecs_t eventTime, nsecs_t readTime, DeviceId deviceId, uint32_t source,
         ui::LogicalDisplayId displayId, uint32_t policyFlags, int32_t action, int32_t actionButton,
         int32_t flags, int32_t metaState, int32_t buttonState, MotionClassification classification,
         uint32_t pointerCount, const PointerProperties* pointerProperties,
@@ -151,8 +151,8 @@ NotifySwitchArgs::NotifySwitchArgs(int32_t id, nsecs_t eventTime, uint32_t polic
 
 // --- NotifySensorArgs ---
 
-NotifySensorArgs::NotifySensorArgs(int32_t id, nsecs_t eventTime, int32_t deviceId, uint32_t source,
-                                   InputDeviceSensorType sensorType,
+NotifySensorArgs::NotifySensorArgs(int32_t id, nsecs_t eventTime, DeviceId deviceId,
+                                   uint32_t source, InputDeviceSensorType sensorType,
                                    InputDeviceSensorAccuracy accuracy, bool accuracyChanged,
                                    nsecs_t hwTimestamp, std::vector<float> values)
       : id(id),
@@ -167,13 +167,13 @@ NotifySensorArgs::NotifySensorArgs(int32_t id, nsecs_t eventTime, int32_t device
 
 // --- NotifyVibratorStateArgs ---
 
-NotifyVibratorStateArgs::NotifyVibratorStateArgs(int32_t id, nsecs_t eventTime, int32_t deviceId,
+NotifyVibratorStateArgs::NotifyVibratorStateArgs(int32_t id, nsecs_t eventTime, DeviceId deviceId,
                                                  bool isOn)
       : id(id), eventTime(eventTime), deviceId(deviceId), isOn(isOn) {}
 
 // --- NotifyDeviceResetArgs ---
 
-NotifyDeviceResetArgs::NotifyDeviceResetArgs(int32_t id, nsecs_t eventTime, int32_t deviceId)
+NotifyDeviceResetArgs::NotifyDeviceResetArgs(int32_t id, nsecs_t eventTime, DeviceId deviceId)
       : id(id), eventTime(eventTime), deviceId(deviceId) {}
 
 // --- NotifyPointerCaptureChangedArgs ---
