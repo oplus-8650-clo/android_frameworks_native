@@ -18,7 +18,9 @@
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_END: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -260,9 +262,11 @@ BLASTBufferQueue::BLASTBufferQueue(const std::string& name, bool updateDestinati
 }
 
 BLASTBufferQueue::~BLASTBufferQueue() {
+// QTI_BEGIN: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
     if (mQtiBBQExtn) {
       delete mQtiBBQExtn;
     }
+// QTI_END: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
     TransactionCompletedListener::getInstance()->removeQueueStallListener(this);
     if (mPendingTransactions.empty()) {
         return;
@@ -558,7 +562,9 @@ void BLASTBufferQueue::releaseBuffer(const ReleaseCallbackId& callbackId,
         return;
     }
     mNumAcquired--;
+// QTI_BEGIN: 2023-04-24: Performance: gui: Fix for thread safety
     mQtiNumUndequeued++;
+// QTI_END: 2023-04-24: Performance: gui: Fix for thread safety
     BBQ_TRACE("frame=%" PRIu64, callbackId.framenumber);
     BQA_LOGV("released %s", callbackId.to_string().c_str());
     mBufferItemConsumer->releaseBuffer(it->second, releaseFence);
@@ -884,7 +890,9 @@ void BLASTBufferQueue::onFrameReplaced(const BufferItem& item) {
 void BLASTBufferQueue::onFrameDequeued(const uint64_t bufferId) {
     std::lock_guard _lock{mTimestampMutex};
     mDequeueTimestamps.emplace_or_replace(bufferId, systemTime());
+// QTI_BEGIN: 2023-04-24: Performance: gui: Fix for thread safety
     mQtiNumUndequeued--;
+// QTI_END: 2023-04-24: Performance: gui: Fix for thread safety
 };
 
 void BLASTBufferQueue::onFrameCancelled(const uint64_t bufferId) {
