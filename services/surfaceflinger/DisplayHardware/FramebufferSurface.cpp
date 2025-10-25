@@ -60,14 +60,12 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displa
     std::tie(mRendererConsumer, mRendererSurface) = BufferItemConsumer::create(
             GRALLOC_USAGE_HW_FB | GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER);
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     // TODO: b/450557702 - add back qcom value-added after wb_framebuffersurface2 flag is turned on
     // if (!mQtiDSExtnIntf) {
     //     mQtiDSExtnIntf = surfaceflingerextension::
     //             qtiCreateDisplaySurfaceExtension(/* isVirtual */ false, nullptr, false, 0,
     //                                              /* FramebufferSurface */ this);
     // }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     mRendererConsumer->setName(String8("FramebufferSurface"));
     mRendererConsumer->setDefaultBufferSize(mLimitedSize.width, mLimitedSize.height);
