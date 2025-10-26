@@ -171,6 +171,29 @@ Result<void> setupGamepadStickAxis(const unique_fd& fd, uint16_t code) {
     return {};
 }
 
+Result<void> setupGamepadTriggerAxis(const unique_fd& fd, uint16_t code) {
+    uinput_abs_setup setup{
+            .code = code,
+            .absinfo =
+                    {
+                            .value = 0,
+                            .minimum = 0,
+                            .maximum = GAMEPAD_AXIS_MAX_VALUE,
+                            .fuzz = static_cast<int>(GAMEPAD_AXIS_MAX_VALUE *
+                                                     GAMEPAD_AXIS_FUZZ_FRACTION),
+                            .flat = static_cast<int>(GAMEPAD_AXIS_MAX_VALUE *
+                                                     GAMEPAD_AXIS_FLAT_FRACTION),
+                            .resolution = 0,
+                    },
+    };
+    if (ioctl(fd, UI_ABS_SETUP, &setup) != 0) {
+        return Error() << "Could not create gamepad uinput axis "
+                       << android::InputEventLookup::getLinuxEvdevCodeLabel(EV_ABS, code) << " ("
+                       << code << "): " << strerror(errno);
+    }
+    return {};
+}
+
 Result<void> setupGamepadHatAxis(const unique_fd& fd, uint16_t code) {
     uinput_abs_setup setup{
             .code = code,
@@ -192,11 +215,15 @@ Result<void> setupGamepadHatAxis(const unique_fd& fd, uint16_t code) {
     return {};
 }
 
-Result<void> setupGamepadAxes(const unique_fd& fd) {
+Result<void> setupGamepadAxes(const unique_fd& fd, bool registerTriggerAxes) {
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_X));
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_Y));
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_Z));
     RETURN_IF_ERROR(setupGamepadStickAxis(fd, ABS_RZ));
+    if (registerTriggerAxes) {
+        RETURN_IF_ERROR(setupGamepadTriggerAxis(fd, ABS_GAS));
+        RETURN_IF_ERROR(setupGamepadTriggerAxis(fd, ABS_BRAKE));
+    }
     RETURN_IF_ERROR(setupGamepadHatAxis(fd, ABS_HAT0X));
     RETURN_IF_ERROR(setupGamepadHatAxis(fd, ABS_HAT0Y));
     return {};
@@ -210,7 +237,10 @@ namespace vd_flags = android::companion::virtualdevice::flags;
 
 /** Creates a new uinput device and assigns a file descriptor. */
 unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t productId,
-                     const char* phys, DeviceType deviceType, std::optional<ui::Size> screenSize) {
+                     const char* phys, DeviceType deviceType, std::optional<ui::Size> screenSize,
+                     bool registerTriggerAxes) {
+    LOG_IF(FATAL, registerTriggerAxes && deviceType != DeviceType::GAMEPAD)
+            << "Only gamepads can register trigger axes.";
     unique_fd fd(TEMP_FAILURE_RETRY(::open("/dev/uinput", O_WRONLY | O_NONBLOCK)));
     if (fd < 0) {
         ALOGE("Error creating uinput device: %s", strerror(errno));
@@ -241,8 +271,10 @@ unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t product
             ioctl(fd, UI_SET_ABSBIT, ABS_Y);
             ioctl(fd, UI_SET_ABSBIT, ABS_Z);
             ioctl(fd, UI_SET_ABSBIT, ABS_RZ);
-            ioctl(fd, UI_SET_ABSBIT, ABS_GAS);
-            ioctl(fd, UI_SET_ABSBIT, ABS_BRAKE);
+            if (registerTriggerAxes) {
+                ioctl(fd, UI_SET_ABSBIT, ABS_GAS);
+                ioctl(fd, UI_SET_ABSBIT, ABS_BRAKE);
+            }
             ioctl(fd, UI_SET_ABSBIT, ABS_HAT0X);
             ioctl(fd, UI_SET_ABSBIT, ABS_HAT0Y);
             break;
@@ -326,7 +358,7 @@ unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t product
                 return invalidFd();
             }
         } else if (deviceType == DeviceType::GAMEPAD) {
-            base::Result<void> result = setupGamepadAxes(fd);
+            base::Result<void> result = setupGamepadAxes(fd, registerTriggerAxes);
             if (!result) {
                 LOG(ERROR) << "Could not set up gamepad: " << result.error();
                 return invalidFd();
@@ -606,9 +638,14 @@ bool VirtualGamepad::writeKeyEvent(int32_t androidKeyCode, int32_t androidAction
 bool VirtualGamepad::writeMotionEvent(const std::map<int, float>& axes,
                                       std::chrono::nanoseconds eventTime) {
     static const std::map<int, int> AXIS_MAPPING = {
-            {AMOTION_EVENT_AXIS_X, ABS_X},         {AMOTION_EVENT_AXIS_Y, ABS_Y},
-            {AMOTION_EVENT_AXIS_Z, ABS_Z},         {AMOTION_EVENT_AXIS_RZ, ABS_RZ},
-            {AMOTION_EVENT_AXIS_HAT_X, ABS_HAT0X}, {AMOTION_EVENT_AXIS_HAT_Y, ABS_HAT0Y},
+            {AMOTION_EVENT_AXIS_X, ABS_X},
+            {AMOTION_EVENT_AXIS_Y, ABS_Y},
+            {AMOTION_EVENT_AXIS_Z, ABS_Z},
+            {AMOTION_EVENT_AXIS_RZ, ABS_RZ},
+            {AMOTION_EVENT_AXIS_LTRIGGER, ABS_BRAKE},
+            {AMOTION_EVENT_AXIS_RTRIGGER, ABS_GAS},
+            {AMOTION_EVENT_AXIS_HAT_X, ABS_HAT0X},
+            {AMOTION_EVENT_AXIS_HAT_Y, ABS_HAT0Y},
     };
 
     for (const auto& [androidAxis, value] : axes) {
@@ -619,19 +656,23 @@ bool VirtualGamepad::writeMotionEvent(const std::map<int, float>& axes,
         }
         uint16_t uinputAxis = static_cast<uint16_t>(it->second);
 
-        float clampedValue = std::clamp(value, -1.0f, 1.0f);
         int32_t resolvedValue;
-
         switch (androidAxis) {
             case AMOTION_EVENT_AXIS_X:
             case AMOTION_EVENT_AXIS_Y:
             case AMOTION_EVENT_AXIS_Z:
             case AMOTION_EVENT_AXIS_RZ:
-                resolvedValue = static_cast<int32_t>(clampedValue * GAMEPAD_AXIS_MAX_VALUE);
+                resolvedValue = static_cast<int32_t>(std::clamp(value, -1.0f, 1.0f) *
+                                                     GAMEPAD_AXIS_MAX_VALUE);
+                break;
+            case AMOTION_EVENT_AXIS_LTRIGGER:
+            case AMOTION_EVENT_AXIS_RTRIGGER:
+                resolvedValue = static_cast<int32_t>(std::clamp(value, 0.0f, 1.0f) *
+                                                     GAMEPAD_AXIS_MAX_VALUE);
                 break;
             case AMOTION_EVENT_AXIS_HAT_X:
             case AMOTION_EVENT_AXIS_HAT_Y:
-                resolvedValue = static_cast<int32_t>(clampedValue);
+                resolvedValue = static_cast<int32_t>(std::clamp(value, -1.0f, 1.0f));
                 break;
             default:
                 ALOGE("Unexpected axis %d for value clamping", androidAxis);

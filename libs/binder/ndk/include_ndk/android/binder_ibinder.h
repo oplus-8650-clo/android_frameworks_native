@@ -259,7 +259,7 @@ void AIBinder_Class_setTransactionCodeToFunctionNameMap(
  * The value returned is valid for the lifetime of clazz. if transaction code is invalid or
  * transactionCodeToFunctionMap is not set, nullptr is returned.
  */
-const char* AIBinder_Class_getFunctionName(AIBinder_Class* clazz, transaction_code_t code)
+const char* AIBinder_Class_getFunctionName(const AIBinder_Class* clazz, transaction_code_t code)
         __INTRODUCED_IN(36);
 
 /**

@@ -39,7 +39,7 @@ namespace android {
 InputVerifier::InputVerifier(const std::string& name)
       : mVerifier(android::input::verifier::create(rust::String::lossy(name),
                                                    input_flags::enable_button_state_verification(),
-                                                   input_flags::touchpad_down_time_fix())) {}
+                                                   input_flags::enable_down_time_verification())) {}
 
 Result<void> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime, int32_t source,
                                             int32_t action, int32_t actionButton,

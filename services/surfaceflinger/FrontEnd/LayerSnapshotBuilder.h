@@ -136,6 +136,13 @@ private:
     static void updateRoundedCorner(LayerSnapshot& snapshot, const RequestedLayerState& layerState,
                                     const LayerSnapshot& parentSnapshot, const Args& args);
     static void scaleRadii(gui::CornerRadii& radii, float scaleX, float scaleY);
+
+    static bool shouldDisableCornerRounding(LayerSnapshot& snapshot,
+                                            const RequestedLayerState& requested);
+    static RoundedCornerState calculateLayerRoundedCornerSettings(
+            LayerSnapshot& snapshot, const RequestedLayerState& requested);
+    static RoundedCornerState calculateParentRoundedCornerSettings(
+            const LayerSnapshot& parentSnapshot, const LayerSnapshot& snapshot);
     static gui::CornerRadii getClippedClientRadii(const gui::CornerRadii& requestedRadii,
                                                   const FloatRect& layerCropRect,
                                                   const FloatRect& layerBounds);

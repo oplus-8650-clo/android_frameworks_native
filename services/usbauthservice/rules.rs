@@ -640,7 +640,7 @@ impl Rule {
 ///
 /// This struct manages all loaded rules, organizing them for efficient lookup
 /// based on the system's current state.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Policy {
     /// A flat list of all rules added to the policy.
     pub all_rules: Vec<Rule>,

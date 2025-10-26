@@ -26,7 +26,10 @@ use usbauthservice_device_info::UsbDeviceInfoWithState;
 use usbauthservice_rules::{Action, DeviceId, InterfaceType, Policy, Rule};
 
 /// Authorizes or deauthorizes a device by writing to its 'authorized' sysfs node.
-fn authorize_device_via_sysfs(syspath: &str, authorize: bool) -> Result<(), AuthorizationError> {
+pub fn authorize_device_via_sysfs(
+    syspath: &str,
+    authorize: bool,
+) -> Result<(), AuthorizationError> {
     debug!("AuthorizeDeviceViaSysfs called for device {} with level {}", syspath, authorize);
     let auth_path = Path::new(syspath).join("authorized");
 

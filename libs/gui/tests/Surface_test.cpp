@@ -3112,4 +3112,58 @@ TEST_F(SurfaceTest, DisconnectWithBadApi) {
     ASSERT_EQ(IGraphicBufferConsumer::STALE_BUFFER_SLOT, consumer->releaseBuffer(item));
     ASSERT_EQ(1u, surfaceListener->mReleasedCount);
 }
+
+TEST_F(SurfaceTest, LegacyBufferDrop_AppOwned) {
+    auto [consumer, surface] =
+            BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS, 10, /* controlledByApp */ true);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    // Legacy buffer drop starts out true.
+
+    sp<GraphicBuffer> bufferA, bufferB, bufferC, bufferD;
+    sp<Fence> fenceA, fenceB, fenceC, fenceD;
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferA, &fenceA));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferA, fenceA));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferB, &fenceB));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferB, fenceB));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferC, &fenceC));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferC, fenceC));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferD, &fenceD));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferD, fenceD));
+
+    // The queue will replace the last buffer.
+    EXPECT_NE(bufferA, bufferB);
+    EXPECT_EQ(bufferA, bufferC);
+    EXPECT_EQ(bufferB, bufferD);
+
+    // Clear all the buffers for a fresh queue.
+    for (;;) {
+        BufferItem item;
+        status_t ret = consumer->acquireBuffer(&item, 0);
+        if (ret == BufferItemConsumer::NO_BUFFER_AVAILABLE) {
+            break;
+        }
+        EXPECT_EQ(OK, consumer->releaseBuffer(item));
+    }
+
+    ASSERT_EQ(OK, surface->setLegacyBufferDrop(false));
+
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferA, &fenceA));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferA, fenceA));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferB, &fenceB));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferB, fenceB));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferC, &fenceC));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferC, fenceC));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferD, &fenceD));
+    EXPECT_EQ(OK, surface->queueBuffer(bufferD, fenceD));
+
+    EXPECT_NE(bufferA, bufferB);
+    EXPECT_NE(bufferA, bufferC);
+    EXPECT_NE(bufferA, bufferD);
+    EXPECT_NE(bufferB, bufferC);
+    EXPECT_NE(bufferB, bufferD);
+    EXPECT_NE(bufferC, bufferD);
+}
 } // namespace android

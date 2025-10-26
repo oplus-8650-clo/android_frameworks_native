@@ -25,6 +25,11 @@ rust_defaults {
         "libthiserror",
         "libueventd",
         "liblog_rust",
+        "liblogger",
+        "libtokio",
+        "libtokio_stream",
+        "libbinder_rs",
+        "libclap",
     ],
 }
 
@@ -41,6 +46,79 @@ rust_test_host {
     crate_name: "usbauthservice_rules",
     defaults: ["libusbauthservice_defaults"],
     srcs: ["rules.rs"],
+    test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
+}
+
+rust_binary {
+    name: "usbauthservice",
+    crate_name: "usbauthservice",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["usbauthservice.rs"],
+    init_rc: ["usbauthservice.rc"],
+    rustlibs: [
+        "libusbauthservice_service",
+        "libusbauthservice_device_info",
+        "libusbauthservice_authorization",
+        "libusbauthservice_manager",
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+    ],
+    prefer_rlib: true,
+}
+
+rust_test_host {
+    name: "usbauthservice_test",
+    crate_name: "usbauthservice",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["usbauthservice.rs"],
+    rustlibs: [
+        "libusbauthservice_service",
+        "libusbauthservice_device_info",
+        "libusbauthservice_authorization",
+        "libusbauthservice_manager",
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+    ],
+    test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
+    compile_multilib: "both",
+}
+
+rust_binary {
+    name: "usbauthservice_client",
+    crate_name: "usbauthservice_client",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["utils/client.rs"],
+    prefer_rlib: true,
+}
+
+rust_binary_host {
+    name: "usbauthservice_validate_policy",
+    crate_name: "usbauthservice_validate_policy",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["utils/validate_policy_file.rs"],
+    rustlibs: [
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+    ],
+}
+
+rust_test_host {
+    name: "usbauthservice_validate_policy_test",
+    crate_name: "usbauthservice_validate_policy",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["utils/validate_policy_file.rs"],
+    data: ["config/desktop_auth_policy.conf"],
+    rustlibs: [
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+        "libenv_logger",
+    ],
     test_suites: ["general-tests"],
     test_options: {
         unit_test: true,
@@ -69,6 +147,66 @@ rust_test_host {
         "libusbauthservice_device_info",
         "libusbauthservice_parser",
         "libusbauthservice_rules",
+    ],
+    test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
+}
+
+rust_library {
+    name: "libusbauthservice_manager",
+    crate_name: "usbauthservice_manager",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["manager.rs"],
+    rustlibs: [
+        "libusbauthservice_authorization",
+        "libusbauthservice_device_info",
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+    ],
+    host_supported: true,
+}
+
+rust_test_host {
+    name: "libusbauthservice_manager_test",
+    crate_name: "usbauthservice_manager",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["manager.rs"],
+    rustlibs: [
+        "libusbauthservice_authorization",
+        "libusbauthservice_device_info",
+        "libusbauthservice_parser",
+        "libusbauthservice_rules",
+        "libenv_logger",
+    ],
+    test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
+}
+
+rust_library {
+    name: "libusbauthservice_service",
+    crate_name: "usbauthservice_service",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["service.rs"],
+    rustlibs: [
+        "libusbauthservice_manager",
+        "libusbauthservice_device_info",
+    ],
+    host_supported: true,
+}
+
+rust_test_host {
+    name: "libusbauthservice_service_test",
+    crate_name: "usbauthservice_service",
+    defaults: ["libusbauthservice_defaults"],
+    srcs: ["service.rs"],
+    rustlibs: [
+        "libusbauthservice_manager",
+        "libusbauthservice_device_info",
+        "libenv_logger",
     ],
     test_suites: ["general-tests"],
     test_options: {
@@ -114,4 +252,11 @@ rust_test_host {
     test_options: {
         unit_test: true,
     },
+}
+
+prebuilt_etc {
+    name: "desktop_auth_policy",
+    src: "config/desktop_auth_policy.conf",
+    sub_dir: "usb_auth",
+    filename: "policy.conf",
 }

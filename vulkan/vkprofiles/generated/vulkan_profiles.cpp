@@ -1,12 +1,12 @@
 
 /*
- * Copyright 2024 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License")
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -1158,7 +1158,6 @@ static const VpPropertyDesc propertyDesc = {
                 case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR: {
                     VkPhysicalDeviceProperties2KHR* s = static_cast<VkPhysicalDeviceProperties2KHR*>(static_cast<void*>(p));
                     s->properties.limits.bufferImageGranularity = 4096;
-                    s->properties.limits.lineWidthGranularity = 0.5f;
                     s->properties.limits.maxColorAttachments = 8;
                     s->properties.limits.maxComputeWorkGroupInvocations = 256;
                     s->properties.limits.maxComputeWorkGroupSize[0] = 256;
@@ -1201,8 +1200,6 @@ static const VpPropertyDesc propertyDesc = {
                     VkPhysicalDeviceProperties2KHR* prettify_VkPhysicalDeviceProperties2KHR = static_cast<VkPhysicalDeviceProperties2KHR*>(static_cast<void*>(p));
                     ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.bufferImageGranularity <= 4096); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.bufferImageGranularity <= 4096), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.bufferImageGranularity <= 4096");
                     ret = ret && ((4096 % prettify_VkPhysicalDeviceProperties2KHR->properties.limits.bufferImageGranularity) == 0); VP_DEBUG_COND_MSG(!((4096 % prettify_VkPhysicalDeviceProperties2KHR->properties.limits.bufferImageGranularity) == 0), "Unsupported properties condition: (4096 % prettify_VkPhysicalDeviceProperties2KHR->properties.limits.bufferImageGranularity) == 0");
-                    ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity <= 0.5); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity <= 0.5), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.lineWidthGranularity <= 0.5");
-                    ret = ret && (isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)); VP_DEBUG_COND_MSG(!(isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)), "Unsupported properties condition: isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)");
                     ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxColorAttachments >= 8); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxColorAttachments >= 8), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.maxColorAttachments >= 8");
                     ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxComputeWorkGroupInvocations >= 256); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxComputeWorkGroupInvocations >= 256), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.maxComputeWorkGroupInvocations >= 256");
                     ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxComputeWorkGroupSize[0] >= 256); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.maxComputeWorkGroupSize[0] >= 256), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.maxComputeWorkGroupSize[0] >= 256");
@@ -1365,6 +1362,139 @@ static const VpStructChainerDesc chainerDesc = {
     },
 };
 } // namespace shaderStencilExport
+namespace wideLinesEnabledConstrained {
+
+static const VpFeatureDesc featureDesc = {
+    [](VkBaseOutStructure* p) { (void)p;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR: {
+                    VkPhysicalDeviceFeatures2KHR* s = static_cast<VkPhysicalDeviceFeatures2KHR*>(static_cast<void*>(p));
+                    s->features.wideLines = VK_TRUE;
+                } break;
+                default: break;
+            }
+    },
+    [](VkBaseOutStructure* p) -> bool { (void)p;
+        bool ret = true;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR: {
+                    VkPhysicalDeviceFeatures2KHR* prettify_VkPhysicalDeviceFeatures2KHR = static_cast<VkPhysicalDeviceFeatures2KHR*>(static_cast<void*>(p));
+                    ret = ret && (prettify_VkPhysicalDeviceFeatures2KHR->features.wideLines == VK_TRUE); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceFeatures2KHR->features.wideLines == VK_TRUE), "Unsupported feature condition: VkPhysicalDeviceFeatures2KHR::features.wideLines == VK_TRUE");
+                } break;
+                default: break;
+            }
+        return ret;
+    }
+};
+
+static const VpPropertyDesc propertyDesc = {
+    [](VkBaseOutStructure* p) { (void)p;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR: {
+                    VkPhysicalDeviceProperties2KHR* s = static_cast<VkPhysicalDeviceProperties2KHR*>(static_cast<void*>(p));
+                    s->properties.limits.lineWidthGranularity = 0.5f;
+                } break;
+                default: break;
+            }
+    },
+    [](VkBaseOutStructure* p) -> bool { (void)p;
+        bool ret = true;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR: {
+                    VkPhysicalDeviceProperties2KHR* prettify_VkPhysicalDeviceProperties2KHR = static_cast<VkPhysicalDeviceProperties2KHR*>(static_cast<void*>(p));
+                    ret = ret && (prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity <= 0.5); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity <= 0.5), "Unsupported properties condition: VkPhysicalDeviceProperties2KHR::properties.limits.lineWidthGranularity <= 0.5");
+                    ret = ret && (isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)); VP_DEBUG_COND_MSG(!(isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)), "Unsupported properties condition: isMultiple(0.5, prettify_VkPhysicalDeviceProperties2KHR->properties.limits.lineWidthGranularity)");
+                } break;
+                default: break;
+            }
+        return ret;
+    }
+};
+
+static const VpStructChainerDesc chainerDesc = {
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, nullptr };
+        VkPhysicalDeviceProtectedMemoryFeatures physicalDeviceProtectedMemoryFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES, &physicalDeviceVulkan12Features };
+        VkPhysicalDeviceShaderIntegerDotProductFeatures physicalDeviceShaderIntegerDotProductFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES, &physicalDeviceProtectedMemoryFeatures };
+        VkPhysicalDeviceTransformFeedbackFeaturesEXT physicalDeviceTransformFeedbackFeaturesEXT{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT, &physicalDeviceShaderIntegerDotProductFeatures };
+        VkPhysicalDeviceImage2DViewOf3DFeaturesEXT physicalDeviceImage2DViewOf3DFeaturesEXT{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT, &physicalDeviceTransformFeedbackFeaturesEXT };
+        VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR physicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR, &physicalDeviceImage2DViewOf3DFeaturesEXT };
+        p->pNext = static_cast<VkBaseOutStructure*>(static_cast<void*>(&physicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR));
+        pfnCb(p, pUser);
+    },
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        VkPhysicalDeviceFloatControlsProperties physicalDeviceFloatControlsProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES, nullptr };
+        VkPhysicalDeviceVulkan11Properties physicalDeviceVulkan11Properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES, &physicalDeviceFloatControlsProperties };
+        p->pNext = static_cast<VkBaseOutStructure*>(static_cast<void*>(&physicalDeviceVulkan11Properties));
+        pfnCb(p, pUser);
+    },
+    [](uint32_t count, VkBaseOutStructure* p, void* pUser, PFN_vpStructArrayChainerCb pfnCb) {
+        pfnCb(count, p, pUser);
+    },
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        pfnCb(p, pUser);
+    },
+};
+} // namespace wideLinesEnabledConstrained
+namespace wideLinesDisabledUnconstrained {
+
+static const VpFeatureDesc featureDesc = {
+    [](VkBaseOutStructure* p) { (void)p;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR: {
+                    VkPhysicalDeviceFeatures2KHR* s = static_cast<VkPhysicalDeviceFeatures2KHR*>(static_cast<void*>(p));
+                    s->features.wideLines = VK_FALSE;
+                } break;
+                default: break;
+            }
+    },
+    [](VkBaseOutStructure* p) -> bool { (void)p;
+        bool ret = true;
+            switch (p->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR: {
+                    VkPhysicalDeviceFeatures2KHR* prettify_VkPhysicalDeviceFeatures2KHR = static_cast<VkPhysicalDeviceFeatures2KHR*>(static_cast<void*>(p));
+                    ret = ret && (prettify_VkPhysicalDeviceFeatures2KHR->features.wideLines == VK_FALSE); VP_DEBUG_COND_MSG(!(prettify_VkPhysicalDeviceFeatures2KHR->features.wideLines == VK_FALSE), "Unsupported feature condition: VkPhysicalDeviceFeatures2KHR::features.wideLines == VK_FALSE");
+                } break;
+                default: break;
+            }
+        return ret;
+    }
+};
+
+static const VpPropertyDesc propertyDesc = {
+    [](VkBaseOutStructure* p) { (void)p;
+    },
+    [](VkBaseOutStructure* p) -> bool { (void)p;
+        bool ret = true;
+        return ret;
+    }
+};
+
+static const VpStructChainerDesc chainerDesc = {
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, nullptr };
+        VkPhysicalDeviceProtectedMemoryFeatures physicalDeviceProtectedMemoryFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES, &physicalDeviceVulkan12Features };
+        VkPhysicalDeviceShaderIntegerDotProductFeatures physicalDeviceShaderIntegerDotProductFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES, &physicalDeviceProtectedMemoryFeatures };
+        VkPhysicalDeviceTransformFeedbackFeaturesEXT physicalDeviceTransformFeedbackFeaturesEXT{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT, &physicalDeviceShaderIntegerDotProductFeatures };
+        VkPhysicalDeviceImage2DViewOf3DFeaturesEXT physicalDeviceImage2DViewOf3DFeaturesEXT{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT, &physicalDeviceTransformFeedbackFeaturesEXT };
+        VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR physicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR, &physicalDeviceImage2DViewOf3DFeaturesEXT };
+        p->pNext = static_cast<VkBaseOutStructure*>(static_cast<void*>(&physicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR));
+        pfnCb(p, pUser);
+    },
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        VkPhysicalDeviceFloatControlsProperties physicalDeviceFloatControlsProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES, nullptr };
+        VkPhysicalDeviceVulkan11Properties physicalDeviceVulkan11Properties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES, &physicalDeviceFloatControlsProperties };
+        p->pNext = static_cast<VkBaseOutStructure*>(static_cast<void*>(&physicalDeviceVulkan11Properties));
+        pfnCb(p, pUser);
+    },
+    [](uint32_t count, VkBaseOutStructure* p, void* pUser, PFN_vpStructArrayChainerCb pfnCb) {
+        pfnCb(count, p, pUser);
+    },
+    [](VkBaseOutStructure* p, void* pUser, PFN_vpStructChainerCb pfnCb) {
+        pfnCb(p, pUser);
+    },
+};
+} // namespace wideLinesDisabledUnconstrained
 } // namespace blocks
 } // namespace VP_ANDROID_16_MINIMUMS
 #endif // VP_ANDROID_16_minimums
@@ -9705,11 +9835,48 @@ namespace VP_ANDROID_16_MINIMUMS {
             };
             static const uint32_t variantCount = static_cast<uint32_t>(std::size(variants));
         } // namespace multisampledToSingleSampled_shaderStencilExport_
+
+        namespace wideLinesEnabledConstrained_wideLinesDisabledUnconstrained_ {
+            static const VpVariantDesc variants[] = {
+                {
+                    "wideLinesEnabledConstrained",
+                    0, nullptr,
+                    0, nullptr,
+                    static_cast<uint32_t>(std::size(featureStructTypes)), featureStructTypes,
+                    blocks::wideLinesEnabledConstrained::featureDesc,
+                    static_cast<uint32_t>(std::size(propertyStructTypes)), propertyStructTypes,
+                    blocks::wideLinesEnabledConstrained::propertyDesc,
+                    0, nullptr,
+                    0, nullptr,
+                    0, nullptr,
+                    0, nullptr,
+                    blocks::wideLinesEnabledConstrained::chainerDesc,
+                    0, nullptr,
+                },
+                {
+                    "wideLinesDisabledUnconstrained",
+                    0, nullptr,
+                    0, nullptr,
+                    static_cast<uint32_t>(std::size(featureStructTypes)), featureStructTypes,
+                    blocks::wideLinesDisabledUnconstrained::featureDesc,
+                    0, nullptr,
+                    blocks::wideLinesDisabledUnconstrained::propertyDesc,
+                    0, nullptr,
+                    0, nullptr,
+                    0, nullptr,
+                    0, nullptr,
+                    blocks::wideLinesDisabledUnconstrained::chainerDesc,
+                    0, nullptr,
+                },
+            };
+            static const uint32_t variantCount = static_cast<uint32_t>(std::size(variants));
+        } // namespace wideLinesEnabledConstrained_wideLinesDisabledUnconstrained_
     } // namespace blocks
 
     static const VpCapabilitiesDesc capabilities[] = {
         { blocks::MUST::variantCount, blocks::MUST::variants },
         { blocks::multisampledToSingleSampled_shaderStencilExport_::variantCount, blocks::multisampledToSingleSampled_shaderStencilExport_::variants },
+        { blocks::wideLinesEnabledConstrained_wideLinesDisabledUnconstrained_::variantCount, blocks::wideLinesEnabledConstrained_wideLinesDisabledUnconstrained_::variants },
     };
     static const uint32_t capabilityCount = static_cast<uint32_t>(std::size(capabilities));
 

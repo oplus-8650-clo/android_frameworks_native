@@ -7,6 +7,93 @@ package {
     default_applicable_licenses: ["frameworks_native_license"],
 }
 
+// TODO(b/402766978) : This bindgen is meant for NDK APIs for which we
+// need the API level checks as rust has no support for it.
+rust_bindgen {
+    name: "libbinder_ndk_compat_bindgen",
+    crate_name: "binder_ndk_compat_bindgen",
+    host_supported: true,
+    vendor_available: true,
+    product_available: true,
+    recovery_available: true,
+    wrapper_src: "src/cpp/include/binder_rust.hpp",
+    source_stem: "bindings",
+    visibility: [":__subpackages__"],
+    bindgen_flags: [
+        "--blocklist-type",
+        "AIBinder_Class",
+        "--allowlist-function",
+        "Compat_AIBinder_Class_setTransactionCodeToFunctionNameMap",
+        "--allowlist-function",
+        "Compat_AIBinder_Class_getFunctionName",
+        "--raw-line",
+        "use binder_ndk_sys::AIBinder_Class;",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+    shared_libs: [
+        "libbinder_ndk",
+    ],
+    rustlibs: [
+        "libbinder_ndk_sys",
+    ],
+    min_sdk_version: "Tiramisu",
+}
+
+// TODO(b/402766978) : This c++ lib is wrapper for calling NDK APIs for which we
+// need the API level checks as rust has no support for it.
+cc_library_static {
+    name: "libbinder_rs_compat",
+    srcs: ["src/cpp/binder_rust.cpp"],
+    host_supported: true,
+    vendor_available: true,
+    product_available: true,
+    recovery_available: true,
+    min_sdk_version: "Tiramisu",
+    shared_libs: [
+        "libbinder_ndk",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+    visibility: [":__subpackages__"],
+}
+
+// TODO(b/402766978) : rust lib which calls into C++ wrapper API around the NDK APIs.
+rust_library {
+    name: "libbinder_rs_ndk_compat",
+    crate_name: "binder_rs_ndk_compat",
+    srcs: ["src/cpp/lib.rs"],
+    whole_static_libs: [
+        "libbinder_rs_compat",
+    ],
+    shared_libs: [
+        "libbinder_ndk",
+    ],
+    rustlibs: [
+        "libbinder_ndk_compat_bindgen",
+        "libbinder_ndk_sys",
+    ],
+    host_supported: true,
+    vendor_available: true,
+    product_available: true,
+    recovery_available: true,
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+    min_sdk_version: "Tiramisu",
+    visibility: [":__subpackages__"],
+}
+
 rust_library {
     name: "libbinder_rs",
     crate_name: "binder",
@@ -17,6 +104,7 @@ rust_library {
         "liblibc",
         "liblog_rust",
         "libzerocopy",
+        "libbinder_rs_ndk_compat",
     ],
     host_supported: true,
     vendor_available: true,
@@ -77,6 +165,7 @@ rust_library {
         "libbinder_ndk_sys_on_trusty_mock",
         "libdowncast_rs",
         "liblibc",
+        "libbinder_rs_ndk_compat",
     ],
     vendor: true,
 }
@@ -218,6 +307,10 @@ rust_defaults {
         "sockaddr",
         "--raw-line",
         "use libc::sockaddr;",
+        "--blocklist-item",
+        "AIBinder_Class_setTransactionCodeToFunctionNameMap",
+        "--blocklist-item",
+        "AIBinder_Class_getFunctionName",
     ],
     cflags: [
         "-DANDROID_PLATFORM",
@@ -315,6 +408,7 @@ rust_test {
         "liblibc",
         "liblog_rust",
         "libzerocopy",
+        "libbinder_rs_ndk_compat",
     ],
 }
 
