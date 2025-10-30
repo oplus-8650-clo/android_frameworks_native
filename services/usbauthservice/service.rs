@@ -14,6 +14,7 @@
 
 //! This module implements the IUsbAuthManager AIDL interface.
 
+use crate::manager::UsbDeviceManager;
 use android_hardware_usb_auth::aidl::android::hardware::usb::IUsbAuthManager::{
     BnUsbAuthManager, IUsbAuthManager,
 };
@@ -23,7 +24,6 @@ use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSys
 use binder::{Interface, SpIBinder, Status};
 use log::debug;
 use std::sync::{Arc, Mutex};
-use usbauthservice_manager::UsbDeviceManager;
 
 /// Implementation of the `IUsbAuthManager` binder service.
 pub struct UsbAuthServiceImpl {
@@ -95,12 +95,12 @@ impl IUsbAuthManager for UsbAuthServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::device_info::UsbDeviceInfoWithState;
     use std::collections::HashMap;
     use std::default::Default;
     use std::fs;
     use tempfile::tempdir;
     use ueventd::mock_sysfs::{MockSysfs, SysfsFile};
-    use usbauthservice_device_info::UsbDeviceInfoWithState;
 
     fn create_test_device(syspath: &str) -> UsbAuthDeviceInfo {
         UsbAuthDeviceInfo {

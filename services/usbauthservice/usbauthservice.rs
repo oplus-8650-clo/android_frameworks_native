@@ -22,8 +22,8 @@ use ueventd::device::Device;
 use ueventd::device_node::watcher::Watcher;
 use ueventd::event::{DeviceEvent, EventType};
 
-use usbauthservice_manager::UsbDeviceManager;
-use usbauthservice_service::UsbAuthServiceImpl;
+use usbauthservice_core::manager::UsbDeviceManager;
+use usbauthservice_core::service::UsbAuthServiceImpl;
 
 async fn handle_device_events(
     mut event_stream: impl Stream<Item = DeviceEvent> + Unpin,
@@ -107,7 +107,7 @@ mod tests {
     use tempfile::tempdir;
     use ueventd::device::Device;
     use ueventd::mock_sysfs::{MockSysfs, SysfsFile};
-    use usbauthservice_manager::UsbDeviceManager;
+    use usbauthservice_core::manager::UsbDeviceManager;
 
     // Creates a mock sysfs with a single USB device for testing.
     fn create_mock_sysfs_with_device(

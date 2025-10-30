@@ -18,11 +18,11 @@
 //! into a structured `Policy` object that can be used to make authorization
 //! decisions.
 
+use crate::rules::*;
 use std::fmt;
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
-use usbauthservice_rules::*;
 
 /// Encapsulates different types of errors that can occur during policy loading.
 #[derive(Debug, Error, PartialEq)]

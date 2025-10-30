@@ -15,7 +15,7 @@
 //! A utility to validate USB authorization policy files.
 use clap::Parser as clapParser;
 use std::path::Path;
-use usbauthservice_parser::Parser;
+use usbauthservice_core::parser::Parser;
 
 #[derive(clapParser, Debug)]
 struct Args {

@@ -202,8 +202,7 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
             *periodFlushed = true;
         }
 
-        if (mLastHwVsync.get() &&
-            (!FlagManager::getInstance().add_first_vsync_to_tracker() || !mLastHwVsync.isFirst())) {
+        if (mLastHwVsync.get() &&!mLastHwVsync.isFirst()) {
             mTracker.addVsyncTimestamp(*mLastHwVsync.get());
         }
         mTracker.addVsyncTimestamp(timestamp);
@@ -214,7 +213,7 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
         SFTRACE_FORMAT("VSR %" PRIu64 ": still confirming period", mId.value);
         mLastHwVsync.set(timestamp);
         // Add the first vsync callback to the tracker to be based on a fresh vsync
-        if (FlagManager::getInstance().add_first_vsync_to_tracker() && mLastHwVsync.isFirst()) {
+        if (mLastHwVsync.isFirst()) {
             mTracker.addVsyncTimestamp(*mLastHwVsync.get());
         }
         mMoreSamplesNeeded = true;
