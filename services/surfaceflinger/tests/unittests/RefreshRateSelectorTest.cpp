@@ -466,33 +466,7 @@ TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap) {
     EXPECT_EQ(performanceRateByPolicy, performanceRate);
 }
 
-TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap_differentGroups) {
-    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, false);
-    auto selector = createSelector(kModes_60_90_G1, kModeId60);
-
-    const auto minRate = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate = selector.getMaxSupportedRefreshRate();
-    const auto minRate60 = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate60 = selector.getMaxRefreshRateByPolicy();
-
-    EXPECT_EQ(kMode60, minRate);
-    EXPECT_EQ(kMode60, minRate60);
-    EXPECT_EQ(kMode60, performanceRate60);
-
-    EXPECT_EQ(SetPolicyResult::Changed,
-              selector.setDisplayManagerPolicy({kModeId90, {60_Hz, 90_Hz}}));
-    selector.setActiveMode(kModeId90, 90_Hz);
-
-    const auto minRate90 = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate90 = selector.getMaxRefreshRateByPolicy();
-
-    EXPECT_EQ(kMode90_G1, performanceRate);
-    EXPECT_EQ(kMode90_G1, minRate90);
-    EXPECT_EQ(kMode90_G1, performanceRate90);
-}
-
 TEST_P(RefreshRateSelectorTest, twoModes_storesONeRefreshRateMap_differentGroups) {
-    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, true);
     auto selector = createSelector(kModes_60_90_G1, kModeId60);
 
     auto minRate = selector.getMinRefreshRateByPolicy();
@@ -4714,7 +4688,6 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMultipleArrModes) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::filter_refresh_rates_within_config_group, true);
     const auto selector = createSelector(kVrrModes_90_120, kModeId120);
 
     std::vector<float> expected;

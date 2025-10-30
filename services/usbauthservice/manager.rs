@@ -14,6 +14,12 @@
 
 //! Manages USB device authorization policies and decisions.
 
+use crate::authorization;
+use crate::device_info::UsbDeviceInfoWithState;
+use crate::parser::{Parser, PolicyLoadError};
+use crate::rules::{
+    Action, DeviceAttributes, DeviceId, InterfaceAttribute, InterfaceType, Policy, Rule,
+};
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::UsbAuthDeviceInfo;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationStatus::UsbAuthorizationStatus;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
@@ -22,12 +28,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use ueventd::device::Device;
-use usbauthservice_authorization as authorization;
-use usbauthservice_device_info::UsbDeviceInfoWithState;
-use usbauthservice_parser::{Parser, PolicyLoadError};
-use usbauthservice_rules::{
-    Action, DeviceAttributes, DeviceId, InterfaceAttribute, InterfaceType, Policy, Rule,
-};
 
 /// Represents the possible errors that can occur in the `UsbDeviceManager`.
 #[derive(Error, Debug)]
@@ -37,7 +37,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
     /// An error occurred during device authorization.
     #[error("Authorization error: {0}")]
-    Authorization(#[from] usbauthservice_device_info::AuthorizationError),
+    Authorization(#[from] crate::device_info::AuthorizationError),
     /// An error occurred while parsing the USB authorization policy.
     #[error("Policy parsing error: {0}")]
     Parse(#[from] PolicyLoadError),
@@ -394,13 +394,13 @@ fn create_default_policy() -> Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rules::Action;
     use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::UsbAuthDeviceInfo;
     use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
     use std::collections::HashMap;
     use std::fs;
     use tempfile::tempdir;
     use ueventd::mock_sysfs::{MockSysfs, SysfsFile};
-    use usbauthservice_rules::Action;
 
     fn init_logger() {
         let _ = env_logger::try_init();

@@ -53,14 +53,12 @@ public:
 
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
-    bool add_first_vsync_to_tracker() const;
     bool adpf_gpu_sf() const;
     bool anchor_list() const;
     bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
-    bool filter_refresh_rates_within_config_group() const;
     bool frontend_caching_v0() const;
     bool graphite_renderengine_preview_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
