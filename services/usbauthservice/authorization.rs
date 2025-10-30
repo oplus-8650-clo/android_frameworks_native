@@ -16,14 +16,14 @@
 //! It evaluates devices against a given policy and system state to determine
 //! the appropriate action, such as allowing, denying, or deferring access.
 
+use crate::device_info::AuthorizationError;
+use crate::device_info::UsbDeviceInfoWithState;
+use crate::rules::{Action, DeviceId, InterfaceType, Policy, Rule};
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::UsbAuthDeviceInfo;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
 use log::{debug, error};
 use std::fs;
 use std::path::Path;
-use usbauthservice_device_info::AuthorizationError;
-use usbauthservice_device_info::UsbDeviceInfoWithState;
-use usbauthservice_rules::{Action, DeviceId, InterfaceType, Policy, Rule};
 
 /// Authorizes or deauthorizes a device by writing to its 'authorized' sysfs node.
 pub fn authorize_device_via_sysfs(
@@ -151,8 +151,8 @@ fn is_device_internal(device: &UsbAuthDeviceInfo) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rules::{DeviceAttributes, InterfaceAttribute};
     use std::collections::HashMap;
-    use usbauthservice_rules::{DeviceAttributes, InterfaceAttribute};
 
     fn create_test_device(
         class: i8,

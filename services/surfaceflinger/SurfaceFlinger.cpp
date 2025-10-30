@@ -6416,6 +6416,19 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     future.get();
 }
 
+ftl::FinalizerStd SurfaceFlinger::makePowerModeAsyncFinalizer(PhysicalDisplayId displayId,
+                                                              hal::PowerMode mode) {
+    return ftl::Finalizer([this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
+        if (displayId == mFrontInternalDisplayId) {
+            mTimeStats->setPowerMode(mode);
+            mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
+        }
+
+        ALOGD("Finished setting power mode %d on physical display %s", mode,
+              to_string(displayId).c_str());
+    });
+}
+
 std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
 SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display,
                                                  hal::PowerMode mode) {
@@ -6461,15 +6474,6 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
 
     const auto activeMode = display->refreshRateSelector().getActiveMode().modePtr;
     using OptimizationPolicy = gui::ISurfaceComposer::OptimizationPolicy;
-    auto commonFinalizer = [this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
-        if (displayId == mFrontInternalDisplayId) {
-            mTimeStats->setPowerMode(mode);
-            mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
-        }
-
-        ALOGD("Finished setting power mode %d on physical display %s", mode,
-              to_string(displayId).c_str());
-    };
     if (display->isPrimary()) {
         mQtiSFExtnIntf->qtiFbScalingOnPowerChange(display);
     }
@@ -6496,9 +6500,10 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
 
         return {getHwComposer().setPowerMode(displayId, mode),
                 ftl::Finalizer([this, displayId, mode, shouldApplyOptimizationPolicy, activeMode,
-                                display, finalizer = std::move(commonFinalizer)]()
+                                display]()
                                        FTL_FAKE_GUARD(kMainThreadContext) {
-                                           const auto _ = ftl::Finalizer(std::move(finalizer));
+                                           const auto _ =
+                                                   makePowerModeAsyncFinalizer(displayId, mode);
                                            if (mode != hal::PowerMode::DOZE_SUSPEND) {
                                                const bool enable =
                                                        mScheduler->getVsyncSchedule(displayId)
@@ -6551,36 +6556,33 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
         // VSYNC.
         requestHardwareVsync(displayId, false);
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer([this, finalizer = std::move(commonFinalizer)]()
-                                       FTL_FAKE_GUARD(kMainThreadContext) {
-                                           const auto _ = ftl::Finalizer(std::move(finalizer));
-                                           mVisibleRegionsDirty = true;
-                                           // from this point on, SF will stop drawing on this
-                                           // display
-                                       })};
+                ftl::Finalizer([this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
+                    const auto _ = makePowerModeAsyncFinalizer(displayId, mode);
+                    mVisibleRegionsDirty = true;
+                    // from this point on, SF will stop drawing on this
+                    // display
+                })};
 
     } else if (mode == hal::PowerMode::DOZE || mode == hal::PowerMode::ON) {
         // Update display while dozing
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(
-                        [this, currentMode, displayId, shouldApplyOptimizationPolicy, activeMode,
-                         finalizer =
-                                 std::move(commonFinalizer)]() FTL_FAKE_GUARD(kMainThreadContext) {
-                            const auto _ = ftl::Finalizer(std::move(finalizer));
-                            if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
-                                if (displayId == mFrontInternalDisplayId) {
-                                    ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
-                                    mVisibleRegionsDirty = true;
-                                    scheduleRepaint();
-                                    if (!shouldApplyOptimizationPolicy) {
-                                        mScheduler->enableSyntheticVsync(false);
-                                    }
-                                }
-                                constexpr bool kAllowToEnable = true;
-                                mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
-                                                                  activeMode.get());
+                ftl::Finalizer([this, currentMode, displayId, mode, shouldApplyOptimizationPolicy,
+                                activeMode]() FTL_FAKE_GUARD(kMainThreadContext) {
+                    const auto _ = makePowerModeAsyncFinalizer(displayId, mode);
+                    if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
+                        if (displayId == mFrontInternalDisplayId) {
+                            ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
+                            mVisibleRegionsDirty = true;
+                            scheduleRepaint();
+                            if (!shouldApplyOptimizationPolicy) {
+                                mScheduler->enableSyntheticVsync(false);
                             }
-                        })};
+                        }
+                        constexpr bool kAllowToEnable = true;
+                        mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
+                                                          activeMode.get());
+                    }
+                })};
     } else if (mode == hal::PowerMode::DOZE_SUSPEND) {
         // Leave display going to doze
         constexpr bool kDisallow = true;
@@ -6590,11 +6592,11 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
             mScheduler->enableSyntheticVsync();
         }
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(std::move(commonFinalizer))};
+                makePowerModeAsyncFinalizer(displayId, mode)};
     } else {
         ALOGE("Attempting to set unknown power mode: %d\n", mode);
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(std::move(commonFinalizer))};
+                makePowerModeAsyncFinalizer(displayId, mode)};
     }
 
 }
