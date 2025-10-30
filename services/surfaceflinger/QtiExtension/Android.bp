@@ -52,7 +52,7 @@ qtidisplayextension_cc_defaults {
                 "-Wno-unused-parameter",
                 "-DQTI_COMPOSER3_EXTENSIONS",
             ],
-            shared_libs: ["vendor.qti.hardware.display.composer3-V1-ndk"],
+            shared_libs: ["vendor.qti.hardware.display.composer3-V5-ndk"],
         },
     },
 }
