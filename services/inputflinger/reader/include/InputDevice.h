@@ -219,7 +219,7 @@ private:
     std::optional<std::string> mAssociatedDisplayUniqueIdByDescriptor;
     std::optional<std::string> mAssociatedDeviceType;
     std::optional<DisplayViewport> mAssociatedViewport;
-    std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> mKeyRemapping;
+    std::unordered_map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> mKeyRemapping;
     bool mHasMic;
     bool mDropUntilNextSync;
     std::optional<bool> mShouldSmoothScroll;
@@ -343,8 +343,12 @@ public:
 
     inline bool hasMscEvent(int mscEvent) const { return mEventHub->hasMscEvent(mId, mscEvent); }
 
-    inline void setKeyRemapping(const std::map<int32_t, int32_t>& keyRemapping) const {
+    inline void setKeyRemapping(const std::unordered_map<int32_t, int32_t>& keyRemapping) {
         mEventHub->setKeyRemapping(mId, keyRemapping);
+    }
+
+    inline void setAxisRemapping(const std::unordered_map<int32_t, int32_t>& axisRemapping) {
+        mEventHub->setAxisRemapping(mId, axisRemapping);
     }
 
     inline status_t mapKey(int32_t scanCode, int32_t usageCode, int32_t metaState,

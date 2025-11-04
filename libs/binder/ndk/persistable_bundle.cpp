@@ -45,7 +45,7 @@ APersistableBundle* _Nullable APersistableBundle_dup(const APersistableBundle* p
 }
 
 void APersistableBundle_delete(APersistableBundle* pBundle) {
-    free(pBundle);
+    delete pBundle;
 }
 
 bool APersistableBundle_isEqual(const APersistableBundle* lhs, const APersistableBundle* rhs) {

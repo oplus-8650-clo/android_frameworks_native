@@ -935,6 +935,12 @@ PFN_vkVoidFunction GetDeviceProcAddr(VkDevice device, const char* pName) {
                                                               : nullptr;
 }
 
+/* The loader's internal implementation of
+ * vkEnumerateInstanceExtensionProperties (see "api.cpp" for the loader's
+ * high-level "instance" implementation).  All instance extensions from all
+ * layers are returned to the application, in addition to the loader's instance
+ * extensions.
+ */
 VkResult EnumerateInstanceExtensionProperties(
     const char* pLayerName,
     uint32_t* pPropertyCount,

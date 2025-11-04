@@ -170,13 +170,6 @@ flag {
 }
 
 flag {
-  name: "rotary_input_telemetry"
-  namespace: "wear_frameworks"
-  description: "Enable telemetry for rotary input"
-  bug: "370353565"
-}
-
-flag {
   name: "set_input_device_kernel_wake"
   namespace: "input"
   description: "Set input device's power/wakeup sysfs node"

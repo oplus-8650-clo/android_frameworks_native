@@ -416,6 +416,7 @@ public:
     static sp<IBinder> createVirtualDisplay(const std::string& displayName, bool isSecure,
                                             bool optimizeForPower = true,
                                             const std::string& uniqueId = kEmpty,
+                                            uid_t ownerUid = gui::Uid::INVALID.val(),
                                             float requestedRefreshRate = 0);
 
     static status_t destroyVirtualDisplay(const sp<IBinder>& displayToken);

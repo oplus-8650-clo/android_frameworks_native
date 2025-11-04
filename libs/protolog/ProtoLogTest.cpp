@@ -47,15 +47,7 @@ namespace protolog {
 
 class ProtoLogTest : public ::testing::Test {
 protected:
-    static void SetUpTestSuite() {
-        // Initialize Perfetto for in-process tracing. This is required to be
-        // able to start/stop tracing sessions within the test itself.
-        perfetto::TracingInitArgs args;
-        args.backends = perfetto::kInProcessBackend;
-        perfetto::Tracing::Initialize(args);
-    }
-
-    void SetUp() override { android::protolog::Initialize(); }
+    void SetUp() override { android::protolog::Initialize(perfetto::kInProcessBackend); }
 
     // void TearDown() override { android::protolog::Destroy(); }
 

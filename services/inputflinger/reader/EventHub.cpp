@@ -1231,7 +1231,7 @@ bool EventHub::markSupportedKeyCodes(RawDeviceId deviceId, const std::vector<int
 }
 
 void EventHub::setKeyRemapping(RawDeviceId deviceId,
-                               const std::map<int32_t, int32_t>& keyRemapping) const {
+                               const std::unordered_map<int32_t, int32_t>& keyRemapping) {
     std::scoped_lock _l(mLock);
     Device* device = getDeviceLocked(deviceId);
     if (device == nullptr) {
@@ -1241,6 +1241,22 @@ void EventHub::setKeyRemapping(RawDeviceId deviceId,
     if (kcm) {
         kcm->setKeyRemapping(keyRemapping);
     }
+}
+
+void EventHub::setAxisRemapping(RawDeviceId deviceId,
+                                const std::unordered_map<int32_t, int32_t>& axisRemapping) {
+    std::scoped_lock _l(mLock);
+    Device* device = getDeviceLocked(deviceId);
+
+    if (device == nullptr) {
+        ALOGE("Invalid device id=%" PRId32 " provided to %s", deviceId, __func__);
+        return;
+    }
+    if (!device->keyMap.haveKeyLayout()) {
+        ALOGW("Device %d does not have a key layout, cannot set axis remapping.", deviceId);
+        return;
+    }
+    device->keyMap.keyLayoutMap->setAxisRemapping(axisRemapping);
 }
 
 status_t EventHub::mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageCode,

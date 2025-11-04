@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <unordered_map>
 #include "InputMapper.h"
 
 namespace android {
@@ -80,12 +81,14 @@ private:
         float newValue;         // most recent value
         float highCurrentValue; // current value of high split
         float highNewValue;     // most recent value of high split
+        nsecs_t lastUpdateTime; // Time of the last EV_ABS event for this axis.
 
         void resetValue() {
             this->currentValue = 0;
             this->newValue = 0;
             this->highCurrentValue = 0;
             this->highNewValue = 0;
+            this->lastUpdateTime = 0;
         }
     };
 
@@ -97,6 +100,8 @@ private:
 
     // Axes indexed by raw ABS_* axis index.
     std::unordered_map<int32_t, Axis> mAxes;
+    std::unordered_map</* fromAndroidAxisId */ int32_t, /* toAndroidAxisId */ int32_t>
+            mAxisRemapping;
 
     [[nodiscard]] std::list<NotifyArgs> sync(nsecs_t when, nsecs_t readTime, bool force);
 

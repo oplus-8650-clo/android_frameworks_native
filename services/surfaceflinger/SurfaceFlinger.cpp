@@ -648,9 +648,8 @@ void SurfaceFlinger::run() {
 sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
         gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        float requestedRefreshRate) {
-    // TODO: b/340933138 -  set this to be the correct value.
-    uid_t ownerUid = static_cast<uid_t>(-1);
+        uid_t ownerUid, float requestedRefreshRate) {
+    (void)ownerUid;
 
     // SurfaceComposerAIDL checks for some permissions, but adding an additional check here.
     // This is to ensure that only root, system, and graphics can request to create a secure
@@ -3141,10 +3140,12 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // Composite if transactions were committed, or if requested by HWC.
     bool mustComposite = mMustComposite.exchange(false);
     {
+        const bool pacesetterPoweredOn =
+                FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->isPoweredOn();
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
                                     pacesetterFrameTarget.frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
-                                    mScheduler->getPacesetterRefreshRate());
+                                    mScheduler->getPacesetterRefreshRate(), pacesetterPoweredOn);
 
         const bool flushTransactions = clearTransactionFlags(eTransactionFlushNeeded);
         bool transactionsAreEmpty = false;
@@ -4608,6 +4609,10 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
                                                                 maxGraphicsHeight));
             displaySurface = frameBufferSurface;
             compositionSurface = frameBufferSurface->getSurface();
+        }
+
+        if (FlagManager::getInstance().sf_disable_producer_throttling_for_client_composition()) {
+            compositionSurface->setProducerThrottlingEnabled(false);
         }
     }
 
@@ -10071,13 +10076,13 @@ binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerCli
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
         gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        float requestedRefreshRate, sp<IBinder>* outDisplay) {
+        int32_t ownerUid, float requestedRefreshRate, sp<IBinder>* outDisplay) {
     status_t status = checkAccessPermission();
     if (status != OK) {
         return binderStatusFromStatusT(status);
     }
     *outDisplay = mFlinger->createVirtualDisplay(displayName, isSecure, optimizationPolicy,
-                                                 uniqueId, requestedRefreshRate);
+                                                 uniqueId, ownerUid, requestedRefreshRate);
     return binder::Status::ok();
 }
 

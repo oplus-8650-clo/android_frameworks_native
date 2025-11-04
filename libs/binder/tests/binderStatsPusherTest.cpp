@@ -63,7 +63,8 @@ void initServiceManagerOnce() {
 }
 
 // Helper function to create a BinderSpamStats for spam comparison
-BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count125, int count250) {
+BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count125, int count250,
+                                        int peakCount) {
     auto stats = BinderSpamStats();
     stats.clientUid = datum.senderUid;
     stats.interfaceDescriptor = datum.interfaceDescriptor;
@@ -71,6 +72,7 @@ BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count12
 
     stats.secondsWithAtLeast125Calls = count125;
     stats.secondsWithAtLeast250Calls = count250;
+    stats.peakCallCountPerSecond = peakCount;
     return stats;
 }
 
@@ -95,7 +97,8 @@ MATCHER_P(SpamStatsEq, expectedStats, "") {
             arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
             arg.aidlMethod == expectedStats.aidlMethod &&
             arg.secondsWithAtLeast125Calls == expectedStats.secondsWithAtLeast125Calls &&
-            arg.secondsWithAtLeast250Calls == expectedStats.secondsWithAtLeast250Calls;
+            arg.secondsWithAtLeast250Calls == expectedStats.secondsWithAtLeast250Calls &&
+            arg.peakCallCountPerSecond == expectedStats.peakCallCountPerSecond;
 }
 
 MATCHER_P(CallStatsEq, expectedStats, "") {
@@ -167,8 +170,9 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
     std::vector<BinderCallData> data;
 
     int64_t currentTimeNanos = 9'100'000'000;
+    int32_t totalCalls = 150;
     // Create enough data in the *same second* to trigger spam, far enough in the past
-    for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
+    for (int i = 0; i < totalCalls; ++i) { // More than kMinSpamCount (125)
         data.push_back({
                 .startTimeNanos = currentTimeNanos - 8000'000'000,
                 .endTimeNanos = 0,
@@ -179,7 +183,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
         });
     }
 
-    auto expectedStats = createExpectedSpamStats(data[0], 1, 0);
+    auto expectedStats = createExpectedSpamStats(data[0], 1, 0, totalCalls);
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -214,8 +218,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
 TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
     std::vector<BinderCallData> data;
     int64_t currentTimeNanos = 9'100'000'000;
-
-    for (int i = 0; i < 130; ++i) {
+    int32_t totalCalls = 130;
+    for (int i = 0; i < totalCalls; ++i) {
         data.push_back({
                 .interfaceDescriptor = String16("IBaz"),
                 .transactionCode = 3,
@@ -238,7 +242,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
     }
 
     // Expect immediate spam to be reported now
-    auto expectedImmediateStats = createExpectedSpamStats(data[0], 1, 0);
+    auto expectedImmediateStats = createExpectedSpamStats(data[0], 1, 0, totalCalls);
     EXPECT_CALL(*mockStatsService,
                 reportSpamStats(ElementsAre(SpamStatsEq(expectedImmediateStats))))
             .Times(1);
@@ -251,9 +255,10 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
     std::vector<BinderCallData> data;
     int64_t spamTimeNanos = 2'000'000'000LL;
     int64_t currentTimeSec = (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1;
+    int32_t totalCalls = 300;
 
     // Create data exceeding the second watermark (250 calls/sec)
-    for (int i = 0; i < 300; ++i) {
+    for (int i = 0; i < totalCalls; ++i) {
         data.push_back({
                 .interfaceDescriptor = String16("IHighVolume"),
                 .transactionCode = 5,
@@ -264,7 +269,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
         });
     }
 
-    auto expectedStats = createExpectedSpamStats(data[0], 1, 1);
+    auto expectedStats = createExpectedSpamStats(data[0], 1, 1, totalCalls);
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -281,7 +286,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
             1; // 3 + 5 + 1 = 9s
 
     // Spam for the first second
-    for (int i = 0; i < 150; ++i) {
+    int32_t totalCalls1 = 150;
+    for (int i = 0; i < totalCalls1; ++i) {
         data.push_back({
                 .interfaceDescriptor = String16("IMultiSecond"),
                 .transactionCode = 6,
@@ -292,7 +298,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
         });
     }
     // Spam for the second second
-    for (int i = 0; i < 160; ++i) {
+    int32_t totalCalls2 = 160;
+    for (int i = 0; i < totalCalls2; ++i) {
         // Use the same UID, code, desc for aggregation
         data.push_back({
                 .interfaceDescriptor = String16("IMultiSecond"),
@@ -305,7 +312,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
     }
 
     // Expect one atom representing spam across 2 seconds
-    auto expectedStats = createExpectedSpamStats(data[0], 2, 0);
+    auto expectedStats = createExpectedSpamStats(data[0], 2, 0, std::max(totalCalls1, totalCalls2));
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -319,7 +326,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     int64_t callTimeSec1 = 10;
     int64_t spamDataTimeNanos = (callTimeSec1 - 2) * 1000'000'000LL; // 8s, will be delayed
 
-    for (int i = 0; i < 150; ++i) {
+    int32_t totalCalls = 150;
+    for (int i = 0; i < totalCalls; ++i) {
         callData1.push_back({
                 .interfaceDescriptor = String16("IDelayed"),
                 .transactionCode = 7,
@@ -340,7 +348,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     std::vector<BinderCallData> callData2; // Can be empty or contain new data
     int64_t call2_time_sec = callTimeSec1 + kSpamAggregationWindowSec + 1; // 10 + 5 + 1 = 16s
 
-    auto expectedStats = createExpectedSpamStats(callData1[0], 1, 0);
+    auto expectedStats = createExpectedSpamStats(callData1[0], 1, 0, totalCalls);
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -364,7 +372,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
             .senderUid = 1008,
             .aidlMethodName = String16("MethodName8"),
     };
-    for (int i = 0; i < 200; ++i) {
+    int32_t totalCalls1 = 200;
+    for (int i = 0; i < totalCalls1; ++i) {
         data.push_back(method1Spam);
     }
 
@@ -377,12 +386,13 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
             .senderUid = 1008,
             .aidlMethodName = String16("MethodName9"),
     };
-    for (int i = 0; i < 200; ++i) {
+    int32_t totalCalls2 = 210;
+    for (int i = 0; i < totalCalls2; ++i) {
         data.push_back(method2Spam);
     }
 
-    auto expectedStats1 = createExpectedSpamStats(method1Spam, 1, 0);
-    auto expectedStats2 = createExpectedSpamStats(method2Spam, 1, 0);
+    auto expectedStats1 = createExpectedSpamStats(method1Spam, 1, 0, totalCalls1);
+    auto expectedStats2 = createExpectedSpamStats(method2Spam, 1, 0, totalCalls2);
 
     EXPECT_CALL(*mockStatsService,
                 reportSpamStats(UnorderedElementsAre(SpamStatsEq(expectedStats1),
@@ -429,7 +439,8 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     // Data old enough to be processed immediately
     int64_t spamDataTimeNanos = (timeSec1 - kSpamAggregationWindowSec) * 1000'000'000LL;
 
-    for (int i = 0; i < 150; ++i) { // Enough to trigger kSpamFirstWatermark
+    int32_t totalCalls = 150;
+    for (int i = 0; i < totalCalls; ++i) { // Enough to trigger kSpamFirstWatermark
         spamCallData1.push_back({
                 .interfaceDescriptor = String16("IServiceSkipped"),
                 .transactionCode = 11,
@@ -461,7 +472,7 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
             .Times(1)
             .WillOnce(Return(IInterface::asBinder(mockStatsService)));
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // Called when service is not null
-    auto expectedStats = createExpectedSpamStats(spamCallData1[0], 1, 0);
+    auto expectedStats = createExpectedSpamStats(spamCallData1[0], 1, 0, totalCalls);
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
