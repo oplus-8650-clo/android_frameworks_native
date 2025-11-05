@@ -1104,6 +1104,12 @@ VkBool32 LayerChain::DebugReportCallback(VkDebugReportFlagsEXT flags,
     return false;
 }
 
+/* The loader's actual implementation of vkCreateInstance.  Since the loader is
+ * the instance (recognized during the specification of Vulkan 1.1), the primary
+ * activity is activating the desired layers, building the layer stack (a chain
+ * of all Vulkan API functions from the loader's trampoline function, through
+ * any layer functions, and down to the driver).
+ */
 VkResult LayerChain::CreateInstance(const VkInstanceCreateInfo* create_info,
                                     const VkAllocationCallbacks* allocator,
                                     VkInstance* instance_out) {
@@ -1193,6 +1199,14 @@ const LayerChain::ActiveLayer* LayerChain::GetActiveLayers(
 
 // ----------------------------------------------------------------------------
 
+/* This function is called by the following early Vulkan API functions, in order
+ * to make sure that the driver and any layers are discovered and loaded:
+ *
+ * - EnumerateInstanceVersion
+ * - EnumerateInstanceLayerProperties
+ * - EnumerateInstanceExtensionProperties
+ * - CreateInstance
+ */
 bool EnsureInitialized() {
     static bool initialized = false;
     static pid_t init_attempted_for_pid = 0;
@@ -1230,6 +1244,10 @@ void ForEachLayerFromSettings(Functor functor) {
 
 }  // anonymous namespace
 
+/* The loader's entry point for vkCreateInstance, which ensures that the loader
+ * is initialized and then uses LayerChain::CreateInstance to do the actual
+ * work.
+ */
 VkResult CreateInstance(const VkInstanceCreateInfo* pCreateInfo,
                         const VkAllocationCallbacks* pAllocator,
                         VkInstance* pInstance) {
@@ -1266,6 +1284,13 @@ void DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) {
         LayerChain::DestroyDevice(device, pAllocator);
 }
 
+/* The implementation of vkEnumerateInstanceLayerProperties.  As expected, all
+ * explicit layers are returned to the application.  For compatibility with the
+ * LunarG loader, all implicit layers are also returned to the application, even
+ * though implicit layers are enabled without application involvement.  No
+ * platform or OEM layers are returned, as those layers are enabled without
+ * application knowledge or involvement.
+ */
 VkResult EnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
                                           VkLayerProperties* pProperties) {
     ATRACE_CALL();
@@ -1288,6 +1313,15 @@ VkResult EnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
     return (copied == count) ? VK_SUCCESS : VK_INCOMPLETE;
 }
 
+/* The loader's "instance" implementation of
+ * vkEnumerateInstanceExtensionProperties (see "driver.cpp" for the loader's
+ * "device" implementation).  All instance extensions from all layers are
+ * returned to the application, in addition to the loader's instance extensions.
+ *
+ * TODO: is it true that all instance extensions from all layers are returned?
+ * It won't work if an application tries to enable an instance extension from a
+ * layer that isn't given to vkCreateInstance.
+ */
 VkResult EnumerateInstanceExtensionProperties(
     const char* pLayerName,
     uint32_t* pPropertyCount,

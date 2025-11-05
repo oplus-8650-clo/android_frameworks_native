@@ -96,6 +96,7 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
          /* no increment */) {
         int32_t secondsWithAtLeast125Calls = 0;
         int32_t secondsWithAtLeast250Calls = 0;
+        uint32_t peakCallCountPerSecond = 0;
 
         uint64_t callsWithLatency = 0;
         uint64_t durationSumMicros = 0;
@@ -106,12 +107,13 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             // Check if the buffer period has passed.
             int64_t startTimeSec = innerIt->first;
             if (nowSec - startTimeSec >= kAggregationWindowSec) {
-                uint64_t totalCalls = innerIt->second.totalCalls;
+                uint32_t totalCalls = innerIt->second.totalCalls;
                 if (totalCalls > kSpamFirstWatermark) {
                     secondsWithAtLeast125Calls++;
                     if (totalCalls > kSpamSecondWatermark) {
                         secondsWithAtLeast250Calls++;
                     }
+                    peakCallCountPerSecond = std::max(peakCallCountPerSecond, totalCalls);
                 }
                 if (innerIt->second.callsWithLatency > 0) {
                     callsWithLatency += innerIt->second.callsWithLatency;
@@ -159,6 +161,7 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             spamStats.aidlMethod = datum.aidlMethodName;
             spamStats.secondsWithAtLeast125Calls = secondsWithAtLeast125Calls;
             spamStats.secondsWithAtLeast250Calls = secondsWithAtLeast250Calls;
+            spamStats.peakCallCountPerSecond = peakCallCountPerSecond;
         }
 
         if (outerIt->second.empty()) {

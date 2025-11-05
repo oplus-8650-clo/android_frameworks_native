@@ -446,6 +446,12 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
                                               snapshot.roundedCorner.clientDrawnRadii.bottomRight.x,
                                               [&]() { return
                                                 layerInfo->mutable_client_drawn_corner_radii(); });
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.effectiveRadii.topLeft.x,
+                                              snapshot.roundedCorner.effectiveRadii.topRight.x,
+                                              snapshot.roundedCorner.effectiveRadii.bottomLeft.x,
+                                              snapshot.roundedCorner.effectiveRadii.bottomRight.x,
+                                              [&]() { return
+                                                layerInfo->mutable_effective_radii(); });
     layerInfo->set_is_trusted_overlay(snapshot.trustedOverlay == gui::TrustedOverlay::ENABLED);
     // TODO(b/339701674) update protos
     LayerProtoHelper::writeToProtoDeprecated(transform, layerInfo->mutable_transform());

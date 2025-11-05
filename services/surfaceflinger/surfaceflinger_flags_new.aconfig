@@ -27,14 +27,6 @@ flag {
 } # arr_setframerate_api
 
 flag {
-  name: "arr_setframerate_gte_enum"
-  namespace: "core_graphics"
-  description: "Exposes GTE (greater than or equal to) enum for Android 16"
-  bug: "380949716"
-  is_fixed_read_only: true
-} # arr_setframerate_gte_enum
-
-flag {
   name: "arr_surfacecontrol_setframerate_api"
   namespace: "core_graphics"
   description: "New SDK SurfaceControl.Transaction#setFrameRate API for Android 16"
@@ -176,6 +168,13 @@ flag {
   description: "Enables caching of frontend layer states"
   bug: "433229921"
 } # frontend_caching_v0
+
+flag {
+  name: "get_display_known_vsync_sample_enabled"
+  namespace: "core_graphics"
+  description: "Enables querying the last known vsync timestamp from the hwc service."
+  bug: "441162952"
+} # get_display_known_vsync_sample_enabled
 
 flag {
   name: "graphite_renderengine_preview_rollout"
@@ -328,6 +327,16 @@ flag {
   }
 } # set_client_drawn_corner_radii
 
+flag {
+  name: "sf_disable_producer_throttling_for_client_composition"
+  namespace: "core_graphics"
+  description: "Disable producer throttling for client composition"
+  bug: "454707399"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # sf_disable_producer_throttling_for_client_composition
+
 
 flag {
   name: "shader_disk_cache"
@@ -397,6 +406,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 } # use_at_least_60_for_min_vote
+
+flag {
+    name: "use_experimental_jank_classification"
+    namespace: "core_graphics"
+    description: "Use experimental jank classification"
+    bug: "416904263"
+} # use_experimental_jank_classification
 
 flag {
   name: "wb_framebuffersurface2"

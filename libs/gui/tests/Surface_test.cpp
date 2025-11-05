@@ -714,7 +714,7 @@ public:
     binder::Status createVirtualDisplay(
             const std::string& /*displayName*/, bool /*isSecure*/,
             gui::ISurfaceComposer::OptimizationPolicy /*optimizationPolicy*/,
-            const std::string& /*uniqueId*/, float /*requestedRefreshRate*/,
+            const std::string& /*uniqueId*/, int32_t /*ownerUid*/, float /*requestedRefreshRate*/,
             sp<IBinder>* /*outDisplay*/) override {
         return binder::Status::ok();
     }

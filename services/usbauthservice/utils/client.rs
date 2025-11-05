@@ -156,14 +156,11 @@ fn print_device_list(devices: &[UsbAuthDeviceInfo]) {
         return;
     }
     for (i, device) in devices.iter().enumerate() {
-        println!(
-            "  {}: {} {} ({}:{})",
-            i + 1,
-            device.manufacturer,
-            device.productName,
-            device.vendorId,
-            device.productId
-        );
+        println!("  {}:", i + 1);
+        println!("     Manufacturer: {}", device.manufacturer);
+        println!("     Product: {}", device.productName);
+        println!("     Vendor ID: {:#04x}", device.vendorId);
+        println!("     Product ID: {:#04x}", device.productId);
         println!("     Syspath: {}", device.syspath);
     }
 }

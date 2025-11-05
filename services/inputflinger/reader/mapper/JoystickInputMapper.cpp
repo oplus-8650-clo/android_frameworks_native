@@ -108,8 +108,23 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
                                                        const InputReaderConfiguration& config,
                                                        ConfigurationChanges changes) {
     std::list<NotifyArgs> out = InputMapper::reconfigure(when, config, changes);
-
-    if (!changes.any()) { // first time only
+    bool refreshAxes = !changes.any();
+    if (changes.test(InputReaderConfiguration::Change::AXIS_REMAPPING) &&
+        !getDeviceContext().isVirtualDevice()) {
+        std::unordered_map<int32_t, int32_t> axisRemapping;
+        if (auto it = config.axisRemappingPerDevice.find(getDeviceId());
+            it != config.axisRemappingPerDevice.end()) {
+            axisRemapping = it->second;
+        }
+        if (mAxisRemapping != axisRemapping) {
+            mAxisRemapping = axisRemapping;
+            getDeviceContext().setAxisRemapping(axisRemapping);
+            refreshAxes = true;
+            bumpGeneration();
+        }
+    }
+    if (refreshAxes) {
+        mAxes.clear();
         // Collect all axes.
         for (int32_t abs = 0; abs <= ABS_MAX; abs++) {
             if (!(getAbsAxisUsage(abs, getDeviceContext().getDeviceClasses())
@@ -294,6 +309,7 @@ std::list<NotifyArgs> JoystickInputMapper::process(const RawEvent& rawEvent) {
                 }
                 axis.newValue = newValue;
                 axis.highNewValue = highNewValue;
+                axis.lastUpdateTime = rawEvent.when;
             }
             break;
         }
@@ -323,16 +339,36 @@ std::list<NotifyArgs> JoystickInputMapper::sync(nsecs_t when, nsecs_t readTime, 
     pointerProperties.id = 0;
     pointerProperties.toolType = ToolType::UNKNOWN;
 
-    PointerCoords pointerCoords;
-    pointerCoords.clear();
+    // A map from the Android axis ID to the most recent value and update time.
+    // This is used to resolve conflicts if multiple raw axes are mapped to the same
+    // Android axis, ensuring the most recent event takes precedence.
+    std::unordered_map<int32_t, std::pair<float, nsecs_t>> latestAxisValues;
 
     for (std::pair<const int32_t, Axis>& pair : mAxes) {
         const Axis& axis = pair.second;
-        setPointerCoordsAxisValue(&pointerCoords, axis.axisInfo.axis, axis.currentValue);
-        if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT) {
-            setPointerCoordsAxisValue(&pointerCoords, axis.axisInfo.highAxis,
-                                      axis.highCurrentValue);
+
+        // Update the entry for the primary axis if this one is more recent.
+        auto it = latestAxisValues.find(axis.axisInfo.axis);
+        if (it == latestAxisValues.end() || axis.lastUpdateTime > it->second.second) {
+            latestAxisValues[axis.axisInfo.axis] = {axis.currentValue, axis.lastUpdateTime};
         }
+
+        // Update the entry for the high axis (for split mode) if this one is more recent.
+        if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT) {
+            it = latestAxisValues.find(axis.axisInfo.highAxis);
+            if (it == latestAxisValues.end() || axis.lastUpdateTime > it->second.second) {
+                latestAxisValues[axis.axisInfo.highAxis] = {axis.highCurrentValue,
+                                                            axis.lastUpdateTime};
+            }
+        }
+    }
+
+    PointerCoords pointerCoords;
+    pointerCoords.clear();
+
+    // Populate pointerCoords with the definitive, most recent values.
+    for (const auto& [axisId, valuePair] : latestAxisValues) {
+        setPointerCoordsAxisValue(&pointerCoords, axisId, valuePair.first);
     }
 
     // Moving a joystick axis should not wake the device because joysticks can

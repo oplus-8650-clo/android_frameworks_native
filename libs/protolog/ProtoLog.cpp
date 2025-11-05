@@ -28,13 +28,21 @@ namespace protolog {
 std::once_flag gInitializeFlag;
 
 void Initialize() {
+    Initialize(perfetto::kSystemBackend);
+}
+
+void Initialize(uint32_t backends) {
     if (!android_tracing_native_proto_logging()) {
         ALOGD("ProtoLog is disabled. Skipping initialization.");
         return;
     }
     ALOGD("Initializing ProtoLog");
 
-    std::call_once(gInitializeFlag, [] {
+    std::call_once(gInitializeFlag, [backends] {
+        perfetto::TracingInitArgs args;
+        args.backends = backends;
+        perfetto::Tracing::Initialize(args);
+
         perfetto::DataSourceDescriptor descriptor;
         descriptor.set_name(android::protolog::ProtoLogDataSource::kName);
         ProtoLogDataSource::Register(descriptor);
