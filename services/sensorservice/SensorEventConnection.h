@@ -50,9 +50,9 @@ class SensorService::SensorEventConnection:
     friend class SensorService;
 
 public:
-    SensorEventConnection(const sp<SensorService>& service, uid_t uid, String8 packageName,
-                          bool isDataInjectionMode, const String16& opPackageName,
-                          const String16& attributionTag);
+    SensorEventConnection(const sp<SensorService>& service, uid_t uid, pid_t pid,
+                          String8 packageName, bool isDataInjectionMode,
+                          const String16& opPackageName, const String16& attributionTag);
 
     status_t sendEvents(sensors_event_t const* buffer, size_t count, sensors_event_t* scratch,
                         wp<const SensorEventConnection> const * mapFlushEventsToConnections = nullptr);
@@ -70,6 +70,7 @@ public:
     String8 getPackageName() const;
 
     uid_t getUid() const { return mUid; }
+    pid_t getPid() const { return mPid; }
     // cap/uncap existing connection depending on the state of the mic toggle.
     void onMicSensorAccessChanged(bool isMicToggleOn);
     userid_t getUserId() const { return mUserId; }
@@ -148,7 +149,8 @@ private:
     void uncapRates();
     sp<SensorService> const mService;
     sp<BitTube> mChannel;
-    uid_t mUid;
+    const uid_t mUid;
+    const pid_t mPid;
     mutable Mutex mConnectionLock;
     // Number of events from wake up sensors which are still pending and haven't been delivered to
     // the corresponding application. It is incremented by one unit for each write to the socket.

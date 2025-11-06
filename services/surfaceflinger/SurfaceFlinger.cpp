@@ -2668,9 +2668,9 @@ void SurfaceFlinger::updateLayerHistory(nsecs_t now) {
             continue;
         }
 
-        const bool updateSmallDirty = FlagManager::getInstance().enable_small_area_detection() &&
-                ((snapshot->clientChanges & layer_state_t::eSurfaceDamageRegionChanged) ||
-                 snapshot->changes.any(Changes::Geometry));
+        const bool updateSmallDirty =
+                (snapshot->clientChanges & layer_state_t::eSurfaceDamageRegionChanged) ||
+                snapshot->changes.any(Changes::Geometry);
 
         const bool hasChanges =
                 snapshot->changes.any(Changes::FrameRate | Changes::Buffer | Changes::Animation |
@@ -3141,7 +3141,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     bool mustComposite = mMustComposite.exchange(false);
     {
         const bool pacesetterPoweredOn =
-                FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->isPoweredOn();
+                FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->getPowerMode()
+                    == hal::PowerMode::ON;
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
                                     pacesetterFrameTarget.frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
@@ -3931,8 +3932,7 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
                                         : snapshot.desiredHdrSdrRatio;
 
                                 float desiredRatio = desiredHdrSdrRatio;
-                                if (FlagManager::getInstance().begone_bright_hlg() &&
-                                    desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                                if (desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
                                     desiredRatio = getIdealizedMaxHeadroom(snapshot.dataspace);
                                 }
 
@@ -5300,9 +5300,7 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
     const auto defaultContentDetectionValue = sysprop::enable_frame_rate_override(true);
     if (sysprop::use_content_detection_for_refresh_rate(defaultContentDetectionValue)) {
         features |= Feature::kContentDetection;
-        if (FlagManager::getInstance().enable_small_area_detection()) {
-            features |= Feature::kSmallDirtyContentDetection;
-        }
+        features |= Feature::kSmallDirtyContentDetection;
     }
     if (base::GetBoolProperty("debug.sf.show_predicted_vsync"s, false)) {
         features |= Feature::kTracePredictedVsync;
@@ -6732,40 +6730,7 @@ void SurfaceFlinger::applyOptimizationPolicy(const char* whence) {
     }
 }
 
-// TODO b/339477240 - Remove.
 void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
-    auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) {
-        mSkipPowerOnForQuiescent = false;
-        const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayToken));
-        if (!display) {
-            Mutex::Autolock lock(mStateLock);
-            if (auto stateOpt = mCurrentState.displays.get(displayToken)) {
-                DisplayDeviceState& state = *stateOpt;
-                if (state.isVirtual()) {
-                    ALOGD("Setting power mode %d for a dormant virtual display with token %p", mode,
-                          displayToken.get());
-                    state.initialPowerMode = static_cast<hal::PowerMode>(mode);
-                    return;
-                }
-            }
-            ALOGE("Failed to set power mode %d for display token %p", mode, displayToken.get());
-        } else if (display->isVirtual()) {
-            if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-                ftl::FakeGuard guard(mStateLock);
-                setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
-            } else {
-                ALOGW("Attempt to set power mode %d for virtual display", mode);
-            }
-        } else {
-            ftl::FakeGuard guard(mStateLock);
-            setPhysicalDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
-        }
-    });
-
-    future.wait();
-}
-
-void SurfaceFlinger::setPowerModeAsync(const sp<IBinder>& displayToken, int mode) {
     auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext)
                                                -> std::pair<ftl::Future<status_t>,
                                                             ftl::FinalizerStd> {
@@ -6792,7 +6757,16 @@ void SurfaceFlinger::setPowerModeAsync(const sp<IBinder>& displayToken, int mode
             }
         } else {
             ftl::FakeGuard guard(mStateLock);
-            return setPhysicalDisplayPowerModeAsync(display, static_cast<hal::PowerMode>(mode));
+            if (FlagManager::getInstance().set_power_mode_async() &&
+                display->getCompositionDisplay()->supportsOffloadPresent()) {
+                ALOGD("Setting power mode %d asynchronously for a physical display with token %p",
+                      mode, displayToken.get());
+                return setPhysicalDisplayPowerModeAsync(display, static_cast<hal::PowerMode>(mode));
+            } else {
+                ALOGD("Setting power mode %d synchronously for a physical display with token %p",
+                      mode, displayToken.get());
+                setPhysicalDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
+            }
         }
         return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     });
@@ -8658,10 +8632,9 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                     if (std::holds_alternative<PhysicalDisplayId>(displayId)) {
                         aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes
                                 attributes;
-                        auto status =
-                                getHwComposer().getReadbackBufferAttributes(*asPhysicalDisplayId(
-                                                                                    displayId),
-                                                                            &attributes);
+                        const auto physicalDisplayId = *asPhysicalDisplayId(displayId);
+                        auto status = getHwComposer().getReadbackBufferAttributes(physicalDisplayId,
+                                                                                  &attributes);
                         if (status == OK) {
                             if (static_cast<android_pixel_format>(reqPixelFormat) !=
                                         PIXEL_FORMAT_UNKNOWN &&
@@ -8670,28 +8643,41 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                                 args.requireDpuReadback) {
                                 return base::unexpected<status_t>(INVALID_OPERATION);
                             }
-                            const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
-                                    GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
-                                    GRALLOC_USAGE_SW_WRITE_OFTEN;
-                            const auto readbackBuffer =
-                                    getFactory()
-                                            .createGraphicBuffer(args.size.getWidth(),
-                                                                 args.size.getHeight(),
-                                                                 static_cast<android_pixel_format>(
-                                                                         attributes.format),
-                                                                 1 /* layerCount */, usage,
-                                                                 "screenshot");
 
-                            if (const auto status = readbackBuffer->initCheck(); status != OK) {
-                                ALOGE("Failed to allocate readback buffer :(: %d", status);
-                                return base::unexpected<status_t>(INVALID_OPERATION);
-                            } else {
-                                mReadbackRequests.emplace_back(*asPhysicalDisplayId(displayId),
-                                                               readbackBuffer, args.captureListener,
-                                                               args.preserveDisplayColors,
-                                                               args.isSecure);
-                                scheduleComposite(FrameHint::kNone);
-                                return ScreenshotStrategy::Readback;
+                            const auto& displayDevice =
+                                    FTL_FAKE_GUARD(mStateLock,
+                                                   getDisplayDeviceLocked(physicalDisplayId));
+
+                            // requiring DPU readback implies that the client is
+                            // OK with the physical orientation
+                            if (args.requireDpuReadback ||
+                                displayDevice->getPhysicalOrientation() ==
+                                        ui::Rotation::Rotation0) {
+                                const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
+                                        GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
+                                        GRALLOC_USAGE_SW_WRITE_OFTEN;
+                                const auto readbackBuffer =
+                                        getFactory()
+                                                .createGraphicBuffer(args.size.getWidth(),
+                                                                     args.size.getHeight(),
+                                                                     static_cast<
+                                                                             android_pixel_format>(
+                                                                             attributes.format),
+                                                                     1 /* layerCount */, usage,
+                                                                     "screenshot");
+
+                                if (const auto status = readbackBuffer->initCheck(); status != OK) {
+                                    ALOGE("Failed to allocate readback buffer :(: %d", status);
+                                    return base::unexpected<status_t>(INVALID_OPERATION);
+                                } else {
+                                    mReadbackRequests.emplace_back(physicalDisplayId,
+                                                                   readbackBuffer,
+                                                                   args.captureListener,
+                                                                   args.preserveDisplayColors,
+                                                                   args.isSecure);
+                                    scheduleComposite(FrameHint::kNone);
+                                    return ScreenshotStrategy::Readback;
+                                }
                             }
                         }
                     }
@@ -9382,6 +9368,7 @@ void SurfaceFlinger::onLayerDestroyed(Layer* layer) {
         mTransactionTracing->onLayerRemoved(layer->getSequence());
     }
     mScheduler->onLayerDestroyed(layer);
+    mFrameTimeline->onLayerDestroyed(layer->getSequence());
 }
 
 void SurfaceFlinger::onLayerUpdate() {
@@ -11212,8 +11199,7 @@ void SurfaceFlinger::updateHdrInfos(
                                 : snapshot->desiredHdrSdrRatio;
 
                         float desiredRatio = desiredHdrSdrRatio;
-                        if (FlagManager::getInstance().begone_bright_hlg() &&
-                            desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                        if (desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
                             desiredRatio = getIdealizedMaxHeadroom(snapshot->dataspace);
                         }
 

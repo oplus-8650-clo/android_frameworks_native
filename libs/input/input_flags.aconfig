@@ -194,16 +194,6 @@ flag {
 }
 
 flag {
-  name: "connected_displays_associated_display_cursor_bugfix"
-  namespace: "lse_desktop_experience"
-  description: "Apply some rules to define associated display cursor behavior in connected displays"
-  bug: "396568321"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "scale_cursor_speed_with_dpi"
   namespace: "lse_desktop_experience"
   description: "Scale the cursor speed based on display density"

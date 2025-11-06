@@ -144,6 +144,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets);
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(resync_on_tx_separate_timer);
+    DUMP_ACONFIG_FLAG(set_power_mode_async);
     DUMP_ACONFIG_FLAG(sf_disable_producer_throttling_for_client_composition);
     DUMP_ACONFIG_FLAG(supported_refresh_rate_update);
     DUMP_ACONFIG_FLAG(use_at_least_60_for_min_vote);
@@ -151,16 +152,12 @@ void FlagManager::dump(std::string& result) const {
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
-    DUMP_ACONFIG_FLAG(begone_bright_hlg);
     DUMP_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved);
     DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
     DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_command_modeset);
-    DUMP_ACONFIG_FLAG(enable_layer_command_batching);
-    DUMP_ACONFIG_FLAG(enable_small_area_detection);
-    DUMP_ACONFIG_FLAG(flush_buffer_slots_to_uncache);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection);
     DUMP_ACONFIG_FLAG(follower_display_backpressure);
     DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition);
@@ -259,7 +256,6 @@ FLAG_MANAGER_LEGACY_SERVER_FLAG(use_skia_tracing, PROPERTY_SKIA_ATRACE_ENABLED,
 
 /// Trunk stable readonly flags ///
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
-FLAG_MANAGER_ACONFIG_FLAG(begone_bright_hlg, "debug.sf.begone_bright_hlg");
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_hdr_v2");
@@ -267,9 +263,6 @@ FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_synthetic_vsync_for_performance, "");
 FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
-FLAG_MANAGER_ACONFIG_FLAG(enable_layer_command_batching, "debug.sf.enable_layer_command_batching")
-FLAG_MANAGER_ACONFIG_FLAG(enable_small_area_detection, "")
-FLAG_MANAGER_ACONFIG_FLAG(flush_buffer_slots_to_uncache, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
                           "debug.sf.follower_arbitrary_refresh_rate_selection");
 FLAG_MANAGER_ACONFIG_FLAG(follower_display_backpressure, "debug.sf.follower_display_backpressure");
@@ -323,6 +316,7 @@ FLAG_MANAGER_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets, "");
 FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx_separate_timer, "");
+FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
 FLAG_MANAGER_ACONFIG_FLAG(sf_disable_producer_throttling_for_client_composition, "");
 FLAG_MANAGER_ACONFIG_FLAG(supported_refresh_rate_update, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_at_least_60_for_min_vote, "");

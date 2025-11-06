@@ -289,10 +289,7 @@ AidlComposer::AidlComposer(const std::string& serviceName) {
             }
         }
     }
-    if (getLayerLifecycleBatchCommand()) {
-        mEnableLayerCommandBatchingFlag =
-                FlagManager::getInstance().enable_layer_command_batching();
-    }
+    mLifecycleBatchCommandSupported = getLayerLifecycleBatchCommand();
     ALOGI("Loaded AIDL composer3 HAL service");
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #ifdef QTI_COMPOSER3_EXTENSIONS
@@ -454,7 +451,7 @@ Error AidlComposer::acceptDisplayChanges(Display display) {
 Error AidlComposer::createLayer(Display display, Layer* outLayer) {
     int64_t layer;
     Error error = Error::NONE;
-    if (!mEnableLayerCommandBatchingFlag) {
+    if (!mLifecycleBatchCommandSupported) {
         const auto status = mAidlComposerClient->createLayer(translate<int64_t>(display),
                                                              kMaxLayerBufferCount, &layer);
         if (!status.isOk()) {
@@ -462,9 +459,9 @@ Error AidlComposer::createLayer(Display display, Layer* outLayer) {
             return static_cast<Error>(status.getServiceSpecificError());
         }
     } else {
-        // generate a unique layerID. map in AidlComposer with <SF_layerID, HWC_layerID>
+        // Generate a unique layerID. Map in AidlComposer with <SF_layerID, HWC_layerID>.
         // Add this as a new displayCommand in execute command.
-        // return the SF generated layerID instead of calling HWC
+        // Return the SF generated layerID instead of calling HWC.
         layer = mLayerID++;
         mMutex.lock_shared();
         if (auto writer = getWriter(display)) {
@@ -484,7 +481,7 @@ Error AidlComposer::createLayer(Display display, Layer* outLayer) {
 
 Error AidlComposer::destroyLayer(Display display, Layer layer) {
     Error error = Error::NONE;
-    if (!mEnableLayerCommandBatchingFlag) {
+    if (!mLifecycleBatchCommandSupported) {
         const auto status = mAidlComposerClient->destroyLayer(translate<int64_t>(display),
                                                               translate<int64_t>(layer));
         if (!status.isOk()) {

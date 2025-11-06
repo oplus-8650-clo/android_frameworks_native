@@ -662,13 +662,6 @@ const DisplayViewport* PointerChoreographer::findViewportByIdLocked(
 
 ui::LogicalDisplayId PointerChoreographer::getTargetMouseDisplayLocked(
         ui::LogicalDisplayId associatedDisplayId) const {
-    if (!InputFlags::connectedDisplaysCursorAndAssociatedDisplayCursorBugfixEnabled()) {
-        if (associatedDisplayId.isValid()) {
-            return associatedDisplayId;
-        }
-        return mCurrentMouseDisplayId.isValid() ? mCurrentMouseDisplayId
-                                                : ui::LogicalDisplayId::DEFAULT;
-    }
     // Associated display is not included in the topology, return this associated display.
     if (associatedDisplayId.isValid() &&
         mTopology.graph.find(associatedDisplayId) == mTopology.graph.end()) {

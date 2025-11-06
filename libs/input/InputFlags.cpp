@@ -53,14 +53,6 @@ bool InputFlags::connectedDisplaysCursorEnabled() {
     return com::android::input::flags::connected_displays_cursor();
 }
 
-bool InputFlags::connectedDisplaysCursorAndAssociatedDisplayCursorBugfixEnabled() {
-    if (getConnectedDisplaysDevOptionValue().value_or(false)) {
-        return true;
-    }
-    return connectedDisplaysCursorEnabled() &&
-            com::android::input::flags::connected_displays_associated_display_cursor_bugfix();
-}
-
 bool InputFlags::scaleCursorSpeedWithDisplayDensity() {
     if (getConnectedDisplaysDevOptionValue().value_or(false)) {
         return true;

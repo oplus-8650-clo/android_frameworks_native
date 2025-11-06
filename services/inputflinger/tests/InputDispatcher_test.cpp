@@ -15404,6 +15404,16 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrim
 
     // drop on the second display
     mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .buttonState(0)
+                    .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
+                    .build());
+    mDragWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+                                          WithDisplayId(SECOND_DISPLAY_ID),
+                                          WithFlags(MotionFlag::NO_FOCUS_CHANGE)));
+    mDispatcher->notifyMotion(
             MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
                     .displayId(SECOND_DISPLAY_ID)
                     .buttonState(0)
@@ -15445,6 +15455,16 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonP
     mWindowOnSecondDisplay->consumeDragEvent(true, 50, 50);
 
     // drop on the primary display
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .buttonState(0)
+                    .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
+                    .build());
+    mDragWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+                                          WithDisplayId(DISPLAY_ID),
+                                          WithFlags(MotionFlag::NO_FOCUS_CHANGE)));
     mDispatcher->notifyMotion(
             MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
                     .displayId(DISPLAY_ID)

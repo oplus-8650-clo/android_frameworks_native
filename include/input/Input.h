@@ -1023,7 +1023,8 @@ public:
                                    std::vector<PointerCoords>>>
     split(int32_t action, ftl::Flags<MotionFlag> flags, int32_t historySize,
           const std::vector<PointerProperties>&, const std::vector<PointerCoords>&,
-          std::bitset<MAX_POINTER_ID + 1> splitPointerIds);
+          std::bitset<MAX_POINTER_ID + 1> splitPointerIds,
+          std::function<std::string(void)> debugInfo);
 
     // MotionEvent will transform various axes in different ways, based on the source. For
     // example, the x and y axes will not have any offsets/translations applied if it comes from a

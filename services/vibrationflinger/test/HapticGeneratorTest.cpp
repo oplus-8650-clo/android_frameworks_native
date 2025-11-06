@@ -376,3 +376,32 @@ TEST_F(HapticGeneratorTest, CloseSession_NewOperations_Fail) {
     HapticGeneratorTestUtils::assertCommandSequence(mFakeHals[VIBRATOR_ID_1]->getRecordedCommands(),
                                                     {HapticGeneratorTestUtils::kSessionCloseCmd});
 }
+
+TEST_F(HapticGeneratorTest, IsValidForVibrators_MatchingIds_ReturnsTrue) {
+    setupTestEnvironment({{VIBRATOR_ID_1, {}}, {VIBRATOR_ID_2, {}}});
+
+    EXPECT_TRUE(mSession->isValidForVibrators({1, 2}));
+    // Order should not matter
+    EXPECT_TRUE(mSession->isValidForVibrators({2, 1}));
+}
+
+TEST_F(HapticGeneratorTest, IsValidForVibrators_MismatchedSize_ReturnsFalse) {
+    setupTestEnvironment({{VIBRATOR_ID_1, {}}, {VIBRATOR_ID_2, {}}});
+
+    EXPECT_FALSE(mSession->isValidForVibrators({1}));
+    EXPECT_FALSE(mSession->isValidForVibrators({1, 2, 3}));
+}
+
+TEST_F(HapticGeneratorTest, IsValidForVibrators_MismatchedIds_ReturnsFalse) {
+    setupTestEnvironment({{VIBRATOR_ID_1, {}}, {VIBRATOR_ID_2, {}}});
+
+    EXPECT_FALSE(mSession->isValidForVibrators({1, 3}));
+}
+
+TEST_F(HapticGeneratorTest, IsValidForVibrators_EmptySessionNonEmptyCheck_ReturnsFalse) {
+    // Setup an empty session
+    setupTestEnvironment({});
+
+    // Check against a non-empty list of vibrator IDs
+    EXPECT_FALSE(mSession->isValidForVibrators({1}));
+}

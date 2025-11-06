@@ -37,6 +37,7 @@
 #include <openssl/mem.h>
 #include <private/android_filesystem_config.h>
 #include <unistd.h>
+#include <utils/StrongPointer.h>
 #include <utils/Trace.h>
 
 #include <cerrno>
@@ -4370,7 +4371,8 @@ std::unique_ptr<MotionEntry> InputDispatcher::splitMotionEvent(
     const auto& result =
             MotionEvent::split(originalMotionEntry.action, originalMotionEntry.flags,
                                /*historySize=*/0, originalMotionEntry.pointerProperties,
-                               originalMotionEntry.pointerCoords, pointerIds);
+                               originalMotionEntry.pointerCoords, pointerIds,
+                               [&]() { return originalMotionEntry.getDescription(); });
     if (!result.ok()) {
         logDispatchStateLocked();
         LOG(FATAL) << "Could not split motion: " << originalMotionEntry
@@ -5509,9 +5511,9 @@ void InputDispatcher::updateWindowHandlesForDisplayLocked(
             continue;
         }
 
-        if ((oldHandlesById.find(handle->getId()) != oldHandlesById.end()) &&
-            (oldHandlesById.at(handle->getId())->getToken() == handle->getToken())) {
-            const sp<WindowInfoHandle>& oldHandle = oldHandlesById.at(handle->getId());
+        if (auto it = oldHandlesById.find(handle->getId());
+            it != oldHandlesById.end() && it->second->getToken() == handle->getToken()) {
+            const sp<WindowInfoHandle>& oldHandle = it->second;
             oldHandle->updateFrom(handle);
             newHandles.push_back(oldHandle);
         } else {

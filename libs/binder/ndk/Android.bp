@@ -144,6 +144,18 @@ cc_library {
         // Only check our headers
         "--header-filter=^.*frameworks/native/libs/binder/.*.h$",
     ],
+    tidy_checks: [
+        "-bugprone-branch-clone",
+        "-bugprone-forwarding-reference-overload",
+        "-clang-analyzer-optin.cplusplus.VirtualCall",
+        "-misc-header-include-cycle",
+        "-misc-include-cleaner",
+        "-misc-use-internal-linkage",
+        "-performance-enum-size",
+        "-performance-unnecessary-copy-initialization",
+        "-performance-unnecessary-value-param",
+        "-portability-template-virtual-member-function",
+    ],
     tidy_checks_as_errors: [
         // Explicitly list the checks that should not occur in this module.
         "abseil-*",

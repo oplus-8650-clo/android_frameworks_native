@@ -871,7 +871,7 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
                         mJankSeverityScore = deltaFrameRatio;
                         mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
                     } else {
-                        mJankSeverityScore = static_cast<float>(mPresentDelay) /
+                        mJankSeverityScore = static_cast<float>(std::abs(mPresentDelay)) /
                                 static_cast<float>(expectedPresentDelta);
                         if (mJankSeverityScore > impl::FrameTimeline::kDeltaFramesRatioThreshold) {
                             mFramePresentMetadata.experimental() =
@@ -898,14 +898,16 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
 
     if (mFramePresentMetadata.experimental() == FramePresentMetadata::OnTimePresent) {
         // Frames presented on time are not janky, but might be buffer stuffed.
-        if (mPresentDelay <= presentThreshold) {
+        if (std::abs(mPresentDelay) <= presentThreshold) {
             mJankType.experimental() = JankType::None;
         } else {
             mJankType.experimental() = JankType::BufferStuffing;
             // fixup the app deadline based on the present delay.
-            nsecs_t adjustedDeadline = mPredictions.endTime + mPresentDelay;
-            if (adjustedDeadline > mActuals.endTime) {
-                mFrameReadyMetadata.experimental() = FrameReadyMetadata::OnTimeFinish;
+            if (mPresentDelay > 0) {
+                const nsecs_t adjustedDeadline = mPredictions.endTime + mPresentDelay;
+                if (adjustedDeadline > mActuals.endTime) {
+                    mFrameReadyMetadata.experimental() = FrameReadyMetadata::OnTimeFinish;
+                }
             }
         }
     } else if (mFramePresentMetadata.experimental() == FramePresentMetadata::EarlyPresent) {
@@ -1273,12 +1275,12 @@ void FrameTimeline::addSurfaceFrame(std::shared_ptr<SurfaceFrame> surfaceFrame) 
     std::scoped_lock lock(mMutex);
 
     if (FlagManager::getInstance().jank_classification_v2()) {
-        if (const auto it = mPreviousSurfaceFrame.find(surfaceFrame->getLayerId());
-            it != mPreviousSurfaceFrame.end()) {
+        if (const auto it = mPreviousSurfaceFrames.find(surfaceFrame->getLayerId());
+            it != mPreviousSurfaceFrames.end()) {
             surfaceFrame->setPreviousSurfaceFrame(it->second);
         }
 
-        mPreviousSurfaceFrame[surfaceFrame->getLayerId()] = surfaceFrame;
+        mPreviousSurfaceFrames[surfaceFrame->getLayerId()] = surfaceFrame;
     }
 
     mCurrentDisplayFrame->addSurfaceFrame(surfaceFrame);
@@ -1523,8 +1525,8 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
             mJankSeverityScore = deltaFramesRatio;
             mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
         } else {
-            mJankSeverityScore =
-                    static_cast<float>(presentDelay) / static_cast<float>(expectedPresentDelta);
+            mJankSeverityScore = static_cast<float>(std::abs(presentDelay)) /
+                    static_cast<float>(expectedPresentDelta);
             if (mJankSeverityScore > kDeltaFramesRatioThreshold) {
                 mFramePresentMetadata.experimental() = (presentationConsistencyDelay > 0)
                         ? FramePresentMetadata::LatePresent
@@ -1544,7 +1546,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
 
     if (mFramePresentMetadata.experimental() == FramePresentMetadata::OnTimePresent) {
         // Frames presented on time are not janky, but might be buffer stuffed.
-        if (presentDelay <= presentThreshold) {
+        if (std::abs(presentDelay) <= presentThreshold) {
             mJankType.experimental() = JankType::None;
         } else {
             mJankType.experimental() = JankType::SurfaceFlingerStuffing;
@@ -2137,6 +2139,11 @@ void FrameTimeline::setMaxDisplayFrames(uint32_t size) {
 
 void FrameTimeline::reset() {
     setMaxDisplayFrames(kDefaultMaxDisplayFrames);
+}
+
+void FrameTimeline::onLayerDestroyed(int32_t layerId) {
+    std::scoped_lock lock(mMutex);
+    mPreviousSurfaceFrames.erase(layerId);
 }
 
 } // namespace impl

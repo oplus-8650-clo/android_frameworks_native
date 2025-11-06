@@ -74,28 +74,43 @@ class OverrideLayerNames {
         allocator_.pfnFree(allocator_.pUserData, implicit_layers_.name_pool);
     }
 
+    /* Build an array of layer names that should be enabled, compiled from:
+     *
+     * - Settings-enabled implicit layers
+     * - Appplication-requested explicit layers
+     * - Platform layers
+     * - OEM layers
+     *
+     * TODO (b/455899446): Potentially restrict AddImplicitLayers() from
+     * including EXPLICIT layers (i.e. disallow layers from the application's
+     * own APK from being enabled via the IMPLICIT layer mechanism, via debug
+     * settings).
+     */
     VkResult Parse(const char* const* names, uint32_t count) {
+        // Determine which implicit layers are enabled by settings
         AddImplicitLayers();
 
         const auto& arr = implicit_layers_;
         if (arr.result != VK_SUCCESS)
             return arr.result;
 
-        // no need to override when there is no implicit layer
-        if (!arr.count)
+        // No need to override when there are no implicit layers
+        uint32_t layersToAdd = arr.count;
+        if (!layersToAdd)
             return VK_SUCCESS;
 
-        names_ = AllocateNameArray(arr.count + count);
+        // Allocate memory for implicit layer names
+        names_ = AllocateNameArray(layersToAdd + count);
         if (!names_)
             return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-        // add implicit layer names
+        // Add implicit layer names
         for (uint32_t i = 0; i < arr.count; i++)
             names_[i] = GetImplicitLayerName(i);
 
         name_count_ = arr.count;
 
-        // add explicit layer names
+        // Add explicit layer names
         for (uint32_t i = 0; i < count; i++) {
             // ignore explicit layers that are also implicit
             if (IsImplicitLayer(names[i]))
@@ -547,6 +562,11 @@ LayerChain::~LayerChain() {
     DestroyLayers(layers_, layer_count_, allocator_);
 }
 
+/* Activate desired layers  early in
+ * vkCreateInstance, activate the desired layers.  Early in vkCreateInstance,
+ * activate the desired layers.  Early in vkCreateInstance, activate the desired
+ * layers.  Early in vkCreateInstance, activate the desired layers.
+ */
 VkResult LayerChain::ActivateLayers(const char* const* layer_names,
                                     uint32_t layer_count,
                                     const char* const* extension_names,
@@ -1298,7 +1318,7 @@ VkResult EnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
     if (!EnsureInitialized())
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    uint32_t count = GetLayerCount();
+    uint32_t count = GetEnumeratedLayerCount();
 
     if (!pProperties) {
         *pPropertyCount = count;
@@ -1306,8 +1326,9 @@ VkResult EnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
     }
 
     uint32_t copied = std::min(*pPropertyCount, count);
-    for (uint32_t i = 0; i < copied; i++)
+    for (uint32_t i = 0; i < copied; i++) {
         pProperties[i] = GetLayerProperties(GetLayer(i));
+    }
     *pPropertyCount = copied;
 
     return (copied == count) ? VK_SUCCESS : VK_INCOMPLETE;

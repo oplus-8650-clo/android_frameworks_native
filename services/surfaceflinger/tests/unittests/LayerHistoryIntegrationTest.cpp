@@ -1867,7 +1867,6 @@ protected:
 };
 
 TEST_F(SmallAreaDetectionTest, SmallDirtyLayer) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();
@@ -1885,7 +1884,6 @@ TEST_F(SmallAreaDetectionTest, SmallDirtyLayer) {
 }
 
 TEST_F(SmallAreaDetectionTest, NotSmallDirtyLayer) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();
@@ -1903,7 +1901,6 @@ TEST_F(SmallAreaDetectionTest, NotSmallDirtyLayer) {
 }
 
 TEST_F(SmallAreaDetectionTest, smallDirtyLayerWithMatrix) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();

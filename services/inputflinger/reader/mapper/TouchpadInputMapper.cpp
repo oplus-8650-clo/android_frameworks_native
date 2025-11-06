@@ -416,6 +416,10 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
         LOG(INFO) << "Changing pointer capture mode from " << ftl::enum_string(mCaptureMode)
                   << " to " << ftl::enum_string(config.pointerCaptureRequest.mode);
         resetGestureInterpreter(when);
+        if (mCaptureMode == PointerCaptureMode::RELATIVE) {
+            // We're transitioning out of relative mode, so re-enable three-finger swipes.
+            mPropertyProvider.getProperty("Three Finger Swipe Enable").setBoolValues({true});
+        }
         switch (config.pointerCaptureRequest.mode) {
             case PointerCaptureMode::UNCAPTURED:
                 out += mGestureConverter.reset(when);
@@ -428,6 +432,9 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
                 break;
             case PointerCaptureMode::RELATIVE:
                 // mRelativeModeGestureConverter is stateless, and so doesn't need resetting.
+                // We don't use three-finger swipes in relative capture mode, so stop the Gestures
+                // library from reporting them.
+                mPropertyProvider.getProperty("Three Finger Swipe Enable").setBoolValues({false});
                 break;
         }
         mCaptureMode = config.pointerCaptureRequest.mode;
