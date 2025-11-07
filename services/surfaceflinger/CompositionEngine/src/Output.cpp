@@ -1737,7 +1737,7 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
     ALOGV(__FUNCTION__);
 
     if (!getState().isEnabled) {
-        if (flushEvenWhenDisabled && FlagManager::getInstance().flush_buffer_slots_to_uncache()) {
+        if (flushEvenWhenDisabled) {
             // Some commands, like clearing buffer slots, should still be executed
             // even if the display is not enabled.
             executeCommands();

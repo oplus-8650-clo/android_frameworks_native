@@ -102,6 +102,12 @@ public:
      */
     status_t close();
 
+    /**
+     * Checks if the session was successfully initialized with queues
+     * matching the given vibratorIds.
+     */
+    bool isValidForVibrators(const std::vector<int32_t>& vibratorIds);
+
 private:
     /** Sends a command to the HAL and waits for a reply. */
     void sendCommandAndReceiveReply(

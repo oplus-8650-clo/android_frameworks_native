@@ -115,6 +115,7 @@ private:
                                                          float currentValue, float thresholdValue);
 
     static bool isCenteredAxis(int32_t axis);
+    static bool isAnalogTrigger(int32_t axis);
     static int32_t getCompatAxis(int32_t axis);
 
     static void addMotionRange(int32_t axisId, const Axis& axis, InputDeviceInfo& info);

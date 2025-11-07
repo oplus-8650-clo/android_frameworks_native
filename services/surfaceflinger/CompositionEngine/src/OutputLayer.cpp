@@ -421,10 +421,8 @@ void OutputLayer::updateCompositionState(
                 getOutput().getState().sdrWhitePointNits;
         float idealizedMaxHeadroom = deviceHeadroom;
 
-        if (FlagManager::getInstance().begone_bright_hlg()) {
-            idealizedMaxHeadroom =
-                    std::min(idealizedMaxHeadroom, getIdealizedMaxHeadroom(state.dataspace));
-        }
+        idealizedMaxHeadroom =
+                std::min(idealizedMaxHeadroom, getIdealizedMaxHeadroom(state.dataspace));
 
         state.dimmingRatio = std::min(idealizedMaxHeadroom / deviceHeadroom, 1.0f);
         state.whitePointNits = getOutput().getState().displayBrightnessNits * state.dimmingRatio;

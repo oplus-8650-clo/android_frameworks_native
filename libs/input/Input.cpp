@@ -656,7 +656,8 @@ void MotionEvent::splitFrom(const android::MotionEvent& other,
     const nsecs_t splitDownTime = other.mDownTime;
 
     auto result = split(other.getAction(), other.getFlags(), other.getHistorySize(),
-                        other.mPointerProperties, other.mSamplePointerCoords, splitPointerIds);
+                        other.mPointerProperties, other.mSamplePointerCoords, splitPointerIds,
+                        [&]() { return safeDump() + ", other=" + other.safeDump(); });
     if (!result) {
         LOG(ERROR) << "Could not split " << other << " into " << splitPointerIds
                    << " with new id=" << newEventId << ": " << result.error();
@@ -1058,10 +1059,12 @@ base::Result<std::tuple<int32_t, std::vector<PointerProperties>, std::vector<Poi
 MotionEvent::split(int32_t action, ftl::Flags<MotionFlag> flags, int32_t historySize,
                    const std::vector<PointerProperties>& pointerProperties,
                    const std::vector<PointerCoords>& pointerCoords,
-                   std::bitset<MAX_POINTER_ID + 1> splitPointerIds) {
-    LOG_ALWAYS_FATAL_IF(!splitPointerIds.any());
+                   std::bitset<MAX_POINTER_ID + 1> splitPointerIds,
+                   std::function<std::string(void)> debugInfo) {
+    LOG_IF(FATAL, !splitPointerIds.any()) << "!splitPointerIds.any() : " << debugInfo();
     const auto pointerCount = pointerProperties.size();
-    LOG_ALWAYS_FATAL_IF(pointerCoords.size() != (pointerCount * (historySize + 1)));
+    LOG_IF(FATAL, pointerCoords.size() != (pointerCount * (historySize + 1)))
+            << "pointerCoords.size() != (pointerCount * (historySize + 1)) : " << debugInfo();
     const auto splitCount = splitPointerIds.count();
 
     std::vector<PointerProperties> splitPointerProperties;
@@ -1077,8 +1080,9 @@ MotionEvent::split(int32_t action, ftl::Flags<MotionFlag> flags, int32_t history
             splitPointerCoords.emplace_back(pointerCoords[i]);
         }
     }
-    LOG_ALWAYS_FATAL_IF(splitPointerCoords.size() !=
-                        (splitPointerProperties.size() * (historySize + 1)));
+    LOG_IF(FATAL, splitPointerCoords.size() != (splitPointerProperties.size() * (historySize + 1)))
+            << "splitPointerCoords.size() != (splitPointerProperties.size() * (historySize + 1)) : "
+            << debugInfo();
 
     if (CC_UNLIKELY(splitPointerProperties.size() != splitCount)) {
         // TODO(b/329107108): Promote this to a fatal check once bugs in the caller are resolved.

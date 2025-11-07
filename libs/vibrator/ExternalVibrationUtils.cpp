@@ -78,11 +78,7 @@ float applyHapticScale(float value, float scaleFactor) {
         float scaledValue = (scaleFactor <= 1 || value == 0)
                 ? (value * scaleFactor)
                 : (value * scaleFactor) / (1 + (scaleFactor - 1) * value * value);
-        if (android_os_vibrator_vibration_scale_bounds_fix_enabled()) {
-            return std::clamp(scaledValue, -1.0f, 1.0f);
-        } else {
-            return scaledValue;
-        }
+        return std::clamp(scaledValue, -1.0f, 1.0f);
     }
     float scale = powf(scaleFactor, 1.0f / SCALE_GAMMA);
     if (scaleFactor <= 1) {
@@ -137,34 +133,17 @@ void applyHapticScale(float* buffer, size_t length, HapticScale scale) {
     for (size_t i = 0; i < length; i++) {
         buffer[i] = applyHapticScale(buffer[i], scale, scaleFactor);
         if (adaptiveScaleFactor >= 0 && adaptiveScaleFactor != 1.0f) {
-            if (android_os_vibrator_vibration_scale_bounds_fix_enabled()) {
-                buffer[i] = std::clamp(buffer[i] * adaptiveScaleFactor, -1.0f, 1.0f);
-            } else {
-                buffer[i] *= adaptiveScaleFactor;
-            }
+            buffer[i] = std::clamp(buffer[i] * adaptiveScaleFactor, -1.0f, 1.0f);
         }
     }
 }
 
 void clipHapticData(float* buffer, size_t length, float limit) {
-    if (android_os_vibrator_vibration_scale_bounds_fix_enabled()) {
-        if (isnan(limit) || limit <= 0 || limit >= 1) {
-            return;
-        }
-        for (size_t i = 0; i < length; i++) {
-            buffer[i] = std::clamp(buffer[i], -limit, limit);
-        }
+    if (isnan(limit) || limit <= 0 || limit >= 1) {
         return;
     }
-    if (isnan(limit) || limit == 0) {
-        return;
-    }
-    limit = fabsf(limit);
     for (size_t i = 0; i < length; i++) {
-        float sign = buffer[i] >= 0 ? 1.0 : -1.0;
-        if (fabsf(buffer[i]) > limit) {
-            buffer[i] = limit * sign;
-        }
+        buffer[i] = std::clamp(buffer[i], -limit, limit);
     }
 }
 

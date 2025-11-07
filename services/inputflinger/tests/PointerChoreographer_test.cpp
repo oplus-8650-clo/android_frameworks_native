@@ -3326,7 +3326,6 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
 TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
        UsePrimaryDisplayIfAssociatedDisplayIsInTopology) {
     SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-    SCOPED_FLAG_OVERRIDE(connected_displays_associated_display_cursor_bugfix, true);
 
     // Add two displays
     mChoreographer.setDisplayViewports(
@@ -3345,7 +3344,6 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
 TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
        AllowCrossingDisplayEvenWithAssociatedDisplaySet) {
     SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-    SCOPED_FLAG_OVERRIDE(connected_displays_associated_display_cursor_bugfix, true);
 
     // Add two displays
     mChoreographer.setDisplayViewports(
@@ -3380,7 +3378,6 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
 TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
        AddAssociatedDisplayCursorOutsideOfDisplayTopology) {
     SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-    SCOPED_FLAG_OVERRIDE(connected_displays_associated_display_cursor_bugfix, true);
 
     // Add three displays, with only first and second display in DisplayTopolgoy
     mChoreographer.setDisplayViewports({createViewport(FIRST_DISPLAY_ID),
@@ -3410,7 +3407,6 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
 TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
        GetCursorPositionReturnValidPositionForDisplayWithCursor) {
     SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-    SCOPED_FLAG_OVERRIDE(connected_displays_associated_display_cursor_bugfix, true);
 
     // Add two displays
     mChoreographer.setDisplayViewports(

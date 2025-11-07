@@ -100,12 +100,13 @@ typedef enum ANativeServiceTrimMemoryLevel : int32_t {
  * Introduced in API 37.
  *
  * \param service {@link ANativeService} associated with the service.
- * \param intentToken A token associated with the intent that was used to bind to this
- * service, as given to `Context.bindService`.
- * \param action The action specified in the intent passed to `Context.bindService` or null if not
- * specified.
+ * \param intentToken A token representing the intent that was passed to `Context.bindService` to
+ * bind to this service. The same token is passed to onUnbind and onRebind callbacks to identify
+ * which binding triggered the callback.
+ * \param action The action specified in the intent passed to `Context.bindService` encoded as UTF-8
+ * or null if not specified.
  * \param data The data specified in the intent passed to `Context.bindService`. This is an encoded
- * URI or null if not specified.
+ * URI based on RFC 2396 using UTF-8 or null if not specified.
  * \return an AIBinder pointer through which clients can call on to the service.
  */
 typedef AIBinder* _Nullable (*ANativeService_onBindCallback)(ANativeService* _Nonnull service,
@@ -123,8 +124,8 @@ typedef AIBinder* _Nullable (*ANativeService_onBindCallback)(ANativeService* _No
  * Introduced in API 37.
  *
  * \param service {@link ANativeService} associated with the service.
- * \param intentToken A token associated with the intent that was used to bind to this
- * service, as given to `Context.bindService`.
+ * \param intentToken A token representing the intent that was passed to `Context.bindService` to
+ * bind to this service, which allows the callback to identify which binding triggered it.
  * \return true if you would like to have the service's {@link ANativeService_onRebindCallback}
  * callback later called when new clients bind to it, otherwise false.
  */
@@ -140,9 +141,8 @@ typedef bool (*ANativeService_onUnbindCallback)(ANativeService* _Nonnull service
  * Introduced in API 37.
  *
  * \param service {@link ANativeService} associated with the service.
- * \param intentToken A token associated with the intent that was used to bind to this
- * service, as given to `Context.bindService`.
- * service binding.
+ * \param intentToken A token representing the intent that was passed to `Context.bindService` to
+ * bind to this service, which allows the callback to identify which binding triggered it.
  */
 typedef void (*ANativeService_onRebindCallback)(ANativeService* _Nonnull service,
                                                 int32_t intentToken);
@@ -188,11 +188,14 @@ typedef void (*ANativeService_onTrimMemoryCallback)(ANativeService* _Nonnull ser
  * \param callback A pointer to an implementation of {@link ANativeService_onBindCallback}.
  */
 void ANativeService_setOnBindCallback(ANativeService* _Nonnull service,
-                                      ANativeService_onBindCallback _Nullable callback)
+                                      ANativeService_onBindCallback _Nonnull callback)
         __INTRODUCED_IN(37);
 
 /**
  * Sets the "onUnbind" callback function for the service.
+ *
+ * If NULL is specified as the callback, then the system runs the default implementation which does
+ * nothing and returns false.
  *
  * Introduced in API 37.
  *
@@ -206,6 +209,9 @@ void ANativeService_setOnUnbindCallback(ANativeService* _Nonnull service,
 /**
  * Sets the "onRebind" callback function for the service.
  *
+ * If NULL is specified as the callback, then the system skips calling the callback when the
+ * event happens.
+ *
  * Introduced in API 37.
  *
  * \param service {@link ANativeService} associated with the service.
@@ -218,6 +224,9 @@ void ANativeService_setOnRebindCallback(ANativeService* _Nonnull service,
 /**
  * Sets the "onDestroy" callback function for the service.
  *
+ * If NULL is specified as the callback, then the system skips calling the callback when the
+ * event happens.
+ *
  * Introduced in API 37.
  *
  * \param service {@link ANativeService} associated with the service.
@@ -229,6 +238,9 @@ void ANativeService_setOnDestroyCallback(ANativeService* _Nonnull service,
 
 /**
  * Sets the "onTrimMemory" callback function for the service.
+ *
+ * If NULL is specified as the callback, then the system skips calling the callback when the
+ * event happens.
  *
  * Introduced in API 37.
  *

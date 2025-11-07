@@ -21,9 +21,11 @@
 #include <input/AccelerationCurve.h>
 
 #include <log/log.h>
+#include <list>
 #include <thread>
 #include "InputMapperTest.h"
 #include "InterfaceMocks.h"
+#include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestEventMatchers.h"
 
@@ -31,6 +33,8 @@
 
 namespace android {
 
+using testing::ElementsAre;
+using testing::IsEmpty;
 using testing::Return;
 using testing::VariantWith;
 constexpr auto ACTION_DOWN = AMOTION_EVENT_ACTION_DOWN;
@@ -174,6 +178,30 @@ TEST_F(TouchpadInputMapperTest, HoverAndLeftButtonPress) {
     args += process(EV_KEY, BTN_TOOL_FINGER, 0);
     args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args, testing::IsEmpty());
+}
+
+TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
+    auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
+    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
+                        ->getBoolValues(),
+                ElementsAre(true));
+
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
+    std::list<NotifyArgs> args;
+    args = mMapper->reconfigure(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
+                        ->getBoolValues(),
+                ElementsAre(false));
+
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    args = mMapper->reconfigure(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
+                        ->getBoolValues(),
+                ElementsAre(true));
 }
 
 TEST_F(TouchpadInputMapperTest, TouchpadHardwareState) {

@@ -164,6 +164,26 @@ status_t HapticGeneratorSession::close() {
     return finalStatus;
 }
 
+bool HapticGeneratorSession::isValidForVibrators(const std::vector<int32_t>& vibratorIds) {
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    if (mQueues.size() != vibratorIds.size()) {
+        ALOGE("HapticGeneratorSession: Invalid session, expected %zu queues but was %zu",
+              vibratorIds.size(), mQueues.size());
+        return false;
+    }
+
+    for (int32_t id : vibratorIds) {
+        if (mQueues.find(id) == mQueues.end()) {
+            // A vibrator id is missing
+            ALOGE("HapticGeneratorSession: Requested vibrator %d is missing from HAL session", id);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void HapticGeneratorSession::sendCommandAndReceiveReply(int32_t vibratorId,
                                                         const HapticGeneratorCommand& command,
                                                         HapticGeneratorReply* reply) {

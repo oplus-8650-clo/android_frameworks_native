@@ -204,7 +204,13 @@ JoystickInputMapper::Axis JoystickInputMapper::createAxis(const AxisInfo& axisIn
         highOffset = offset;
         highScale = scale;
         min = -1.0f;
+    } else if (isAnalogTrigger(axisInfo.axis)) {
+        scale = 1.0f / (rawAxisInfo.maxValue - rawAxisInfo.minValue);
+        offset = -rawAxisInfo.minValue * scale;
+        highScale = scale;
+        highOffset = offset;
     } else {
+        // generic axes
         scale = 1.0f / (rawAxisInfo.maxValue - rawAxisInfo.minValue);
         highScale = scale;
     }
@@ -257,6 +263,19 @@ bool JoystickInputMapper::isCenteredAxis(int32_t axis) {
         case AMOTION_EVENT_AXIS_ORIENTATION:
         case AMOTION_EVENT_AXIS_RUDDER:
         case AMOTION_EVENT_AXIS_WHEEL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool JoystickInputMapper::isAnalogTrigger(int32_t axis) {
+    switch (axis) {
+        case AMOTION_EVENT_AXIS_LTRIGGER:
+        case AMOTION_EVENT_AXIS_RTRIGGER:
+        case AMOTION_EVENT_AXIS_GAS:
+        case AMOTION_EVENT_AXIS_BRAKE:
+        case AMOTION_EVENT_AXIS_THROTTLE:
             return true;
         default:
             return false;

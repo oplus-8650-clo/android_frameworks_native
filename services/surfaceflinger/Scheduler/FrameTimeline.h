@@ -439,6 +439,9 @@ public:
 
     // Restores the max number of display frames to default. Called by SF backdoor.
     virtual void reset() = 0;
+
+    // Called when a layer is destroyed. Used for data cleanup.
+    virtual void onLayerDestroyed(int32_t layerId) = 0;
 };
 
 namespace impl {
@@ -614,6 +617,7 @@ public:
     float computeFps(const std::unordered_set<int32_t>& layerIds) override;
     void generateFrameStats(int32_t layer, size_t count, FrameStats* outStats) const override;
     void reset() override;
+    void onLayerDestroyed(int32_t layerId) override;
 
     // Sets up the perfetto tracing backend and data source.
     void onBootFinished() override;
@@ -662,7 +666,7 @@ private:
     // internal vector resizing that happens with push_back.
     static constexpr uint32_t kNumSurfaceFramesInitial = 10;
 
-    std::unordered_map<int32_t /*layerId*/, std::weak_ptr<SurfaceFrame>> mPreviousSurfaceFrame
+    std::unordered_map<int32_t /*layerId*/, std::weak_ptr<SurfaceFrame>> mPreviousSurfaceFrames
             GUARDED_BY(mMutex);
 };
 

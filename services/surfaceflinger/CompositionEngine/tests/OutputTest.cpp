@@ -3326,8 +3326,6 @@ struct OutputPostFramebufferTest : public testing::Test {
 };
 
 TEST_F(OutputPostFramebufferTest, ifNotEnabledDoesNothing) {
-    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::flush_buffer_slots_to_uncache,
-                      true);
     mOutput.mState.isEnabled = false;
     EXPECT_CALL(mOutput, executeCommands()).Times(0);
     EXPECT_CALL(mOutput, presentFrame()).Times(0);
@@ -3337,8 +3335,6 @@ TEST_F(OutputPostFramebufferTest, ifNotEnabledDoesNothing) {
 }
 
 TEST_F(OutputPostFramebufferTest, ifNotEnabledExecutesCommandsIfFlush) {
-    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::flush_buffer_slots_to_uncache,
-                      true);
     mOutput.mState.isEnabled = false;
     EXPECT_CALL(mOutput, executeCommands());
     EXPECT_CALL(mOutput, presentFrame()).Times(0);
@@ -3348,8 +3344,6 @@ TEST_F(OutputPostFramebufferTest, ifNotEnabledExecutesCommandsIfFlush) {
 }
 
 TEST_F(OutputPostFramebufferTest, ifEnabledDoNotExecuteCommands) {
-    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::flush_buffer_slots_to_uncache,
-                      true);
     mOutput.mState.isEnabled = true;
 
     compositionengine::Output::FrameFences frameFences;
@@ -3371,8 +3365,6 @@ TEST_F(OutputPostFramebufferTest, ifEnabledDoNotExecuteCommands2) {
     // Same test as ifEnabledDoNotExecuteCommands, but with this variable set to false.
     constexpr bool kFlushEvenWhenDisabled = false;
 
-    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::flush_buffer_slots_to_uncache,
-                      true);
     mOutput.mState.isEnabled = true;
 
     compositionengine::Output::FrameFences frameFences;

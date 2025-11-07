@@ -331,7 +331,7 @@ private:
     ftl::SharedMutex mMutex;
 
     int32_t mComposerInterfaceVersion = 1;
-    bool mEnableLayerCommandBatchingFlag = false;
+    bool mLifecycleBatchCommandSupported = false;
     std::atomic<int64_t> mLayerID = 1;
 
     // Buffer slots for layers are cleared by setting the slot buffer to this buffer.
