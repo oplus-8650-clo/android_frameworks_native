@@ -9173,9 +9173,8 @@ TEST_F(InputDispatcherFallbackKeyTest, WindowRemovedWhileAwaitingFinishedSignal)
 
 class InputDispatcherKeyRepeatTest : public InputDispatcherTest {
 protected:
-    static constexpr std::chrono::nanoseconds KEY_REPEAT_TIMEOUT = 40ms;
-    static constexpr std::chrono::nanoseconds KEY_REPEAT_DELAY = 40ms;
-    static constexpr bool KEY_REPEAT_ENABLED = true;
+    std::chrono::nanoseconds mKeyRepeatTimeout = 40ms;
+    std::chrono::nanoseconds mKeyRepeatDelay = 40ms;
 
     std::shared_ptr<FakeApplicationHandle> mApp;
     sp<FakeWindowHandle> mWindow;
@@ -9183,8 +9182,12 @@ protected:
     virtual void SetUp() override {
         InputDispatcherTest::SetUp();
 
-        mDispatcher->setKeyRepeatConfiguration(KEY_REPEAT_TIMEOUT, KEY_REPEAT_DELAY,
-                                               KEY_REPEAT_ENABLED);
+        int hardwareTimeoutMultiplier = android::base::HwTimeoutMultiplier();
+        mKeyRepeatTimeout = mKeyRepeatTimeout * hardwareTimeoutMultiplier;
+        mKeyRepeatDelay = mKeyRepeatDelay * hardwareTimeoutMultiplier;
+
+        mDispatcher->setKeyRepeatConfiguration(mKeyRepeatTimeout, mKeyRepeatDelay,
+                                               /*keyRepeatEnabled=*/true);
         setUpWindow();
     }
 
@@ -9353,7 +9356,13 @@ TEST_F(InputDispatcherKeyRepeatTest, FocusedWindow_CorrectRepeatCountWhenInjectK
 
 TEST_F(InputDispatcherKeyRepeatTest, FocusedWindow_NoRepeatWhenKeyRepeatDisabled) {
     SCOPED_FLAG_OVERRIDE(keyboard_repeat_keys, true);
-    static constexpr std::chrono::milliseconds KEY_NO_REPEAT_ASSERTION_TIMEOUT = 100ms;
+    constexpr std::chrono::milliseconds KEY_NO_REPEAT_ASSERTION_TIMEOUT = 100ms;
+    // In the other tests, we multiply the repeat timeout and delay by the hardware multiplier,
+    // since delays in sending key UPs on slow systems were causing multiple repeat DOWNs to be sent
+    // and breaking tests. Since this test is checking for the absence of events, we don't need to
+    // do that here, so let's not to keep the test fast.
+    const std::chrono::milliseconds KEY_REPEAT_TIMEOUT = 40ms;
+    const std::chrono::milliseconds KEY_REPEAT_DELAY = 40ms;
 
     mDispatcher->setKeyRepeatConfiguration(KEY_REPEAT_TIMEOUT, KEY_REPEAT_DELAY,
                                            /*repeatKeyEnabled=*/false);
@@ -9365,7 +9374,7 @@ TEST_F(InputDispatcherKeyRepeatTest, FocusedWindow_NoRepeatWhenKeyRepeatDisabled
             << "Ensure the check for no key repeats extends beyond the repeat delay duration.";
 
     // No events should be returned if key repeat is turned off.
-    // Wait for KEY_NO_REPEAT_ASSERTION_TIMEOUT to return no events to ensure key repeat disabled.
+    // Wait for keyNoRepeatAssertionTimeout to return no events to ensure key repeat disabled.
     mWindow->assertNoEvents(KEY_NO_REPEAT_ASSERTION_TIMEOUT);
 }
 

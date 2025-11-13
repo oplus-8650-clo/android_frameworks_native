@@ -254,6 +254,13 @@ flag {
 } # offload_gpu_composition
 
 flag {
+  name: "out_of_process_rendering"
+  namespace: "window_surfaces"
+  description: "Enable out of process rendering"
+  bug: "448153717"
+} # out_of_process_rendering
+
+flag {
   name: "parse_edid_version_and_input_type"
   namespace: "desktop_display"
   description: "Extends the display information parsed and provided by SurfaceFlinger to include EDID version and input type."

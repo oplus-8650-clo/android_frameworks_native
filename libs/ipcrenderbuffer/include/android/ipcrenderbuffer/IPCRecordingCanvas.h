@@ -40,10 +40,11 @@ class SkRRect;
 namespace android {
 
 class Mesh;
+struct IPCClientResourceCache;
 
 class IPCRecordingCanvas : public SkCanvasVirtualEnforcer<SkNoDrawCanvas> {
 public:
-    IPCRecordingCanvas();
+    explicit IPCRecordingCanvas(IPCClientResourceCache& resourceCache);
 
     void startRecording();
     void endRecording();
@@ -110,6 +111,7 @@ public:
 private:
     typedef SkCanvasVirtualEnforcer<SkNoDrawCanvas> INHERITED;
     std::shared_ptr<RenderCommandBufferProducer> mRenderCommandBufferProducer;
+    IPCClientResourceCache& mResourceCache;
     RenderCommandBuffer* mCurrentRenderCommandBuffer = nullptr;
 
     int mWidth = 0;

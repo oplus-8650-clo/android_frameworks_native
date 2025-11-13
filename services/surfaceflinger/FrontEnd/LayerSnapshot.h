@@ -117,6 +117,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     bool handleSkipScreenshotFlag = false;
     int32_t frameRateSelectionPriority = -1;
     LayerHierarchy::TraversalPath mirrorRootPath;
+    uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     uint32_t touchCropId;
     gui::Uid uid = gui::Uid::INVALID;
     gui::Pid pid = gui::Pid::INVALID;

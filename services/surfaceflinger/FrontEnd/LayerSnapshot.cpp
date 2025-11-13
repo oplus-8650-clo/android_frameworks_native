@@ -132,6 +132,7 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     clientChanges = 0;
     mirrorRootPath =
             LayerHierarchy::isMirror(path.variant) ? path : LayerHierarchy::TraversalPath::ROOT;
+    stopLayerId = state.stopLayerId;
     reachability = LayerSnapshot::Reachability::Unreachable;
     frameRateSelectionPriority = state.frameRateSelectionPriority;
     layerMetadata = state.metadata;
@@ -369,6 +370,11 @@ std::ostream& operator<<(std::ostream& out, const LayerSnapshot& obj) {
     if (obj.desiredHdrSdrRatio > 1.f) {
         out << " desiredHdrSdrRatio=" << obj.desiredHdrSdrRatio;
     }
+
+    if (obj.stopLayerId != UNASSIGNED_LAYER_ID) {
+        out << " stopLayerId=" << obj.stopLayerId;
+    }
+
     return out;
 }
 

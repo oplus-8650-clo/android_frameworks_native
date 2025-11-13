@@ -43,18 +43,14 @@ public:
 
     void reset();
 
-    size_t getRemainingSize() const { return sizeof(mBytes) - mUsed; }
-
     template <typename T>
-    T* alloc(size_t count = 1) {
+    T* allocAligned(size_t count = 1) {
         size_t aligned = roundUp(mUsed, alignof(T));
         size_t allocationSize = count * sizeof(T);
         if (aligned + allocationSize > sizeof(mBytes)) {
             return nullptr;
         }
         uint8_t* ptr = mBytes + aligned;
-        // TODO: do we need constructors for anything?
-        memset(ptr, 0, allocationSize);
         mUsed = aligned + allocationSize;
         return reinterpret_cast<T*>(ptr);
     }
@@ -72,10 +68,10 @@ public:
         height = mHeight;
     }
 
-private:
-    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
     uint8_t mBytes[RENDER_COMMAND_BUFFER_DEFAULT_SIZE];
     size_t mUsed = 0;
+
+    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
     RPointer<IPCRenderBufferOp> mTail;
     RPointer<IPCRenderBufferOp> mHead;
     // These are somewhat awkward, and used to achieve compatibility with the buffer based geometry
@@ -88,7 +84,7 @@ private:
 template <typename T>
 inline bool SetRSpan(RSpan<T>& span, RenderCommandBuffer* commandBuffer, const T* data,
                      size_t count) {
-    span.data = commandBuffer->alloc<T>(count);
+    span.data = commandBuffer->allocAligned<T>(count);
     if (!span.data) {
         return false;
     }

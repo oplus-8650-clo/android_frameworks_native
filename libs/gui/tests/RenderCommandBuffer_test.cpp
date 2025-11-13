@@ -57,7 +57,7 @@ TEST(RenderCommandBufferTest, AllocAndPushOp) {
     auto bufferOriginal = std::make_unique<RenderCommandBuffer>();
     ASSERT_NE(nullptr, bufferOriginal.get());
 
-    auto* opOriginal = bufferOriginal->alloc<IPCRenderBufferOp>();
+    auto* opOriginal = bufferOriginal->allocAligned<IPCRenderBufferOp>();
     ASSERT_NE(nullptr, opOriginal);
 
     opOriginal->type = 1;
@@ -81,7 +81,7 @@ TEST(RenderCommandBufferTest, PushMultipleOps) {
     IPCRenderBufferOp* opsOriginal[opCount];
 
     for (unsigned int i = 0; i < opCount; i++) {
-        opsOriginal[i] = bufferOriginal->alloc<IPCRenderBufferOp>();
+        opsOriginal[i] = bufferOriginal->allocAligned<IPCRenderBufferOp>();
         ASSERT_NE(nullptr, opsOriginal[i]);
         opsOriginal[i]->type = i;
         bufferOriginal->pushOp(opsOriginal[i]);
@@ -115,7 +115,7 @@ TEST(RenderCommandBufferTest, PushMultipleOpsWithData) {
     std::vector<std::vector<int>> testData(opCount);
 
     for (unsigned int i = 0; i < opCount; i++) {
-        TestOp* op = bufferOriginal->alloc<TestOp>();
+        TestOp* op = bufferOriginal->allocAligned<TestOp>();
         ASSERT_NE(nullptr, op);
         opsOriginal[i] = op;
 

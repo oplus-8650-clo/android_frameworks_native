@@ -40,7 +40,8 @@
 
 namespace android {
 
-IPCRecordingCanvas::IPCRecordingCanvas() : INHERITED(512, 512) {
+IPCRecordingCanvas::IPCRecordingCanvas(IPCClientResourceCache& resourceCache)
+      : INHERITED(512, 512), mResourceCache(resourceCache) {
     mRenderCommandBufferProducer = std::make_shared<RenderCommandBufferProducer>();
 }
 
@@ -290,10 +291,15 @@ void IPCRecordingCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkSc
     mCurrentRenderCommandBuffer->pushOp(op);
 }
 
-void IPCRecordingCanvas::onDrawImage2(const SkImage*, SkScalar, SkScalar, const SkSamplingOptions&,
-                                      const SkPaint*) {
+void IPCRecordingCanvas::onDrawImage2(const SkImage* image, SkScalar x, SkScalar y,
+                                      const SkSamplingOptions& sampling, const SkPaint* paint) {
     IPC_CANVAS_TRACE_CALL;
-    ALOGE("onDrawImage2 Not implemented");
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto it = mResourceCache.bitmaps.find(image->uniqueID());
+    LOG_ALWAYS_FATAL_IF(it == mResourceCache.bitmaps.end(), "Bitmap not found in cache");
+    auto op = DrawImageOp::Create(mCurrentRenderCommandBuffer, it->second.id, x, y, sampling, paint);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
 }
 void IPCRecordingCanvas::onDrawImageLattice2(const SkImage*, const Lattice&, const SkRect&,
                                              SkFilterMode, const SkPaint*) {
@@ -301,11 +307,17 @@ void IPCRecordingCanvas::onDrawImageLattice2(const SkImage*, const Lattice&, con
     ALOGE("onDrawImageLattice2 Not implemented");
 }
 
-void IPCRecordingCanvas::onDrawImageRect2(const SkImage* i, const SkRect& src, const SkRect& dst,
+void IPCRecordingCanvas::onDrawImageRect2(const SkImage* image, const SkRect& src, const SkRect& dst,
                                           const SkSamplingOptions& sampling, const SkPaint* paint,
                                           SrcRectConstraint constraint) {
     IPC_CANVAS_TRACE_CALL;
-    ALOGE("Not implemented");
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto it = mResourceCache.bitmaps.find(image->uniqueID());
+    LOG_ALWAYS_FATAL_IF(it == mResourceCache.bitmaps.end(), "Bitmap not found in cache");
+    auto op = DrawImageRectOp::Create(mCurrentRenderCommandBuffer, it->second.id, src, dst,
+                                      sampling, paint, constraint);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
 }
 
 void IPCRecordingCanvas::storeSize(int width, int height) {
@@ -313,19 +325,35 @@ void IPCRecordingCanvas::storeSize(int width, int height) {
     mHeight = height;
 }
 
-void IPCRecordingCanvas::onDrawPatch(const SkPoint[12], const SkColor[4], const SkPoint[4],
-                                     SkBlendMode, const SkPaint&) {
+void IPCRecordingCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                                     const SkPoint texCoords[4], SkBlendMode mode,
+                                     const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
-    ALOGE("onDrawPatch Not implemented");
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto op = DrawPatchOp::Create(mCurrentRenderCommandBuffer, cubics, colors, texCoords, mode,
+                                  paint);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
 }
-void IPCRecordingCanvas::onDrawPoints(PointMode, size_t count, const SkPoint pts[],
-                                      const SkPaint&) {
+void IPCRecordingCanvas::onDrawPoints(PointMode mode, size_t count, const SkPoint pts[],
+                                      const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
-    ALOGE("onDrawPoints Not implemented");
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto op = DrawPointsOp::Create(mCurrentRenderCommandBuffer, mode, count, pts, paint);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
 }
-void IPCRecordingCanvas::onDrawVerticesObject(const SkVertices*, SkBlendMode, const SkPaint&) {
+void IPCRecordingCanvas::onDrawVerticesObject(const SkVertices* vertices, SkBlendMode mode,
+                                              const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     ALOGE("onDrawVerticesObject Not implemented");
+    
+    #if 0
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto op = DrawVerticesOp::Create(mCurrentRenderCommandBuffer, vertices, mode, paint);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
+    #endif
 }
 void IPCRecordingCanvas::onDrawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) {
     IPC_CANVAS_TRACE_CALL;

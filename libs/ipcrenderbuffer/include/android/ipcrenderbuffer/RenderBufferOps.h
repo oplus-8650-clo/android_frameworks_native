@@ -19,6 +19,7 @@
 #include <SkRect.h>
 #include <gui/RenderCommandBuffer.h>
 #include <gui/RenderCommandBufferConsumer.h>
+#include <ui/GraphicBuffer.h>
 
 #include <SkAndroidFrameworkUtils.h>
 #include <SkCanvas.h>
@@ -72,31 +73,40 @@
 
 namespace android {
 
+struct IPCClientBitmap {
+    uint64_t id;
+    sp<GraphicBuffer> buffer;
+};
+
+struct IPCClientResourceCache {
+    std::map<uint32_t, IPCClientBitmap> bitmaps;
+};
+
+struct IPCServerBitmap {
+    sp<GraphicBuffer> buffer;
+    sk_sp<SkImage> image;
+};
+
+struct IPCServerResourceCache {
+    sk_sp<SkFontMgr> fontManager;
+    std::map<uint64_t, IPCServerBitmap> bitmaps;
+};
+
 // Derived from RecordingCanvas.cpp
 struct SaveOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_SAVE;
 
-    static SaveOp* Create(RenderCommandBuffer* commandBuffer) {
-        SaveOp* op = commandBuffer->alloc<SaveOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        return op;
-    }
-    void draw(SkCanvas* c, const SkMatrix&) { c->save(); }
-    std::string toString() const { return std::string("SaveOp"); }
+    static SaveOp* Create(RenderCommandBuffer* commandBuffer);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct RestoreOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESTORE;
 
-    static RestoreOp* Create(RenderCommandBuffer* commandBuffer) {
-        RestoreOp* op = commandBuffer->alloc<RestoreOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        return op;
-    }
-    void draw(SkCanvas* c, const SkMatrix&) { c->restore(); }
-    std::string toString() const { return std::string("RestoreOp"); }
+    static RestoreOp* Create(RenderCommandBuffer* commandBuffer);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct SaveLayerOp final : IPCRenderBufferOp {
@@ -107,128 +117,54 @@ struct SaveLayerOp final : IPCRenderBufferOp {
     bool hasPaint;
 
     static SaveLayerOp* Create(RenderCommandBuffer* commandBuffer, const SkRect* bounds,
-                               const SkPaint* paint) {
-        SaveLayerOp* op = commandBuffer->alloc<SaveLayerOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        if (bounds) {
-            op->bounds = *bounds;
-            op->hasBounds = true;
-        } else {
-            op->hasBounds = false;
-        }
-        if (paint) {
-            op->paint = toShmemPaint(*paint);
-            op->hasPaint = true;
-        } else {
-            op->hasPaint = false;
-        }
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        const SkRect* boundsPtr = hasBounds ? &bounds : nullptr;
-        SkPaint p;
-        const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
-        c->saveLayer(boundsPtr, paintPtr);
-    }
-    std::string toString() const { return std::string("SaveLayerOp"); }
+                               const SkPaint* paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct SaveBehindOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_SAVEBEHIND;
     SkRect subset;
 
-    static SaveBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& subset) {
-        SaveBehindOp* op = commandBuffer->alloc<SaveBehindOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        if (subset.isEmpty()) {
-            op->subset.setEmpty();
-        } else {
-            op->subset = subset;
-        }
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { SkAndroidFrameworkUtils::SaveBehind(c, &subset); }
-    std::string toString() const {
-        return std::string("SaveBehindOp subset: ") + rectToString(subset);
-    }
+    static SaveBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& subset);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ConcatOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_CONCAT;
     SkM44 matrix;
 
-    static ConcatOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix) {
-        ConcatOp* op = commandBuffer->alloc<ConcatOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->matrix = matrix;
-        return op;
-    }
-    void draw(SkCanvas* c, const SkMatrix&) { c->concat(matrix); }
-    std::string toString() const {
-        return std::string("ConcatOp matrix: ") + skmatrixToString(matrix);
-    }
+    static ConcatOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct SetMatrixOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_SETMATRIX;
     SkM44 matrix;
 
-    static SetMatrixOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix) {
-        SetMatrixOp* op = commandBuffer->alloc<SetMatrixOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->matrix = matrix;
-        return op;
-    }
-    void draw(SkCanvas* c, const SkMatrix& original) { c->setMatrix(SkM44(original) * matrix); }
-    std::string toString() const {
-        return std::string("SetMatrixOp matrix: ") + skmatrixToString(matrix);
-    }
+    static SetMatrixOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix);
+    void draw(SkCanvas* c, const SkMatrix& original);
+    std::string toString() const;
 };
 
 struct ScaleOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_SCALE;
     SkScalar sx, sy;
 
-    static ScaleOp* Create(RenderCommandBuffer* commandBuffer, SkScalar sx, SkScalar sy) {
-        ScaleOp* op = commandBuffer->alloc<ScaleOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->sx = sx;
-        op->sy = sy;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->scale(sx, sy); }
-    std::string toString() const {
-        return std::string("ScaleOp sx: ") + std::to_string(sx) + std::string(" sy: ") +
-                std::to_string(sy);
-    }
+    static ScaleOp* Create(RenderCommandBuffer* commandBuffer, SkScalar sx, SkScalar sy);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct TranslateOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_TRANSLATE;
     SkScalar dx, dy;
 
-    static TranslateOp* Create(RenderCommandBuffer* commandBuffer, SkScalar dx, SkScalar dy) {
-        TranslateOp* op = commandBuffer->alloc<TranslateOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->dx = dx;
-        op->dy = dy;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->translate(dx, dy); }
-    std::string toString() const {
-        return std::string("TranslateOp dx: ") + std::to_string(dx) + std::string(" dy: ") +
-                std::to_string(dy);
-    }
+    static TranslateOp* Create(RenderCommandBuffer* commandBuffer, SkScalar dx, SkScalar dy);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ClipPathOp final : IPCRenderBufferOp {
@@ -238,26 +174,9 @@ struct ClipPathOp final : IPCRenderBufferOp {
     RSpan<uint8_t> pathData;
 
     static ClipPathOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path, SkClipOp op,
-                              bool aa) {
-        ClipPathOp* opData = commandBuffer->alloc<ClipPathOp>();
-        if (!opData) return nullptr;
-        size_t pathSize = path.writeToMemory(nullptr);
-        if (!SetRSpan<uint8_t>(opData->pathData, commandBuffer, nullptr, pathSize)) {
-            return nullptr;
-        }
-        path.writeToMemory(opData->pathData.data.get());
-        opData->type = kType;
-        opData->op = op;
-        opData->aa = aa;
-        return opData;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        SkPath path;
-        path.readFromMemory(pathData.data.get(), pathData.size);
-        c->clipPath(path, op, aa);
-    }
-    std::string toString() const { return "ClipPathOp"; }
+                              bool aa);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ClipRectOp final : IPCRenderBufferOp {
@@ -267,21 +186,9 @@ struct ClipRectOp final : IPCRenderBufferOp {
     bool aa;
 
     static ClipRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& rect, SkClipOp op,
-                              bool aa) {
-        ClipRectOp* opData = commandBuffer->alloc<ClipRectOp>();
-        if (!opData) return nullptr;
-        opData->type = kType;
-        opData->rect = rect;
-        opData->op = op;
-        opData->aa = aa;
-        return opData;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->clipRect(rect, op, aa); }
-    std::string toString() const {
-        return std::string("ClipRectOp: rect: ") + rectToString(rect) + std::string(" op: ") +
-                std::to_string((int)op) + std::string(" aa: ") + std::to_string(aa);
-    }
+                              bool aa);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ClipRRectOp final : IPCRenderBufferOp {
@@ -291,22 +198,9 @@ struct ClipRRectOp final : IPCRenderBufferOp {
     bool aa;
 
     static ClipRRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRRect& rrect,
-                               SkClipOp op, bool aa) {
-        ClipRRectOp* opData = commandBuffer->alloc<ClipRRectOp>();
-        if (!opData) return nullptr;
-        opData->type = kType;
-        opData->rrect = rrect;
-        opData->op = op;
-        opData->aa = aa;
-        return opData;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->clipRRect(rrect, op, aa); }
-    std::string toString() const {
-        std::string rectAsString = std::string(rrect.dumpToString(false).c_str());
-        return std::string("ClipRRectOp: rrect: ") + rectAsString + std::string(" op: ") +
-                std::to_string((int)op) + std::string(" aa: ") + std::to_string(aa);
-    }
+                               SkClipOp op, bool aa);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ClipRegionOp final : IPCRenderBufferOp {
@@ -315,77 +209,45 @@ struct ClipRegionOp final : IPCRenderBufferOp {
     RSpan<uint8_t> regionData;
 
     static ClipRegionOp* Create(RenderCommandBuffer* commandBuffer, const SkRegion& region,
-                                SkClipOp op) {
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        return nullptr;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        SkRegion region;
-        region.readFromMemory(regionData.data.get(), regionData.size);
-        c->clipRegion(region, op);
-    }
-    std::string toString() const { return "ClipRegionOp"; }
+                                SkClipOp op);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct ClipShaderOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_CLIPSHADER;
 
     static ClipShaderOp* Create(RenderCommandBuffer* commandBuffer,
-                                const sk_sp<SkShader>& /*shader*/, SkClipOp op) {
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        return nullptr;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
+                                const sk_sp<SkShader>& /*shader*/, SkClipOp op);
+    void draw(SkCanvas* c, const SkMatrix&);
     SkClipOp op;
-    std::string toString() const { return "ClipShaderOp"; }
+    std::string toString() const;
 };
 
 struct ResetClipOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESETCLIP;
 
-    static ResetClipOp* Create(RenderCommandBuffer* commandBuffer) {
-        ResetClipOp* op = commandBuffer->alloc<ResetClipOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { SkAndroidFrameworkUtils::ResetClip(c); }
-    std::string toString() const { return "ResetClipOp"; }
+    static ResetClipOp* Create(RenderCommandBuffer* commandBuffer);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawPaintOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWPAINT;
     ShmemPaint paint;
 
-    static DrawPaintOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p) {
-        DrawPaintOp* op = commandBuffer->alloc<DrawPaintOp>();
-        if (!op) return nullptr;
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->drawPaint(fromShmemPaint(paint)); }
-    std::string toString() const { return "DrawPaintOp" + shmemPaintToString(paint); }
+    static DrawPaintOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawBehindOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWBEHIND;
     ShmemPaint paint;
 
-    static DrawBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p) {
-        DrawBehindOp* op = commandBuffer->alloc<DrawBehindOp>();
-        if (!op) return nullptr;
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawBehindOp"; }
+    static DrawBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawPathOp final : IPCRenderBufferOp {
@@ -394,26 +256,9 @@ struct DrawPathOp final : IPCRenderBufferOp {
     RSpan<uint8_t> pathData;
 
     static DrawPathOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path,
-                              const SkPaint& p) {
-        DrawPathOp* op = commandBuffer->alloc<DrawPathOp>();
-        if (!op) return nullptr;
-        size_t pathSize = path.writeToMemory(nullptr);
-        if (!SetRSpan<uint8_t>(op->pathData, commandBuffer, nullptr, pathSize)) {
-            return nullptr;
-        }
-        path.writeToMemory(op->pathData.data.get());
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        SkPath path;
-        path.readFromMemory(pathData.data.get(), pathData.size);
-        c->drawPath(path, fromShmemPaint(paint));
-    }
-    std::string toString() const { return "DrawPathOp"; }
-    void resetForReplay() {}
+                              const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawRectOp final : IPCRenderBufferOp {
@@ -422,20 +267,9 @@ struct DrawRectOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& r,
-                              const SkPaint& p) {
-        DrawRectOp* op = commandBuffer->alloc<DrawRectOp>();
-        if (!op) return nullptr;
-        op->rect = r;
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->drawRect(rect, fromShmemPaint(paint)); }
-    std::string toString() const {
-        return std::string("DrawRectOp rect(") + rectToString(rect) + ") " +
-                std::string(" paint: ") + shmemPaintToString(paint);
-    }
+                              const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawRegionOp final : IPCRenderBufferOp {
@@ -444,25 +278,9 @@ struct DrawRegionOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawRegionOp* Create(RenderCommandBuffer* commandBuffer, const SkRegion& r,
-                                const SkPaint& p) {
-        DrawRegionOp* op = commandBuffer->alloc<DrawRegionOp>();
-        if (!op) return nullptr;
-        size_t regionSize = r.writeToMemory(nullptr);
-        if (!SetRSpan<uint8_t>(op->regionData, commandBuffer, nullptr, regionSize)) {
-            return nullptr;
-        }
-        r.writeToMemory(op->regionData.data.get());
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        SkRegion region;
-        region.readFromMemory(regionData.data.get(), regionData.size);
-        c->drawRegion(region, fromShmemPaint(paint));
-    }
-    std::string toString() const { return "DrawRegionOp"; }
+                                const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawOvalOp final : IPCRenderBufferOp {
@@ -471,17 +289,9 @@ struct DrawOvalOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawOvalOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& o,
-                              const SkPaint& p) {
-        DrawOvalOp* op = commandBuffer->alloc<DrawOvalOp>();
-        if (!op) return nullptr;
-        op->oval = o;
-        op->paint = toShmemPaint(p);
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->drawOval(oval, fromShmemPaint(paint)); }
-    std::string toString() const { return std::string("DrawOvalOp") + rectToString(oval); }
+                              const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawArcOp final : IPCRenderBufferOp {
@@ -494,27 +304,9 @@ struct DrawArcOp final : IPCRenderBufferOp {
 
     static DrawArcOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& oval,
                              SkScalar startAngle, SkScalar sweepAngle, bool useCenter,
-                             const SkPaint& paint) {
-        DrawArcOp* op = commandBuffer->alloc<DrawArcOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->paint = toShmemPaint(paint);
-        op->oval = oval;
-        op->startAngle = startAngle;
-        op->sweepAngle = sweepAngle;
-        op->useCenter = useCenter;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        c->drawArc(oval, startAngle, sweepAngle, useCenter, fromShmemPaint(paint));
-    }
-    std::string toString() const {
-        return std::string("DrawArcOp") + rectToString(oval) + std::string(" startAngle: ") +
-                std::to_string(startAngle) + std::string(" sweepAngle: ") +
-                std::to_string(sweepAngle) + std::string(" useCenter: ") +
-                std::to_string(useCenter);
-    }
+                             const SkPaint& paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawRRectOp final : IPCRenderBufferOp {
@@ -523,103 +315,78 @@ struct DrawRRectOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawRRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRRect& rr,
-                               const SkPaint& p) {
-        DrawRRectOp* op = commandBuffer->alloc<DrawRRectOp>();
-        if (!op) return nullptr;
-        op->paint = toShmemPaint(p);
-        op->rrect = rr;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { c->drawRRect(rrect, fromShmemPaint(paint)); }
-    std::string toString() const {
-        return std::string("DrawRRectOp") + std::string(rrect.dumpToString(false).c_str());
-    }
+                               const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawAnnotationOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWANNOTATION;
 
     static DrawAnnotationOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& rect,
-                                    const char* text, SkData* data) {
-        DrawAnnotationOp* op = commandBuffer->alloc<DrawAnnotationOp>();
-        if (!op) return nullptr;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawAnnotationOp"; }
+                                    const char* text, SkData* data);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawDrawableOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWDRAWABLE;
 
     static DrawDrawableOp* Create(RenderCommandBuffer* commandBuffer, SkDrawable* drawable,
-                                  const SkMatrix* matrix) {
-        DrawDrawableOp* op = commandBuffer->alloc<DrawDrawableOp>();
-        if (!op) return nullptr;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawDrawableOp"; }
+                                  const SkMatrix* matrix);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawPictureOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWPICTURE;
 
     static DrawPictureOp* Create(RenderCommandBuffer* commandBuffer, const SkPicture* picture,
-                                 const SkMatrix* matrix, const SkPaint* paint) {
-        DrawPictureOp* op = commandBuffer->alloc<DrawPictureOp>();
-        if (!op) return nullptr;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawPictureOp"; }
+                                 const SkMatrix* matrix, const SkPaint* paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawImageOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWIMAGE;
+    uint64_t bitmapId;
+    SkScalar x;
+    SkScalar y;
+    SkSamplingOptions sampling;
+    ShmemPaint paint;
+    bool hasPaint;
 
-    static DrawImageOp* Create(RenderCommandBuffer* commandBuffer, const SkImage* image, SkScalar x,
-                               SkScalar y, const SkSamplingOptions& sampling,
-                               const SkPaint* paint) {
-        DrawImageOp* op = commandBuffer->alloc<DrawImageOp>();
-        if (!op) return nullptr;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawImageOp"; }
+    static DrawImageOp* Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId, SkScalar x,
+                               SkScalar y, const SkSamplingOptions& sampling, const SkPaint* paint);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache);
+    std::string toString() const;
 };
 
 // TODO(b/448196792): Implement hardware bitmap support
 struct DrawImageRectOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWIMAGERECT;
-    int offset;
-    SkRect srcRect;
-    SkRect dstRect;
+    uint64_t bitmapId;
+    SkRect src;
+    SkRect dst;
     SkSamplingOptions sampling;
     ShmemPaint paint;
-    int constraint;
     bool hasPaint;
-    int uniqueId;
-    bool isHardware;
+    SkCanvas::SrcRectConstraint constraint;
 
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    virtual std::string toString() const { return "DrawImageRectOp"; }
+    static DrawImageRectOp* Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId,
+                                   const SkRect& src, const SkRect& dst,
+                                   const SkSamplingOptions& sampling, const SkPaint* paint,
+                                   SkCanvas::SrcRectConstraint constraint);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache);
+    std::string toString() const;
 };
 
+struct ShmemTypeface {
+    RSpan<char> name;
+    int weight;
+    int width;
+    SkFontStyle::Slant slant;
+};
 struct DrawTextBlobOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWTEXTBLOB;
     ShmemPaint paint;
@@ -628,38 +395,9 @@ struct DrawTextBlobOp final : IPCRenderBufferOp {
     RSpan<uint8_t> blobData;
 
     static DrawTextBlobOp* Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
-                                  SkScalar x_in, SkScalar y_in, const SkPaint& p) {
-        SkSerialProcs procs;
-        size_t blobSize = blob->serialize(procs, nullptr, 0);
-        if (blobSize == 0) {
-            return nullptr;
-        }
-        if (commandBuffer->getRemainingSize() < blobSize) {
-            return nullptr;
-        }
-
-        DrawTextBlobOp* op = commandBuffer->alloc<DrawTextBlobOp>();
-        if (!op) return nullptr;
-
-        op->type = kType;
-        op->paint = toShmemPaint(p);
-        op->x = x_in;
-        op->y = y_in;
-
-        if (!SetRSpan<uint8_t>(op->blobData, commandBuffer, nullptr, blobSize)) {
-            return nullptr;
-        }
-        blob->serialize(procs, op->blobData.data.get(), blobSize);
-        return op;
-    }
-    void draw(SkCanvas* c, const SkMatrix&) {
-        SkDeserialProcs procs;
-        sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(blobData.data.get(), blobData.size, procs);
-        c->drawTextBlob(blob, x, y, fromShmemPaint(paint));
-    }
-    std::string toString() const { return "DrawTextBlobOp"; }
-
-    void resetForReplay() {}
+                                  SkScalar x_in, SkScalar y_in, const SkPaint& p);
+    void draw(SkCanvas* c, const SkMatrix&, sk_sp<SkFontMgr> fontMgr);
+    std::string toString() const;
 };
 
 struct DrawPatchOp final : IPCRenderBufferOp {
@@ -672,30 +410,9 @@ struct DrawPatchOp final : IPCRenderBufferOp {
 
     static DrawPatchOp* Create(RenderCommandBuffer* commandBuffer, const SkPoint inPoints[12],
                                const SkColor inColors[4], const SkPoint inTexCoords[4],
-                               SkBlendMode inMode, const SkPaint& inPaint) {
-        DrawPatchOp* op = commandBuffer->alloc<DrawPatchOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->mode = inMode;
-        op->paint = toShmemPaint(inPaint);
-
-        if (!SetRSpan(op->points, commandBuffer, inPoints, 12)) {
-            return nullptr;
-        }
-        if (!SetRSpan(op->colors, commandBuffer, inColors, 4)) {
-            return nullptr;
-        }
-        if (!SetRSpan(op->texCoords, commandBuffer, inTexCoords, 4)) {
-            return nullptr;
-        }
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        c->drawPatch(points.data.get(), colors.data.get(), texCoords.data.get(), mode,
-                     fromShmemPaint(paint));
-    }
-    std::string toString() const { return "DrawPatchOp"; }
+                               SkBlendMode inMode, const SkPaint& inPaint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawPointsOp final : IPCRenderBufferOp {
@@ -705,22 +422,9 @@ struct DrawPointsOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawPointsOp* Create(RenderCommandBuffer* commandBuffer, SkCanvas::PointMode mode,
-                                size_t count, const SkPoint* points, const SkPaint& paint) {
-        DrawPointsOp* op = commandBuffer->alloc<DrawPointsOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->mode = mode;
-        op->paint = toShmemPaint(paint);
-        if (!SetRSpan(op->points, commandBuffer, points, count)) {
-            return nullptr;
-        }
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        c->drawPoints(mode, points.size, points.data.get(), fromShmemPaint(paint));
-    }
-    std::string toString() const { return "DrawPointsOp"; }
+                                size_t count, const SkPoint* points, const SkPaint& paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawVerticesOp final : IPCRenderBufferOp {
@@ -730,18 +434,9 @@ struct DrawVerticesOp final : IPCRenderBufferOp {
     RSpan<uint8_t> verticesData;
 
     static DrawVerticesOp* Create(RenderCommandBuffer* commandBuffer, const SkVertices* vertices,
-                                  SkBlendMode mode, const SkPaint& paint) {
-        DrawVerticesOp* op = commandBuffer->alloc<DrawVerticesOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->mode = mode;
-        op->paint = toShmemPaint(paint);
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawVerticesOp"; }
+                                  SkBlendMode mode, const SkPaint& paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 /*struct DrawMeshOp final : IPCRenderBufferOp {
@@ -755,16 +450,9 @@ struct DrawSkMeshOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWMESH;
 
     static DrawSkMeshOp* Create(RenderCommandBuffer* commandBuffer, const SkMesh& mesh,
-                                sk_sp<SkBlender> blender, const SkPaint& paint) {
-        DrawSkMeshOp* op = commandBuffer->alloc<DrawSkMeshOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawSkMeshOp"; }
+                                sk_sp<SkBlender> blender, const SkPaint& paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawAtlasOp final : IPCRenderBufferOp {
@@ -773,34 +461,17 @@ struct DrawAtlasOp final : IPCRenderBufferOp {
     static DrawAtlasOp* Create(RenderCommandBuffer* commandBuffer, const SkImage* atlas,
                                const SkRSXform* xform, const SkRect* tex, const SkColor* colors,
                                int count, SkBlendMode mode, const SkSamplingOptions& sampling,
-                               const SkRect* cull, const SkPaint* paint) {
-        DrawAtlasOp* op = commandBuffer->alloc<DrawAtlasOp>();
-        if (!op) return nullptr;
-        IPCRENDERBUFFER_UNIMPLEMENTED;
-        op->type = kType;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) { IPCRENDERBUFFER_UNIMPLEMENTED; }
-    std::string toString() const { return "DrawAtlasOp"; }
+                               const SkRect* cull, const SkPaint* paint);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 
 struct DrawProxySurfaceControlOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWPROXYSURFACECONTROL;
     int proxyId;
 
-    static DrawProxySurfaceControlOp* Create(RenderCommandBuffer* commandBuffer, int id) {
-        DrawProxySurfaceControlOp* op = commandBuffer->alloc<DrawProxySurfaceControlOp>();
-        if (!op) return nullptr;
-        op->type = kType;
-        op->proxyId = id;
-        return op;
-    }
-
-    void draw(SkCanvas* c, const SkMatrix&) {
-        LOG_ALWAYS_FATAL_IF("DrawProxySurfaceControlOp::draw unexpected");
-    }
-
-    std::string toString() const { return "DrawProxySurfaceControlOp"; }
+    static DrawProxySurfaceControlOp* Create(RenderCommandBuffer* commandBuffer, int id);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
 };
 } // namespace android
