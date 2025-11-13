@@ -31,6 +31,7 @@ use std::fmt;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::ops::Deref;
+#[cfg(feature = "std")]
 use std::os::fd::AsRawFd;
 use std::os::raw::c_char;
 use std::ptr;
@@ -271,6 +272,7 @@ pub trait IBinderInternal: IBinder {
     fn set_requesting_sid(&mut self, enable: bool);
 
     /// Dump this object to the given file handle
+    #[cfg(feature = "std")]
     fn dump<F: AsRawFd>(&mut self, fp: &F, args: &[&str]) -> Result<()>;
 
     /// Get a new interface that exposes additional extension functionality, if

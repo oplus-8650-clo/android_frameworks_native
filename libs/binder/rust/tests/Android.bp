@@ -86,22 +86,27 @@ rust_ffi_static {
     ],
 }
 
-cc_test {
-    name: "rustBinderSerializationTest",
+cc_defaults {
+    name: "rustBinderSerializationTest_defaults",
     shared_libs: [
         "libbinder",
         "libbinder_ndk",
         "libutils",
         "libbase",
     ],
-    static_libs: [
-        "libbinder_rs_serialization_test",
-    ],
     srcs: [
         "serialization.cpp",
     ],
     auto_gen_config: true,
     test_suites: ["general-tests"],
+}
+
+cc_test {
+    name: "rustBinderSerializationTest",
+    defaults: ["rustBinderSerializationTest_defaults"],
+    static_libs: [
+        "libbinder_rs_serialization_test",
+    ],
 }
 
 rust_bindgen {
@@ -131,5 +136,28 @@ rust_ffi_static {
     ],
     rustlibs: [
         "libbinder_rs",
+    ],
+}
+
+// The following rules add tests that link against libbinder_rs_nostd.
+// The binaries and tests themselves still link against std.
+rust_ffi_static {
+    name: "libbinder_rs_nostd_serialization_test",
+    crate_name: "binder_rs_nostd_serialization_test",
+    srcs: [
+        "serialization.rs",
+        ":libbinder_rs_serialization_bindgen",
+    ],
+    // TODO: b/425915863 - change to no_std_rlibs once libbinder_rs_nostd is actually no_std
+    rlibs: [
+        "libbinder_rs_nostd",
+    ],
+}
+
+cc_test {
+    name: "rustBinderNoStdSerializationTest",
+    defaults: ["rustBinderSerializationTest_defaults"],
+    static_libs: [
+        "libbinder_rs_nostd_serialization_test",
     ],
 }
