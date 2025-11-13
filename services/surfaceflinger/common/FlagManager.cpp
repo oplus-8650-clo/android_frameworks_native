@@ -184,6 +184,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(wb_virtualdisplay2);
     DUMP_ACONFIG_FLAG(window_blur_kawase2);
     DUMP_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing);
+    DUMP_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers);
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
 
 #undef DUMP_ACONFIG_FLAG
@@ -292,6 +293,7 @@ FLAG_MANAGER_ACONFIG_FLAG(wb_framebuffersurface2, "");
 FLAG_MANAGER_ACONFIG_FLAG(wb_virtualdisplay2, "");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
+FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 
 /// Trunk stable server (R/W) flags ///
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts

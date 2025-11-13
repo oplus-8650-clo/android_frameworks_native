@@ -436,4 +436,14 @@ flag {
   }
 } # window_blur_kawase2_fix_aliasing
 
+flag {
+  name: "window_blur_kawase2_preallocate_buffers"
+  namespace: "core_graphics"
+  description: "Flag for preallocating buffers for kawase2 window blur"
+  bug: "445059696"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # window_blur_kawase2_preallocate_buffers
+
 # IMPORTANT - please keep alphabetize to reduce merge conflicts

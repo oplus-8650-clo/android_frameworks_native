@@ -116,6 +116,7 @@ public:
     bool wb_virtualdisplay2() const;
     bool window_blur_kawase2() const;
     bool window_blur_kawase2_fix_aliasing() const;
+    bool window_blur_kawase2_preallocate_buffers() const;
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
 
 protected:
