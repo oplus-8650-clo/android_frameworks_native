@@ -620,6 +620,10 @@ void PointerChoreographer::dump(std::string& dump) {
     dump += "PointerChoreographer:\n";
     dump += StringPrintf(INDENT "Show Touches Enabled: %s\n",
                          mShowTouchesEnabled ? "true" : "false");
+    dump += INDENT "DisplaysWithShowTouchesForceEnabled: " +
+            dumpContainer(mDisplaysWithShowTouchesForceEnabled,
+                          [](const auto& displayId) { return displayId.toString(); });
+    dump += "\n";
     dump += StringPrintf(INDENT "Stylus PointerIcon Enabled: %s\n",
                          mStylusPointerIconEnabled ? "true" : "false");
     dump += StringPrintf(INDENT "Accessibility Pointer Motion Filter Enabled: %s\n",

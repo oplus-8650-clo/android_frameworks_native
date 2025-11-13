@@ -146,7 +146,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(resync_on_tx_separate_timer);
     DUMP_ACONFIG_FLAG(set_power_mode_async);
-    DUMP_ACONFIG_FLAG(sf_disable_producer_throttling_for_client_composition);
     DUMP_ACONFIG_FLAG(supported_refresh_rate_update);
     DUMP_ACONFIG_FLAG(use_at_least_60_for_min_vote);
     DUMP_ACONFIG_FLAG(use_experimental_jank_classification);
@@ -183,8 +182,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(vulkan_renderengine);
     DUMP_ACONFIG_FLAG(wb_framebuffersurface2);
     DUMP_ACONFIG_FLAG(wb_virtualdisplay2);
-    DUMP_ACONFIG_FLAG(window_blur_kawase2);
-    DUMP_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing);
     DUMP_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers);
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
 
@@ -292,8 +289,6 @@ FLAG_MANAGER_ACONFIG_FLAG(true_hdr_screenshots, "debug.sf.true_hdr_screenshots")
 FLAG_MANAGER_ACONFIG_FLAG(vulkan_renderengine, "debug.renderengine.vulkan")
 FLAG_MANAGER_ACONFIG_FLAG(wb_framebuffersurface2, "");
 FLAG_MANAGER_ACONFIG_FLAG(wb_virtualdisplay2, "");
-FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
-FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
 FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 
 /// Trunk stable server (R/W) flags ///
@@ -321,7 +316,6 @@ FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx_separate_timer, "");
 FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
-FLAG_MANAGER_ACONFIG_FLAG(sf_disable_producer_throttling_for_client_composition, "");
 FLAG_MANAGER_ACONFIG_FLAG(supported_refresh_rate_update, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_at_least_60_for_min_vote, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");

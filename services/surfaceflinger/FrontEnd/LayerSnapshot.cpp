@@ -566,7 +566,9 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
                  layer_state_t::eFlagsChanged | layer_state_t::eBufferChanged |
                  layer_state_t::eSidebandStreamChanged)) {
         contentOpaque = isContentOpaque();
-        isOpaque = contentOpaque && !roundedCorner.hasRoundedCorners() && color.a == 1.f;
+        isOpaque = contentOpaque &&
+                !(roundedCorner.hasSfDrawnRadius() || roundedCorner.hasClientDrawnRadius()) &&
+                color.a == 1.f;
         blendMode = getBlendMode(requested);
     }
 
@@ -604,8 +606,10 @@ char LayerSnapshot::classifyCompositionForDebug(
         code = 'l'; // Blur
     } else if (hasProtectedContent) {
         code = 'p'; // Protected content
-    } else if (roundedCorner.hasRoundedCorners()) {
-        code = 'r'; // Rounded corners
+    } else if (roundedCorner.hasSfDrawnRadius()) {
+        code = 'r'; // SF Drawn Rounded corners
+    } else if (roundedCorner.hasClientDrawnRadius()) {
+        code = 'o'; // Client Drawn Rounded corners
     } else if (drawShadows()) {
         code = 's'; // Shadow
     } else if (fillsColor()) {

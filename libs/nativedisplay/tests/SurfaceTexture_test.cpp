@@ -43,6 +43,8 @@ constexpr uint32_t kGreen = 0x00ff00ff;
 constexpr uint32_t kBlue = 0x0000ffff;
 constexpr ui::Size kTextureSize = {4, 4};
 
+using com::android::graphics::libgui::flags::surface_texture_updateteximage_stop_early;
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_SURFACETEXTURE)
 typedef SurfaceTexture SurfaceTextureType;
 typedef SurfaceTexture::SurfaceTextureListener SurfaceTextureListenerType;
@@ -388,6 +390,107 @@ TEST_F(SurfaceTextureTest, SingleBufferMode) {
     queueColorToSurface(surface, kGreen);
     ASSERT_EQ(OK, surfaceTexture->updateTexImage());
     EXPECT_TRUE(checkAllPixelsMatch(textureId, kGreen));
+}
+
+TEST_F(SurfaceTextureTest, DetachAndReattachToContext_OldBehavior) {
+    if (surface_texture_updateteximage_stop_early()) {
+        GTEST_SKIP();
+        return;
+    }
+
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+    ASSERT_EQ(OK, surfaceTexture->setMaxBufferCount(10));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    // Setting up the BQ to let us queue multiple buffers
+    ASSERT_EQ(OK, surface->setLegacyBufferDrop(false));
+
+    queueColorToSurface(surface, kGreen);
+
+    // When we're attached, updating should work as expected, and the GREEN image is used.
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId1, kGreen));
+
+    ASSERT_EQ(OK, surfaceTexture->detachFromContext());
+
+    // Without anything queued, this returns OK for some reason.
+    EXPECT_EQ(OK, surfaceTexture->updateTexImage());
+
+    queueColorToSurface(surface, kRed);
+    queueColorToSurface(surface, kBlue);
+
+    // With things queued, this will fail. But still update the image.
+    EXPECT_EQ(INVALID_OPERATION, surfaceTexture->updateTexImage());
+
+    GLuint textureId2;
+    glGenTextures(1, &textureId2);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId2);
+
+    // When we attach, the previous color should remain:
+    ASSERT_EQ(OK, surfaceTexture->attachToContext(textureId2));
+    EXPECT_TRUE(checkAllPixelsMatch(textureId2, kGreen));
+
+    // updateTexImage should work again and update the new texture. But notice that the red image
+    // was skipped.
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId2, kBlue));
+}
+
+TEST_F(SurfaceTextureTest, DetachAndReattachToContext) {
+    if (!surface_texture_updateteximage_stop_early()) {
+        GTEST_SKIP();
+        return;
+    }
+
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+    ASSERT_EQ(OK, surfaceTexture->setMaxBufferCount(10));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    // Setting up the BQ to let us queue multiple buffers
+    ASSERT_EQ(OK, surface->setLegacyBufferDrop(false));
+
+    queueColorToSurface(surface, kGreen);
+    queueColorToSurface(surface, kRed);
+    queueColorToSurface(surface, kBlue);
+
+    // When we're attached, updating should work as expected, and the GREEN image is used.
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId1, kGreen));
+
+    ASSERT_EQ(OK, surfaceTexture->detachFromContext());
+
+    // updateTexImage should fail now that we're detached... but it will still cycle images.
+    EXPECT_EQ(INVALID_OPERATION, surfaceTexture->updateTexImage());
+
+    GLuint textureId2;
+    glGenTextures(1, &textureId2);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId2);
+
+    // When we attach, the previous color should remain:
+    ASSERT_EQ(OK, surfaceTexture->attachToContext(textureId2));
+    EXPECT_TRUE(checkAllPixelsMatch(textureId2, kGreen));
+
+    // updateTexImage should work again and update the new texture
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId2, kRed));
 }
 
 } // namespace android

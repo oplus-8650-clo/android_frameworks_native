@@ -954,17 +954,8 @@ renderengine::RenderEngine::BlurAlgorithm chooseBlurAlgorithm(bool supportsBlur)
         return renderengine::RenderEngine::BlurAlgorithm::Kawase;
     } else if (algorithm == "kawase2") {
         return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
-    } else if (algorithm == "kawase2_fix_aliasing") {
-        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
     } else {
-        if (FlagManager::getInstance().window_blur_kawase2()) {
-            if (FlagManager::getInstance().window_blur_kawase2_fix_aliasing()) {
-                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
-            } else {
-                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
-            }
-        }
-        return renderengine::RenderEngine::BlurAlgorithm::Kawase;
+        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
     }
 }
 
@@ -4611,10 +4602,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
             displaySurface = frameBufferSurface;
             compositionSurface = frameBufferSurface->getSurface();
         }
-
-        if (FlagManager::getInstance().sf_disable_producer_throttling_for_client_composition()) {
-            compositionSurface->setProducerThrottlingEnabled(false);
-        }
+        compositionSurface->setProducerThrottlingEnabled(false);
     }
 
     LOG_FATAL_IF(!displaySurface);
@@ -6355,7 +6343,8 @@ status_t SurfaceFlinger::createLayer(LayerCreationArgs& args, gui::CreateSurface
         return result;
     }
 
-    args.addToRoot = args.addToRoot && callingThreadHasUnscopedSurfaceFlingerAccess();
+    args.addToRoot = args.addToRoot && (args.flags & ISurfaceComposerClient::eNotAddToRoot) == 0 &&
+            callingThreadHasUnscopedSurfaceFlingerAccess();
     // We can safely promote the parent layer in binder thread because we have a strong reference
     // to the layer's handle inside this scope.
     sp<Layer> parent = LayerHandle::getLayer(args.parentHandle.promote());
@@ -10137,8 +10126,8 @@ binder::Status SurfaceComposerAIDL::getDisplayStats(const sp<IBinder>& display,
     DisplayStatInfo statInfo;
     status_t status = mFlinger->getDisplayStats(display, &statInfo);
     if (status == NO_ERROR) {
-        outStatInfo->vsyncTime = static_cast<long>(statInfo.vsyncTime);
-        outStatInfo->vsyncPeriod = static_cast<long>(statInfo.vsyncPeriod);
+        outStatInfo->vsyncTime = statInfo.vsyncTime;
+        outStatInfo->vsyncPeriod = statInfo.vsyncPeriod;
     }
     return binderStatusFromStatusT(status);
 }

@@ -22,6 +22,7 @@
 #include <gui/BufferItemConsumer.h>
 #include <gui/IProducerListener.h>
 #include <gui/Surface.h>
+#include <system/window.h>
 #include <ui/BufferQueueDefs.h>
 #include <ui/GraphicBuffer.h>
 #include <utils/Errors.h>
@@ -354,6 +355,83 @@ TEST_F(BufferItemConsumerTest, OnSetFrameRateCallback) {
     status_t ret = mProducer->setFrameRate(expectedFrameRate, expectedCompatibility,
                                            expectedChangeFrameRateStrategy);
     ASSERT_EQ(NO_ERROR, ret);
+}
+
+TEST_F(BufferItemConsumerTest, Cache_ProducerDetach_FreesSlot) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+
+    wp<GraphicBuffer> weakBufferToDelete = buffer;
+
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->detachBuffer(buffer));
+    EXPECT_EQ(weakBufferToDelete.promote(), buffer);
+
+    buffer = nullptr;
+    EXPECT_EQ(nullptr, weakBufferToDelete.promote());
+}
+
+TEST_F(BufferItemConsumerTest, Cache_ProducerDetachNextBuffer_FreesSlot) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+
+    wp<GraphicBuffer> weakBufferToDelete = buffer;
+
+    ASSERT_EQ(OK, surface->detachNextBuffer(&buffer, &fence));
+    EXPECT_EQ(weakBufferToDelete.promote(), buffer);
+
+    buffer = nullptr;
+    EXPECT_EQ(nullptr, weakBufferToDelete.promote());
+}
+
+TEST_F(BufferItemConsumerTest, Cache_Disconnect_FreesSlot) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+    wp<GraphicBuffer> weakBufferToDelete = buffer;
+
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+
+    buffer = nullptr;
+    EXPECT_EQ(nullptr, weakBufferToDelete.promote());
 }
 
 }  // namespace android

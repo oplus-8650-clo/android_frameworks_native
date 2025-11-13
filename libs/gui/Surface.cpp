@@ -903,10 +903,19 @@ status_t Surface::detachBuffer(const sp<GraphicBuffer>& buffer) {
 #endif
         auto& bufferSlot = mSlots[slot];
         if (bufferSlot.buffer != nullptr && bufferSlot.buffer->getId() == bufferId) {
-            bufferSlot.buffer = nullptr;
-            bufferSlot.dirtyRegion = Region::INVALID_REGION;
-            bufferSlot.requiresFreeOnReturn = false;
-            return mGraphicBufferProducer->detachBuffer(slot);
+            status_t ret = mGraphicBufferProducer->detachBuffer(slot);
+
+            if (NO_ERROR == ret) {
+                bufferSlot.buffer = nullptr;
+                bufferSlot.dirtyRegion = Region::INVALID_REGION;
+                bufferSlot.requiresFreeOnReturn = false;
+                mDequeuedSlots.erase(slot);
+            } else {
+                SURF_LOGE("Surface::detachBuffer failed with error %d for slot %d and bufferId "
+                          "%" PRIu64,
+                          ret, slot, bufferId);
+            }
+            return ret;
         }
     }
 

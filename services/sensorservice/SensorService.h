@@ -663,11 +663,10 @@ private:
     sensors_event_t *mSensorEventBuffer, *mSensorEventScratch, *mRuntimeSensorEventBuffer;
 
     // List of death receipients to clean up dead client listeners
-    mutable Mutex mStateLock;
-    bool mShuttingDown GUARDED_BY(mStateLock) = false;
+    mutable Mutex mBinderStateRecipientsLock;
     std::unordered_map<sp<hardware::sensor::ISensorClientListener>, sp<ClientStateRecipient>,
                        SensorClientListenerHasher>
-            mBinderStateRecipients GUARDED_BY(mStateLock);
+            mBinderStateRecipients GUARDED_BY(mBinderStateRecipientsLock);
 
     // WARNING: these SensorEventConnection instances must not be promoted to sp, except via
     // modification to add support for them in ConnectionSafeAutolock

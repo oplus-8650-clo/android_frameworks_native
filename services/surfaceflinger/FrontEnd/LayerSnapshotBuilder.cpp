@@ -1017,7 +1017,9 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
             !snapshot.boxShadowSettings.boxShadows.empty();
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
-    snapshot.isOpaque = snapshot.contentOpaque && !snapshot.roundedCorner.hasRoundedCorners() &&
+    snapshot.isOpaque = snapshot.contentOpaque &&
+            !(snapshot.roundedCorner.hasSfDrawnRadius() ||
+              snapshot.roundedCorner.hasClientDrawnRadius()) &&
             snapshot.color.a == 1.f;
     snapshot.blendMode = getBlendMode(snapshot, requested);
     LLOGV(snapshot.sequence,
@@ -1042,7 +1044,7 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
     // Populate parent settings to inherit
     RoundedCornerState parentSettings =
             calculateParentRoundedCornerSettings(parentSnapshot, snapshot);
-    const bool parentSettingsValid = !parentSettings.radii.isEmpty();
+    const bool parentSettingsValid = !parentSettings.effectiveRadii.isEmpty();
 
     // Populate layer settings
     RoundedCornerState layerSettings = calculateLayerRoundedCornerSettings(snapshot, requested);
@@ -1065,20 +1067,21 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
         finalSettings = layerSettings;
     } else if (parentSettingsValid &&
                childOverlapsParentCornerRegion(snapshot.geomLayerBounds, parentSettings.cropRect,
-                                               parentSettings.radii)) {
+                                               parentSettings.effectiveRadii)) {
         finalSettings = parentSettings;
     }
 
     snapshot.roundedCorner = finalSettings;
 
-    snapshot.roundedCorner.effectiveRadii = snapshot.roundedCorner.radii;
     snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
     snapshot.roundedCorner.reportedRadii =
-            getClippedClientRadii(snapshot.roundedCorner.radii, snapshot.roundedCorner.cropRect,
-                                  snapshot.sourceBounds());
+            getClippedClientRadii(snapshot.roundedCorner.effectiveRadii,
+                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
 
     if (shouldDisableCornerRounding(snapshot, requested)) {
-        snapshot.roundedCorner.radii = gui::CornerRadii(0.f);
+        snapshot.roundedCorner.sfDrawnRadii = gui::CornerRadii(0.f);
+    } else {
+        snapshot.roundedCorner.sfDrawnRadii = snapshot.roundedCorner.effectiveRadii;
     }
 }
 
@@ -1092,7 +1095,7 @@ bool LayerSnapshotBuilder::shouldDisableCornerRounding(LayerSnapshot& snapshot,
 RoundedCornerState LayerSnapshotBuilder::calculateLayerRoundedCornerSettings(
         LayerSnapshot& snapshot, const RequestedLayerState& requested) {
     RoundedCornerState layerSettings;
-    layerSettings.radii = requested.cornerRadii;
+    layerSettings.effectiveRadii = requested.cornerRadii;
     layerSettings.requestedRadii = requested.cornerRadii;
     layerSettings.cropRect = snapshot.croppedBufferSize;
     return layerSettings;
@@ -1103,11 +1106,11 @@ RoundedCornerState LayerSnapshotBuilder::calculateParentRoundedCornerSettings(
     RoundedCornerState parentSettings;
 
     const auto& parentRoundedCorner = parentSnapshot.roundedCorner;
-    if (parentRoundedCorner.hasRoundedCorners()) {
+    if (parentRoundedCorner.hasEffectiveRadii()) {
         ui::Transform t = snapshot.localTransform.inverse();
         parentSettings.cropRect = t.transform(parentRoundedCorner.cropRect);
-        parentSettings.radii = parentRoundedCorner.effectiveRadii;
-        parentSettings.radii.transform(t);
+        parentSettings.effectiveRadii = parentRoundedCorner.effectiveRadii;
+        parentSettings.effectiveRadii.transform(t);
     }
     return parentSettings;
 }

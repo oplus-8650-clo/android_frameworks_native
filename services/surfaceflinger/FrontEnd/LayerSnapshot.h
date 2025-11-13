@@ -35,25 +35,23 @@ struct RoundedCornerState {
 
     // Rounded rectangle in local layer coordinate space.
     FloatRect cropRect = FloatRect();
-    // Radius of the rounded rectangle for composition
-    gui::CornerRadii radii;
-    // Requested radius of the rounded rectangle
+    // Radius of the rounded rectangle drawn by SurfaceFlinger during composition.
+    gui::CornerRadii sfDrawnRadii;
+    // Radius of the rounded rectangle as requested by the client.
     gui::CornerRadii requestedRadii;
-    // Radius drawn by client for the rounded rectangle
+    // Radius of the rounded rectangle drawn by the client into the buffer.
     gui::CornerRadii clientDrawnRadii;
-    // Radius reported to client based on layerCropRect and bounds
+    // Radius of the rounded rectangle reported to client, which may be clipped.
     gui::CornerRadii reportedRadii;
-    // The "true" radius (from request or inheritance) used as the source for children.
+    // The radius used as the source for children to inherit from.
     gui::CornerRadii effectiveRadii;
 
-    bool hasClientDrawnRadius() const { return radii.isEmpty() && !clientDrawnRadii.isEmpty(); }
+    bool hasClientDrawnRadius() const { return !clientDrawnRadii.isEmpty(); }
     bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }
-    bool hasRoundedCorners() const { return !effectiveRadii.isEmpty(); }
+    bool hasSfDrawnRadius() const { return !sfDrawnRadii.isEmpty(); }
+    bool hasEffectiveRadii() const { return !effectiveRadii.isEmpty(); }
 
-    bool operator==(RoundedCornerState const& rhs) const {
-        return cropRect == rhs.cropRect && radii == rhs.radii &&
-                requestedRadii == rhs.requestedRadii && clientDrawnRadii == rhs.clientDrawnRadii;
-    }
+    bool operator==(const RoundedCornerState&) const = default;
 };
 
 // LayerSnapshot stores Layer state used by CompositionEngine and RenderEngine. Composition

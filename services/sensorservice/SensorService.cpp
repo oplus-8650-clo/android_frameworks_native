@@ -572,28 +572,20 @@ bool SensorService::registerVirtualSensor(std::shared_ptr<SensorInterface> s, bo
 SensorService::~SensorService() {
     ALOGI("SensorService destructor starting");
     if (android::hardware::flags::suspend_sensor_event_delivery_on_frozen_pid()) {
-        {
-            Mutex::Autolock _l(mStateLock);
-            if (mShuttingDown) {
-                ALOGW("SensorService destructor called more than once.");
-                return;
-            }
-            mShuttingDown = true;
-        }
 
-        std::vector<sp<hardware::sensor::ISensorClientListener>> ListenersToUnregister;
+        std::vector<sp<hardware::sensor::ISensorClientListener>> listenersToUnregister;
         {
-            Mutex::Autolock _l(mStateLock);
-            ListenersToUnregister.reserve(mBinderStateRecipients.size());
+            Mutex::Autolock _l(mBinderStateRecipientsLock);
+            listenersToUnregister.reserve(mBinderStateRecipients.size());
             for (const auto& pair : mBinderStateRecipients) {
-                ListenersToUnregister.push_back(pair.first);
+                listenersToUnregister.push_back(pair.first);
             }
         }
 
-        if (!ListenersToUnregister.empty()) {
+        if (!listenersToUnregister.empty()) {
             ALOGI("Unregistering %zu client listeners during shutdown.",
-                  ListenersToUnregister.size());
-            for (const auto& listener : ListenersToUnregister) {
+                  listenersToUnregister.size());
+            for (const auto& listener : listenersToUnregister) {
                 // unregisterClientListener locks mStateLock internally, but it's fine as
                 // the destructor does not hold the lock in this loop.
                 unregisterClientListener(listener);
@@ -715,7 +707,7 @@ status_t SensorService::dump(int fd, const Vector<String16>& args) {
             result.appendFormat("Sensor Privacy: %s\n",
                     mSensorPrivacyPolicy->isSensorPrivacyEnabled() ? "enabled" : "disabled");
             if (android::hardware::flags::suspend_sensor_event_delivery_on_frozen_pid()) {
-                Mutex::Autolock _l(mStateLock);
+                Mutex::Autolock _l(mBinderStateRecipientsLock);
                 result.appendFormat("\n--- Client Listeners (%zu registered) ---\n",
                                     mBinderStateRecipients.size());
                 if (mBinderStateRecipients.empty()) {
@@ -1949,23 +1941,13 @@ void SensorService::ClientStateRecipient::onStateChanged(const wp<IBinder>& /*wh
     mIsFrozen = isFrozen;
     sp<SensorService> service = mService.promote();
     if (service != nullptr) {
-        Mutex::Autolock _sl(service->mStateLock);
-        if (service->mShuttingDown) {
-            ALOGW("SensorService shutting down, ignoring onStateChanged for PID %d", mPid);
-            return;
+        if (service->getLooper() != nullptr) {
+            sp<MessageHandler> handler = new FrozenStateChangeHandler(mService, mPid, isFrozen);
+            service->getLooper()->sendMessage(handler, Message(0));
         }
-
-        if (service->mLooper == nullptr) {
-            ALOGE("SensorService::mLooper is null unexpectedly for PID %d", mPid);
-            return;
-        }
-
-        sp<MessageHandler> handler = new FrozenStateChangeHandler(mService, mPid, isFrozen);
-        service->mLooper->sendMessage(handler, Message(0));
     } else {
         ALOGW("SensorService already destroyed, cannot process client state change.");
     }
-
 }
 
 void SensorService::onClientFrozenStateChange(pid_t pid, bool isFrozen) {
@@ -2002,12 +1984,7 @@ status_t SensorService::registerClientListener(
     pid_t pid = IPCThreadState::self()->getCallingPid();
     uid_t uid = IPCThreadState::self()->getCallingUid();
 
-    Mutex::Autolock _l(mStateLock);
-
-    if (mShuttingDown) {
-        ALOGW("SensorService is shutting down, cannot register client listener for PID %d", pid);
-        return INVALID_OPERATION;
-    }
+    Mutex::Autolock _l(mBinderStateRecipientsLock);
 
     if (mBinderStateRecipients.count(listener)) {
         ALOGW("Listener already registered (pid=%d, uid=%d). Ignoring duplicate registration.", pid,
@@ -2045,9 +2022,11 @@ status_t SensorService::unregisterClientListener(
     if (!android::hardware::flags::suspend_sensor_event_delivery_on_frozen_pid()) {
         return UNKNOWN_TRANSACTION;
     }
+
     if (listener == nullptr) {
         return BAD_VALUE;
     }
+
     sp<IBinder> binder = IInterface::asBinder(listener);
     if (binder == nullptr) {
         return BAD_VALUE;
@@ -2055,7 +2034,7 @@ status_t SensorService::unregisterClientListener(
 
     sp<ClientStateRecipient> recipient;
     {
-        Mutex::Autolock _l(mStateLock);
+        Mutex::Autolock _l(mBinderStateRecipientsLock);
 
         auto it = mBinderStateRecipients.find(listener);
         if (it != mBinderStateRecipients.end()) {
@@ -2080,7 +2059,7 @@ status_t SensorService::unregisterClientListener(
 }
 
 bool SensorService::isPidFrozen(pid_t pid) {
-    Mutex::Autolock _l(mStateLock);
+    Mutex::Autolock _l(mBinderStateRecipientsLock);
     for (const auto& it : mBinderStateRecipients) {
         if (it.second->getPid() == pid) {
             return it.second->isFrozen();
