@@ -188,8 +188,9 @@ public:
     explicit HidlComposer(const std::string& serviceName);
     ~HidlComposer() override;
 
-    bool isSupported(OptionalFeature) const;
-    bool isVrrSupported() const;
+    bool isSupported(OptionalFeature) const override;
+    bool isVrrSupported() const override;
+    bool isDisplayCommandModesetSupported() const override;
 
     std::vector<aidl::android::hardware::graphics::composer3::Capability> getCapabilities()
             override;
@@ -395,6 +396,8 @@ public:
     Error setReadbackBuffer(Display display, const sp<GraphicBuffer>& buffer,
                             int acquireFence) override;
     Error getReadbackBufferFence(Display display, int* outReleaseFence) override;
+
+    Error setDisplayMode(Display display, Config modeId, bool seamless) override;
 
 private:
 // QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime

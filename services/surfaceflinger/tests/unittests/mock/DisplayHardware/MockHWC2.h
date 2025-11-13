@@ -85,6 +85,7 @@ public:
                 (override));
     MOCK_METHOD(ftl::Future<hal::Error>, setDisplayBrightness,
                 (float, float, const Hwc2::Composer::DisplayBrightnessOptions &), (override));
+    MOCK_METHOD(hal::Error, setDisplayMode, (hal::HWConfigId, bool), (override));
     MOCK_METHOD(hal::Error, setActiveConfigWithConstraints,
                 (hal::HWConfigId, const hal::VsyncPeriodChangeConstraints&,
                  hal::VsyncPeriodChangeTimeline*),

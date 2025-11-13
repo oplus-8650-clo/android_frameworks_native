@@ -266,3 +266,10 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "enable_attention_service_apis"
+  namespace: "input"
+  description: "Enable AttentionService APIs"
+  bug: "438159795"
+}

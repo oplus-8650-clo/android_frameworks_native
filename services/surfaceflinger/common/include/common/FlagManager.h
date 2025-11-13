@@ -59,6 +59,7 @@ public:
     bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
+    bool enable_color_correction_bugfix() const;
     bool frontend_caching_v0() const;
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;

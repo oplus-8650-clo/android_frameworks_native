@@ -98,17 +98,10 @@ public:
 protected:
     hal::VsyncPeriodChangeConstraints expectModeSet(const DisplayModeRequest& request,
                                                     hal::VsyncPeriodChangeTimeline& timeline,
-                                                    bool subsequent = false) {
-        EXPECT_CALL(*mComposerHal,
-                    isSupported(Hwc2::Composer::OptionalFeature::RefreshRateSwitching))
-                .WillOnce(Return(true));
-
-        if (!subsequent) {
-            EXPECT_CALL(*mComposerHal, getDisplayConnectionType(kHwcDisplayId, _))
-                    .WillOnce(DoAll(SetArgPointee<1>(
-                                            hal::IComposerClient::DisplayConnectionType::INTERNAL),
-                                    Return(hal::V2_4::Error::NONE)));
-        }
+                                                    bool subsequent = false,
+                                                    bool useDisplayCommand = false) {
+        EXPECT_CALL(*mComposerHal, isDisplayCommandModesetSupported())
+                .WillOnce(Return(useDisplayCommand));
 
         const hal::VsyncPeriodChangeConstraints constraints{
                 .desiredTimeNanos = systemTime(),
@@ -117,9 +110,23 @@ protected:
 
         const hal::HWConfigId hwcModeId = request.mode.modePtr->getHwcId();
 
-        EXPECT_CALL(*mComposerHal,
-                    setActiveConfigWithConstraints(kHwcDisplayId, hwcModeId, constraints, _))
-                .WillOnce(DoAll(SetArgPointee<3>(timeline), Return(hal::Error::NONE)));
+        if (!useDisplayCommand) {
+            if (!subsequent) {
+                EXPECT_CALL(*mComposerHal, getDisplayConnectionType(kHwcDisplayId, _))
+                        .WillOnce(DoAll(SetArgPointee<1>(hal::IComposerClient::
+                                                                 DisplayConnectionType::INTERNAL),
+                                        Return(hal::V2_4::Error::NONE)));
+            }
+            EXPECT_CALL(*mComposerHal,
+                        isSupported(Hwc2::Composer::OptionalFeature::RefreshRateSwitching))
+                    .WillOnce(Return(true));
+            EXPECT_CALL(*mComposerHal,
+                        setActiveConfigWithConstraints(kHwcDisplayId, hwcModeId, constraints, _))
+                    .WillOnce(DoAll(SetArgPointee<3>(timeline), Return(hal::Error::NONE)));
+        } else {
+            EXPECT_CALL(*mComposerHal, setDisplayMode(kHwcDisplayId, hwcModeId, false))
+                    .WillOnce(Return(hal::Error::NONE));
+        }
 
         return constraints;
     }
@@ -258,6 +265,38 @@ TEST_F(DisplayModeControllerTest, initiateModeChange) REQUIRES(kMainThreadContex
 
     hal::VsyncPeriodChangeTimeline timeline;
     const auto constraints = expectModeSet(modeRequest, timeline);
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
+              mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getPendingMode(mDisplayId));
+
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 90_Hz, 90_Hz)).Times(1);
+
+    auto modeChange = mDmc.finalizeModeChange(mDisplayId);
+
+    auto* changePtr = std::get_if<DisplayModeController::RefreshRateChange>(&modeChange);
+    ASSERT_TRUE(changePtr);
+    EXPECT_DISPLAY_MODE_REQUEST(kDesiredMode90, changePtr->activeMode);
+}
+
+TEST_F(DisplayModeControllerTest, initiateModeChangeDisplayCommand) REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
+    SET_FLAG_FOR_TEST(flags::display_command_modeset, true);
+
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
+
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+
+    const auto desiredModeOpt = mDmc.takeDesiredModeIfMatches(mDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, desiredModeOpt);
+    auto modeRequest = *desiredModeOpt;
+
+    hal::VsyncPeriodChangeTimeline timeline;
+    const auto constraints = expectModeSet(modeRequest, timeline, false, true);
 
     EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
               mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));

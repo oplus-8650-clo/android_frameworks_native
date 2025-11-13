@@ -579,6 +579,11 @@ ftl::Future<Error> Display::setDisplayBrightness(
     });
 }
 
+Error Display::setDisplayMode(hal::HWConfigId modeId, bool seamless) {
+    const auto intError = mComposer.setDisplayMode(mId, modeId, seamless);
+    return static_cast<Error>(intError);
+}
+
 Error Display::setBootDisplayConfig(hal::HWConfigId configId) {
     auto intError = mComposer.setBootDisplayConfig(mId, configId);
     return static_cast<Error>(intError);

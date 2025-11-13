@@ -97,6 +97,16 @@ flag {
 } # disable_transparent_region_hint
 
 flag {
+  name: "enable_color_correction_bugfix"
+  namespace: "accessibility"
+  description: "Enable a corrected color correction (daltonization) algorithm matching the one used in ChromeOS"
+  bug: "322829049"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # enable_color_correction_bugfix
+
+flag {
   name: "display_command_modeset"
   namespace: "desktop_display"
   description: "Guards use of the new display command modeset"

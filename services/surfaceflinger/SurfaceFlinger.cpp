@@ -148,6 +148,7 @@
 #include "ClientCache.h"
 #include "Colorizer.h"
 #include "Display/DisplayIdentification.h"
+#include "Display/PhysicalDisplay.h"
 #include "DisplayDevice.h"
 #include "DisplayHardware/ComposerHal.h"
 #include "DisplayHardware/FramebufferSurface.h"
@@ -7622,7 +7623,11 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             case 1014: {
                 Mutex::Autolock _l(mStateLock);
                 // daltonize
+                mDaltonizer.setUseUpdatedAlgorithm(
+                        FlagManager::getInstance().enable_color_correction_bugfix());
                 n = data.readInt32();
+                // frameworks/native/services/surfaceflinger/common/include/common/FlagManager.h
+                // to get which type of cc to use.
                 mDaltonizer.setLevel(data.readInt32());
                 switch (n % 10) {
                     case 1:
@@ -8579,6 +8584,20 @@ bool SurfaceFlinger::layersHasHdrLayer(
     });
 }
 
+bool SurfaceFlinger::loadReadbackAttributesAndCheckPixelFormat(
+        PhysicalDisplayId physicalDisplayId, ui::PixelFormat reqPixelFormat,
+        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes& outAttributes) {
+    auto status = getHwComposer().getReadbackBufferAttributes(physicalDisplayId, &outAttributes);
+    if (status != OK) {
+        return false;
+    }
+    if (static_cast<android_pixel_format>(reqPixelFormat) == PIXEL_FORMAT_UNKNOWN) {
+        return true;
+    }
+    return static_cast<android_pixel_format>(reqPixelFormat) ==
+            static_cast<android_pixel_format>(outAttributes.format);
+}
+
 // Getting layer snapshots and accessing display state should take place on
 // main thread. Accessing display requires mStateLock, and contention for
 // this lock is reduced when grabbed from the main thread, thus also reducing
@@ -8614,7 +8633,8 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                 bool capturingDisplay =
                         std::holds_alternative<DisplayId>(args.captureTypeVariant) ||
                         std::holds_alternative<sp<IBinder>>(args.captureTypeVariant);
-
+                const auto physicalDisplayId = asPhysicalDisplayId(*args.displayIdVariant);
+                aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes attributes;
                 bool canDpuReadback = FlagManager::getInstance().readback_screenshot() &&
                         // The device needs to explicitly opt-in, in addition to the trunk stable
                         // flag being flipped.
@@ -8627,7 +8647,9 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                         args.transform.getScaleX() == 1.0f && args.transform.getScaleY() == 1.0f &&
                         args.transform.tx() == 0.0f && args.transform.ty() == 0.0f &&
                         !hasProtectedOrDisallowedSecureLayers &&
-                        !hasHdrLayersButDoesNotPreserveColors;
+                        !hasHdrLayersButDoesNotPreserveColors && physicalDisplayId.has_value() &&
+                        loadReadbackAttributesAndCheckPixelFormat(*physicalDisplayId,
+                                                                  reqPixelFormat, attributes);
 
                 if (!canDpuReadback && args.requireDpuReadback) {
                     if (hasProtectedOrDisallowedSecureLayers) {
@@ -8637,57 +8659,34 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                     }
                 }
                 if (canDpuReadback) {
-                    auto displayId = *args.displayIdVariant;
-                    if (std::holds_alternative<PhysicalDisplayId>(displayId)) {
-                        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes
-                                attributes;
-                        const auto physicalDisplayId = *asPhysicalDisplayId(displayId);
-                        auto status = getHwComposer().getReadbackBufferAttributes(physicalDisplayId,
-                                                                                  &attributes);
-                        if (status == OK) {
-                            if (static_cast<android_pixel_format>(reqPixelFormat) !=
-                                        PIXEL_FORMAT_UNKNOWN &&
-                                static_cast<android_pixel_format>(reqPixelFormat) !=
-                                        static_cast<android_pixel_format>(attributes.format) &&
-                                args.requireDpuReadback) {
-                                return base::unexpected<status_t>(INVALID_OPERATION);
-                            }
+                    const auto& displayDevice =
+                            FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(*physicalDisplayId));
 
-                            const auto& displayDevice =
-                                    FTL_FAKE_GUARD(mStateLock,
-                                                   getDisplayDeviceLocked(physicalDisplayId));
+                    // requiring DPU readback implies that the client is
+                    // OK with the physical orientation
+                    if (args.requireDpuReadback ||
+                        displayDevice->getPhysicalOrientation() == ui::Rotation::Rotation0) {
+                        const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
+                                GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
+                                GRALLOC_USAGE_SW_WRITE_OFTEN;
+                        const auto readbackBuffer =
+                                getFactory().createGraphicBuffer(args.size.getWidth(),
+                                                                 args.size.getHeight(),
+                                                                 static_cast<android_pixel_format>(
+                                                                         attributes.format),
+                                                                 1 /* layerCount */, usage,
+                                                                 "screenshot");
 
-                            // requiring DPU readback implies that the client is
-                            // OK with the physical orientation
-                            if (args.requireDpuReadback ||
-                                displayDevice->getPhysicalOrientation() ==
-                                        ui::Rotation::Rotation0) {
-                                const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
-                                        GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
-                                        GRALLOC_USAGE_SW_WRITE_OFTEN;
-                                const auto readbackBuffer =
-                                        getFactory()
-                                                .createGraphicBuffer(args.size.getWidth(),
-                                                                     args.size.getHeight(),
-                                                                     static_cast<
-                                                                             android_pixel_format>(
-                                                                             attributes.format),
-                                                                     1 /* layerCount */, usage,
-                                                                     "screenshot");
-
-                                if (const auto status = readbackBuffer->initCheck(); status != OK) {
-                                    ALOGE("Failed to allocate readback buffer :(: %d", status);
-                                    return base::unexpected<status_t>(INVALID_OPERATION);
-                                } else {
-                                    mReadbackRequests.emplace_back(physicalDisplayId,
-                                                                   readbackBuffer,
-                                                                   args.captureListener,
-                                                                   args.preserveDisplayColors,
-                                                                   args.isSecure);
-                                    scheduleComposite(FrameHint::kNone);
-                                    return ScreenshotStrategy::Readback;
-                                }
-                            }
+                        if (const auto status = readbackBuffer->initCheck(); status != OK) {
+                            ALOGE("Failed to allocate readback buffer :(: %d", status);
+                            return base::unexpected<status_t>(INVALID_OPERATION);
+                        } else {
+                            mReadbackRequests.emplace_back(*physicalDisplayId, readbackBuffer,
+                                                           args.captureListener,
+                                                           args.preserveDisplayColors,
+                                                           args.isSecure);
+                            scheduleComposite(FrameHint::kNone);
+                            return ScreenshotStrategy::Readback;
                         }
                     }
                 }

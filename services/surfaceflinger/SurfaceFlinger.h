@@ -1037,6 +1037,10 @@ private:
     base::expected<ScreenshotStrategy, status_t> setScreenshotSnapshotsAndDisplayState(
             ScreenshotArgs& args, ui::PixelFormat requestedPixelFormat);
 
+    bool loadReadbackAttributesAndCheckPixelFormat(
+            PhysicalDisplayId displayId, ui::PixelFormat reqPixelFormat,
+            aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes& outAttributes);
+
     void captureScreenCommon(ScreenshotArgs& args, ui::PixelFormat,
                              const sp<IScreenCaptureListener>&);
 

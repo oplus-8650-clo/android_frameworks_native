@@ -54,6 +54,7 @@ public:
     ~Composer() override;
 
     MOCK_METHOD(bool, isSupported, (OptionalFeature), (const, override));
+    MOCK_METHOD(bool, isDisplayCommandModesetSupported, (), (const, override));
     MOCK_METHOD(bool, isVrrSupported, (), (const, override));
     MOCK_METHOD0(getCapabilities,
                  std::vector<aidl::android::hardware::graphics::composer3::Capability>());
@@ -148,6 +149,7 @@ public:
     MOCK_METHOD4(setActiveConfigWithConstraints,
                  Error(Display, Config, const IComposerClient::VsyncPeriodChangeConstraints&,
                        VsyncPeriodChangeTimeline*));
+    MOCK_METHOD3(setDisplayMode, Error(Display, Config, bool));
     MOCK_METHOD2(setAutoLowLatencyMode, V2_4::Error(Display, bool));
     MOCK_METHOD2(setBootDisplayConfig, Error(Display, Config));
     MOCK_METHOD1(clearBootDisplayConfig, Error(Display));
