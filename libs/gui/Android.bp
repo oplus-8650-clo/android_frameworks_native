@@ -471,6 +471,7 @@ cc_library_shared {
 
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
+        "-DFMT_CPP_LIB_FILESYSTEM=0", // b/455625875
         "-Wthread-safety",
     ],
 }

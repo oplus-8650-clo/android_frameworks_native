@@ -6567,12 +6567,21 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
                                      OptimizationPolicy::optimizeForPerformance);
         }
 
+        if (FlagManager::getInstance().set_power_mode_async()) {
+            // Revert to OFF until hardware op completes.
+            display->setPowerMode(currentMode);
+        }
         return {getHwComposer().setPowerMode(displayId, mode),
                 ftl::Finalizer([this, displayId, mode, shouldApplyOptimizationPolicy, activeMode,
                                 display]()
                                        FTL_FAKE_GUARD(kMainThreadContext) {
                                            const auto _ =
                                                    makePowerModeAsyncFinalizer(displayId, mode);
+                                           if (FlagManager::getInstance()
+                                                       .set_power_mode_async()) {
+                                               // Hardware op completed, set to new mode for good.
+                                               display->setPowerMode(mode);
+                                           }
                                            if (mode != hal::PowerMode::DOZE_SUSPEND) {
                                                const bool enable =
                                                        mScheduler->getVsyncSchedule(displayId)

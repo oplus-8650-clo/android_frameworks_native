@@ -6749,8 +6749,6 @@ TEST_F(InputDispatcherDisplayProjectionTest, WindowGetsEventsInCorrectCoordinate
 }
 
 TEST_F(InputDispatcherDisplayProjectionTest, UseCloneLayerStackTransformForRawCoordinates) {
-    SCOPED_FLAG_OVERRIDE(use_cloned_screen_coordinates_as_raw, true);
-
     auto [firstWindow, secondWindow] = setupScaledDisplayScenario();
 
     const std::array<float, 9> matrix = {1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 0.0, 0.0, 1.0};

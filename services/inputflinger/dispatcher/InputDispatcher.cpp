@@ -5283,9 +5283,7 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
     }
     // If the window has a cloneLayerStackTransform, always use it as the transform for the "getRaw"
     // APIs. If not, fall back to using the DisplayInfo transform of the window's display
-    bool useClonedScreenCoordinates = (input_flags::use_cloned_screen_coordinates_as_raw() &&
-                                       windowInfo.cloneLayerStackTransform);
-    if (useClonedScreenCoordinates) {
+    if (windowInfo.cloneLayerStackTransform) {
         return *windowInfo.cloneLayerStackTransform;
     }
     return getDisplayTransform(windowInfo.displayId);

@@ -610,12 +610,12 @@ int Surface::hook_queueBuffer(ANativeWindow* window,
             return interceptor(window, Surface::queueBufferInternal, data, buffer, fenceFd);
         }
     }
-    return c->queueBuffer(GraphicBuffer::from(buffer), fenceFd);
+    return c->queueBuffer(GraphicBuffer::from(buffer), sp<Fence>::make(fenceFd));
 }
 
 int Surface::queueBufferInternal(ANativeWindow* window, ANativeWindowBuffer* buffer, int fenceFd) {
     Surface* c = getSelf(window);
-    return c->queueBuffer(GraphicBuffer::from(buffer), fenceFd);
+    return c->queueBuffer(GraphicBuffer::from(buffer), sp<Fence>::make(fenceFd));
 }
 
 int Surface::hook_dequeueBuffer_DEPRECATED(ANativeWindow* window,
@@ -654,7 +654,7 @@ int Surface::hook_lockBuffer_DEPRECATED(ANativeWindow* window,
 int Surface::hook_queueBuffer_DEPRECATED(ANativeWindow* window,
         ANativeWindowBuffer* buffer) {
     Surface* c = getSelf(window);
-    return c->queueBuffer(GraphicBuffer::from(buffer), -1);
+    return c->queueBuffer(GraphicBuffer::from(buffer), Fence::NO_FENCE);
 }
 
 int Surface::hook_perform(ANativeWindow* window, int operation, ...) {
@@ -878,14 +878,6 @@ status_t Surface::dequeueBuffer(sp<GraphicBuffer>* buffer, sp<Fence>* outFence) 
     *buffer = tmpBuffer;
     *outFence = sp<Fence>::make(fd);
     return res;
-}
-
-status_t Surface::queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fd,
-                              SurfaceQueueBufferOutput* output) {
-    if (buffer == nullptr) {
-        return BAD_VALUE;
-    }
-    return queueBuffer(sp<GraphicBuffer>::fromExisting(buffer.get()), fd ? fd->get() : -1, output);
 }
 
 status_t Surface::detachBuffer(const sp<GraphicBuffer>& buffer) {
@@ -1131,8 +1123,8 @@ int Surface::cancelBuffer(sp<GraphicBuffer>&& buffer, int fenceFd) {
         }
         return OK;
     }
-    sp<Fence> fence(fenceFd >= 0 ? sp<Fence>::make(fenceFd) : Fence::NO_FENCE);
-    mGraphicBufferProducer->cancelBuffer(i, fence);
+
+    mGraphicBufferProducer->cancelBuffer(i, sp<Fence>::make(fenceFd));
 
     if (mSharedBufferMode && mAutoRefresh && mSharedBufferSlot == i) {
         mSharedBufferHasBeenQueued = true;
@@ -1261,7 +1253,7 @@ int Surface::lockBuffer_DEPRECATED(const sp<GraphicBuffer>& buffer __attribute__
     return OK;
 }
 
-void Surface::getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, int fenceFd,
+void Surface::getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
                                         nsecs_t timestamp,
                                         IGraphicBufferProducer::QueueBufferInput* out) {
     bool isAutoTimestamp = false;
@@ -1276,7 +1268,6 @@ void Surface::getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, int fen
     Rect crop(Rect::EMPTY_RECT);
     mCrop.intersect(Rect(buffer->width, buffer->height), &crop);
 
-    sp<Fence> fence(fenceFd >= 0 ? sp<Fence>::make(fenceFd) : Fence::NO_FENCE);
     IGraphicBufferProducer::QueueBufferInput input(timestamp, isAutoTimestamp,
             static_cast<android_dataspace>(mDataSpace), crop, mScalingMode,
             mTransform ^ mStickyTransform, fence, mStickyTransform,
@@ -1376,8 +1367,8 @@ void Surface::applyGrallocMetadataLocked(
         mapper.setSmpte2094_40(buffer->handle, queueBufferInput.getHdrMetadata().getHdr10Plus());
 }
 
-void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
-        const IGraphicBufferProducer::QueueBufferOutput& output) {
+void Surface::onBufferQueuedLocked(int slot, const sp<Fence>& fence,
+                                   const IGraphicBufferProducer::QueueBufferOutput& output) {
     mDequeuedSlots.erase(slot);
     if (mSlots[slot].requiresFreeOnReturn) {
         mSlots[slot].buffer = nullptr;
@@ -1436,15 +1427,18 @@ void Surface::onBufferQueuedLocked(int slot, sp<Fence> fence,
     }
 }
 
-int Surface::queueBuffer(sp<GraphicBuffer>&& buffer, int fenceFd,
-                         SurfaceQueueBufferOutput* surfaceOutput) {
+status_t Surface::queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
+                              SurfaceQueueBufferOutput* surfaceOutput) {
     ATRACE_CALL();
     SURF_LOGV("Surface::queueBuffer");
+
+    if (buffer == nullptr) {
+        return BAD_VALUE;
+    }
 
     IGraphicBufferProducer::QueueBufferOutput output;
     IGraphicBufferProducer::QueueBufferInput input;
     int slot;
-    sp<Fence> fence;
     {
         Mutex::Autolock lock(mMutex);
 
@@ -1458,21 +1452,14 @@ int Surface::queueBuffer(sp<GraphicBuffer>&& buffer, int fenceFd,
 
         slot = getSlotFromBufferLocked(buffer);
         if (slot < 0) {
-            if (fenceFd >= 0) {
-                close(fenceFd);
-            }
             return slot;
         }
         if (mSharedBufferSlot == slot && mSharedBufferHasBeenQueued) {
-            if (fenceFd >= 0) {
-                close(fenceFd);
-            }
             return OK;
         }
 
-        getQueueBufferInputLocked(buffer, fenceFd, mTimestamp, &input);
+        getQueueBufferInputLocked(buffer, fence, mTimestamp, &input);
         applyGrallocMetadataLocked(buffer, input);
-        fence = input.fence;
     }
     nsecs_t now = systemTime();
 // QTI_BEGIN: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
@@ -1556,7 +1543,7 @@ int Surface::queueBuffers(const std::vector<BatchQueuedBuffer>& buffers,
             bufferSlots[batchIdx] = i;
 
             IGraphicBufferProducer::QueueBufferInput input;
-            getQueueBufferInputLocked(buffer, buffers[batchIdx].fenceFd,
+            getQueueBufferInputLocked(buffer, sp<Fence>::make(buffers[batchIdx].fenceFd),
                                       buffers[batchIdx].timestamp, &input);
             input.slot = i;
             bufferFences[batchIdx] = input.fence;
@@ -3102,7 +3089,7 @@ status_t Surface::unlockAndPost()
     status_t err = mLockedBuffer->unlockAsync(&fd);
     SURF_LOGE_IF(err, "failed unlocking buffer (%p)", mLockedBuffer->handle);
 
-    err = queueBuffer(sp<GraphicBuffer>::fromExisting(mLockedBuffer.get()), fd);
+    err = queueBuffer(sp<GraphicBuffer>::fromExisting(mLockedBuffer.get()), sp<Fence>::make(fd));
     SURF_LOGE_IF(err, "queueBuffer (handle=%p) failed (%s)", mLockedBuffer->handle, strerror(-err));
 
     mPostedBuffer = mLockedBuffer;
