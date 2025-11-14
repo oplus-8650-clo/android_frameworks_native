@@ -18,8 +18,12 @@
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
 #include <SkColorFilter.h>
+#include <SkFontMgr.h>
 
 #include "SkFontScanner_FreeType.h"
+#include "src/core/SkReadBuffer.h"
+//#include "src/core/SkVerticesPriv.h"
+#include "src/core/SkWriteBuffer.h"
 
 #include <android/ipcrenderbuffer/RenderBufferOps.h>
 #include <android/ipcrenderbuffer/RenderBufferDebugUtils.h>
@@ -37,7 +41,7 @@ SkImageInfo fromShmemImageInfo(const ShmemImageInfo& info) {
     return SkImageInfo::Make(info.width, info.height, info.colorType, info.alphaType);
 }
 
-void renderOpToCanvas(const std::shared_ptr<RenderCommandBufferConsumer>& consumer,
+void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
                       IPCRenderBufferOp* op, SkCanvas* canvas,
                       const std::function<void(int)>& renderProxyCallback) {
     switch (op->type) {
@@ -168,17 +172,17 @@ void renderOpToCanvas(const std::shared_ptr<RenderCommandBufferConsumer>& consum
         }
         case TYPE_DRAWIMAGE: {
             DrawImageOp* co = (DrawImageOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, SkMatrix::I(), *cache);
             break;
         }
         case TYPE_DRAWIMAGERECT: {
             DrawImageRectOp* co = (DrawImageRectOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, SkMatrix::I(), *cache);
             break;
         }
         case TYPE_DRAWTEXTBLOB: {
             DrawTextBlobOp* co = (DrawTextBlobOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, SkMatrix::I(), cache->fontManager);
             break;
         }
         case TYPE_DRAWPATCH: {
@@ -269,7 +273,7 @@ bool isDrawingOp(uint32_t type) {
     }
 }
 
-bool renderCommandBufferToCanvas(const std::shared_ptr<RenderCommandBufferConsumer>& consumer,
+bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
     auto buffer = consumer->consumerAcquire();
@@ -304,7 +308,7 @@ bool renderCommandBufferToCanvas(const std::shared_ptr<RenderCommandBufferConsum
             ALOGE("Rendering op %s", opTypeToString(op->type).c_str());
             ALOGE("Details %s", opToString(op).c_str());
         }
-        renderOpToCanvas(consumer, op, canvas, renderProxyCallback);
+        renderOpToCanvas(cache, consumer, op, canvas, renderProxyCallback);
     }
     if constexpr (DUMP_OPS) {
         ALOGE("Done rendering command buffer");
@@ -312,8 +316,8 @@ bool renderCommandBufferToCanvas(const std::shared_ptr<RenderCommandBufferConsum
     return true;
 }
 
-void resetRenderCommandBufferForReplay(
-        const std::shared_ptr<RenderCommandBufferConsumer>& consumer) {
+void resetRenderCommandBufferForReplay(IPCServerResourceCache* cache,
+                                       RenderCommandBufferConsumer* consumer) {
     auto buffer = consumer->consumerAcquire();
     if (buffer == nullptr) {
         ALOGE("Failed to acquire RenderCommandBuffer for replay");
@@ -321,13 +325,7 @@ void resetRenderCommandBufferForReplay(
     }
 
     for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
-        if (op->type == TYPE_DRAWPATH) {
-            DrawPathOp* co = (DrawPathOp*)op;
-            co->resetForReplay();
-        } else if (op->type == TYPE_DRAWTEXTBLOB) {
-            DrawTextBlobOp* co = (DrawTextBlobOp*)op;
-            co->resetForReplay();
-        }
+        //  TODO:
     }
 }
 
@@ -337,6 +335,742 @@ std::string shmemPaintToString(const ShmemPaint& paint) {
             std::string(" ") + std::to_string(paint.color.fA) + std::string(" ") +
             std::string(" style: ") + std::to_string((int)paint.style) + std::string(" ") +
             std::to_string((int)paint.blendMode);
+}
+
+#define OP_REQUIRE(expr)                                                                      \
+    ({                                                                                        \
+        if (!(expr)) {                                                                        \
+            ALOGE("%s:%s:%d: Expression was false: %s", __FILE__, __func__, __LINE__, #expr); \
+            return nullptr;                                                                   \
+        }                                                                                     \
+    })
+SaveOp* SaveOp::Create(RenderCommandBuffer* commandBuffer) {
+    SaveOp* op = commandBuffer->allocAligned<SaveOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    return op;
+}
+
+void SaveOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->save();
+}
+
+std::string SaveOp::toString() const {
+    return std::string("SaveOp");
+}
+
+RestoreOp* RestoreOp::Create(RenderCommandBuffer* commandBuffer) {
+    RestoreOp* op = commandBuffer->allocAligned<RestoreOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    return op;
+}
+
+void RestoreOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->restore();
+}
+
+std::string RestoreOp::toString() const {
+    return std::string("RestoreOp");
+}
+
+SaveLayerOp* SaveLayerOp::Create(RenderCommandBuffer* commandBuffer, const SkRect* bounds,
+                                 const SkPaint* paint) {
+    SaveLayerOp* op = commandBuffer->allocAligned<SaveLayerOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    if (bounds) {
+        op->bounds = *bounds;
+        op->hasBounds = true;
+    } else {
+        op->hasBounds = false;
+    }
+    if (paint) {
+        op->paint = toShmemPaint(*paint);
+        op->hasPaint = true;
+    } else {
+        op->hasPaint = false;
+    }
+    return op;
+}
+
+void SaveLayerOp::draw(SkCanvas* c, const SkMatrix&) {
+    const SkRect* boundsPtr = hasBounds ? &bounds : nullptr;
+    SkPaint p;
+    const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
+    c->saveLayer(boundsPtr, paintPtr);
+}
+
+std::string SaveLayerOp::toString() const {
+    return std::string("SaveLayerOp");
+}
+
+SaveBehindOp* SaveBehindOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& subset) {
+    SaveBehindOp* op = commandBuffer->allocAligned<SaveBehindOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    if (subset.isEmpty()) {
+        op->subset.setEmpty();
+    } else {
+        op->subset = subset;
+    }
+    return op;
+}
+
+void SaveBehindOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkAndroidFrameworkUtils::SaveBehind(c, &subset);
+}
+
+std::string SaveBehindOp::toString() const {
+    return std::string("SaveBehindOp subset: ") + rectToString(subset);
+}
+
+ConcatOp* ConcatOp::Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix) {
+    ConcatOp* op = commandBuffer->allocAligned<ConcatOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->matrix = matrix;
+    return op;
+}
+
+void ConcatOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->concat(matrix);
+}
+
+std::string ConcatOp::toString() const {
+    return std::string("ConcatOp matrix: ") + skmatrixToString(matrix);
+}
+
+SetMatrixOp* SetMatrixOp::Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix) {
+    SetMatrixOp* op = commandBuffer->allocAligned<SetMatrixOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->matrix = matrix;
+    return op;
+}
+
+void SetMatrixOp::draw(SkCanvas* c, const SkMatrix& original) {
+    c->setMatrix(SkM44(original) * matrix);
+}
+
+std::string SetMatrixOp::toString() const {
+    return std::string("SetMatrixOp matrix: ") + skmatrixToString(matrix);
+}
+
+ScaleOp* ScaleOp::Create(RenderCommandBuffer* commandBuffer, SkScalar sx, SkScalar sy) {
+    ScaleOp* op = commandBuffer->allocAligned<ScaleOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->sx = sx;
+    op->sy = sy;
+    return op;
+}
+
+void ScaleOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->scale(sx, sy);
+}
+
+std::string ScaleOp::toString() const {
+    return std::string("ScaleOp sx: ") + std::to_string(sx) + std::string(" sy: ") +
+            std::to_string(sy);
+}
+
+TranslateOp* TranslateOp::Create(RenderCommandBuffer* commandBuffer, SkScalar dx, SkScalar dy) {
+    TranslateOp* op = commandBuffer->allocAligned<TranslateOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->dx = dx;
+    op->dy = dy;
+    return op;
+}
+
+void TranslateOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->translate(dx, dy);
+}
+
+std::string TranslateOp::toString() const {
+    return std::string("TranslateOp dx: ") + std::to_string(dx) + std::string(" dy: ") +
+            std::to_string(dy);
+}
+
+ClipPathOp* ClipPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath& path, SkClipOp op,
+                               bool aa) {
+    ClipPathOp* opData = commandBuffer->allocAligned<ClipPathOp>();
+    OP_REQUIRE(opData);
+    size_t pathSize = path.writeToMemory(nullptr);
+    OP_REQUIRE(SetRSpan<uint8_t>(opData->pathData, commandBuffer, nullptr, pathSize));
+    path.writeToMemory(opData->pathData.data.get());
+    opData->type = kType;
+    opData->op = op;
+    opData->aa = aa;
+    return opData;
+}
+
+void ClipPathOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkPath path;
+    path.readFromMemory(pathData.data.get(), pathData.size);
+    c->clipPath(path, op, aa);
+}
+
+std::string ClipPathOp::toString() const {
+    return "ClipPathOp";
+}
+
+ClipRectOp* ClipRectOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& rect, SkClipOp op,
+                               bool aa) {
+    ClipRectOp* opData = commandBuffer->allocAligned<ClipRectOp>();
+    OP_REQUIRE(opData);
+    opData->type = kType;
+    opData->rect = rect;
+    opData->op = op;
+    opData->aa = aa;
+    return opData;
+}
+
+void ClipRectOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->clipRect(rect, op, aa);
+}
+
+std::string ClipRectOp::toString() const {
+    return std::string("ClipRectOp: rect: ") + rectToString(rect) + std::string(" op: ") +
+            std::to_string((int)op) + std::string(" aa: ") + std::to_string(aa);
+}
+
+ClipRRectOp* ClipRRectOp::Create(RenderCommandBuffer* commandBuffer, const SkRRect& rrect,
+                                 SkClipOp op, bool aa) {
+    ClipRRectOp* opData = commandBuffer->allocAligned<ClipRRectOp>();
+    OP_REQUIRE(opData);
+    opData->type = kType;
+    opData->rrect = rrect;
+    opData->op = op;
+    opData->aa = aa;
+    return opData;
+}
+
+void ClipRRectOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->clipRRect(rrect, op, aa);
+}
+
+std::string ClipRRectOp::toString() const {
+    std::string rectAsString = std::string(rrect.dumpToString(false).c_str());
+    return std::string("ClipRRectOp: rrect: ") + rectAsString + std::string(" op: ") +
+            std::to_string((int)op) + std::string(" aa: ") + std::to_string(aa);
+}
+
+ClipRegionOp* ClipRegionOp::Create(RenderCommandBuffer* commandBuffer, const SkRegion& region,
+                                   SkClipOp op) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    return nullptr;
+}
+
+void ClipRegionOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkRegion region;
+    region.readFromMemory(regionData.data.get(), regionData.size);
+    c->clipRegion(region, op);
+}
+
+std::string ClipRegionOp::toString() const {
+    return "ClipRegionOp";
+}
+
+ClipShaderOp* ClipShaderOp::Create(RenderCommandBuffer* commandBuffer,
+                                   const sk_sp<SkShader>& /*shader*/, SkClipOp op) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    return nullptr;
+}
+
+void ClipShaderOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+
+std::string ClipShaderOp::toString() const {
+    return "ClipShaderOp";
+}
+
+ResetClipOp* ResetClipOp::Create(RenderCommandBuffer* commandBuffer) {
+    ResetClipOp* op = commandBuffer->allocAligned<ResetClipOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    return op;
+}
+
+void ResetClipOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkAndroidFrameworkUtils::ResetClip(c);
+}
+
+std::string ResetClipOp::toString() const {
+    return "ResetClipOp";
+}
+
+DrawPaintOp* DrawPaintOp::Create(RenderCommandBuffer* commandBuffer, const SkPaint& p) {
+    DrawPaintOp* op = commandBuffer->allocAligned<DrawPaintOp>();
+    OP_REQUIRE(op);
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawPaintOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawPaint(fromShmemPaint(paint));
+}
+
+std::string DrawPaintOp::toString() const {
+    return "DrawPaintOp" + shmemPaintToString(paint);
+}
+
+DrawBehindOp* DrawBehindOp::Create(RenderCommandBuffer* commandBuffer, const SkPaint& p) {
+    DrawBehindOp* op = commandBuffer->allocAligned<DrawBehindOp>();
+    OP_REQUIRE(op);
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawBehindOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawBehindOp::toString() const {
+    return "DrawBehindOp";
+}
+
+DrawPathOp* DrawPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath& path,
+                               const SkPaint& p) {
+    DrawPathOp* op = commandBuffer->allocAligned<DrawPathOp>();
+    OP_REQUIRE(op);
+    size_t pathSize = path.writeToMemory(nullptr);
+    OP_REQUIRE(SetRSpan<uint8_t>(op->pathData, commandBuffer, nullptr, pathSize));
+    path.writeToMemory(op->pathData.data.get());
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawPathOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkPath path;
+    path.readFromMemory(pathData.data.get(), pathData.size);
+    c->drawPath(path, fromShmemPaint(paint));
+}
+std::string DrawPathOp::toString() const {
+    return "DrawPathOp";
+}
+
+DrawRectOp* DrawRectOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& r,
+                               const SkPaint& p) {
+    DrawRectOp* op = commandBuffer->allocAligned<DrawRectOp>();
+    OP_REQUIRE(op);
+    op->rect = r;
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawRectOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawRect(rect, fromShmemPaint(paint));
+}
+
+std::string DrawRectOp::toString() const {
+    return std::string("DrawRectOp rect(") + rectToString(rect) + ") " + std::string(" paint: ") +
+            shmemPaintToString(paint);
+}
+
+DrawRegionOp* DrawRegionOp::Create(RenderCommandBuffer* commandBuffer, const SkRegion& r,
+                                   const SkPaint& p) {
+    DrawRegionOp* op = commandBuffer->allocAligned<DrawRegionOp>();
+    OP_REQUIRE(op);
+    size_t regionSize = r.writeToMemory(nullptr);
+    OP_REQUIRE(SetRSpan<uint8_t>(op->regionData, commandBuffer, nullptr, regionSize));
+    r.writeToMemory(op->regionData.data.get());
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawRegionOp::draw(SkCanvas* c, const SkMatrix&) {
+    SkRegion region;
+    region.readFromMemory(regionData.data.get(), regionData.size);
+    c->drawRegion(region, fromShmemPaint(paint));
+}
+
+std::string DrawRegionOp::toString() const {
+    return "DrawRegionOp";
+}
+
+DrawOvalOp* DrawOvalOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& o,
+                               const SkPaint& p) {
+    DrawOvalOp* op = commandBuffer->allocAligned<DrawOvalOp>();
+    OP_REQUIRE(op);
+    op->oval = o;
+    op->paint = toShmemPaint(p);
+    op->type = kType;
+    return op;
+}
+
+void DrawOvalOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawOval(oval, fromShmemPaint(paint));
+}
+std::string DrawOvalOp::toString() const {
+    return std::string("DrawOvalOp") + rectToString(oval);
+}
+
+DrawArcOp* DrawArcOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& oval,
+                             SkScalar startAngle, SkScalar sweepAngle, bool useCenter,
+                             const SkPaint& paint) {
+    DrawArcOp* op = commandBuffer->allocAligned<DrawArcOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->paint = toShmemPaint(paint);
+    op->oval = oval;
+    op->startAngle = startAngle;
+    op->sweepAngle = sweepAngle;
+    op->useCenter = useCenter;
+    return op;
+}
+
+void DrawArcOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawArc(oval, startAngle, sweepAngle, useCenter, fromShmemPaint(paint));
+}
+std::string DrawArcOp::toString() const {
+    return std::string("DrawArcOp") + rectToString(oval) + std::string(" startAngle: ") +
+            std::to_string(startAngle) + std::string(" sweepAngle: ") + std::to_string(sweepAngle) +
+            std::string(" useCenter: ") + std::to_string(useCenter);
+}
+
+DrawRRectOp* DrawRRectOp::Create(RenderCommandBuffer* commandBuffer, const SkRRect& rr,
+                                 const SkPaint& p) {
+    DrawRRectOp* op = commandBuffer->allocAligned<DrawRRectOp>();
+    OP_REQUIRE(op);
+    op->paint = toShmemPaint(p);
+    op->rrect = rr;
+    op->type = kType;
+    return op;
+}
+
+void DrawRRectOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawRRect(rrect, fromShmemPaint(paint));
+}
+std::string DrawRRectOp::toString() const {
+    return std::string("DrawRRectOp") + std::string(rrect.dumpToString(false).c_str());
+}
+
+DrawAnnotationOp* DrawAnnotationOp::Create(RenderCommandBuffer* commandBuffer, const SkRect& rect,
+                                           const char* text, SkData* data) {
+    DrawAnnotationOp* op = commandBuffer->allocAligned<DrawAnnotationOp>();
+    OP_REQUIRE(op);
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    op->type = kType;
+    return op;
+}
+
+void DrawAnnotationOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawAnnotationOp::toString() const {
+    return "DrawAnnotationOp";
+}
+
+DrawDrawableOp* DrawDrawableOp::Create(RenderCommandBuffer* commandBuffer, SkDrawable* drawable,
+                                       const SkMatrix* matrix) {
+    DrawDrawableOp* op = commandBuffer->allocAligned<DrawDrawableOp>();
+    OP_REQUIRE(op);
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    op->type = kType;
+    return op;
+}
+
+void DrawDrawableOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawDrawableOp::toString() const {
+    return "DrawDrawableOp";
+}
+
+DrawPictureOp* DrawPictureOp::Create(RenderCommandBuffer* commandBuffer, const SkPicture* picture,
+                                     const SkMatrix* matrix, const SkPaint* paint) {
+    DrawPictureOp* op = commandBuffer->allocAligned<DrawPictureOp>();
+    OP_REQUIRE(op);
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    op->type = kType;
+    return op;
+}
+
+void DrawPictureOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawPictureOp::toString() const {
+    return "DrawPictureOp";
+}
+
+DrawImageOp* DrawImageOp::Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId, SkScalar x,
+                                 SkScalar y, const SkSamplingOptions& sampling,
+                                 const SkPaint* paint) {
+    DrawImageOp* op = commandBuffer->allocAligned<DrawImageOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->bitmapId = bitmapId;
+    op->x = x;
+    op->y = y;
+    op->sampling = sampling;
+    if (paint) {
+        op->paint = toShmemPaint(*paint);
+        op->hasPaint = true;
+    } else {
+        op->hasPaint = false;
+    }
+    return op;
+}
+
+void DrawImageOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache) {
+    auto it = resourceCache.bitmaps.find(bitmapId);
+    LOG_ALWAYS_FATAL_IF(it == resourceCache.bitmaps.end(), "Bitmap not found in cache");
+    SkPaint p;
+    const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
+    c->drawImage(it->second.image, x, y, sampling, paintPtr);
+}
+std::string DrawImageOp::toString() const {
+    return "DrawImageOp";
+}
+
+DrawImageRectOp* DrawImageRectOp::Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId,
+                                         const SkRect& src, const SkRect& dst,
+                                         const SkSamplingOptions& sampling, const SkPaint* paint,
+                                         SkCanvas::SrcRectConstraint constraint) {
+    DrawImageRectOp* op = commandBuffer->allocAligned<DrawImageRectOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->bitmapId = bitmapId;
+    op->src = src;
+    op->dst = dst;
+    op->sampling = sampling;
+    if (paint) {
+        op->paint = toShmemPaint(*paint);
+        op->hasPaint = true;
+    } else {
+        op->hasPaint = false;
+    }
+    op->constraint = constraint;
+    return op;
+}
+
+void DrawImageRectOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache) {
+    auto it = resourceCache.bitmaps.find(bitmapId);
+    LOG_ALWAYS_FATAL_IF(it == resourceCache.bitmaps.end(), "Bitmap not found in cache");
+    SkPaint p;
+    const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
+    c->drawImageRect(it->second.image, src, dst, sampling, paintPtr, constraint);
+}
+std::string DrawImageRectOp::toString() const {
+    return "DrawImageRectOp";
+}
+
+sk_sp<SkData> serializeTypeFace(SkTypeface* tf, void* ctx) {
+    thread_local static std::vector<char> sTmpTypefaceStorage;
+
+    SkString familyName;
+    tf->getFamilyName(&familyName);
+
+    // We have to do this because skia wants to do 2 copies
+    // Ideally we should have a LinearAllocator API if this is not one-off.
+    size_t nameSize = familyName.size() + 1;
+    sTmpTypefaceStorage.resize(sizeof(ShmemTypeface) + nameSize);
+
+    ShmemTypeface* info = reinterpret_cast<ShmemTypeface*>(&sTmpTypefaceStorage[0]);
+    // allocate after info
+    info->name.data = &sTmpTypefaceStorage[sizeof(*info)];
+    info->name.size = nameSize;
+
+    // write fields
+    std::copy(familyName.data(), familyName.data() + nameSize, info->name.data.get());
+    SkFontStyle style = tf->fontStyle();
+    info->weight = style.weight();
+    info->width = style.width();
+    info->slant = style.slant();
+
+    return SkData::MakeWithoutCopy(sTmpTypefaceStorage.data(), sTmpTypefaceStorage.size());
+}
+
+sk_sp<SkTypeface> deserializeTypeFace(const void* data, size_t length, void* ctx) {
+    auto* fontManager = reinterpret_cast<SkFontMgr*>(ctx);
+
+    const auto* info = reinterpret_cast<const ShmemTypeface*>(data);
+
+    SkFontStyle style(info->weight, info->width, info->slant);
+    sk_sp<SkTypeface> tf = fontManager->matchFamilyStyle(info->name.data.get(), style);
+
+    return tf;
+};
+
+DrawTextBlobOp* DrawTextBlobOp::Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
+                                       SkScalar x_in, SkScalar y_in, const SkPaint& p) {
+    SkSerialProcs procs;
+
+    DrawTextBlobOp* op = commandBuffer->allocAligned<DrawTextBlobOp>();
+    OP_REQUIRE(op);
+
+    op->type = kType;
+    op->paint = toShmemPaint(p);
+    op->x = x_in;
+    op->y = y_in;
+
+    procs.fTypefaceProc = serializeTypeFace;
+    size_t serializedSizeBytes =
+            blob->serialize(procs, commandBuffer->mBytes + commandBuffer->mUsed,
+                            sizeof(commandBuffer->mBytes) - commandBuffer->mUsed);
+
+    OP_REQUIRE(serializedSizeBytes > 0);
+
+    // Since uint8_t is aligned to 1 byte this allocation will start at
+    // commandBuffer->mBytes + commandBuffer->mUsed
+    OP_REQUIRE(SetRSpan<uint8_t>(op->blobData, commandBuffer, nullptr, serializedSizeBytes));
+
+    return op;
+}
+
+void DrawTextBlobOp::draw(SkCanvas* c, const SkMatrix&, sk_sp<SkFontMgr> fontMgr) {
+    SkDeserialProcs procs;
+    procs.fTypefaceCtx = fontMgr.get();
+    procs.fTypefaceProc = deserializeTypeFace;
+    sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(blobData.data.get(), blobData.size, procs);
+    if (blob) {
+        c->drawTextBlob(blob, x, y, fromShmemPaint(paint));
+    }
+}
+std::string DrawTextBlobOp::toString() const {
+    return "DrawTextBlobOp";
+}
+
+DrawPatchOp* DrawPatchOp::Create(RenderCommandBuffer* commandBuffer, const SkPoint inPoints[12],
+                                 const SkColor inColors[4], const SkPoint inTexCoords[4],
+                                 SkBlendMode inMode, const SkPaint& inPaint) {
+    DrawPatchOp* op = commandBuffer->allocAligned<DrawPatchOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->mode = inMode;
+    op->paint = toShmemPaint(inPaint);
+
+    OP_REQUIRE(SetRSpan(op->points, commandBuffer, inPoints, 12));
+    OP_REQUIRE(SetRSpan(op->colors, commandBuffer, inColors, 4));
+    OP_REQUIRE(SetRSpan(op->texCoords, commandBuffer, inTexCoords, 4));
+    return op;
+}
+
+void DrawPatchOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawPatch(points.data.get(), colors.data.get(), texCoords.data.get(), mode,
+                 fromShmemPaint(paint));
+}
+std::string DrawPatchOp::toString() const {
+    return "DrawPatchOp";
+}
+
+DrawPointsOp* DrawPointsOp::Create(RenderCommandBuffer* commandBuffer, SkCanvas::PointMode mode,
+                                   size_t count, const SkPoint* points, const SkPaint& paint) {
+    DrawPointsOp* op = commandBuffer->allocAligned<DrawPointsOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->mode = mode;
+    op->paint = toShmemPaint(paint);
+    OP_REQUIRE(SetRSpan(op->points, commandBuffer, points, count));
+    return op;
+}
+
+void DrawPointsOp::draw(SkCanvas* c, const SkMatrix&) {
+    c->drawPoints(mode, points.size, points.data.get(), fromShmemPaint(paint));
+}
+std::string DrawPointsOp::toString() const {
+    return "DrawPointsOp";
+}
+
+DrawVerticesOp* DrawVerticesOp::Create(RenderCommandBuffer* commandBuffer,
+                                       const SkVertices* vertices, SkBlendMode mode,
+                                       const SkPaint& paint) {
+    
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    return nullptr;
+
+    #if 0
+    DrawVerticesOp* op = commandBuffer->allocAligned<DrawVerticesOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->mode = mode;
+    op->paint = toShmemPaint(paint);
+    SkBinaryWriteBuffer writeBuffer(SkSerialProcs{});
+    vertices->priv().encode(writeBuffer);
+    auto data = writeBuffer.snapshotAsData();
+    OP_REQUIRE(SetRSpan<uint8_t>(op->verticesData, commandBuffer,
+                                 reinterpret_cast<const uint8_t*>(data->data()), data->size()));
+    return op;
+    #endif
+}
+
+void DrawVerticesOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    #if 0
+    SkReadBuffer readBuffer(verticesData.data.get(), verticesData.size);
+    sk_sp<SkVertices> vertices = SkVerticesPriv::Decode(readBuffer);
+    if (vertices) {
+        c->drawVertices(vertices, mode, fromShmemPaint(paint));
+    }
+    #endif
+}
+std::string DrawVerticesOp::toString() const {
+    return "DrawVerticesOp";
+}
+
+/*struct DrawMeshOp final : IPCRenderBufferOp {
+  const auto kType = TYPE_DRAWMESH;
+  DrawMeshOp(const Mesh& mesh, const SkPaint& paint) {
+    ALOGE("Not implemented %s", __FUNCTION__);
+  }
+};*/
+
+DrawSkMeshOp* DrawSkMeshOp::Create(RenderCommandBuffer* commandBuffer, const SkMesh& mesh,
+                                   sk_sp<SkBlender> blender, const SkPaint& paint) {
+    DrawSkMeshOp* op = commandBuffer->allocAligned<DrawSkMeshOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    return op;
+}
+
+void DrawSkMeshOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawSkMeshOp::toString() const {
+    return "DrawSkMeshOp";
+}
+
+DrawAtlasOp* DrawAtlasOp::Create(RenderCommandBuffer* commandBuffer, const SkImage* atlas,
+                                 const SkRSXform* xform, const SkRect* tex, const SkColor* colors,
+                                 int count, SkBlendMode mode, const SkSamplingOptions& sampling,
+                                 const SkRect* cull, const SkPaint* paint) {
+    DrawAtlasOp* op = commandBuffer->allocAligned<DrawAtlasOp>();
+    OP_REQUIRE(op);
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    op->type = kType;
+    return op;
+}
+
+void DrawAtlasOp::draw(SkCanvas* c, const SkMatrix&) {
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+}
+std::string DrawAtlasOp::toString() const {
+    return "DrawAtlasOp";
+}
+
+DrawProxySurfaceControlOp* DrawProxySurfaceControlOp::Create(RenderCommandBuffer* commandBuffer,
+                                                             int id) {
+    DrawProxySurfaceControlOp* op = commandBuffer->allocAligned<DrawProxySurfaceControlOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->proxyId = id;
+    return op;
+}
+
+void DrawProxySurfaceControlOp::draw(SkCanvas* c, const SkMatrix&) {
+    LOG_ALWAYS_FATAL_IF("DrawProxySurfaceControlOp::draw unexpected");
+}
+
+std::string DrawProxySurfaceControlOp::toString() const {
+    return "DrawProxySurfaceControlOp";
 }
 
 } // namespace android

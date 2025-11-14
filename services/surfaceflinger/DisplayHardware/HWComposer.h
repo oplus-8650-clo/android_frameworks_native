@@ -243,6 +243,8 @@ public:
             PhysicalDisplayId, float brightness, float brightnessNits,
             const Hwc2::Composer::DisplayBrightnessOptions&) = 0;
 
+    virtual status_t setDisplayMode(PhysicalDisplayId, hal::HWConfigId, bool) = 0;
+
     // Get whether the display skipped validation on the latest present
     virtual bool getValidateSkipped(HalDisplayId displayId) const = 0;
 
@@ -462,6 +464,8 @@ public:
     ftl::Future<status_t> setDisplayBrightness(
             PhysicalDisplayId, float brightness, float brightnessNits,
             const Hwc2::Composer::DisplayBrightnessOptions&) override;
+
+    status_t setDisplayMode(PhysicalDisplayId, hal::HWConfigId, bool) override;
 
     // Events handling ---------------------------------------------------------
 

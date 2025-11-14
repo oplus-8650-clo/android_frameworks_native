@@ -97,6 +97,16 @@ flag {
 } # disable_transparent_region_hint
 
 flag {
+  name: "enable_color_correction_bugfix"
+  namespace: "accessibility"
+  description: "Enable a corrected color correction (daltonization) algorithm matching the one used in ChromeOS"
+  bug: "322829049"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # enable_color_correction_bugfix
+
+flag {
   name: "display_command_modeset"
   namespace: "desktop_display"
   description: "Guards use of the new display command modeset"
@@ -254,6 +264,13 @@ flag {
 } # offload_gpu_composition
 
 flag {
+  name: "out_of_process_rendering"
+  namespace: "window_surfaces"
+  description: "Enable out of process rendering"
+  bug: "448153717"
+} # out_of_process_rendering
+
+flag {
   name: "parse_edid_version_and_input_type"
   namespace: "desktop_display"
   description: "Extends the display information parsed and provided by SurfaceFlinger to include EDID version and input type."
@@ -307,17 +324,6 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # set_client_drawn_corner_radii
-
-flag {
-  name: "sf_disable_producer_throttling_for_client_composition"
-  namespace: "core_graphics"
-  description: "Disable producer throttling for client composition"
-  bug: "454707399"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # sf_disable_producer_throttling_for_client_composition
-
 
 flag {
   name: "shader_disk_cache"
@@ -420,20 +426,13 @@ flag {
 } # wb_virtualdisplay2
 
 flag {
-  name: "window_blur_kawase2"
+  name: "window_blur_kawase2_preallocate_buffers"
   namespace: "core_graphics"
-  description: "Flag for using Kawase2 algorithm for window blur"
-  bug: "353826438"
-} # window_blur_kawase2
-
-flag {
-  name: "window_blur_kawase2_fix_aliasing"
-  namespace: "core_graphics"
-  description: "Flag for mitigating aliasing in Kawase2 window blur"
-  bug: "33968507"
+  description: "Flag for preallocating buffers for kawase2 window blur"
+  bug: "445059696"
   metadata {
     purpose: PURPOSE_BUGFIX
   }
-} # window_blur_kawase2_fix_aliasing
+} # window_blur_kawase2_preallocate_buffers
 
 # IMPORTANT - please keep alphabetize to reduce merge conflicts

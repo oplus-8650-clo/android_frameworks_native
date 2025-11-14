@@ -2939,6 +2939,20 @@ TEST_F(SurfaceTest, DisconnectWhileDequeued_ReconnectDoesNotAffectLeakedBuffers)
     ASSERT_EQ(nullptr, wpBufferA.promote());
 }
 
+TEST_F(SurfaceTest, Detach_BufferIsNotLeaked) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, sp<StubSurfaceListener>::make(), false));
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    wp<GraphicBuffer> weakBuffer = buffer;
+    buffer = nullptr;
+    ASSERT_EQ(OK, surface->detachBuffer(weakBuffer.promote()));
+    ASSERT_EQ(nullptr, weakBuffer.promote());
+}
+
 // TEST_F(SurfaceTest, DiscardDetach_DoesNotDeadlock) {
 //     constexpr size_t kLotsOfBuffers = 512;
 //     auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);

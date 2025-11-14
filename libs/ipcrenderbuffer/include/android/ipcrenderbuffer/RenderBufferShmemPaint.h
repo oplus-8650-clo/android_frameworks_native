@@ -23,6 +23,12 @@ namespace android {
 struct ShmemPaint {
     SkColor4f color;
     SkPaint::Style style;
+    SkScalar strokeWidth;
+    SkScalar strokeMiter;
+    SkPaint::Cap strokeCap;
+    SkPaint::Join strokeJoin;
+    bool antiAlias;
+    bool dither;
     SkBlendMode blendMode;
 };
 

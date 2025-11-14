@@ -1014,6 +1014,12 @@ public:
     status_t setAutoPrerotation(bool autoPrerotation) override {
         return mBase->setAutoPrerotation(autoPrerotation);
     }
+
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
+    status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options) override {
+        return mBase->setAdditionalOptions(options);
+    }
+#endif
 };
 
 IMPLEMENT_HYBRID_META_INTERFACE(GraphicBufferProducer,

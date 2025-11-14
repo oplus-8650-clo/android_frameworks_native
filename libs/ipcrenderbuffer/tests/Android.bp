@@ -29,6 +29,12 @@ cc_test {
         "libperfetto",
         "libtracing_perfetto",
         "libperfetto_c",
+        "libandroid",
+        "libjnigraphics",
+    ],
+
+    data: [
+        "testdata/*",
     ],
 
     static_libs: [

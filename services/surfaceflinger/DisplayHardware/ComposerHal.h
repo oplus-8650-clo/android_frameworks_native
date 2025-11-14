@@ -110,10 +110,12 @@ public:
         DisplayBrightnessCommand,
         KernelIdleTimer,
         PhysicalDisplayOrientation,
+        DisplayCommandModeset,
     };
 
     virtual bool isSupported(OptionalFeature) const = 0;
     virtual bool isVrrSupported() const = 0;
+    virtual bool isDisplayCommandModesetSupported() const = 0;
 
     virtual std::vector<aidl::android::hardware::graphics::composer3::Capability>
     getCapabilities() = 0;
@@ -330,6 +332,8 @@ public:
     virtual Error setReadbackBuffer(Display display, const sp<GraphicBuffer>& buffer,
                                     int acquireFence) = 0;
     virtual Error getReadbackBufferFence(Display display, int* outReleaseFence) = 0;
+
+    virtual Error setDisplayMode(Display display, Config modeId, bool seamless) = 0;
 };
 
 } // namespace Hwc2

@@ -131,6 +131,12 @@ status_t SurfaceTexture::updateTexImage() {
         return NO_INIT;
     }
 
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(SURFACE_TEXTURE_UPDATETEXIMAGE_STOP_EARLY)
+    if (mOpMode != OpMode::attachedToGL) {
+        SFT_LOGE("updateTexImage: SurfaceTexture is not attached!");
+        return INVALID_OPERATION;
+    }
+#endif
     return mEGLConsumer.updateTexImage(*this);
 }
 

@@ -203,30 +203,26 @@ int LoadDriver(android_namespace_t* library_namespace,
     return 0;
 }
 
-int LoadDriverFromApex(const hwvulkan_module_t** module) {
-    ATRACE_CALL();
-
-    auto apex_name = android::base::GetProperty(RO_VULKAN_APEX_PROPERTY, "");
-    if (apex_name == "") {
-        return -ENOENT;
-    }
-    // Get linker namespace for Vulkan APEX
-    std::replace(apex_name.begin(), apex_name.end(), '.', '_');
-    auto ns = android_get_exported_namespace(apex_name.c_str());
-    if (!ns) {
-        return -ENOENT;
-    }
-    android::GraphicsEnv::getInstance().setDriverToLoad(
-        android::GpuStatsInfo::Driver::VULKAN);
-    return LoadDriver(ns, apex_name.c_str(), module);
-}
-
 int LoadBuiltinDriver(const hwvulkan_module_t** module) {
     ATRACE_CALL();
 
+    android_namespace_t* library_namespace = nullptr;
+    const char* ns_name = nullptr;
+
+    // Builtin driver is loaded from APEX when ro.vulkan.apex is set
+    auto apex_name = android::base::GetProperty(RO_VULKAN_APEX_PROPERTY, "");
+    if (apex_name != "") {
+        ALOGD("Loading builtin Vulkan driver from APEX: ro.vulkan.apex=%s",
+              apex_name.c_str());
+        // Get linker namespace for Vulkan APEX NAME
+        std::replace(apex_name.begin(), apex_name.end(), '.', '_');
+        library_namespace = android_get_exported_namespace(apex_name.c_str());
+        ns_name = apex_name.c_str();
+    }
+
     android::GraphicsEnv::getInstance().setDriverToLoad(
         android::GpuStatsInfo::Driver::VULKAN);
-    return LoadDriver(nullptr, nullptr, module);
+    return LoadDriver(library_namespace, ns_name, module);
 }
 
 int LoadUpdatedDriver(const hwvulkan_module_t** module) {
@@ -265,9 +261,6 @@ bool Hal::Open() {
     const hwvulkan_module_t* module = nullptr;
 
     result = LoadUpdatedDriver(&module);
-    if (result == -ENOENT) {
-        result = LoadDriverFromApex(&module);
-    }
     if (result == -ENOENT) {
         result = LoadBuiltinDriver(&module);
     }

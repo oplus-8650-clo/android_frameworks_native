@@ -121,6 +121,7 @@ rust_library {
     ],
     features: [
         "std",
+        "kernel_ipc",
     ],
     min_sdk_version: "33",
 }
@@ -401,6 +402,7 @@ rust_test {
     ],
     features: [
         "std",
+        "kernel_ipc",
     ],
     rustlibs: [
         "libbinder_ndk_sys",

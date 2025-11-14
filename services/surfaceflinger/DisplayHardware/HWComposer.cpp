@@ -962,6 +962,20 @@ ftl::Future<status_t> HWComposer::setDisplayBrightness(
             });
 }
 
+status_t HWComposer::setDisplayMode(PhysicalDisplayId displayId, hal::HWConfigId modeId,
+                                    bool seamless) {
+    RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
+    auto& display = mDisplayData[displayId].hwcDisplay;
+    const auto error = display->setDisplayMode(modeId, seamless);
+    if (error == hal::Error::UNSUPPORTED) {
+        RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
+    } else if (error == hal::Error::BAD_PARAMETER) {
+        RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
+    }
+    RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
+    return NO_ERROR;
+}
+
 bool HWComposer::getValidateSkipped(HalDisplayId displayId) const {
     if (mDisplayData.count(displayId) == 0) {
         return false;

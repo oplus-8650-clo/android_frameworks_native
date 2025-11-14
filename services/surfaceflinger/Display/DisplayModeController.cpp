@@ -28,6 +28,7 @@
 #include <ftl/fake_guard.h>
 #include <log/log.h>
 #include <utils/Errors.h>
+#include <utils/Timers.h>
 
 namespace android::display {
 
@@ -240,10 +241,11 @@ void DisplayModeController::clearDesiredMode(PhysicalDisplayId displayId) {
     }
 }
 
-auto DisplayModeController::initiateModeChange(
-        PhysicalDisplayId displayId, DisplayModeRequest&& desiredMode,
-        const hal::VsyncPeriodChangeConstraints& constraints,
-        hal::VsyncPeriodChangeTimeline& outTimeline) -> ModeChangeResult {
+auto DisplayModeController::initiateModeChange(PhysicalDisplayId displayId,
+                                               DisplayModeRequest&& desiredMode,
+                                               const hal::VsyncPeriodChangeConstraints& constraints,
+                                               hal::VsyncPeriodChangeTimeline& outTimeline)
+        -> ModeChangeResult {
     std::lock_guard lock(mDisplayLock);
     const auto& displayPtr =
             FTL_EXPECT(mDisplays.get(displayId).ok_or(ModeChangeResult::Aborted)).get();
@@ -265,9 +267,17 @@ auto DisplayModeController::initiateModeChange(
     displayPtr->pendingModeOpt = std::move(desiredMode);
 
     const auto& mode = *displayPtr->pendingModeOpt->mode.modePtr;
-
-    const auto error = mComposerPtr->setActiveModeWithConstraints(displayId, mode.getHwcId(),
-                                                                  constraints, &outTimeline);
+    status_t error;
+    if (!mComposerPtr->getComposer()->isDisplayCommandModesetSupported()) {
+        error = mComposerPtr->setActiveModeWithConstraints(displayId, mode.getHwcId(), constraints,
+                                                           &outTimeline);
+    } else {
+        error = mComposerPtr->setDisplayMode(displayId, mode.getHwcId(),
+                                             constraints.seamlessRequired);
+        // DisplayCommand modeset, when successful, is immediate and doesn't need a refresh.
+        outTimeline.refreshRequired = false;
+        outTimeline.newVsyncAppliedTimeNanos = systemTime();
+    }
     switch (error) {
         case FAILED_TRANSACTION:
             return ModeChangeResult::Rejected;

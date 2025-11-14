@@ -192,6 +192,16 @@ impl PartialEq for InterfaceType {
     }
 }
 
+/// Represents a range for matching the bcdDevice of a USB device.
+#[derive(Debug, PartialEq, Clone)]
+pub struct BcdDeviceRange {
+    /// The start of the BCD device version range (inclusive).
+    pub start: u16,
+    /// The end of the BCD device version range (inclusive), if specified.
+    /// If `None`, the range includes all versions from `start` onwards.
+    pub end: Option<u16>,
+}
+
 /// Represents a rule attribute for matching device ports.
 #[derive(Debug, PartialEq, Clone)]
 pub struct PortAttribute {
@@ -252,6 +262,8 @@ pub struct UsbDevice {
     pub vendor_id: Option<u16>,
     /// The product ID of the device, if available.
     pub product_id: Option<u16>,
+    /// The device's release number in binary-coded decimal.
+    pub bcd_device: Option<u16>,
     /// A list of port identifiers the device is connected through.
     pub ports: Vec<String>,
     /// A list of interface types supported by the device.
@@ -271,6 +283,8 @@ pub struct DeviceAttributes {
     pub serial: Option<String>,
     /// Matches the device's vendor and/or product ID.
     pub with_id: Option<DeviceId>,
+    /// Matches the device's bcdDevice against a version range.
+    pub with_bcd_device_range: Option<BcdDeviceRange>,
     /// Matches the ports the device is connected via, using an optional operator.
     pub via_port: Option<PortAttribute>,
     /// Matches the interface types the device provides, using an optional operator.
@@ -303,6 +317,9 @@ impl DeviceAttributes {
                 "with-id" => {
                     attrs.with_id = Some(Self::parse_device_id(parts)?);
                 }
+                "with-bcd-device-range" => {
+                    attrs.with_bcd_device_range = Some(Self::parse_bcd_device_range(parts)?);
+                }
                 "with-interface" => {
                     attrs.with_interface = Some(Self::parse_interface_attribute(parts)?);
                 }
@@ -331,6 +348,7 @@ impl DeviceAttributes {
             || attribute_keyword == "with-id"
             || attribute_keyword == "with-interface"
             || attribute_keyword == "internal-device"
+            || attribute_keyword == "with-bcd-device-range"
             || attribute_keyword == "via-port"
     }
 
@@ -367,6 +385,39 @@ impl DeviceAttributes {
                 )
             },
         })
+    }
+
+    /// Parses the 'with-bcd-device-range' attribute, returning a `BcdDeviceRange` on success.
+    fn parse_bcd_device_range(
+        parts: &mut std::iter::Peekable<std::str::SplitWhitespace>,
+    ) -> Result<BcdDeviceRange, ParseError> {
+        let range_str =
+            parts.next().ok_or(ParseError::MissingValue("with-bcd-device-range".to_string()))?;
+        let (start_str, end_str) = range_str
+            .split_once(':')
+            .ok_or(ParseError::InvalidBcdDeviceRangeFormat(range_str.to_string()))?;
+
+        let start = u16::from_str_radix(start_str, 16)
+            .map_err(|e| ParseError::ParseIntError(e.to_string()))?;
+
+        let end = if end_str == "*" {
+            None
+        } else {
+            Some(
+                u16::from_str_radix(end_str, 16)
+                    .map_err(|e| ParseError::ParseIntError(e.to_string()))?,
+            )
+        };
+
+        if let Some(end_val) = end {
+            if start > end_val {
+                return Err(ParseError::InvalidBcdDeviceRangeFormat(
+                    "start of range cannot be greater than end of range".to_string(),
+                ));
+            }
+        }
+
+        Ok(BcdDeviceRange { start, end })
     }
 
     /// Parses the 'with-interface' attribute, returning an `InterfaceAttribute` on success.
@@ -612,6 +663,22 @@ impl Rule {
             }
         }
 
+        if let Some(bcd_range) = &attributes.with_bcd_device_range {
+            let Some(device_bcd) = device.bcd_device else {
+                // Rule requires bcdDevice, but device does not have one. No match.
+                return false;
+            };
+
+            if device_bcd < bcd_range.start {
+                return false;
+            }
+            if let Some(end) = bcd_range.end {
+                if device_bcd > end {
+                    return false;
+                }
+            }
+        }
+
         if let Some(rule_is_internal) = attributes.internal_device {
             if rule_is_internal != device.is_internal {
                 return false;
@@ -833,6 +900,106 @@ mod tests {
             assert_eq!(policy.rules_by_state.get(state).unwrap()[0], default_rule_1);
         }
     }
+
+    #[test]
+    fn test_parse_bcd_device_range_ok() {
+        // Test with a specific end
+        let mut parts = "1234:5678".split_whitespace().peekable();
+        let range = DeviceAttributes::parse_bcd_device_range(&mut parts).unwrap();
+        assert_eq!(range, BcdDeviceRange { start: 0x1234, end: Some(0x5678) });
+
+        // Test with a wildcard end
+        let mut parts = "abcd:*".split_whitespace().peekable();
+        let range = DeviceAttributes::parse_bcd_device_range(&mut parts).unwrap();
+        assert_eq!(range, BcdDeviceRange { start: 0xabcd, end: None });
+    }
+
+    #[test]
+    fn test_parse_bcd_device_range_invalid_format() {
+        let mut parts = "1234".split_whitespace().peekable();
+        let err = DeviceAttributes::parse_bcd_device_range(&mut parts).unwrap_err();
+        assert!(matches!(err, ParseError::InvalidBcdDeviceRangeFormat(_)));
+    }
+
+    #[test]
+    fn test_parse_bcd_device_range_invalid_range() {
+        let mut parts = "5678:1234".split_whitespace().peekable();
+        let err = DeviceAttributes::parse_bcd_device_range(&mut parts).unwrap_err();
+        assert!(matches!(err, ParseError::InvalidBcdDeviceRangeFormat(_)));
+    }
+
+    #[test]
+    fn test_evaluate_bcd_device_range() {
+        // Device bcdDevice is within the range
+        let rule = Rule {
+            action: Action::Allow,
+            attributes: Some(DeviceAttributes {
+                with_bcd_device_range: Some(BcdDeviceRange { start: 0x0200, end: Some(0x0299) }),
+                ..Default::default()
+            }),
+            condition: None,
+        };
+        let device = UsbDevice { bcd_device: Some(0x0250), ..Default::default() };
+        assert!(rule.evaluate(&device));
+
+        // Device bcdDevice is at the start of the range
+        let device = UsbDevice { bcd_device: Some(0x0200), ..Default::default() };
+        assert!(rule.evaluate(&device));
+
+        // Device bcdDevice is at the end of the range
+        let device = UsbDevice { bcd_device: Some(0x0299), ..Default::default() };
+        assert!(rule.evaluate(&device));
+
+        // Device bcdDevice is below the range
+        let device = UsbDevice { bcd_device: Some(0x0199), ..Default::default() };
+        assert!(!rule.evaluate(&device));
+
+        // Device bcdDevice is above the range
+        let device = UsbDevice { bcd_device: Some(0x0300), ..Default::default() };
+        assert!(!rule.evaluate(&device));
+
+        // Rule with wildcard end
+        let rule_wildcard = Rule {
+            action: Action::Allow,
+            attributes: Some(DeviceAttributes {
+                with_bcd_device_range: Some(BcdDeviceRange { start: 0x0300, end: None }),
+                ..Default::default()
+            }),
+            condition: None,
+        };
+
+        // Device bcdDevice is above the start
+        let device = UsbDevice { bcd_device: Some(0x0400), ..Default::default() };
+        assert!(rule_wildcard.evaluate(&device));
+
+        // Device bcdDevice is at the start
+        let device = UsbDevice { bcd_device: Some(0x0300), ..Default::default() };
+        assert!(rule_wildcard.evaluate(&device));
+
+        // Device bcdDevice is below the start
+        let device = UsbDevice { bcd_device: Some(0x0299), ..Default::default() };
+        assert!(!rule_wildcard.evaluate(&device));
+
+        // Device has no bcdDevice
+        let device_no_bcd = UsbDevice { bcd_device: None, ..Default::default() };
+        assert!(!rule.evaluate(&device_no_bcd));
+
+        // Rule has no bcd_device_range, device has bcdDevice. Should match.
+        let rule_no_bcd_range = Rule {
+            action: Action::Allow,
+            attributes: Some(DeviceAttributes {
+                name: Some("test".to_string()),
+                ..Default::default()
+            }),
+            condition: None,
+        };
+        let device_with_bcd = UsbDevice {
+            bcd_device: Some(0x0200),
+            name: Some("test".to_string()),
+            ..Default::default()
+        };
+        assert!(rule_no_bcd_range.evaluate(&device_with_bcd));
+    }
 }
 
 /// Represents an error that occurred when adding a rule to a policy.
@@ -864,6 +1031,9 @@ pub enum ParseError {
     /// Indicates an invalid format for a device ID (e.g., "123").
     #[error("Invalid device ID format: '{0}'")]
     InvalidDeviceIdFormat(String),
+    /// Indicates an invalid format for a bcdDevice range (e.g., "123").
+    #[error("Invalid bcdDevice range format: '{0}'")]
+    InvalidBcdDeviceRangeFormat(String),
     /// Indicates an error parsing a number (e.g., vendor ID, product ID, class).
     #[error("Parse integer error: '{0}'")]
     ParseIntError(String),

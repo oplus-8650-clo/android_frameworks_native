@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use ueventd::device::Device;
 
-/// Represents the possible errors that can occur in the `UsbDeviceManager`.
+/// Represents the possible errors that can occur in the `UsbDeviceAuthManager`.
 #[derive(Error, Debug)]
 pub enum Error {
     /// An I/O error occurred while interacting with the file system.
@@ -62,7 +62,7 @@ const USB_AUTH_INTERNAL_DEVICES_CONF_RELATIVE_PATH: &str = "usb_auth/internal_de
 struct InternalDevices;
 
 /// Manages the lists of USB devices based on their authorization state.
-pub struct UsbDeviceManager {
+pub struct UsbDeviceAuthManager {
     /// The root directory for the system files. Typically /sys, but might be
     /// different for testing.
     root_sys_dir: PathBuf,
@@ -81,7 +81,7 @@ pub struct UsbDeviceManager {
     policy: Policy,
 }
 
-impl UsbDeviceManager {
+impl UsbDeviceAuthManager {
     /// Returns a clone of the list of processed devices.
     pub fn processed_devices(&self) -> Vec<UsbDeviceInfoWithState> {
         self.processed_devices.clone()
@@ -120,12 +120,12 @@ impl UsbDeviceManager {
         UsbAuthorizationStatus::DENIED
     }
 
-    /// Creates a new `UsbDeviceManager` and performs initial setup.
+    /// Creates a new `UsbDeviceAuthManager` and performs initial setup.
     pub fn new() -> Result<Self, Error> {
         Self::with_paths("/sys", "/etc")
     }
 
-    /// Creates a new `UsbDeviceManager` with specified root directories and performs initial setup.
+    /// Creates a new `UsbDeviceAuthManager` with specified root directories and performs initial setup.
     /// This function is useful for testing with mock file systems.
     pub fn with_paths<P: AsRef<Path>, Q: AsRef<Path>>(
         root_sys_dir_path: P,
@@ -177,7 +177,7 @@ impl UsbDeviceManager {
         Ok(())
     }
     /// Iterates through existing USB devices and sets their 'authorized_default' to '0' (deny).
-    /// This is called during the initial setup of the UsbDeviceManager.
+    /// This is called during the initial setup of the UsbDeviceAuthManager.
     fn set_default_to_deny_for_new_devices(&mut self) -> Result<(), Error> {
         debug!("Setting default to deny for new devices");
         self.set_module_default_to_deny()?;
@@ -450,7 +450,7 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let manager = UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
 
         let authorized_default_path = mock_sys.path().join(USBCORE_AUTHORIZED_DEFAULT_PATH);
         assert_eq!(fs::read_to_string(authorized_default_path).unwrap(), "0");
@@ -474,7 +474,7 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
 
         assert_eq!(manager.policy.all_rules.len(), 1);
         assert_eq!(manager.policy.all_rules[0].action, Action::Allow);
@@ -485,7 +485,8 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let mut manager = UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let mut manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
 
         manager.processed_devices.push(UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "authorized".to_string(), ..Default::default() },
@@ -514,7 +515,8 @@ mod tests {
         // Defer everything in BOOTED state
         fs::write(&policy_file, "defer when Booted").unwrap();
 
-        let mut manager = UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let mut manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
         assert_eq!(manager.policy.all_rules.len(), 1);
 
         let device = UsbDeviceInfoWithState {

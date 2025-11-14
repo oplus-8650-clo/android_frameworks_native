@@ -4,14 +4,6 @@ package: "com.android.graphics.surfaceflinger.flags"
 container: "system"
 
 flag {
-  name: "connected_display"
-  namespace: "core_graphics"
-  description: "Controls SurfaceFlinger support for Connected Displays in 24Q1"
-  bug: "278199093"
-  is_fixed_read_only: true
-}
-
-flag {
   name: "multithreaded_present"
   namespace: "core_graphics"
   description: "Controls whether to offload present calls to another thread"

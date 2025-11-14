@@ -201,16 +201,6 @@ flag {
 }
 
 flag {
-  name: "use_cloned_screen_coordinates_as_raw"
-  namespace: "input"
-  description: "Use the cloned window's layer stack (screen) space as the raw coordinate space for input going to clones"
-  bug: "377846505"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "prevent_merging_input_pointer_devices"
   namespace: "desktop_input"
   description: "Prevent merging input sub-devices that provide pointer input streams"
@@ -275,4 +265,11 @@ flag {
   metadata {
     purpose: PURPOSE_BUGFIX
   }
+}
+
+flag {
+  name: "enable_attention_service_apis"
+  namespace: "input"
+  description: "Enable AttentionService APIs"
+  bug: "438159795"
 }
