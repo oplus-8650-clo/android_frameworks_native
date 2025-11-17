@@ -142,10 +142,10 @@ static bool intersectionIsRoundRect(const SkRect& bounds, const SkRect& crop,
     // In particular the round rect implementation will scale the value of all corner radii
     // if the sum of the radius along any edge is greater than the length of that edge.
     // See https://www.w3.org/TR/css-backgrounds-3/#corner-overlap
-    const bool requiredWidth = bounds.width() > (cornerRadii.topLeft.x + cornerRadii.topRight.x) ||
+    const bool requiredWidth = bounds.width() > (cornerRadii.topLeft.x + cornerRadii.topRight.x) &&
             bounds.width() > (cornerRadii.bottomLeft.x + cornerRadii.bottomRight.x);
     const bool requiredHeight =
-            bounds.height() > (cornerRadii.topLeft.y + cornerRadii.bottomLeft.y) ||
+            bounds.height() > (cornerRadii.topLeft.y + cornerRadii.bottomLeft.y) &&
             bounds.height() > (cornerRadii.topRight.y + cornerRadii.bottomRight.y);
     if (!requiredWidth || !requiredHeight) {
         return false;
@@ -216,9 +216,9 @@ static inline std::pair<SkRRect, SkRRect> getBoundsAndClip(
         // converting them to a single RRect draw. It is possible there are other cases
         // that can be converted.
         if (crop.contains(bounds)) {
-            float dx = std::min({cornerRadii.topLeft.x, cornerRadii.topRight.x,
+            float dx = std::max({cornerRadii.topLeft.x, cornerRadii.topRight.x,
                                  cornerRadii.bottomLeft.x, cornerRadii.bottomRight.x});
-            float dy = std::min({cornerRadii.topLeft.y, cornerRadii.topRight.y,
+            float dy = std::max({cornerRadii.topLeft.y, cornerRadii.topRight.y,
                                  cornerRadii.bottomLeft.y, cornerRadii.bottomRight.y});
             const auto insetCrop = crop.makeInset(dx, dy);
             if (insetCrop.contains(bounds)) {

@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
+// QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_BEGIN: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+// QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "Scheduler.h"
@@ -1786,22 +1790,13 @@ void Scheduler::setGameModeFrameRateForUid(FrameRateOverride frameRateOverride) 
         return;
     }
 
-    if (FlagManager::getInstance().game_default_frame_rate()) {
-        // update the frame rate override mapping in LayerHistory
-        mLayerHistory.updateGameModeFrameRateOverride(frameRateOverride);
-    } else {
-        mFrameRateOverrideMappings.setGameModeRefreshRateForUid(frameRateOverride);
-    }
+    // update the frame rate override mapping in LayerHistory
+    mLayerHistory.updateGameModeFrameRateOverride(frameRateOverride);
 
     onFrameRateOverridesChanged();
 }
 
 void Scheduler::setGameDefaultFrameRateForUid(FrameRateOverride frameRateOverride) {
-    if (!FlagManager::getInstance().game_default_frame_rate() ||
-        (frameRateOverride.frameRateHz > 0.f && frameRateOverride.frameRateHz < 1.f)) {
-        return;
-    }
-
     // update the frame rate override mapping in LayerHistory
     mLayerHistory.updateGameDefaultFrameRateOverride(frameRateOverride);
 }

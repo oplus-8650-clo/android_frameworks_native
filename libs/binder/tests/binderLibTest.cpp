@@ -31,6 +31,7 @@
 #include <android-base/properties.h>
 #include <android-base/result-gmock.h>
 #include <binder/Binder.h>
+#include <binder/BinderNetlink.h>
 #include <binder/BpBinder.h>
 #include <binder/Functional.h>
 #include <binder/IBinder.h>
@@ -47,6 +48,7 @@
 #include <utils/SystemClock.h>
 #include "binder/IServiceManagerUnitTestHelper.h"
 
+#include <linux/android/binderfs.h>
 #include <linux/sched.h>
 #include <sys/epoll.h>
 #include <sys/mman.h>
@@ -60,6 +62,7 @@
 
 using namespace android;
 using namespace android::binder::impl;
+using namespace android::bindernetlink;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using android::base::testing::HasValue;
@@ -461,6 +464,7 @@ class BinderLibTestEvent
             pthread_mutex_init(&m_waitMutex, nullptr);
             pthread_cond_init(&m_waitCond, nullptr);
         }
+        void reset() { m_eventTriggered = false; }
         int waitEvent(int timeout_s)
         {
             int ret;
@@ -1692,6 +1696,7 @@ TEST_F(BinderLibTest, FileDescriptorRemainsNonBlocking) {
 // buffers near the cap size.
 constexpr size_t kSizeBytesAlmostFull = 950'000;
 constexpr size_t kSizeBytesOverFull = 1'050'000;
+constexpr size_t kSizeBytesAsyncSpam = 480'000;
 
 TEST_F(BinderLibTest, GargantuanVectorSent) {
     sp<IBinder> server = addServer();
@@ -2086,6 +2091,244 @@ TEST_F(BinderLibTest, BinderProxyCountCallback) {
         createProxyOnce(kInvalidUid, kInvalidUid);
     }
     EXPECT_EQ(BpBinder::getBinderProxyCount(), initialCount);
+}
+
+class TestBinderNetlink : public BinderNetlink, public BinderLibTestEvent {
+private:
+    // A prefix for log messages.
+    static const char* mPrefix;
+
+    bool finished = false;
+    int result = NONE;
+
+    // The following values are expected to arrive in a message.
+    struct {
+        uint32_t from;
+        uint32_t to;
+        uint32_t code;
+        uint32_t error;
+    } expected;
+
+    // The report thread.
+    std::thread mMonitor;
+
+    void monitorBinderReport() {
+        result = STARTED;
+        triggerEvent();
+
+        int counter = 0;
+        while (!finished) {
+            Report report;
+            ALOGI("%s: waiting for binder report %d", mPrefix, counter++);
+            if (getReport(&report) < 0) {
+                if (errno == EAGAIN) {
+                    // The report timed out so the loop can test the finished flag.
+                } else {
+                    ALOGW("%s: failed to get next binder report: %s", mPrefix, strerror(errno));
+                    result = ERROR;
+                    triggerEvent();
+                    finished = true;
+                }
+            } else {
+                // A message has been received but it might be for some other process.  Log it
+                // and then see if it matches the configured expected values.
+                ALOGI("%s: binder report: %s", mPrefix, report.toString().c_str());
+                if (report.fromPid == expected.from && report.toPid == expected.to &&
+                    report.code == expected.code && report.error == expected.error) {
+                    ALOGI("Netlink: found expected report");
+                    result = FOUND;
+                    triggerEvent();
+                }
+            }
+        }
+        ALOGI("%s: exiting monitorBinderReport", mPrefix);
+    }
+
+public:
+    enum {
+        NONE,
+        ERROR,
+        FOUND,
+        STARTED,
+    };
+
+    // Set the expected values.  The monitor thread matches incoming messages against these
+    // values to know that a test message has been received.
+    void expect(uint32_t from, uint32_t to, uint32_t code, uint32_t error) {
+        ALOGD("%s: expect %u --> %u (%u) returns %u", mPrefix, from, to, code, error);
+        reset();
+        expected.from = from;
+        expected.to = to;
+        expected.code = code;
+        expected.error = error;
+        result = NONE;
+    }
+
+    // Fetch the result as set by the monitor thread.
+    int getResult() const { return result; }
+
+    void start() {
+        setTimeout(1);
+        mMonitor = std::thread(&TestBinderNetlink::monitorBinderReport, this);
+    }
+
+    void stop() {
+        // Signal to the thread to finish.  The thread will poll the finish flag ever second.
+        finished = true;
+        mMonitor.join();
+        close();
+    }
+};
+
+const char* TestBinderNetlink::mPrefix = "BinderNetlink";
+
+TEST_F(BinderLibTest, BinderNetlinkOpen) {
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+    binderNetlink.close();
+}
+
+TEST_F(BinderLibTest, BinderNetlinkMonitor) {
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+
+    binderNetlink.start();
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::STARTED, binderNetlink.getResult());
+    binderNetlink.stop();
+}
+
+TEST_F(BinderLibTest, BinderNetlinkFailedReply) {
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+
+    binderNetlink.start();
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::STARTED, binderNetlink.getResult());
+
+    Parcel data, reply, replypid;
+    EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_GETPID, data, &replypid));
+    int32_t pid = replypid.readInt32();
+
+    const std::vector<uint64_t> testValue(kSizeBytesOverFull / sizeof(uint64_t), 42);
+    data.writeUint64Vector(testValue);
+    binderNetlink.expect(getpid(), pid, BINDER_LIB_TEST_ECHO_VECTOR, BR_FAILED_REPLY);
+    EXPECT_EQ(FAILED_TRANSACTION, m_server->transact(BINDER_LIB_TEST_ECHO_VECTOR, data, &reply));
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::FOUND, binderNetlink.getResult());
+
+    bindernetlink::Statistics stats = binderNetlink.getStatistics();
+    EXPECT_EQ(0, stats.mUnknownAttribute);
+    EXPECT_EQ(0, stats.mUnknownCommand);
+
+    binderNetlink.stop();
+}
+
+TEST_F(BinderLibTest, BinderNetlinkFrozenReply) {
+    if (!checkFreezeSupport()) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support proceess freezing";
+    }
+
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+
+    binderNetlink.start();
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::STARTED, binderNetlink.getResult());
+
+    Parcel data, reply, replypid;
+    EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_GETPID, data, &replypid));
+    int32_t pid = replypid.readInt32();
+
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, true, 1000));
+    binderNetlink.expect(getpid(), pid, BINDER_LIB_TEST_NOP_TRANSACTION, BR_FROZEN_REPLY);
+    EXPECT_EQ(FAILED_TRANSACTION,
+              m_server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::FOUND, binderNetlink.getResult());
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
+
+    bindernetlink::Statistics stats = binderNetlink.getStatistics();
+    EXPECT_EQ(0, stats.mUnknownAttribute);
+    EXPECT_EQ(0, stats.mUnknownCommand);
+
+    binderNetlink.stop();
+}
+
+TEST_F(BinderLibTest, BinderNetlinkPendingReply) {
+    if (!checkFreezeSupport()) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support proceess freezing";
+    }
+
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+
+    binderNetlink.start();
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::STARTED, binderNetlink.getResult());
+
+    Parcel data, reply, replypid;
+    EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_GETPID, data, &replypid));
+    int32_t pid = replypid.readInt32();
+
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, true, 1000));
+    binderNetlink.expect(getpid(), pid, BINDER_LIB_TEST_NOP_TRANSACTION,
+                         BR_TRANSACTION_PENDING_FROZEN);
+    EXPECT_EQ(NO_ERROR,
+              m_server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply, TF_ONE_WAY));
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::FOUND, binderNetlink.getResult());
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
+
+    bindernetlink::Statistics stats = binderNetlink.getStatistics();
+    EXPECT_EQ(0, stats.mUnknownAttribute);
+    EXPECT_EQ(0, stats.mUnknownCommand);
+
+    binderNetlink.stop();
+}
+
+TEST_F(BinderLibTest, BinderNetlinkSpamReply) {
+    if (!checkFreezeSupport()) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support proceess freezing";
+    }
+
+    TestBinderNetlink binderNetlink;
+    if (binderNetlink.open() < 0) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support Binder Netlink report";
+    }
+
+    binderNetlink.start();
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::STARTED, binderNetlink.getResult());
+
+    Parcel data, reply, replypid;
+    EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_GETPID, data, &replypid));
+    int32_t pid = replypid.readInt32();
+
+    const std::vector<uint64_t> testValue(kSizeBytesAsyncSpam / sizeof(uint64_t), 42);
+    data.writeUint64Vector(testValue);
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, true, 1000));
+    binderNetlink.expect(getpid(), pid, BINDER_LIB_TEST_ECHO_VECTOR, BR_ONEWAY_SPAM_SUSPECT);
+    EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_ECHO_VECTOR, data, &reply, TF_ONE_WAY));
+    binderNetlink.waitEvent(5);
+    EXPECT_EQ(TestBinderNetlink::FOUND, binderNetlink.getResult());
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
+
+    bindernetlink::Statistics stats = binderNetlink.getStatistics();
+    EXPECT_EQ(0, stats.mUnknownAttribute);
+    EXPECT_EQ(0, stats.mUnknownCommand);
+
+    binderNetlink.stop();
 }
 
 class BinderLibRpcTestBase : public BinderLibTest {
