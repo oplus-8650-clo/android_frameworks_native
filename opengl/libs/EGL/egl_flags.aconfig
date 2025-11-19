@@ -11,3 +11,14 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "do_not_unload_driver_from_updatable_apk"
+  namespace: "gpu"
+  description: "This flag controls behavior to address bugs in system driver unloading logic"
+  bug: "448201398"
+  is_fixed_read_only: true
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

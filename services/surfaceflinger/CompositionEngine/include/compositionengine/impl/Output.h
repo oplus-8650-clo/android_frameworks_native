@@ -293,7 +293,7 @@ std::shared_ptr<BaseOutput> createOutputTemplated(const CompositionEngine& compo
         // Note: This is declared as a private virtual non-override so it can be
         // an override implementation in the unit tests, but otherwise is not an
         // accessible override for the normal implementation.
-        virtual void injectOutputLayerForTest(std::unique_ptr<OutputLayer> outputLayer) {
+        void injectOutputLayerForTest(std::unique_ptr<OutputLayer> outputLayer) {
             mCurrentOutputLayersOrderedByZ.emplace_back(std::move(outputLayer));
         }
 

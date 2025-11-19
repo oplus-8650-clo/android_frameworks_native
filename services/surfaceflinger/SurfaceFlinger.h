@@ -642,8 +642,7 @@ private:
     status_t removeFpsListener(const sp<gui::IFpsListener>& listener);
     status_t addTunnelModeEnabledListener(const sp<gui::ITunnelModeEnabledListener>& listener);
     status_t removeTunnelModeEnabledListener(const sp<gui::ITunnelModeEnabledListener>& listener);
-    status_t setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                        const gui::DisplayModeSpecs&);
+    status_t setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&);
     status_t getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken, gui::DisplayModeSpecs*);
     status_t getDisplayBrightnessSupport(const sp<IBinder>& displayToken, bool* outSupport) const;
     status_t setDisplayBrightness(const sp<IBinder>& displayToken,
@@ -1869,8 +1868,7 @@ public:
             const sp<gui::ITunnelModeEnabledListener>& listener) override;
     binder::Status removeTunnelModeEnabledListener(
             const sp<gui::ITunnelModeEnabledListener>& listener) override;
-    binder::Status setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                              const gui::DisplayModeSpecs&) override;
+    binder::Status setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&) override;
     binder::Status getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
                                               gui::DisplayModeSpecs* outSpecs) override;
     binder::Status getDisplayBrightnessSupport(const sp<IBinder>& displayToken,

@@ -78,6 +78,7 @@ private:
     void resetGestureInterpreter(nsecs_t when);
     explicit TouchpadInputMapper(InputDeviceContext& deviceContext,
                                  const InputReaderConfiguration& readerConfig);
+    void configureAccelerationCurves();
     void updatePalmDetectionMetrics();
     [[nodiscard]] std::list<NotifyArgs> sendHardwareState(nsecs_t when, nsecs_t readTime,
                                                           SelfContainedHardwareState schs);
@@ -102,6 +103,8 @@ private:
     HardwareProperties mHardwareProperties;
 
     PointerCaptureMode mCaptureMode = PointerCaptureMode::UNCAPTURED;
+    int32_t mPointerSpeed = 0;
+    bool mAccelerationEnabled = true;
     bool mResettingInterpreter = false;
     std::vector<Gesture> mGesturesToProcess;
 

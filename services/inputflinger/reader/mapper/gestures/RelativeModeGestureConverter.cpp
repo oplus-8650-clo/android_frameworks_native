@@ -90,7 +90,6 @@ std::list<NotifyArgs> RelativeModeGestureConverter::handleMove(nsecs_t when, nse
                                                                const Gesture& gesture) {
     float deltaX = gesture.details.move.dx;
     float deltaY = gesture.details.move.dy;
-    // TODO(b/403531245): scale the deltas to be similar to those from a captured mouse.
 
     std::list<NotifyArgs> out;
     PointerCoords coords;
@@ -170,7 +169,6 @@ std::list<NotifyArgs> RelativeModeGestureConverter::handleScroll(nsecs_t when, n
                                                                  const Gesture& gesture) {
     PointerCoords coords;
     coords.clear();
-    // TODO(b/403531245): scale the scroll values to be similar to those from a captured mouse.
     coords.setAxisValue(AMOTION_EVENT_AXIS_VSCROLL, gesture.details.scroll.dy);
     coords.setAxisValue(AMOTION_EVENT_AXIS_HSCROLL, gesture.details.scroll.dx);
     coords.setAxisValue(AMOTION_EVENT_AXIS_PRESSURE, isPointerDown(mButtonState) ? 1.0f : 0.0f);

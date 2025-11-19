@@ -64,6 +64,7 @@ inline bool equalIgnoringBuffer(const renderengine::LayerSettings& lhs,
 
 bool layerSettingsAreEqual(const LayerFE::LayerSettings& lhs, const LayerFE::LayerSettings& rhs) {
     return lhs.bufferId == rhs.bufferId && lhs.frameNumber == rhs.frameNumber &&
+            lhs.renderCommandBufferFrameId == rhs.renderCommandBufferFrameId &&
             equalIgnoringBuffer(lhs, rhs);
 }
 

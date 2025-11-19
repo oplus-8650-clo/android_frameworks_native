@@ -2529,6 +2529,32 @@ SurfaceComposerClient::Transaction::clearTrustedPresentationCallback(const sp<Su
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderCommandBuffer(
+        const sp<SurfaceControl>& sc,
+        const std::shared_ptr<RenderCommandBufferProducer>& producer) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderCommandBufferChanged;
+    s->renderCommandBufferProducer = producer;
+    return *this;
+}
+
+SurfaceComposerClient::Transaction&
+SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<SurfaceControl>& sc,
+                                                                  uint64_t frameId) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderCommandBufferFrameIdChanged;
+    s->renderCommandBufferFrameId = frameId;
+    return *this;
+}
+
 // ---------------------------------------------------------------------------
 
 SurfaceComposerClient::SurfaceComposerClient() : mStatus(NO_INIT) {}
@@ -2871,11 +2897,10 @@ status_t SurfaceComposerClient::getActiveDisplayMode(const sp<IBinder>& display,
     return NAME_NOT_FOUND;
 }
 
-status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                                           const gui::DisplayModeSpecs& specs) {
+status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(
+        const std::vector<gui::DisplayModeSpecs>& specs) {
     binder::Status status =
-            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(displayToken,
-                                                                                  specs);
+            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(specs);
     return statusTFromBinderStatus(status);
 }
 

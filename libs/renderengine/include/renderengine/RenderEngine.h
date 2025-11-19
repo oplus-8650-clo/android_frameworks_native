@@ -159,7 +159,6 @@ public:
         None,
         Gaussian,
         Kawase,
-        KawaseDualFilter,
         KawaseDualFilterV2,
 
         ftl_last = KawaseDualFilterV2

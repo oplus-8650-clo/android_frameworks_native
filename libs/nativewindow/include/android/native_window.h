@@ -392,7 +392,7 @@ inline int32_t ANativeWindow_clearFrameRate(ANativeWindow* _Nonnull window) __IN
  * or vkPresentKHR() calls will stall the CPU until the GPU is done processing the previous
  * frame. This API allows to disable this throttling while queueing a buffer.
  *
- * While the default it to have throttling enabled, the more correct and efficient behavior
+ * While the default is to have throttling enabled, the more correct and efficient behavior
  * is to have it disabled. Unfortunately, some Vulkan applications may inadvertently rely
  * on this stall which effectively behaves as consumer/producer synchronization, albeit,
  * inefficiently. It is therefore recommended to always disable throttling and perform
@@ -402,7 +402,7 @@ inline int32_t ANativeWindow_clearFrameRate(ANativeWindow* _Nonnull window) __IN
  * buffer is dequeued, based on the size of the queue. This typically happen during the
  * first drawing in OpenGL ES and in vkAcquireNextImageKHR() in Vulkan.
  *
- * his API has no effect in asynchronous mode, where throttling is always enabled.
+ * This API has no effect in asynchronous mode, where throttling is always enabled.
  *
  * Available since API level 37.
  *

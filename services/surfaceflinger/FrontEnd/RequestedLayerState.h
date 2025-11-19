@@ -113,6 +113,7 @@ struct RequestedLayerState : layer_state_t {
     // The owner pid of the layer. If created from a non system process, it will be the calling pid.
     // If created from a system process, the value can be passed in.
     const gui::Pid ownerPid;
+    const uint64_t ownerPermissions;
     bool dataspaceRequested;
     bool hasColorTransform;
     bool transformIsValid = true;

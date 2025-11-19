@@ -299,9 +299,9 @@ nsecs_t VSyncPredictor::snapToVsync(nsecs_t timePoint) const {
 
     auto const printer = [&, slope = slope, intercept = intercept, oldest = mOldestVsync] {
         std::stringstream str;
-        str << "prediction made from: " << timePoint << "prediction: " << prediction << " (+"
+        str << "prediction made from: " << timePoint << " prediction: " << prediction << " (+"
             << prediction - timePoint << ") slope: " << slope << " intercept: " << intercept
-            << "oldestTS: " << oldest << " ordinal: " << ordinalRequest;
+            << " oldestTS: " << oldest << " ordinal: " << ordinalRequest;
         return str.str();
     };
 

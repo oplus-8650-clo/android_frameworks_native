@@ -501,10 +501,8 @@ void EventThread::onModeAndFrameRateOverridesChanged(PhysicalDisplayId displayId
     for (auto frameRateOverride : overrides) {
         mPendingEvents.push_back(makeFrameRateOverrideEvent(displayId, frameRateOverride));
     }
-    if (FlagManager::getInstance().supported_refresh_rate_update()) {
-        for (float refreshRate : supportedRefreshRates) {
-            mPendingEvents.push_back(makeSupportedRefreshRateEvent(displayId, refreshRate));
-        }
+    for (float refreshRate : supportedRefreshRates) {
+        mPendingEvents.push_back(makeSupportedRefreshRateEvent(displayId, refreshRate));
     }
     mPendingEvents.push_back(makeModeChanged(mode, config));
 

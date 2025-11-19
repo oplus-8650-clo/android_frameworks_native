@@ -53,6 +53,7 @@ RequestedLayerState::RequestedLayerState(const LayerCreationArgs& args)
         layerCreationFlags(args.flags),
         ownerUid(args.ownerUid),
         ownerPid(args.ownerPid),
+        ownerPermissions(args.ownerPermissions),
         parentId(args.parentId),
         layerIdToMirror(args.layerIdToMirror),
         stopLayerId(args.stopLayerId),
@@ -182,6 +183,11 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
         if ((oldFlags ^ flags) & layer_state_t::eCanOccludePresentation) {
             changes |= RequestedLayerState::Changes::Input;
         }
+    }
+
+    if (clientState.what & layer_state_t::eRenderCommandBufferChanged) {
+        changes |= RequestedLayerState::Changes::Input | RequestedLayerState::Changes::Geometry |
+                RequestedLayerState::Changes::Buffer;
     }
 
     if (clientState.what & layer_state_t::eBufferChanged) {

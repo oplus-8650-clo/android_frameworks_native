@@ -4618,7 +4618,6 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRates) {
         return;
     }
 
-    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
     auto selector = createSelector(kModes_1_10_60_90_120, kModeId90);
     const FpsRange range60 = {0_Hz, 60_Hz};
     EXPECT_EQ(SetPolicyResult::Changed,
@@ -4642,7 +4641,6 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRRNonGroupMode) {
     if (!enableFrameRateOverride) {
         return;
     }
-    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
     const auto selector = createSelector(kModes_1_10_60_90G1_120, kModeId90);
 
     const std::vector<float> expected = {90.0f, 45.0f, 30.0f, 22.5f};
