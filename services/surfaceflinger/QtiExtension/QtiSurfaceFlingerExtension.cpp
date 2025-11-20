@@ -1255,11 +1255,16 @@ bool QtiSurfaceFlingerExtension::qtiIsScreenshot(const std::string& layer_name) 
 void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState& state) {
     ConditionalLock lock(mQtiFlinger->mStateLock,
                          std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
+
+    if (state.isVirtual()) {
+        return;
+    }
+
     const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(state.getPhysical().id);
     const auto& displayObject = displayOpt->get();
     const auto& snapshot = displayObject.snapshot();
 
-    if (state.isVirtual() || snapshot.connectionType() == ui::DisplayConnectionType::External) {
+    if (snapshot.connectionType() == ui::DisplayConnectionType::External) {
         return;
     }
 
