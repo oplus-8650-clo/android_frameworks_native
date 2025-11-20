@@ -1102,6 +1102,13 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
                 scaling_caps->maxScaledImageExtent = capabilities->maxImageExtent;
             } break;
 
+            case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_ID_2_KHR: {
+                VkSurfaceCapabilitiesPresentId2KHR* present_id2 =
+                    reinterpret_cast<VkSurfaceCapabilitiesPresentId2KHR*>(pNext);
+                present_id2->presentId2Supported = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT: {
                 VkSurfacePresentModeCompatibilityEXT* mode_caps =
                     reinterpret_cast<VkSurfacePresentModeCompatibilityEXT*>(pNext);

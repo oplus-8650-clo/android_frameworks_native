@@ -86,6 +86,7 @@ cc_defaults {
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         "-DLOG_TAG=\"SurfaceFlinger\"",
+        "-DFMT_CPP_LIB_FILESYSTEM=0", // b/455625875
         "-Wall",
         "-Wconversion",
         "-Werror",

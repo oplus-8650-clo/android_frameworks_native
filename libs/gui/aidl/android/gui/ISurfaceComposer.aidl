@@ -424,11 +424,11 @@ interface ISurfaceComposer {
     void removeTunnelModeEnabledListener(ITunnelModeEnabledListener listener);
 
     /**
-     * Sets the refresh rate boundaries for the display.
+     * Sets the mode specifications for multiple displays, to be applied atomically.
      *
      * @see DisplayModeSpecs.aidl for details.
      */
-    void setDesiredDisplayModeSpecs(IBinder displayToken, in DisplayModeSpecs specs);
+    void setDesiredDisplayModeSpecs(in DisplayModeSpecs[] specs);
 
     DisplayModeSpecs getDesiredDisplayModeSpecs(IBinder displayToken);
 

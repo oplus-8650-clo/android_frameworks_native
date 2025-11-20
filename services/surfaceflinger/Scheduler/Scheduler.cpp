@@ -1586,7 +1586,8 @@ auto Scheduler::applyPolicy(S Policy::* statePtr, T&& newState,
         modeRequests.reserve(modeChoices.size());
         emitModeChangedEvents.reserve(modeChoices.size());
         for (auto& [id, choice] : modeChoices) {
-            modeRequests.emplace_back(display::DisplayModeRequest{.mode = choice.mode});
+            modeRequests.emplace_back(
+                    display::DisplayModeRequest{.mode = choice.mode, .seamless = true});
             emitModeChangedEvents.emplace_back(
                     display::DisplayModeRequest{.mode = choice.mode,
                                                 .emitEvent = choice.consideredSignals

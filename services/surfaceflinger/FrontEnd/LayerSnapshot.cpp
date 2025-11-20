@@ -128,6 +128,7 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     inputInfo.ownerPid = gui::Pid{state.ownerPid};
     uid = state.ownerUid;
     pid = state.ownerPid;
+    permissions = state.ownerPermissions;
     changes = RequestedLayerState::Changes::Created;
     clientChanges = 0;
     mirrorRootPath =
@@ -194,7 +195,7 @@ bool LayerSnapshot::hasEffect() const {
 }
 
 bool LayerSnapshot::hasSomethingToDraw() const {
-    return hasEffect() || hasBufferOrSidebandStream();
+    return hasEffect() || hasBufferOrSidebandStream() || renderCommandBufferConsumer != nullptr;
 }
 
 bool LayerSnapshot::isContentOpaque() const {
@@ -575,6 +576,20 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
     if (forceUpdate || requested.what & layer_state_t::eLutsChanged) {
         luts = requested.luts;
     }
+
+    if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferChanged) {
+        renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+    }
+    if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferFrameIdChanged) {
+        renderCommandBufferFrameId = requested.renderCommandBufferFrameId;
+        // TODO(b/459526480): We should implement the barrier logic here and only
+        // acquire the target frame.
+        if (renderCommandBufferConsumer != nullptr) {
+            renderCommandBufferConsumer->consumerAcquire();
+        }
+    }
+
+    forceClientComposition = (renderCommandBufferConsumer != nullptr);
 }
 
 char LayerSnapshot::classifyCompositionForDebug(

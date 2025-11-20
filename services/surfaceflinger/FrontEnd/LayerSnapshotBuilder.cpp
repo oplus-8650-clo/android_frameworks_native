@@ -1010,11 +1010,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
+    if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderCommandBufferChanged) {
+        snapshot.renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+    }
+
     // computed snapshot properties
     snapshot.forceClientComposition = snapshot.shadowSettings.length > 0 ||
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
             snapshot.borderSettings.strokeWidth > 0 ||
-            !snapshot.boxShadowSettings.boxShadows.empty();
+            !snapshot.boxShadowSettings.boxShadows.empty() ||
+            snapshot.renderCommandBufferConsumer != nullptr;
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
     snapshot.isOpaque = snapshot.contentOpaque &&

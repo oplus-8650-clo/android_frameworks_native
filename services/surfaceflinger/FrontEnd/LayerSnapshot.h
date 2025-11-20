@@ -150,6 +150,8 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     // True when the surfaceDamage is recognized as a small area update.
     bool isSmallDirty = false;
 
+    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+
     static bool isOpaqueFormat(PixelFormat format);
     static bool isTransformValid(const ui::Transform& t);
 

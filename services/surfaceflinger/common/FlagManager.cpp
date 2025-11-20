@@ -129,6 +129,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
+    DUMP_ACONFIG_FLAG(enable_color_correction_desktop_bugfix);
     DUMP_ACONFIG_FLAG(frontend_caching_v0);
     DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
@@ -146,7 +147,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(resync_on_tx_separate_timer);
     DUMP_ACONFIG_FLAG(set_power_mode_async);
-    DUMP_ACONFIG_FLAG(supported_refresh_rate_update);
     DUMP_ACONFIG_FLAG(use_at_least_60_for_min_vote);
     DUMP_ACONFIG_FLAG(use_experimental_jank_classification);
 
@@ -299,6 +299,7 @@ FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
 FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_bugfix, "");
+FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_desktop_bugfix, "");
 FLAG_MANAGER_ACONFIG_FLAG(frontend_caching_v0, "");
 FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
                           "debug.sf.get_display_known_vsync_sample_enabled");
@@ -316,7 +317,6 @@ FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx_separate_timer, "");
 FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
-FLAG_MANAGER_ACONFIG_FLAG(supported_refresh_rate_update, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_at_least_60_for_min_vote, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 

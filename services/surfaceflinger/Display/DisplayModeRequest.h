@@ -32,6 +32,9 @@ struct DisplayModeRequest {
 
     // Whether to force the request to be applied, even if the mode is unchanged.
     bool force = false;
+
+    // Whether the request is expected to happen seamlessly (without visual artifact).
+    bool seamless = false;
 };
 
 inline bool operator==(const DisplayModeRequest& lhs, const DisplayModeRequest& rhs) {

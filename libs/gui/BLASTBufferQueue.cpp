@@ -883,7 +883,7 @@ void BLASTBufferQueue::onFrameAvailable(const BufferItem& item) {
 }
 
 void BLASTBufferQueue::onFrameReplaced(const BufferItem& item) {
-    BQA_LOGV("onFrameReplaced framenumber=%" PRIu64, item.mFrameNumber);
+    ALOGV("[%s] onFrameReplaced framenumber=%" PRIu64, mName.c_str(), item.mFrameNumber);
     // Do nothing since we are not storing unacquired buffer items locally.
 }
 

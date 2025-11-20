@@ -33,6 +33,8 @@ public:
     RenderCommandBuffer* consumerAcquire();
     void consumerRelease();
 
+    RenderCommandBuffer* getCurrentBuffer() { return mCurrentBuffer; }
+
     void adoptFdCommandBuffer(int fd);
 
     static status_t readFromParcel(const Parcel& parcel, RenderCommandBufferConsumer* consumer);

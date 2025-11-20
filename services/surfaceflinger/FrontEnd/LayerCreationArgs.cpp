@@ -19,6 +19,7 @@
 #include <private/android_filesystem_config.h>
 #include "Client.h"
 #include "gui/LayerMetadata.h"
+#include "gui/LayerStatePermissions.h"
 
 namespace android::surfaceflinger {
 
@@ -48,6 +49,8 @@ LayerCreationArgs::LayerCreationArgs(SurfaceFlinger* flinger, sp<Client> client,
         ownerUid = static_cast<uid_t>(
                 metadata.getInt32(gui::METADATA_OWNER_UID, static_cast<int32_t>(ownerUid)));
     }
+    ownerPermissions =
+            LayerStatePermissions::getTransactionPermissions(ownerPid, static_cast<int>(ownerUid));
 
     if (internalLayer) {
         sequence = id.value_or(getInternalLayerId(sInternalSequence++));

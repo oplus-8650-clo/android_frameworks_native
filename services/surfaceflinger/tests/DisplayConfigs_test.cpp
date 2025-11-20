@@ -52,7 +52,7 @@ protected:
     }
 
     void TearDown() override {
-        status_t res = SurfaceComposerClient::setDesiredDisplayModeSpecs(mDisplayToken, mSpecs);
+        status_t res = SurfaceComposerClient::setDesiredDisplayModeSpecs({mSpecs});
         ASSERT_EQ(res, NO_ERROR);
     }
 
@@ -66,6 +66,7 @@ protected:
         ASSERT_GT(modes.size(), 0);
         for (const auto& mode : modes) {
             gui::DisplayModeSpecs setSpecs;
+            setSpecs.displayToken = mDisplayToken;
             setSpecs.defaultMode = mode.id;
             setSpecs.allowGroupSwitching = allowGroupSwitching;
             setSpecs.primaryRanges.physical.min = mode.peakRefreshRate;
@@ -73,7 +74,7 @@ protected:
             setSpecs.primaryRanges.render = setSpecs.primaryRanges.physical;
             setSpecs.appRequestRanges = setSpecs.primaryRanges;
 
-            res = SurfaceComposerClient::setDesiredDisplayModeSpecs(mDisplayToken, setSpecs);
+            res = SurfaceComposerClient::setDesiredDisplayModeSpecs({setSpecs});
             ASSERT_EQ(res, NO_ERROR);
             gui::DisplayModeSpecs getSpecs;
             res = SurfaceComposerClient::getDesiredDisplayModeSpecs(mDisplayToken, &getSpecs);

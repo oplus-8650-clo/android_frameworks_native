@@ -1739,19 +1739,7 @@ void RefreshRateSelector::setLayerFilter(LayerFilter layerFilter) {
 }
 
 FpsRange RefreshRateSelector::getSupportedFrameRateRangeLocked() const {
-    if ((FlagManager::getInstance().anchor_list() && mIsVrrDisplay) ||
-        FlagManager::getInstance().supported_refresh_rate_update()) {
-        // When supported_refresh_rate_update is enabled include all the modes below 20Fps for MRR,
-        // and for VRR results are capped with the kMinSupportedRefreshRate, these checks
-        // are enforced in createFrameRateModes, that's why the range here starts with 0.
-        return {0_Hz, mMaxRefreshRateModeIt->second->getPeakFps()};
-    }
-
-    using fps_approx_ops::operator<;
-    if (mMaxRefreshRateModeIt->second->getPeakFps() < kMinSupportedFrameRate) {
-        return {mMaxRefreshRateModeIt->second->getPeakFps(), kMinSupportedFrameRate};
-    }
-    return {kMinSupportedFrameRate, mMaxRefreshRateModeIt->second->getPeakFps()};
+    return {0_Hz, mMaxRefreshRateModeIt->second->getPeakFps()};
 }
 
 auto RefreshRateSelector::getIdleTimerAction() const -> KernelIdleTimerAction {

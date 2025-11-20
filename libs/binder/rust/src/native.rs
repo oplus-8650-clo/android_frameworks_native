@@ -27,7 +27,7 @@ use std::ffi::c_void;
 #[cfg(feature = "std")]
 use std::ffi::CStr;
 #[cfg(feature = "std")]
-use std::io::Write;
+use std::io::{Read, Write};
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::os::raw::c_char;
@@ -269,6 +269,17 @@ impl<T: Remotable> Interface for Binder<T> {
     fn dump(&self, writer: &mut dyn Write, args: &[&CStr]) -> Result<()> {
         self.on_dump(writer, args)
     }
+
+    #[cfg(all(feature = "std", not(android_ndk)))]
+    fn shell_command(
+        &self,
+        stdin: &mut dyn Read,
+        stdout: &mut dyn Write,
+        stderr: &mut dyn Write,
+        args: &[&CStr],
+    ) -> Result<()> {
+        self.on_shell_command(stdin, stdout, stderr, args)
+    }
 }
 
 impl<T: Remotable> InterfaceClassMethods for Binder<T> {
@@ -410,6 +421,85 @@ impl<T: Remotable> InterfaceClassMethods for Binder<T> {
         // right now because we do not have a uniform way of writing to handles.
         StatusCode::INVALID_OPERATION as status_t
     }
+
+    /// Called to handle the `shellCommand` transaction.
+    ///
+    /// # Safety
+    ///
+    /// Must be called with a non-null, valid pointer to a local `AIBinder` that
+    /// contains a `T` pointer in its user data. stdin, stdout, and stderr
+    /// should be non-owned file descriptors, and args must be an array of
+    /// null-terminated string pointers with length num_args.
+    #[cfg(all(not(trusty), feature = "std", not(android_ndk)))]
+    unsafe extern "C" fn on_shell_command(
+        binder: *mut sys::AIBinder,
+        stdin: i32,
+        stdout: i32,
+        stderr: i32,
+        args: *mut *const c_char,
+        num_args: u32,
+    ) -> status_t {
+        if stdin < 0 || stdout < 0 || stderr < 0 {
+            return StatusCode::UNEXPECTED_NULL as status_t;
+        }
+        use std::fs::File;
+        use std::os::fd::FromRawFd;
+        // SAFETY: Our caller promised that stdin, stdout, and stderr are file
+        // descriptors. We don't own these file descriptors, so we need to be
+        // careful not to drop them.
+        let (mut stdin, mut stdout, mut stderr) = unsafe {
+            (
+                ManuallyDrop::new(File::from_raw_fd(stdin)),
+                ManuallyDrop::new(File::from_raw_fd(stdout)),
+                ManuallyDrop::new(File::from_raw_fd(stderr)),
+            )
+        };
+
+        if args.is_null() && num_args != 0 {
+            return StatusCode::UNEXPECTED_NULL as status_t;
+        }
+
+        let args = if args.is_null() || num_args == 0 {
+            vec![]
+        } else {
+            // SAFETY: Our caller promised that `args` is an array of
+            // null-terminated string pointers with length `num_args`.
+            unsafe {
+                std::slice::from_raw_parts(args, num_args as usize)
+                    .iter()
+                    .map(|s| CStr::from_ptr(*s))
+                    .collect()
+            }
+        };
+
+        // SAFETY: Our caller promised that `binder` is a non-null, valid
+        // pointer to a local `AIBinder`.
+        let object = unsafe { sys::AIBinder_getUserData(binder) };
+        // SAFETY: Our caller promised that the binder has a `T` pointer in its
+        // user data.
+        let binder: &T = unsafe { &*(object as *const T) };
+        let res = binder.on_shell_command(&mut *stdin, &mut *stdout, &mut *stderr, &args);
+
+        match res {
+            Ok(()) => 0,
+            Err(e) => e as status_t,
+        }
+    }
+
+    /// Called to handle the `shellCommand` transaction.
+    #[cfg(any(trusty, not(feature = "std"), android_ndk))]
+    unsafe extern "C" fn on_shell_command(
+        _binder: *mut sys::AIBinder,
+        _stdin: i32,
+        _stdout: i32,
+        _stderr: i32,
+        _args: *mut *const c_char,
+        _num_args: u32,
+    ) -> status_t {
+        // This operation is not supported on Trusty or no_std environments
+        // right now because we do not have a uniform way of writing to handles.
+        StatusCode::INVALID_OPERATION as status_t
+    }
 }
 
 impl<T: Remotable> Drop for Binder<T> {
@@ -507,6 +597,17 @@ impl Remotable for () {
         Ok(())
     }
 
+    #[cfg(all(feature = "std", not(android_ndk)))]
+    fn on_shell_command(
+        &self,
+        _stdin: &mut dyn std::io::Read,
+        _stdout: &mut dyn Write,
+        _stderr: &mut dyn Write,
+        _args: &[&CStr],
+    ) -> Result<()> {
+        Ok(())
+    }
+
     binder_fn_get_class!(Binder::<Self>);
 }
 
@@ -540,6 +641,18 @@ mod tests {
             Ok(())
         }
 
+        #[cfg(not(android_ndk))]
+        fn on_shell_command(
+            &self,
+            _stdin: &mut dyn std::io::Read,
+            stdout: &mut dyn Write,
+            _stderr: &mut dyn Write,
+            args: &[&CStr],
+        ) -> Result<()> {
+            write!(stdout, "TestRemotable shell command with {:?}", args).unwrap();
+            Ok(())
+        }
+
         binder_fn_get_class!(Binder::<Self>);
     }
 
@@ -550,5 +663,22 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         binder_object.dump(&mut buffer, &[c"arg1", c"arg2"]).unwrap();
         assert_eq!(str::from_utf8(&buffer), Ok("TestRemotable dumped with [\"arg1\", \"arg2\"]"));
+    }
+
+    #[test]
+    #[cfg(not(android_ndk))]
+    fn shell_command() {
+        let binder_object = Binder::new(TestRemotable);
+
+        let mut input: &[u8] = &[];
+        let mut output: Vec<u8> = Vec::new();
+        let mut error: Vec<u8> = Vec::new();
+        binder_object
+            .shell_command(&mut input, &mut output, &mut error, &[c"arg1", c"arg2"])
+            .unwrap();
+        assert_eq!(
+            str::from_utf8(&output),
+            Ok("TestRemotable shell command with [\"arg1\", \"arg2\"]")
+        );
     }
 }

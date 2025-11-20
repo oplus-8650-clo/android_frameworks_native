@@ -60,6 +60,7 @@ public:
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
+    bool enable_color_correction_desktop_bugfix() const;
     bool frontend_caching_v0() const;
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;
@@ -76,7 +77,6 @@ public:
     bool refresh_rate_overlay_on_external_display() const;
     bool resync_on_tx_separate_timer() const;
     bool set_power_mode_async() const;
-    bool supported_refresh_rate_update() const;
     bool use_at_least_60_for_min_vote() const;
     bool use_experimental_jank_classification() const;
 

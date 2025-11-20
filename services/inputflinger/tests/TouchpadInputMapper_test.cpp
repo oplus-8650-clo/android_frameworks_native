@@ -19,12 +19,12 @@
 #include <android-base/logging.h>
 #include <gtest/gtest.h>
 #include <input/AccelerationCurve.h>
+#include <input/Input.h>
 
 #include <log/log.h>
 #include <list>
 #include <thread>
 #include "InputMapperTest.h"
-#include "InterfaceMocks.h"
 #include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestEventMatchers.h"
@@ -116,7 +116,76 @@ protected:
                 .WillRepeatedly([]() -> base::Result<std::vector<int32_t>> {
                     return base::ResultError("Axis not supported", NAME_NOT_FOUND);
                 });
+
+        // User's settings - enable pointer acceleration
+        mReaderConfiguration.touchpadAccelerationEnabled = true;
+
         mMapper = createInputMapper<TouchpadInputMapper>(*mDeviceContext, mReaderConfiguration);
+    }
+
+    void assertAccelCurvePropEquals(const std::string& propName,
+                                    const std::vector<AccelerationCurveSegment>& expectedSegments) {
+        SCOPED_TRACE(testing::Message() << "Gesture property \"" << propName << "\"");
+        auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
+
+        const auto prop = touchpadMapper->getGesturePropertyForTesting(propName);
+        ASSERT_TRUE(prop.has_value());
+
+        std::vector<double> actualValues = prop.value().getRealValues();
+
+        for (size_t i = 0; i < expectedSegments.size(); ++i) {
+            SCOPED_TRACE(testing::Message() << "i = " << i);
+            if (std::isinf(expectedSegments[i].maxPointerSpeedMmPerS)) {
+                ASSERT_TRUE(std::isinf(actualValues[i * 4 + 0]));
+            } else {
+                ASSERT_NEAR(actualValues[i * 4 + 0], expectedSegments[i].maxPointerSpeedMmPerS,
+                            EPSILON);
+            }
+
+            ASSERT_NEAR(actualValues[i * 4 + 1], 0, EPSILON);
+            ASSERT_NEAR(actualValues[i * 4 + 2], expectedSegments[i].baseGain, EPSILON);
+            ASSERT_NEAR(actualValues[i * 4 + 3], expectedSegments[i].reciprocal, EPSILON);
+        }
+    }
+
+    void assertBothCurvesEqual(const std::vector<AccelerationCurveSegment>& expectedSegments) {
+        assertAccelCurvePropEquals("Pointer Accel Curve", expectedSegments);
+        assertAccelCurvePropEquals("Scroll Accel Curve", expectedSegments);
+    }
+
+    void assertRelativeModeCurvesInUse() {
+        auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
+
+        // The pointer curve should be flat (i.e. a single segment with infinite maximum speed).
+        const auto pointerCurveProp =
+                touchpadMapper->getGesturePropertyForTesting("Pointer Accel Curve");
+        ASSERT_TRUE(pointerCurveProp.has_value());
+
+        std::vector<double> pointerCurveValues = pointerCurveProp.value().getRealValues();
+        ASSERT_TRUE(std::isinf(pointerCurveValues[0]));
+        ASSERT_NEAR(pointerCurveValues[1], 0, EPSILON);
+        // What exact gain it has is an implementation detail subject to change, so we don't want to
+        // assert an exact value.
+        double pointerCurveGain = pointerCurveValues[2];
+        ASSERT_GT(pointerCurveGain, 0);
+        ASSERT_NEAR(pointerCurveValues[3], 0, EPSILON);
+
+        // The scroll curve should also be flat.
+        const auto scrollCurveProp =
+                touchpadMapper->getGesturePropertyForTesting("Scroll Accel Curve");
+        ASSERT_TRUE(scrollCurveProp.has_value());
+
+        std::vector<double> scrollCurveValues = scrollCurveProp.value().getRealValues();
+        ASSERT_TRUE(std::isinf(scrollCurveValues[0]));
+        ASSERT_NEAR(scrollCurveValues[1], 0, EPSILON);
+        // Again, we don't want to specify the exact gain, but it should be positive and smaller
+        // than the pointer curve's gain (since a scroll wheel tick is a much larger movement than a
+        // single-pixel move on a mouse, so the scroll numbers reported in relative mode should be
+        // much smaller than the cursor movement numbers for the same physical distance moved).
+        double scrollCurveGain = scrollCurveValues[2];
+        ASSERT_GT(scrollCurveGain, 0);
+        ASSERT_LT(scrollCurveGain, pointerCurveGain);
+        ASSERT_NEAR(scrollCurveValues[3], 0, EPSILON);
     }
 };
 
@@ -229,19 +298,9 @@ TEST_F(TouchpadInputMapperTest, TouchpadAccelerationDisabled) {
     std::list<NotifyArgs> args =
             mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
                                  InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
-    auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
 
-    const auto accelCurvePropsDisabled =
-            touchpadMapper->getGesturePropertyForTesting("Pointer Accel Curve");
-    ASSERT_TRUE(accelCurvePropsDisabled.has_value());
-    std::vector<double> curveValuesDisabled = accelCurvePropsDisabled.value().getRealValues();
-    std::vector<AccelerationCurveSegment> curve =
-            createFlatAccelerationCurve(mReaderConfiguration.touchpadPointerSpeed);
-    double expectedBaseGain = curve[0].baseGain;
-    ASSERT_EQ(curveValuesDisabled[0], std::numeric_limits<double>::infinity());
-    ASSERT_EQ(curveValuesDisabled[1], 0);
-    ASSERT_NEAR(curveValuesDisabled[2], expectedBaseGain, EPSILON);
-    ASSERT_EQ(curveValuesDisabled[3], 0);
+    ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(
+            createFlatAccelerationCurve(mReaderConfiguration.touchpadPointerSpeed)));
 }
 
 TEST_F(TouchpadInputMapperTest, TouchpadAccelerationEnabled) {
@@ -254,35 +313,69 @@ TEST_F(TouchpadInputMapperTest, TouchpadAccelerationEnabled) {
                                  InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
     ASSERT_THAT(args, testing::IsEmpty());
 
-    auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
-
-    // Get the acceleration curve properties when acceleration is enabled.
-    const auto accelCurvePropsEnabled =
-            touchpadMapper->getGesturePropertyForTesting("Pointer Accel Curve");
-    ASSERT_TRUE(accelCurvePropsEnabled.has_value());
-
-    // Get the curve values.
-    std::vector<double> curveValuesEnabled = accelCurvePropsEnabled.value().getRealValues();
-
     // Use createAccelerationCurveForPointerSensitivity to get expected curve segments.
-    std::vector<AccelerationCurveSegment> expectedCurveSegments =
-            createAccelerationCurveForPointerSensitivity(mReaderConfiguration.touchpadPointerSpeed);
+    ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(
+            mReaderConfiguration.touchpadPointerSpeed)));
+}
 
-    // Iterate through the segments and compare the values.
-    for (size_t i = 0; i < expectedCurveSegments.size(); ++i) {
-        // Check max speed.
-        if (std::isinf(expectedCurveSegments[i].maxPointerSpeedMmPerS)) {
-            ASSERT_TRUE(std::isinf(curveValuesEnabled[i * 4 + 0]));
-        } else {
-            ASSERT_NEAR(curveValuesEnabled[i * 4 + 0],
-                        expectedCurveSegments[i].maxPointerSpeedMmPerS, EPSILON);
-        }
+TEST_F(TouchpadInputMapperTest, AccelerationDisabledDuringCapture) {
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
+    std::list<NotifyArgs> args =
+            mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                 InputReaderConfiguration::Change::POINTER_CAPTURE);
+    ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
 
-        // Check that the x^2 term is zero.
-        ASSERT_NEAR(curveValuesEnabled[i * 4 + 1], 0, EPSILON);
-        ASSERT_NEAR(curveValuesEnabled[i * 4 + 2], expectedCurveSegments[i].baseGain, EPSILON);
-        ASSERT_NEAR(curveValuesEnabled[i * 4 + 3], expectedCurveSegments[i].reciprocal, EPSILON);
-    }
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    args = mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+    ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(
+            mReaderConfiguration.touchpadPointerSpeed)));
+}
+
+TEST_F(TouchpadInputMapperTest, ExitingCaptureWithAccelerationDisabledDoesntReenable) {
+    mReaderConfiguration.touchpadAccelerationEnabled = false;
+    mReaderConfiguration.touchpadPointerSpeed = 3;
+    std::list<NotifyArgs> args =
+            mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                 InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
+    args = mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+    ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
+
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    args = mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(
+            createFlatAccelerationCurve(mReaderConfiguration.touchpadPointerSpeed)));
+}
+
+TEST_F(TouchpadInputMapperTest, ChangingSettingsDuringCaptureDoesntReenableAcceleration) {
+    constexpr int32_t NEW_POINTER_SPEED = 3;
+    ASSERT_NE(mReaderConfiguration.touchpadPointerSpeed, NEW_POINTER_SPEED);
+
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
+    std::list<NotifyArgs> args =
+            mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                 InputReaderConfiguration::Change::POINTER_CAPTURE);
+    ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
+
+    // Changing the pointer speed settings shouldn't result in an immediate change to the curve,
+    // since we're in pointer capture.
+    mReaderConfiguration.touchpadAccelerationEnabled = true;
+    mReaderConfiguration.touchpadPointerSpeed = NEW_POINTER_SPEED;
+    args = mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+    ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
+
+    // ...but once we leave capture, the new speed should take effect.
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    args = mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                InputReaderConfiguration::Change::POINTER_CAPTURE);
+    ASSERT_NO_FATAL_FAILURE(
+            assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(NEW_POINTER_SPEED)));
 }
 
 } // namespace android

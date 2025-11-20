@@ -19,9 +19,11 @@
 #include <algorithm>
 #include <chrono>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
+#include <vector>
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
@@ -30,6 +32,7 @@
 #include <com_android_input_flags.h>
 #include <ftl/enum.h>
 #include <input/AccelerationCurve.h>
+#include <input/Input.h>
 #include <input/PrintTools.h>
 #include <linux/input-event-codes.h>
 #include <log/log_main.h>
@@ -48,12 +51,33 @@ namespace android {
 
 namespace {
 
-std::vector<double> createAccelerationCurveForSensitivity(int32_t sensitivity,
-                                                          bool accelerationEnabled,
-                                                          size_t propertySize) {
-    std::vector<AccelerationCurveSegment> segments = accelerationEnabled
-            ? createAccelerationCurveForPointerSensitivity(sensitivity)
-            : createFlatAccelerationCurve(sensitivity);
+/**
+ * The amount of movement to report from a 1mm finger movement when in RELATIVE capture mode.
+ *
+ * When in RELATIVE capture mode, we want to send MOVE events with relative X and Y values that are
+ * in a similar range to those that an app might expect from a captured mouse, so we scale them up
+ * using this factor.
+ *
+ * For context, mice typically report movements of between 32–630 counts per mm (800–16,000 counts
+ * per inch).
+ */
+constexpr double RELATIVE_MODE_POINTER_MOVEMENT_PER_MM = 50;
+
+/**
+ * The amount of scrolling to report from a 1mm two-finger swipe when in RELATIVE capture mode, in
+ * "wheel ticks".
+ *
+ * When in RELATIVE capture mode, we want to send SCROLL events with relative X and Y values that
+ * are in a similar range to those that an app might expect from a captured mouse, so we scale them
+ * up using this factor.
+ *
+ * For context, mice typically report 1 wheel tick per 20–40° of rotation of a 15–20mm diameter
+ * wheel, which works out to roughly 0.1–0.4 ticks per mm of horizontal finger movement.
+ */
+constexpr double RELATIVE_MODE_SCROLL_TICKS_PER_MM = 0.15;
+
+std::vector<double> convertCurveToGesturePropValues(
+        const std::vector<AccelerationCurveSegment>& segments, size_t propertySize) {
     LOG_ALWAYS_FATAL_IF(propertySize < 4 * segments.size());
     std::vector<double> output(propertySize, 0);
 
@@ -375,20 +399,9 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
     }
     std::list<NotifyArgs> out;
     if (!changes.any() || changes.test(InputReaderConfiguration::Change::TOUCHPAD_SETTINGS)) {
-        mPropertyProvider.getProperty("Use Custom Touchpad Pointer Accel Curve")
-                .setBoolValues({true});
-        GesturesProp accelCurveProp = mPropertyProvider.getProperty("Pointer Accel Curve");
-        accelCurveProp.setRealValues(
-                createAccelerationCurveForSensitivity(config.touchpadPointerSpeed,
-                                                      config.touchpadAccelerationEnabled,
-                                                      accelCurveProp.getCount()));
-        mPropertyProvider.getProperty("Use Custom Touchpad Scroll Accel Curve")
-                .setBoolValues({true});
-        GesturesProp scrollCurveProp = mPropertyProvider.getProperty("Scroll Accel Curve");
-        scrollCurveProp.setRealValues(
-                createAccelerationCurveForSensitivity(config.touchpadPointerSpeed,
-                                                      config.touchpadAccelerationEnabled,
-                                                      scrollCurveProp.getCount()));
+        mPointerSpeed = config.touchpadPointerSpeed;
+        mAccelerationEnabled = config.touchpadAccelerationEnabled;
+        configureAccelerationCurves();
         mPropertyProvider.getProperty("Scroll X Out Scale").setRealValues({1.0});
         mPropertyProvider.getProperty("Scroll Y Out Scale").setRealValues({1.0});
         mPropertyProvider.getProperty("Invert Scrolling")
@@ -438,6 +451,7 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
                 break;
         }
         mCaptureMode = config.pointerCaptureRequest.mode;
+        configureAccelerationCurves();
         // The motion ranges are going to change, so bump the generation to clear the cached ones.
         bumpGeneration();
         if (changes.any()) {
@@ -445,6 +459,41 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
         }
     }
     return out;
+}
+
+void TouchpadInputMapper::configureAccelerationCurves() {
+    std::vector<AccelerationCurveSegment> pointerCurve;
+    std::vector<AccelerationCurveSegment> scrollCurve;
+    if (mCaptureMode == PointerCaptureMode::RELATIVE) {
+        // The gestures library applies a hardcoded scaling factor of 133/25.4 to all touchpad
+        // motion. In relative mode we don't want this scaling, so we cancel it out so that output
+        // values are the distances moved by the finger(s) in mm.
+        pointerCurve = {AccelerationCurveSegment{.maxPointerSpeedMmPerS =
+                                                         std::numeric_limits<double>::infinity(),
+                                                 .baseGain = RELATIVE_MODE_POINTER_MOVEMENT_PER_MM *
+                                                         25.4 / 133,
+                                                 .reciprocal = 0}};
+        scrollCurve = {
+                AccelerationCurveSegment{.maxPointerSpeedMmPerS =
+                                                 std::numeric_limits<double>::infinity(),
+                                         .baseGain = RELATIVE_MODE_SCROLL_TICKS_PER_MM * 25.4 / 133,
+                                         .reciprocal = 0}};
+    } else if (mAccelerationEnabled) {
+        pointerCurve = createAccelerationCurveForPointerSensitivity(mPointerSpeed);
+        scrollCurve = pointerCurve;
+    } else {
+        pointerCurve = createFlatAccelerationCurve(mPointerSpeed);
+        scrollCurve = pointerCurve;
+    }
+    mPropertyProvider.getProperty("Use Custom Touchpad Pointer Accel Curve").setBoolValues({true});
+    GesturesProp accelCurveProp = mPropertyProvider.getProperty("Pointer Accel Curve");
+    accelCurveProp.setRealValues(
+            convertCurveToGesturePropValues(pointerCurve, accelCurveProp.getCount()));
+
+    mPropertyProvider.getProperty("Use Custom Touchpad Scroll Accel Curve").setBoolValues({true});
+    GesturesProp scrollCurveProp = mPropertyProvider.getProperty("Scroll Accel Curve");
+    scrollCurveProp.setRealValues(
+            convertCurveToGesturePropValues(scrollCurve, scrollCurveProp.getCount()));
 }
 
 std::list<NotifyArgs> TouchpadInputMapper::reset(nsecs_t when) {

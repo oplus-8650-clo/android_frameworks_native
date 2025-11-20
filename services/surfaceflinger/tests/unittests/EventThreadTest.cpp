@@ -946,8 +946,6 @@ TEST_F(EventThreadTest, postHcpLevelsChanged) {
 }
 
 TEST_F(EventThreadTest, postOnModeChangedAndFrameRateOverride) {
-    SET_FLAG_FOR_TEST(flags::supported_refresh_rate_update, true);
-
     setupEventThread();
     const std::vector<FrameRateOverride> overrides = {
             {.uid = 1, .frameRateHz = 20},
