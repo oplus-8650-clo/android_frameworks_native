@@ -606,8 +606,9 @@ void QtiSurfaceFlingerExtension::qtiSetContentFps(uint32_t contentFps) {
             return;
         }
 
-        auto perf_hal_status = base::GetIntProperty("vendor.mpctl.init.complete", 0);
-        if (!perf_hal_status) {
+        auto perf_hal_status = base::GetProperty("init.svc.perf2-hal-1-0", "");
+        auto perf_hal_init_status = base::GetIntProperty("vendor.mpctl.init.complete", 0);
+        if (perf_hal_status == "stopped" || !perf_hal_init_status) {
             ALOGV("Perf-Hal service is stopped number of attempts %d", mQtiFailedAttempts);
             mQtiFailedAttempts += 1;
             if (mQtiFailedAttempts > (int) contentFps / 2) {
