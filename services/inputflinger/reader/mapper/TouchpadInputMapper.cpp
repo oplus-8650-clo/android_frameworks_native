@@ -329,7 +329,9 @@ void TouchpadInputMapper::populateDeviceInfo(InputDeviceInfo& info) {
             mCapturedEventConverter.populateMotionRanges(info);
             break;
         case PointerCaptureMode::RELATIVE:
-            // TODO(b/403531245): populate motion ranges from the relative mode gesture converter.
+            mRelativeModeGestureConverter
+                    .populateMotionRanges(info, RELATIVE_MODE_POINTER_MOVEMENT_PER_MM,
+                                          RELATIVE_MODE_SCROLL_TICKS_PER_MM);
             break;
     }
 }

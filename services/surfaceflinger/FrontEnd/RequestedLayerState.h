@@ -143,6 +143,7 @@ struct RequestedLayerState : layer_state_t {
     std::vector<uint32_t> mirrorIds{};
     ftl::Flags<RequestedLayerState::Changes> changes;
     bool bgColorLayer = false;
+    nsecs_t lastUpdateTime = 0;
 };
 
 } // namespace android::surfaceflinger::frontend

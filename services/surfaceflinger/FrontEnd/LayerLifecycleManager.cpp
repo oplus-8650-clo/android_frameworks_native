@@ -209,6 +209,7 @@ void LayerLifecycleManager::applyTransactions(
             uint32_t oldRelativeParentId = layer->relativeParentId;
             uint32_t oldTouchCropId = layer->touchCropId;
             layer->merge(resolvedComposerState);
+            layer->lastUpdateTime = transaction.postTime;
 
             if (layer->what & layer_state_t::eBackgroundColorChanged) {
                 RequestedLayerState* bgColorLayer = nullptr;

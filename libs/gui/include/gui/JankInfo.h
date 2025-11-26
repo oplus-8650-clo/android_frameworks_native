@@ -57,6 +57,14 @@ enum JankType {
     DisplayNotOn = 0x1000,
 };
 
+// IMPORTANT: update this whenever a new value is added to JankType.
+constexpr int kJankTypeAll = JankType::None | JankType::DisplayHAL |
+        JankType::SurfaceFlingerCpuDeadlineMissed | JankType::SurfaceFlingerGpuDeadlineMissed |
+        JankType::AppDeadlineMissed | JankType::PredictionError |
+        JankType::SurfaceFlingerScheduling | JankType::BufferStuffing | JankType::Unknown |
+        JankType::SurfaceFlingerStuffing | JankType::Dropped | JankType::NonAnimating |
+        JankType::AppResyncedJitter | JankType::DisplayNotOn;
+
 // Jank severity type tracked by SurfaceFlinger(SF) for Perfetto tracing and telemetry.
 enum class JankSeverityType {
     // Unknown: not enough information to classify the severity of a jank

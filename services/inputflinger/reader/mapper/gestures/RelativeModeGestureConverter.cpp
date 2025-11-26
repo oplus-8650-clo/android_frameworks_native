@@ -28,6 +28,7 @@
 #include "gestures/GestureConverterCommon.h"
 #include "include/gestures.h"
 #include "input/Input.h"
+#include "input/InputDevice.h"
 #include "ui/LogicalDisplayId.h"
 
 namespace android {
@@ -68,6 +69,22 @@ std::list<NotifyArgs> RelativeModeGestureConverter::reset(nsecs_t when) {
     }
     mDownTime = 0;
     return out;
+}
+
+void RelativeModeGestureConverter::populateMotionRanges(InputDeviceInfo& info,
+                                                        double pointerMovementPerMm,
+                                                        double scrollTicksPerMm) const {
+    info.addMotionRange(AMOTION_EVENT_AXIS_PRESSURE, SOURCE, 0.0f, 1.0f, 0, 0, 0);
+
+    info.addMotionRange(AMOTION_EVENT_AXIS_X, SOURCE, -1.0f, 1.0f, 0, 0, pointerMovementPerMm);
+    info.addMotionRange(AMOTION_EVENT_AXIS_Y, SOURCE, -1.0f, 1.0f, 0, 0, pointerMovementPerMm);
+    info.addMotionRange(AMOTION_EVENT_AXIS_RELATIVE_X, SOURCE, -1.0f, 1.0f, 0, 0,
+                        pointerMovementPerMm);
+    info.addMotionRange(AMOTION_EVENT_AXIS_RELATIVE_Y, SOURCE, -1.0f, 1.0f, 0, 0,
+                        pointerMovementPerMm);
+
+    info.addMotionRange(AMOTION_EVENT_AXIS_VSCROLL, SOURCE, -1.0f, 1.0f, 0, 0, scrollTicksPerMm);
+    info.addMotionRange(AMOTION_EVENT_AXIS_HSCROLL, SOURCE, -1.0f, 1.0f, 0, 0, scrollTicksPerMm);
 }
 
 std::list<NotifyArgs> RelativeModeGestureConverter::handleGesture(nsecs_t when, nsecs_t readTime,
