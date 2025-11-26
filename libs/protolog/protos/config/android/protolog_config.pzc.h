@@ -23,8 +23,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "../../common/protolog_common.pzc.h"
 #include "perfetto/public/pb_macros.h"
-#include "perfetto/public/protos/common/protolog_common.pzc.h"
 
 PERFETTO_PB_MSG_DECL(perfetto_protos_ProtoLogGroup);
 

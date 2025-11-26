@@ -32,6 +32,8 @@
 
 namespace android::renderengine::skia {
 
+class PipelineCallbackHandler;
+
 /**
  * Abstraction over Ganesh and Graphite's underlying context-like objects.
  *
@@ -62,7 +64,8 @@ public:
      */
     static std::unique_ptr<SkiaGpuContext> MakeVulkan_Graphite(
             const skgpu::VulkanBackendContext& vulkanBackendContext,
-            SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects);
+            SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
+            PipelineCallbackHandler* callbackHandler);
 
     virtual ~SkiaGpuContext() = default;
 

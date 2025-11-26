@@ -174,9 +174,10 @@ void TouchResamplingTest::consumeInputEventEntries(const std::vector<InputEventE
     uint32_t consumeSeq;
     InputEvent* event;
 
-    status_t status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, frameTime.count(),
-                                         &consumeSeq, &event);
-    ASSERT_EQ(OK, status);
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, frameTime.count(),
+                               &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok());
     MotionEvent* motionEvent = static_cast<MotionEvent*>(event);
 
     ASSERT_EQ(entries.size() - 1, motionEvent->getHistorySize());
@@ -214,7 +215,7 @@ void TouchResamplingTest::consumeInputEventEntries(const std::vector<InputEventE
         }
     }
 
-    status = mConsumer->sendFinishedSignal(consumeSeq, true);
+    status_t status = mConsumer->sendFinishedSignal(consumeSeq, true);
     ASSERT_EQ(OK, status);
 
     receiveResponseUntilSequence(consumeSeq);

@@ -52,6 +52,7 @@ public:
     void destroySemaphore(VkSemaphore semaphore);
 
     bool isInitialized() const { return mInitialized; }
+    bool isProtected() const { return mIsProtected; }
     bool isRealtimePriority() const { return mIsRealtimePriority; }
 
     uint32_t driverVersion() const { return mPhysicalDeviceProperties.driverVersion; }

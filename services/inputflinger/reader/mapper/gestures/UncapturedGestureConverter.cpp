@@ -111,6 +111,7 @@ std::list<NotifyArgs> UncapturedGestureConverter::reset(nsecs_t when) {
         default:
             break;
     }
+    out += exitHover(when, when);
     mCurrentClassification = MotionClassification::NONE;
     mDownTime = 0;
     return out;

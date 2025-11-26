@@ -43,6 +43,8 @@ public:
     /* Gets the underlying input channel. */
     inline std::shared_ptr<InputChannel> getChannel() { return mChannel; }
 
+    using ConsumeResult = android::base::Result<void>;
+
     /* Consumes an input event from the input channel and copies its contents into
      * an InputEvent object created using the specified factory.
      *
@@ -66,8 +68,8 @@ public:
      * Returns NO_MEMORY if the event could not be created.
      * Other errors probably indicate that the channel is broken.
      */
-    status_t consume(InputEventFactoryInterface* factory, bool consumeBatches, nsecs_t frameTime,
-                     uint32_t* outSeq, InputEvent** outEvent);
+    ConsumeResult consume(InputEventFactoryInterface* factory, bool consumeBatches,
+                          nsecs_t frameTime, uint32_t* outSeq, InputEvent** outEvent);
 
     /* Sends a finished signal to the publisher to inform it that the message
      * with the specified sequence number has finished being process and whether
