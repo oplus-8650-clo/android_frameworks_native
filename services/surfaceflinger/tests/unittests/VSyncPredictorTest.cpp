@@ -265,8 +265,6 @@ TEST_F(VSyncPredictorTest, adaptsToFenceTimelinesDiscontinuous_22hzLowVariance) 
             5591378272, // 122
     };
     auto idealPeriod = 45454545;
-    auto expectedPeriod = 45450152;
-    auto expectedIntercept = 469647;
 
     tracker.setDisplayModePtr(displayMode(idealPeriod));
     for (auto const& timestamp : simulatedVsyncs) {
@@ -291,8 +289,6 @@ TEST_F(VSyncPredictorTest, againstOutliersDiscontinuous_500hzLowVariance) {
             2410121051, // 1204
     };
     auto idealPeriod = 2000000;
-    auto expectedPeriod = 1999892;
-    auto expectedIntercept = 86342;
 
     tracker.setDisplayModePtr(displayMode(idealPeriod));
     for (auto const& timestamp : simulatedVsyncs) {
@@ -492,8 +488,6 @@ TEST_F(VSyncPredictorTest, doesNotPredictBeforeTimePointWithHigherIntercept) {
             158929650879052, 158929661969209, 158929684198847, 158929695268171, 158929706370359,
     };
     auto const idealPeriod = 11111111;
-    auto const expectedPeriod = 11113919;
-    auto const expectedIntercept = -1195945;
 
     tracker.setDisplayModePtr(displayMode(idealPeriod));
     for (auto const& timestamp : simulatedVsyncs) {
@@ -703,8 +697,6 @@ TEST_F(VSyncPredictorTest, robustToDuplicateTimestamps_60hzRealTraceData) {
             198857715631, 198890885797, 198924199640, 198940873834, 198974204401,
     };
     auto constexpr idealPeriod = 16'666'666;
-    auto constexpr expectedPeriod = 16'644'742;
-    auto constexpr expectedIntercept = 125'626;
 
     tracker.setDisplayModePtr(displayMode(idealPeriod));
     for (auto const& timestamp : simulatedVsyncs) {

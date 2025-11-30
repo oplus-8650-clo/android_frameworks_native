@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <utils/Timers.h>
 #include <memory>
 #include <vector>
 #include "FrontEnd/LayerSnapshotBuilder.h"
@@ -47,6 +48,7 @@ public:
     // Accumulates LayerHierarchies to construct an MergeableHierarchy.
     class Accumulator {
     public:
+        Accumulator() : mTime(systemTime(SYSTEM_TIME_MONOTONIC)) {}
         // Add a new LayerHierarchy to the equivalency. True if adding it was successful
         bool add(const LayerHierarchy* hierarchy);
 
@@ -60,6 +62,7 @@ public:
         }
 
     private:
+        nsecs_t mTime;
         std::vector<HierarchyState> mHierarchies;
         std::vector<LayerSnapshot*> mSnapshots;
     };

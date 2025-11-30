@@ -273,3 +273,13 @@ flag {
   description: "Enable AttentionService APIs"
   bug: "438159795"
 }
+
+flag {
+  name: "fix_input_anr_by_send_message_exception"
+  namespace: "input"
+  description: "Fix a bug where unhandled finishInputEvent statuses were causing ANRs on cancelled motion events"
+  bug: "422114163"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

@@ -55,4 +55,19 @@ typedef void (*WriteFlagValueFunction)(bool);
     WriteFlagValueFunction write##NAME = com::android::input::flags::NAME; \
     ScopedFlagOverride override##NAME(read##NAME, write##NAME, (VALUE))
 
+/**
+ * Use this macro to override a flag value for a whole test fixture.
+ * Example usage:
+ *    FIXTURE_FLAG_OVERRIDE(enable_multi_device_same_window_stream, false);
+ * Note: this works by creating a member variable in your fixture. Don't call this twice for the
+ * same flag, because the variable names will clash!
+ */
+#define FIXTURE_FLAG_OVERRIDE(NAME, VALUE)                                \
+    ScopedFlagOverride mOverride##NAME =                                  \
+            ScopedFlagOverride(static_cast<ReadFlagValueFunction>(        \
+                                       com::android::input::flags::NAME), \
+                               static_cast<WriteFlagValueFunction>(       \
+                                       com::android::input::flags::NAME), \
+                               (VALUE))
+
 } // namespace android

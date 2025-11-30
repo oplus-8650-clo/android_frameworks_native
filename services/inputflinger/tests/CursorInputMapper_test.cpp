@@ -1194,18 +1194,13 @@ TEST_F(CursorInputMapperUnitTest, ConfigureAccelerationOnDisplayChange) {
 //  XYDensityDependentCursorUnitTest when corrosponding flags are fully released
 class DensityDependentCursorUnitTest : public CursorInputMapperUnitTest {
 protected:
-    std::unique_ptr<ScopedFlagOverride> mScaleWithDpiFlagOverride;
     std::unique_ptr<ScopedFlagOverride> mSeparateXYFlagOverride;
+    FIXTURE_FLAG_OVERRIDE(scale_cursor_speed_with_dpi, true);
 
     void SetUp() override {
         ReadFlagValueFunction read_xy = input_flags::use_separate_xy_dpi_scaling_for_mice;
         WriteFlagValueFunction write_xy = input_flags::use_separate_xy_dpi_scaling_for_mice;
         mSeparateXYFlagOverride = std::make_unique<ScopedFlagOverride>(read_xy, write_xy, false);
-
-        ReadFlagValueFunction read_scale = input_flags::scale_cursor_speed_with_dpi;
-        WriteFlagValueFunction write_scale = input_flags::scale_cursor_speed_with_dpi;
-        mScaleWithDpiFlagOverride =
-                std::make_unique<ScopedFlagOverride>(read_scale, write_scale, true);
 
         CursorInputMapperUnitTest::SetUp();
     }
@@ -1350,11 +1345,6 @@ TEST_F(DensityDependentCursorUnitTest, DoesNotScaleCursorMoveWithPointerCaptureE
 class XYDensityDependentCursorUnitTest : public DensityDependentCursorUnitTest {
 protected:
     void SetUp() override {
-        ReadFlagValueFunction read_scale = input_flags::scale_cursor_speed_with_dpi;
-        WriteFlagValueFunction write_scale = input_flags::scale_cursor_speed_with_dpi;
-        mScaleWithDpiFlagOverride =
-                std::make_unique<ScopedFlagOverride>(read_scale, write_scale, true);
-
         ReadFlagValueFunction read_xy = input_flags::use_separate_xy_dpi_scaling_for_mice;
         WriteFlagValueFunction write_xy = input_flags::use_separate_xy_dpi_scaling_for_mice;
         mSeparateXYFlagOverride = std::make_unique<ScopedFlagOverride>(read_xy, write_xy, true);

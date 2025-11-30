@@ -20,6 +20,8 @@
 
 #include <include/gpu/graphite/BackendSemaphore.h>
 
+#include "compat/PipelineCallbackHandler.h"
+
 namespace android::renderengine::skia {
 
 class GraphiteVkRenderEngine : public SkiaVkRenderEngine {
@@ -40,6 +42,9 @@ private:
 
     std::thread mPrecompilePipelinesTask;
     std::vector<graphite::BackendSemaphore> mStagedWaitSemaphores;
+
+    PipelineCallbackHandler mPipelineCallbackHandler;
+    PipelineCallbackHandler mProtectedPipelineCallbackHandler;
 };
 
 } // namespace android::renderengine::skia

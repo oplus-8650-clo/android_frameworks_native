@@ -169,6 +169,10 @@ public:
                              std::optional<std::vector<uint8_t>>* outSmpte2094_10);
     status_t setSmpte2094_10(buffer_handle_t bufferHandle,
                              std::optional<std::vector<uint8_t>> smpte2094_10);
+    status_t getSmpte2094_50(buffer_handle_t bufferHandle,
+                             std::optional<std::vector<uint8_t>>* outSmpte2094_50);
+    status_t setSmpte2094_50(buffer_handle_t bufferHandle,
+                             std::optional<std::vector<uint8_t>> smpte2094_50);
 
     const GrallocMapper& getGrallocMapper() const {
         return reinterpret_cast<const GrallocMapper&>(*mMapper);

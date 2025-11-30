@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include "FrontEnd/Caching/MergeableHierarchy.h"
 #include "compositionengine/CompositionEngine.h"
@@ -23,10 +24,60 @@
 namespace android::surfaceflinger::frontend {
 
 namespace caching {
+using namespace std::chrono_literals;
 
 // Manages the lifecycle of MergeableHierarchies constructed from the layer graph
 class MergeableHierarchyManager {
 public:
+    // Collection of tunables which are backed by sysprops
+    struct Tunables {
+        // Tunables that are specific to scheduling when a mergeable hierarchy should be rendered
+        struct RenderScheduling {
+            // This default assumes that rendering a mergeable hierarchy takes about 3ms. That time
+            // is then cut in half - the next frame using the mergeable hierarchy would have the
+            // same workload, meaning that composition cost is the same. This is best illustrated
+            // with the following example:
+            //
+            // Suppose we're at a 120hz cadence so SurfaceFlinger is budgeted 8.3ms per-frame. If
+            // renderMergeableHierarchies costs 3ms, then two consecutive frames have timings:
+            //
+            // First frame: Start at 0ms, end at 6.8ms.
+            // renderMergeableHierarchies: Start at 6.8ms, end at 9.8ms.
+            // Second frame: Start at 9.8ms, end at 16.6ms.
+            //
+            // Now the second frame won't render a mergeable hierarchy afterwards, but the first
+            // frame didn't really steal time from the second frame.
+            static const constexpr std::chrono::nanoseconds
+                    kDefaultMergeableHierarchyRenderDuration = 1500us;
+
+            static const constexpr size_t kDefaultMaxDeferRenderAttempts = 240;
+
+            // Duration allocated for rendering a mergeable hierarchy. If we don't have enough time
+            // for rendering a mergeable hierarchy, then rendering is deferred to another frame.
+            const std::chrono::nanoseconds mergeableHierarchyRenderDuration;
+            // Maximum of times that we defer rendering a mergeable hierarchy. If we defer rendering
+            // a mergeable hierarchy too many times, then render it anyways so that future frames
+            // would benefit from the flattened mergeable hierarchy.
+            const size_t maxDeferRenderAttempts;
+        };
+
+        static const constexpr std::chrono::milliseconds kDefaultActiveLayerTimeout = 150ms;
+
+        static const constexpr bool kDefaultEnableHolePunch = true;
+
+        // Threshold for determing whether a layer is active. A layer whose properties, including
+        // the buffer, have not changed in at least this time is considered inactive and is
+        // therefore a candidate for flattening.
+        const std::chrono::milliseconds mActiveLayerTimeout;
+
+        // Toggles for scheduling when it's safe to render a mergeable hierarchy.
+        // See: RenderScheduling
+        const std::optional<RenderScheduling> mRenderScheduling;
+
+        // True if the hole punching feature should be enabled.
+        const bool mEnableHolePunch;
+    };
+
     void update(const LayerHierarchy& hierarchy);
 
     void constructSnapshots(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,

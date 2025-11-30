@@ -241,6 +241,13 @@ flag {
 } # mirror_uid_filtering
 
 flag {
+  name: "modeset_multi_display"
+  namespace: "core_graphics"
+  description: "Allows multiple display to be modeset at the same time."
+  bug: "460127976"
+} # modeset_multi_display
+
+flag {
   name: "modeset_state_machine"
   namespace: "core_graphics"
   description: "Prevent data races causing modeset failures and deadlocks"
@@ -386,16 +393,6 @@ flag {
   bug: "329470026"
   is_fixed_read_only: true
 } # true_hdr_screenshots
-
-flag {
-    name: "use_at_least_60_for_min_vote"
-    namespace: "core_graphics"
-    description: "Chooses the lowest >= 60 render rate when all voters want Min frame rate"
-    bug: "441896528"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-} # use_at_least_60_for_min_vote
 
 flag {
     name: "use_experimental_jank_classification"

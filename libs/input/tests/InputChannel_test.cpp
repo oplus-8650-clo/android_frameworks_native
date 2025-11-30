@@ -24,6 +24,7 @@
 #include <binder/Binder.h>
 #include <binder/Parcel.h>
 #include <gtest/gtest.h>
+#include <input/InputEventBuilders.h>
 #include <input/InputTransport.h>
 #include <utils/StopWatch.h>
 #include <utils/StrongPointer.h>
@@ -388,4 +389,80 @@ TEST_F(InputChannelTest, DuplicateChannelAndAssertEqual) {
     EXPECT_EQ(*serverChannel == *dupChan, true) << "inputchannel should be equal after duplication";
 }
 
+/**
+ * In situations of high load, the channel's socket can be filled. This leads to sendMessage
+ * returning status WOULD_BLOCK. This can result in ANRs when not properly handled. Therefore it is
+ * useful to understand the capacity of these sockets for various important messages, including
+ * finished messages. The specific number of messages is determined by the socket buffer size and
+ * size of the InputMessage, which this test determines by sending messages until sendMessage
+ * return a non-OK status such as WOULD_BLOCK.
+ *
+ * Concretely, the send buffer and receive buffer of the socket (SO_SNDBUF and SO_RECVBUF) each have
+ * a size of 65536 bytes (this is double what is defined as SOCKET_BUFFER_SIZE in InputTransport, as
+ * the kernel accounts for SOCK_SEQPACKET metadata). In the case of a motion message, which occupies
+ * the whole capacity of the InputMessage union, its effective size in the socket is the same as
+ * InputMessage.size(), which is 2472 bytes. For sendMessage (send() under the hood), to return a
+ * WOULD_BLOCK, the read buffer has to be full. This happens when both the receive buffer and send
+ * buffer is full, meaning the effective capacity of the socket is 65536 bytes * 2 = 131072 bytes.
+ * Therefore the expected number of messages to fill the socket is 131072 bytes / 2472 bytes = 53.
+ *
+ * Depending on the architecture and the type of message, the effective message size could differ,
+ * requiring fewer or more messages to fill the socket.
+ */
+TEST_F(InputChannelTest, FinishedMessageCapacityInSocket) {
+    std::unique_ptr<InputChannel> serverChannel, clientChannel;
+    status_t result =
+            InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel);
+    ASSERT_EQ(OK, result) << "should have successfully opened a channel pair";
+
+    uint32_t seq = 1;
+    for (;;) {
+        InputMessage finishedMessage = createFinishedMessage(seq);
+        status_t status = serverChannel->sendMessage(&finishedMessage);
+        if (status != OK) {
+            break;
+        }
+        seq++;
+    }
+    const uint32_t expected_capacity = 87;
+    ASSERT_EQ(seq, expected_capacity) << "server should have sent " << expected_capacity
+                                      << " finished messages, instead sent " << seq;
+}
+
+/**
+ * Similar to above, but for motion messages.
+ */
+TEST_F(InputChannelTest, MotionMessageCapacityInSocket) {
+    std::unique_ptr<InputChannel> serverChannel, clientChannel;
+    status_t result =
+            InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel);
+    ASSERT_EQ(OK, result) << "should have successfully opened a channel pair";
+
+    uint32_t seq = 1;
+    for (;;) {
+        InputMessage motionMessage = InputMessageBuilder{InputMessage::Type::MOTION, seq}
+                                             .deviceId(0)
+                                             .action(AMOTION_EVENT_ACTION_MOVE)
+                                             .build();
+        status_t status = serverChannel->sendMessage(&motionMessage);
+        if (status != OK) {
+            break;
+        }
+        seq++;
+    }
+
+// The size() of the InputMessage struct remains the same for Motion messages for both host
+// and device. However the actual message size in the socket (as measured by TIOCOUTQ) shows them
+// differing. This means that the number of messages to fill the socket also differs. We add this
+// conditional to maintain compatibility with host tests.
+#if defined(__ANDROID__)
+    const uint32_t expected_capacity = 53;
+#elif defined(__x86_64__) || defined(__i386__) // Host
+    const uint32_t expected_capacity = 87;
+#else
+    GTEST_SKIP() << "Unexpected architecture";
+#endif
+    ASSERT_EQ(seq, expected_capacity) << "server should have sent " << expected_capacity
+                                      << " motion messages, instead sent " << seq;
+}
 } // namespace android

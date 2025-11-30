@@ -77,7 +77,6 @@ public:
     bool refresh_rate_overlay_on_external_display() const;
     bool resync_on_tx_separate_timer() const;
     bool set_power_mode_async() const;
-    bool use_at_least_60_for_min_vote() const;
     bool use_experimental_jank_classification() const;
 
     /// Trunk stable readonly flags ///
@@ -99,6 +98,7 @@ public:
     bool idle_screen_refresh_rate_timeout() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
+    bool modeset_multi_display() const;
     bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
     bool parse_edid_version_and_input_type() const;

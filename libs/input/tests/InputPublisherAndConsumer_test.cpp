@@ -285,9 +285,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeKeyEvent() {
     waitUntilInputAvailable(*mConsumer);
     uint32_t consumeSeq;
     InputEvent* event;
-    status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status)
-            << "consumer consume should return OK";
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
     EXPECT_FALSE(mConsumer->probablyHasInput())
             << "no events should be waiting after being consumed";
 
@@ -364,9 +364,11 @@ void InputPublisherAndConsumerTest::publishAndConsumeBatchedMotionMove(nsecs_t d
     // Consume leaving a batch behind.
     uint32_t consumeSeq;
     InputEvent* event;
-    status_t status = mConsumer->consume(&mEventFactory,
-                                         /*consumeBatches=*/false, -1, &consumeSeq, &event);
-    ASSERT_EQ(WOULD_BLOCK, status)
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory,
+                               /*consumeBatches=*/false, -1, &consumeSeq, &event);
+    ASSERT_FALSE(consumeResult.ok());
+    ASSERT_EQ(WOULD_BLOCK, consumeResult.error().code())
             << "consumer consume should return WOULD_BLOCK when a new batch is started";
     ASSERT_TRUE(mConsumer->hasPendingBatch()) << "consume should have created a batch";
     EXPECT_TRUE(mConsumer->probablyHasInput())
@@ -383,9 +385,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeMotionEvent(
 
     uint32_t consumeSeq;
     InputEvent* event;
-    status_t status =
+    InputConsumer::ConsumeResult consumeResult =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status) << "consumer consume should return OK";
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
     ASSERT_TRUE(event != nullptr)
             << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::MOTION, event->getType())
@@ -409,8 +411,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeFocusEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status) << "consumer consume should return OK";
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::FOCUS, event->getType())
@@ -450,8 +453,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeCaptureEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status) << "consumer consume should return OK";
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::CAPTURE, event->getType())
@@ -492,8 +496,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeDragEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status) << "consumer consume should return OK";
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::DRAG, event->getType())
@@ -534,8 +539,9 @@ void InputPublisherAndConsumerTest::publishAndConsumeTouchModeEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    status = mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_EQ(OK, status) << "consumer consume should return OK";
+    InputConsumer::ConsumeResult consumeResult =
+            mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
+    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::TOUCH_MODE, event->getType())

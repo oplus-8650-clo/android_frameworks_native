@@ -26,13 +26,21 @@
 
 namespace android::surfaceflinger::frontend::caching {
 
+static const constexpr nsecs_t kDefaultActiveLayerTimeout = 150 * 1000 * 1000;
+
 bool MergeableHierarchy::Accumulator::add(const LayerHierarchy* hierarchy) {
     // TODO: Add a check for whether we actually want to add the hierarchy
     // For now, unconditionally add the hierarchy
-    mHierarchies.push_back(
-            {.layerId = hierarchy->getLayer() ? hierarchy->getLayer()->id : UNASSIGNED_LAYER_ID,
-             .hierarchy = hierarchy});
-    return true;
+    if (!hierarchy->getLayer()) {
+        return false;
+    }
+    if (mTime - hierarchy->getLayer()->lastUpdateTime > kDefaultActiveLayerTimeout) {
+        mHierarchies.push_back(
+                {.layerId = hierarchy->getLayer() ? hierarchy->getLayer()->id : UNASSIGNED_LAYER_ID,
+                 .hierarchy = hierarchy});
+        return true;
+    }
+    return false;
 }
 
 void MergeableHierarchy::constructSnapshot(
