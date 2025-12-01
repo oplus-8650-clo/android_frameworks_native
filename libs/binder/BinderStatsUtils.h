@@ -22,6 +22,7 @@ struct BinderCallData {
     // TODO(b/299356196): Use the receiver binder object instead and resolve interface lazily
     int64_t startTimeNanos;
     int64_t endTimeNanos;
+    int64_t cpuTimeNanos;
     String16 interfaceDescriptor;
     String16 aidlMethodName;
     uint32_t transactionCode;

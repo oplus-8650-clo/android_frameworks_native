@@ -79,6 +79,10 @@ private:
         uint32_t totalCalls = 0;
         uint32_t callsWithLatency = 0;
         int64_t durationSumMicros = 0;
+        uint64_t callDurationSumSquaredMicros = 0;
+        uint64_t cpuTimeCount = 0;
+        uint64_t cpuTimeSumMicros = 0;
+        uint64_t cpuTimeSumSquaredMicros = 0;
     };
 
     using StatsBufferMap =

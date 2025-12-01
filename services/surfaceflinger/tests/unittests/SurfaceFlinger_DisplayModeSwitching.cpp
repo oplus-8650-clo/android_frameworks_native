@@ -663,6 +663,30 @@ TEST_P(DisplayModeSwitchingTest, changeRefreshRateTriggersPacesetterChange) {
     EXPECT_EQ(mFlinger.scheduler()->pacesetterDisplayId(), outerDisplay->getPhysicalId());
 }
 
+TEST_P(DisplayModeSwitchingTest, updateWorkDuration) {
+    SET_FLAG_FOR_TEST(flags::configure_work_duration, true);
+
+    gui::DisplayModeSpecs specs =
+            mock::createDisplayModeSpecs(mDisplay->getDisplayToken().promote(), kModeId60, 60_Hz);
+
+    gui::DisplayModeSpecs::WorkDuration workDuration;
+    workDuration.minSfDurationNanos = 12345;
+    workDuration.maxSfDurationNanos = 54321;
+    workDuration.appDurationNanos = 67890;
+    specs.workDuration = workDuration;
+
+    EXPECT_EQ(NO_ERROR, mFlinger.setDesiredDisplayModeSpecs(specs));
+
+    const auto vsyncConfigSet = mFlinger.scheduler()->getVsyncConfigsForRefreshRate(60_Hz);
+
+    EXPECT_EQ(vsyncConfigSet.late.sfWorkDuration,
+              std::chrono::nanoseconds(workDuration.minSfDurationNanos));
+    EXPECT_EQ(vsyncConfigSet.late.appWorkDuration,
+              std::chrono::nanoseconds(workDuration.appDurationNanos));
+    EXPECT_EQ(vsyncConfigSet.early.sfWorkDuration,
+              std::chrono::nanoseconds(workDuration.maxSfDurationNanos));
+}
+
 INSTANTIATE_TEST_SUITE_P(WithModesetFSM, DisplayModeSwitchingTest, testing::Bool());
 
 } // namespace

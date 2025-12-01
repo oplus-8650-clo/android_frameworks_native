@@ -1879,6 +1879,9 @@ int Surface::perform(int operation, va_list args)
     case NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED:
         res = dispatchIsProducerThrottlingEnabled(args);
         break;
+    case NATIVE_WINDOW_SET_PRESENT_MODE:
+        res = dispatchSetPresentMode(args);
+        break;
     default:
         res = NAME_NOT_FOUND;
         break;
@@ -2122,6 +2125,11 @@ int Surface::dispatchSetProducerThrottlingEnabled(va_list args) {
 int Surface::dispatchIsProducerThrottlingEnabled(va_list args) {
     bool* outEnabled = va_arg(args, bool*);
     return isProducerThrottlingEnabled(outEnabled);
+}
+
+int Surface::dispatchSetPresentMode(va_list args) {
+    int32_t mode = va_arg(args, int32_t);
+    return setPresentMode(mode);
 }
 
 int Surface::dispatchAddCancelInterceptor(va_list args) {
@@ -3244,6 +3252,10 @@ status_t Surface::setAdditionalOptions(const std::vector<gui::AdditionalOptions>
     return mGraphicBufferProducer->setAdditionalOptions(options);
 }
 #endif
+
+status_t Surface::setPresentMode(int32_t mode) {
+    return mGraphicBufferProducer->setPresentMode(mode);
+}
 
 sp<IBinder> Surface::getSurfaceControlHandle() const {
     Mutex::Autolock lock(mMutex);

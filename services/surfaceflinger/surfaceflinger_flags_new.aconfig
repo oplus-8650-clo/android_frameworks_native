@@ -36,6 +36,13 @@ flag {
 } # arr_surfacecontrol_setframerate_api
 
 flag {
+  name: "configure_work_duration"
+  namespace: "window_surfaces"
+  description: "Enable the work duration configuration via DisplayModeSpecs."
+  bug: "399491928"
+} # configure_work_duration
+
+flag {
   name: "connected_display_hdr_v2"
   namespace: "desktop_display"
   description: "enable connected display hdr selection"
@@ -200,13 +207,6 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # hdcp_negotiation
-
-flag {
-  name: "increase_missed_frame_jank_threshold"
-  namespace: "core_graphics"
-  description: "Increase the jank threshold to 4 milliseconds"
-  bug: "342265411"
-} # increase_missed_frame_jank_threshold
 
 flag {
   name: "jank_classification_v2"

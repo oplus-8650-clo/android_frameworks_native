@@ -37,6 +37,7 @@
 #include "SurfaceFlinger.h"
 
 #include <aidl/android/hardware/power/Boost.h>
+#include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -5380,12 +5381,7 @@ ui::Size SurfaceFlinger::findLargestFramebufferSizeLocked() const {
     return maxSize;
 }
 
-status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinder>& handle,
-                                        const sp<Layer>& layer, const wp<Layer>& parent,
-                                        uint32_t* outTransformHint) {
-    if (outTransformHint) {
-        *outTransformHint = mFrontInternalDisplayTransformHint;
-    }
+void SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<Layer>& layer) {
     args.parentId = LayerHandle::getLayerId(args.parentHandle.promote());
     args.layerIdToMirror = LayerHandle::getLayerId(args.mirrorLayerHandle.promote());
     {
@@ -5396,9 +5392,7 @@ status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinde
         args.parentHandle.clear();
         mNewLayerArgs.emplace_back(std::move(args));
     }
-
     setTransactionFlags(eTransactionFlushNeeded | eTransactionNeeded);
-    return NO_ERROR;
 }
 
 uint32_t SurfaceFlinger::getTransactionFlags() const {
@@ -6259,48 +6253,43 @@ status_t SurfaceFlinger::mirrorLayer(const LayerCreationArgs& args,
 
     outResult.layerId = mirrorLayer->sequence;
     outResult.layerName = String16(mirrorLayer->getDebugName());
-    return addClientLayer(mirrorArgs, outResult.handle, mirrorLayer /* layer */,
-                          nullptr /* parent */, nullptr /* outTransformHint */);
+    addClientLayer(mirrorArgs, mirrorLayer);
+    return OK;
 }
 
-status_t SurfaceFlinger::mirrorDisplay(DisplayId displayId, const LayerCreationArgs& args,
-                                       gui::CreateSurfaceResult& outResult) {
-    IPCThreadState* ipc = IPCThreadState::self();
-    const int uid = ipc->getCallingUid();
-    if (uid != AID_ROOT && uid != AID_GRAPHICS && uid != AID_SYSTEM && uid != AID_SHELL) {
-        ALOGE("Permission denied when trying to mirror display");
-        return PERMISSION_DENIED;
+base::expected<gui::CreateSurfaceResult, status_t> SurfaceFlinger::mirrorLayerStack(
+        DisplayId displayId, const LayerCreationArgs& args) {
+    const IPCThreadState* threadState = IPCThreadState::self();
+    if (const int uid = threadState->getCallingUid();
+        uid != AID_ROOT && uid != AID_GRAPHICS && uid != AID_SYSTEM && uid != AID_SHELL) {
+        LOG(ERROR) << "Permission denied when trying to mirror layer stack ID";
+        return base::unexpected(PERMISSION_DENIED);
     }
 
-    ui::LayerStack layerStack;
-    sp<Layer> rootMirrorLayer;
-    status_t result = 0;
-    LayerCreationArgs mirrorArgs = LayerCreationArgs::fromOtherArgs(args);
-
+    LayerCreationArgs mirrorArgs(LayerCreationArgs::fromOtherArgs(args));
+    gui::CreateSurfaceResult surfaceResult{};
+    sp<Layer> rootMirrorLayer{};
     {
-        Mutex::Autolock lock(mStateLock);
+        const Mutex::Autolock lock(mStateLock);
 
-        const auto display = getDisplayDeviceLocked(displayId);
-        if (!display) {
-            return NAME_NOT_FOUND;
+        const sp<const DisplayDevice> displayDevice = getDisplayDeviceLocked(displayId);
+        if (displayDevice == nullptr) {
+            return base::unexpected(NAME_NOT_FOUND);
         }
-
-        layerStack = display->getLayerStack();
+        mirrorArgs.layerStackToMirror = displayDevice->getLayerStack();
         mirrorArgs.flags |= ISurfaceComposerClient::eNoColorFill;
         mirrorArgs.addToRoot = true;
-        mirrorArgs.layerStackToMirror = layerStack;
-        result = createLayer(mirrorArgs, &outResult.handle, &rootMirrorLayer);
-        if (result != NO_ERROR) {
-            return result;
+        if (const status_t status =
+                    createLayer(mirrorArgs, &surfaceResult.handle, &rootMirrorLayer);
+            status != OK) {
+            return base::unexpected(status);
         }
     }
-    outResult.layerId = rootMirrorLayer->sequence;
-    outResult.layerName = String16(rootMirrorLayer->getDebugName());
-    addClientLayer(mirrorArgs, outResult.handle, rootMirrorLayer /* layer */, nullptr /* parent */,
-                   nullptr /* outTransformHint */);
-
+    surfaceResult.layerId = rootMirrorLayer->sequence;
+    surfaceResult.layerName = static_cast<String16>(rootMirrorLayer->getDebugName());
+    addClientLayer(mirrorArgs, rootMirrorLayer);
     setTransactionFlags(eTransactionFlushNeeded);
-    return NO_ERROR;
+    return surfaceResult;
 }
 
 status_t SurfaceFlinger::createLayer(LayerCreationArgs& args, gui::CreateSurfaceResult& outResult) {
@@ -6346,13 +6335,9 @@ status_t SurfaceFlinger::createLayer(LayerCreationArgs& args, gui::CreateSurface
         args.addToRoot = false;
     }
 
-    uint32_t outTransformHint;
-    result = addClientLayer(args, outResult.handle, layer, parent, &outTransformHint);
-    if (result != NO_ERROR) {
-        return result;
-    }
+    addClientLayer(args, layer);
 
-    outResult.transformHint = static_cast<int32_t>(outTransformHint);
+    outResult.transformHint = mFrontInternalDisplayTransformHint;
     outResult.layerId = layer->sequence;
     outResult.layerName = String16(layer->getDebugName());
     return result;
@@ -8075,7 +8060,7 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
                         int64_t arg1 = data.readInt64();
                         int64_t arg2 = data.readInt64();
                         // Enable mirroring for one display
-                        auto mirrorRoot = SurfaceComposerClient::getDefault()->mirrorDisplay(
+                        auto mirrorRoot = SurfaceComposerClient::getDefault()->mirrorLayerStack(
                                 DisplayId::fromValue(arg1));
                         const auto token2 =
                                 getPhysicalDisplayToken(PhysicalDisplayId::fromValue(arg2));
@@ -9290,6 +9275,22 @@ gui::DisplayModeSpecs::RefreshRateRanges translate(const FpsRanges& ranges) {
 
 } // namespace
 
+void SurfaceFlinger::updateWorkDuration(const sp<DisplayDevice>& display,
+                                        const gui::DisplayModeSpecs& specs) {
+    std::optional<gui::DisplayModeSpecs::WorkDuration> workDuration = specs.workDuration;
+    if (workDuration.has_value()) {
+        SFTRACE_FORMAT("Updating the work duration. minSf=%" PRId64 ", maxSf=%" PRId64
+                       ", app=%" PRId64,
+                       workDuration->minSfDurationNanos, workDuration->maxSfDurationNanos,
+                       workDuration->appDurationNanos);
+        mScheduler->reloadPhaseConfiguration(mDisplayModeController.getActiveMode(
+                                                     display->getPhysicalId()),
+                                             Duration::fromNs(workDuration->minSfDurationNanos),
+                                             Duration::fromNs(workDuration->maxSfDurationNanos),
+                                             Duration::fromNs(workDuration->appDurationNanos));
+    }
+}
+
 status_t SurfaceFlinger::setDesiredDisplayModeSpecs(
         const std::vector<gui::DisplayModeSpecs>& perDisplaySpecs) {
     SFTRACE_CALL();
@@ -9316,7 +9317,11 @@ status_t SurfaceFlinger::setDesiredDisplayModeSpecs(
                                 translate(specs.appRequestRanges), specs.allowGroupSwitching,
                                 specs.idleScreenRefreshRateConfig};
 
-            return setDesiredDisplayModeSpecsInternal(display, policy);
+            status_t status = setDesiredDisplayModeSpecsInternal(display, policy);
+            if (status == NO_ERROR && FlagManager::getInstance().configure_work_duration()) {
+                updateWorkDuration(display, specs);
+            }
+            return status;
         }
     });
 

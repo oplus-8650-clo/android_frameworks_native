@@ -295,6 +295,7 @@ filegroup {
         "FrontEnd/TransactionHandler.cpp",
         "FrontEnd/Caching/MergeableHierarchy.cpp",
         "FrontEnd/Caching/MergeableHierarchyManager.cpp",
+        "FrontEnd/Caching/TexturePool.cpp",
         "HdrLayerInfoReporter.cpp",
         "HdrSdrRatioOverlay.cpp",
         "Jank/JankTracker.cpp",

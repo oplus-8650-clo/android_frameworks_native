@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,17 @@
  * limitations under the License.
  */
 
+#ifndef ANDROID_GUI_BUFFERQUEUEHELPERS_H
+#define ANDROID_GUI_BUFFERQUEUEHELPERS_H
+
+#include <android/native_window.h>
+#include <system/window.h>
+#include <string_view>
+
 namespace android {
-
-#ifdef BINDER_RPC_SINGLE_THREADED
-constexpr bool kEnableRpcThreads = false;
-#else
-constexpr bool kEnableRpcThreads = true;
-#endif
-
-#ifdef BINDER_WITH_KERNEL_IPC
-constexpr bool kEnableKernelIpc = true;
-#else  // BINDER_WITH_KERNEL_IPC
-constexpr bool kEnableKernelIpc = false;
-#endif // BINDER_WITH_KERNEL_IPC
-
-#ifdef LIBBINDER_BINDER_OBSERVER_V2
-constexpr bool kBinderObserverV2Enabled = true;
-#else
-constexpr bool kBinderObserverV2Enabled = false;
-#endif
-
+namespace BufferQueueHelpers {
+std::string_view presentModeToString(int32_t mode);
+} // namespace BufferQueueHelpers
 } // namespace android
+
+#endif

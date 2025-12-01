@@ -61,7 +61,7 @@ interface ISurfaceComposerClient {
 
     CreateSurfaceResult mirrorSurface(IBinder mirrorFromHandle, @nullable IBinder stopAtHandle);
 
-    CreateSurfaceResult mirrorDisplay(long displayId);
+    CreateSurfaceResult mirrorLayerStack(long displayId);
 
     SchedulingPolicy getSchedulingPolicy();
 }

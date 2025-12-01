@@ -27,6 +27,8 @@
 #include <binder/Parcel.h>
 #include <binder/IInterface.h>
 
+#include <android/native_window.h>
+#include <gui/BufferQueueCore.h>
 #include <gui/BufferQueueDefs.h>
 
 #include <gui/IGraphicBufferProducer.h>
@@ -84,6 +86,7 @@ enum {
     SET_MAX_BUFER_COUNT_EXTENDED,
     SET_PRODUCER_THROTTLING_ENABLED,
     GET_PRODUCER_THROTTLING_ENABLED,
+    SET_PRESENT_MODE,
 };
 
 class BpGraphicBufferProducer : public BpInterface<IGraphicBufferProducer>
@@ -836,6 +839,18 @@ public:
         return result;
     }
 #endif
+
+    virtual status_t setPresentMode(int32_t mode) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
+        data.writeInt32(static_cast<int32_t>(mode));
+        status_t result = remote()->transact(SET_PRESENT_MODE, data, &reply);
+        if (result != NO_ERROR) {
+            return result;
+        }
+        result = reply.readInt32();
+        return result;
+    }
 };
 
 // Out-of-line virtual method definition to trigger vtable emission in this
@@ -1020,6 +1035,8 @@ public:
         return mBase->setAdditionalOptions(options);
     }
 #endif
+
+    status_t setPresentMode(int32_t mode) override { return mBase->setPresentMode(mode); }
 };
 
 IMPLEMENT_HYBRID_META_INTERFACE(GraphicBufferProducer,
@@ -1069,6 +1086,11 @@ status_t IGraphicBufferProducer::setAdditionalOptions(const std::vector<gui::Add
     return INVALID_OPERATION;
 }
 #endif
+
+status_t IGraphicBufferProducer::setPresentMode(int32_t /*mode*/) {
+    // No-op for IGBP other than BufferQueue.
+    return INVALID_OPERATION;
+}
 
 status_t IGraphicBufferProducer::exportToParcel(Parcel* parcel) {
     status_t res = OK;
@@ -1667,6 +1689,13 @@ status_t BnGraphicBufferProducer::onTransact(
             return NO_ERROR;
         }
 #endif
+        case SET_PRESENT_MODE: {
+            CHECK_INTERFACE(IGraphicBufferProducer, data, reply);
+            int32_t mode = data.readInt32();
+            status_t result = setPresentMode(mode);
+            reply->writeInt32(result);
+            return NO_ERROR;
+        }
     }
     return BBinder::onTransact(code, data, reply, flags);
 }

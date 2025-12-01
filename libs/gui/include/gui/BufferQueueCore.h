@@ -19,11 +19,13 @@
 
 #include <com_android_graphics_libgui_flags.h>
 
+#include <android/native_window.h>
 #include <gui/AdditionalOptions.h>
 #include <gui/BufferItem.h>
 #include <gui/BufferQueueDefs.h>
 #include <gui/BufferSlot.h>
 #include <gui/OccupancyTracker.h>
+#include <system/window.h>
 
 #include <utils/NativeHandle.h>
 #include <utils/RefBase.h>
@@ -398,6 +400,9 @@ private:
     uint32_t mAdditionalOptionsGenerationId = 0;
     std::vector<gui::AdditionalOptions> mAdditionalOptions;
 #endif
+
+    // mPresentMode indicates which buffer acquisition strategy to use.
+    int32_t mPresentMode;
 
 }; // class BufferQueueCore
 

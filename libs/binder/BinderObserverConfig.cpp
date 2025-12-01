@@ -20,6 +20,8 @@
 #include <unistd.h>                           // for getuid()
 
 #include "BinderObserverConfig.h"
+#include "BuildFlags.h"
+#include "OS.h"
 
 namespace android {
 #ifdef BINDER_OBSERVER_DROIDFOOD_CONFIG
@@ -54,26 +56,43 @@ std::string BinderObserverConfig::Environment::getProcessName() {
 
 BinderObserverConfig::ShardingConfig BinderObserverConfig::Environment::getSystemServerSharding() {
     return kUseDroidfoodConfig
-            ? ShardingConfig{.processMod = 1, .spamMod = 5, .callMod = 10}
-            : ShardingConfig{.processMod = 10, .spamMod = 50, .callMod = 100};
+            ? ShardingConfig{.processMod = 1,
+                             .spamMod = 5,
+                             .callMod = 10,
+                             .cpuSamplingMod = kBinderObserverV2Enabled ? 10 : 0}
+            : ShardingConfig{.processMod = 10,
+                             .spamMod = 50,
+                             .callMod = 100,
+                             .cpuSamplingMod = kBinderObserverV2Enabled ? 100 : 0};
 }
 
 BinderObserverConfig::ShardingConfig
 BinderObserverConfig::Environment::getOtherProcessesSharding() {
     return kUseDroidfoodConfig
-            ? ShardingConfig{.processMod = 5, .spamMod = 1, .callMod = 2}
-            : ShardingConfig{.processMod = 50, .spamMod = 10, .callMod = 20};
+            ? ShardingConfig{.processMod = 5,
+                             .spamMod = 1,
+                             .callMod = 2,
+                             .cpuSamplingMod = kBinderObserverV2Enabled ? 10 : 0}
+            : ShardingConfig{.processMod = 50,
+                             .spamMod = 10,
+                             .callMod = 20,
+                             .cpuSamplingMod = kBinderObserverV2Enabled ? 100 : 0};
 }
 
-std::pair<size_t, size_t> BinderObserverConfig::getBootStableTokens(Environment& environment) {
+std::tuple<size_t, size_t, size_t> BinderObserverConfig::getBootStableTokens(
+        Environment& environment) {
     std::string bootToken = environment.readFileLine(kBootIdPath);
 
     // Boot id looks like this: "16e12b27-2a84-4355-84cd-948348d6c998"
     LOG_ALWAYS_FATAL_IF(bootToken.size() != kBootIdSize, "Bad boot_id: '%s'", bootToken.c_str());
 
     // Use the first half for process sharding and the second half for AIDL sharding.
-    return std::make_pair(environment.hashString8(bootToken.substr(0, kBootIdSize / 2)),
-                          environment.hashString8(bootToken.substr(kBootIdSize / 2)));
+    size_t token1 = environment.hashString8(bootToken.substr(0, kBootIdSize / 2));
+    size_t token2 = environment.hashString8(bootToken.substr(kBootIdSize / 2));
+    // Use the middle substring for cpu Tracking offset.
+    size_t token3 = environment.hashString8(bootToken.substr(kBootIdSize / 4, 3 * kBootIdSize / 4));
+
+    return std::tie(token1, token2, token3);
 }
 
 std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
@@ -89,7 +108,7 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
     if (sharding.processMod == 0) {
         // Sharding of 0 means disabled. No need to read further configuration.
         return std::unique_ptr<BinderObserverConfig>(
-                new BinderObserverConfig(std::move(environment), false, sharding, 0));
+                new BinderObserverConfig(std::move(environment), false, sharding, 0, 0));
     }
 
     // Note: we want sharding to be stable for each session. Otherwise, for short-lived
@@ -99,7 +118,7 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
     // We also want process sharding and AIDL sharding to be independent, as otherwise
     // certain process+AIDL combinations may be reported more frequently than others.
     // That's why we use two independent tokens.
-    auto [processOffset, aidlOffset] = getBootStableTokens(*environment);
+    auto [processOffset, aidlOffset, cpuTrackingOffset] = getBootStableTokens(*environment);
 
     // We use simple modulo arithmetc to keep sharding easier to understand and test. Everything
     // is mod-ed before addition too to ensure we don't overflow.
@@ -110,8 +129,45 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
     token += environment->hashString8(processName) % modulo;
     bool enabled = token % modulo == 0;
 
+    if (sharding.cpuSamplingMod > 0) {
+        cpuTrackingOffset %= sharding.cpuSamplingMod;
+    }
+
     return std::unique_ptr<BinderObserverConfig>(
-            new BinderObserverConfig(std::move(environment), enabled, sharding, aidlOffset));
+            new BinderObserverConfig(std::move(environment), enabled, sharding, aidlOffset,
+                                     cpuTrackingOffset));
+}
+
+// mLatencySequenceNumber can safely overflow and wrap, as it's only used for modulo operations.
+__attribute__((no_sanitize("unsigned-integer-overflow"))) size_t
+BinderObserverConfig::fetchAddOneLatencySequenceNumber() {
+    return mLatencySequenceNumber.fetch_add(1, std::memory_order_relaxed);
+}
+
+BinderObserverConfig::TrackingInfo BinderObserverConfig::getTrackingInfo(
+        const std::u16string_view& interfaceDescriptor, uint32_t txnCode) {
+    if (!mEnabled) {
+        return {.trackSpam = false, .trackLatency = false, .trackCpu = false};
+    }
+    // If present callMod must be a multiple of spamMod, so use it as a modulo.
+    size_t modulo = mSharding.callMod != 0 ? mSharding.callMod : mSharding.spamMod;
+    // As above, mod before addition too to ensure we don't overflow.
+    size_t token = mAidlOffset % modulo;
+    token += txnCode % modulo;
+    token += mEnvironment->hashString16(interfaceDescriptor) % modulo;
+
+    bool trackSpam = mSharding.spamMod > 0 && token % mSharding.spamMod == 0;
+    bool trackLatency = mSharding.callMod > 0 && token % mSharding.callMod == 0;
+    bool trackCpu = false;
+    if (trackLatency && mSharding.cpuSamplingMod > 0) {
+        size_t latencySequenceNumber = fetchAddOneLatencySequenceNumber();
+        trackCpu = latencySequenceNumber % mSharding.cpuSamplingMod == 0;
+    }
+    return {
+            .trackSpam = trackSpam,
+            .trackLatency = trackLatency,
+            .trackCpu = trackCpu,
+    };
 }
 
 } // namespace android
