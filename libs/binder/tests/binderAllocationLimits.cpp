@@ -378,7 +378,7 @@ TEST(BinderAccessorAllocation, AddAccessorCheckService) {
 
     sp<IBinder> binder = sm->checkService(kInstanceName16);
 
-    status_t status = android::removeAccessorProvider(receipt);
+    (void)android::removeAccessorProvider(receipt);
 }
 
 TEST(RpcBinderAllocation, SetupRpcServer) {

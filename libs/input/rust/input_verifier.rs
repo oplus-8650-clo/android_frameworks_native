@@ -424,6 +424,9 @@ impl InputVerifier {
     /// the current internal state for this device. Subsequent events from this device are expected
     //// to start a new gesture.
     pub fn reset_device(&mut self, device_id: DeviceId) {
+        if self.should_log {
+            info!("Resetting device {:?}", device_id);
+        }
         self.touching_pointer_ids_by_device.remove(&device_id);
         self.hovering_pointer_ids_by_device.remove(&device_id);
         self.down_time_by_device.remove(&device_id);

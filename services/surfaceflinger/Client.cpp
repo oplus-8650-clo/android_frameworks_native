@@ -110,11 +110,26 @@ binder::Status Client::mirrorSurface(const sp<IBinder>& mirrorFromHandle,
 binder::Status Client::mirrorLayerStack(int64_t displayId,
                                         gui::CreateSurfaceResult* outSurfaceResult) {
     const LayerCreationArgs args(mFlinger.get(), sp<Client>::fromExisting(this),
-                                 "MirrorRoot-" + std::to_string(displayId), /*flags=*/0,
-                                 gui::LayerMetadata());
+                                 "MirrorRoot-" + std::to_string(displayId) + "-LayerStack",
+                                 /*flags=*/0, gui::LayerMetadata());
     const DisplayId id = DisplayId::fromValue(static_cast<uint64_t>(displayId));
     const base::expected<gui::CreateSurfaceResult, status_t> surfaceResult =
             mFlinger->mirrorLayerStack(id, args);
+    if (!surfaceResult.has_value()) {
+        return binderStatusFromStatusT(surfaceResult.error());
+    }
+    *outSurfaceResult = surfaceResult.value();
+    return binderStatusFromStatusT(OK);
+}
+
+binder::Status Client::mirrorDisplay(int64_t displayId,
+                                     gui::CreateSurfaceResult* outSurfaceResult) {
+    LayerCreationArgs args(mFlinger.get(), sp<Client>::fromExisting(this),
+                           "MirrorRoot-" + std::to_string(displayId), /*flags=*/0,
+                           gui::LayerMetadata());
+    args.displayIdToMirror = DisplayId::fromValue(static_cast<uint64_t>(displayId));
+    const base::expected<gui::CreateSurfaceResult, status_t> surfaceResult =
+            mFlinger->mirrorDisplay(args);
     if (!surfaceResult.has_value()) {
         return binderStatusFromStatusT(surfaceResult.error());
     }

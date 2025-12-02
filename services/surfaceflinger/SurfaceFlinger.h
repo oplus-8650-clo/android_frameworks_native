@@ -916,6 +916,12 @@ private:
     base::expected<gui::CreateSurfaceResult, status_t> mirrorLayerStack(
             DisplayId displayId, const LayerCreationArgs& args);
 
+    // Returns a surface control via `gui::CreateSurfaceResult` that mirrors the provided
+    // `displayIdToMirror` inside `args`. Otherwise, PERMISSION_DENIED if the client lacks necessary
+    // permissions, or NO_MEMORY if the layer cannot be created due to a leak. The
+    // `displayIdToMirror` must exist.
+    base::expected<gui::CreateSurfaceResult, status_t> mirrorDisplay(const LayerCreationArgs& args);
+
     // Adds a layer to SurfaceFlinger
     void addClientLayer(LayerCreationArgs& args, const sp<Layer>& layer);
 

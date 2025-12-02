@@ -2694,6 +2694,21 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorLayerStack(DisplayId displayId) 
                                     toString(outSurfaceResult.layerName));
 }
 
+sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
+    const Mutex::Autolock lock(mLock);
+
+    gui::CreateSurfaceResult outSurfaceResult;
+    const binder::Status status = mClient->mirrorDisplay(displayId.value, &outSurfaceResult);
+    if (const status_t errorCode = statusTFromBinderStatus(status); errorCode != OK) {
+        LOG(ERROR) << "Failed to mirror display ID " << to_string(displayId)
+                   << ". Error: " << statusToString(errorCode);
+        return nullptr;
+    }
+    return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
+                                    outSurfaceResult.handle, outSurfaceResult.layerId,
+                                    toString(outSurfaceResult.layerName));
+}
+
 status_t SurfaceComposerClient::clearLayerFrameStats(const sp<IBinder>& token) const {
     Mutex::Autolock _lm(mLock);
 

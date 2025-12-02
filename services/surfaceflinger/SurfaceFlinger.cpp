@@ -2751,6 +2751,8 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
 
         size_t addedLayers = update.newLayers.size();
         mLayerLifecycleManager.addLayers(std::move(update.newLayers));
+        mLayerLifecycleManager.updateDisplayMirrors(mFrontEndDisplayInfos,
+                                                    mFrontEndDisplayInfosChanged);
         update.transactions = mTransactionHandler.flushTransactions();
         ftl::Flags<adpf::Workload> committedWorkload;
         for (auto& transaction : update.transactions) {
@@ -5386,11 +5388,11 @@ void SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<Layer>& la
     args.layerIdToMirror = LayerHandle::getLayerId(args.mirrorLayerHandle.promote());
     {
         std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
-        mCreatedLayers.emplace_back(layer);
-        mNewLayers.emplace_back(std::make_unique<frontend::RequestedLayerState>(args));
+        mCreatedLayers.push_back(layer);
+        mNewLayers.push_back(std::make_unique<frontend::RequestedLayerState>(args));
         args.mirrorLayerHandle.clear();
         args.parentHandle.clear();
-        mNewLayerArgs.emplace_back(std::move(args));
+        mNewLayerArgs.push_back(std::move(args));
     }
     setTransactionFlags(eTransactionFlushNeeded | eTransactionNeeded);
 }
@@ -6289,6 +6291,31 @@ base::expected<gui::CreateSurfaceResult, status_t> SurfaceFlinger::mirrorLayerSt
     surfaceResult.layerName = static_cast<String16>(rootMirrorLayer->getDebugName());
     addClientLayer(mirrorArgs, rootMirrorLayer);
     setTransactionFlags(eTransactionFlushNeeded);
+    return surfaceResult;
+}
+
+base::expected<gui::CreateSurfaceResult, status_t> SurfaceFlinger::mirrorDisplay(
+        const LayerCreationArgs& args) {
+    const IPCThreadState* threadState = IPCThreadState::self();
+    if (const int uid = threadState->getCallingUid();
+        uid != AID_ROOT && uid != AID_GRAPHICS && uid != AID_SYSTEM && uid != AID_SHELL) {
+        LOG(ERROR) << "Permission denied when trying to mirror display ID";
+        return base::unexpected(PERMISSION_DENIED);
+    }
+
+    LayerCreationArgs mirrorArgs(LayerCreationArgs::fromOtherArgs(args));
+    gui::CreateSurfaceResult surfaceResult{};
+    sp<Layer> rootMirrorLayer{};
+    mirrorArgs.displayIdToMirror = args.displayIdToMirror;
+    mirrorArgs.flags |= ISurfaceComposerClient::eNoColorFill;
+    mirrorArgs.addToRoot = true;
+    if (const status_t status = createLayer(mirrorArgs, &surfaceResult.handle, &rootMirrorLayer);
+        status != OK) {
+        return base::unexpected(status);
+    }
+    surfaceResult.layerId = rootMirrorLayer->sequence;
+    surfaceResult.layerName = static_cast<String16>(rootMirrorLayer->getDebugName());
+    addClientLayer(mirrorArgs, rootMirrorLayer);
     return surfaceResult;
 }
 
@@ -7591,8 +7618,7 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
                 Mutex::Autolock _l(mStateLock);
                 // daltonize
                 mDaltonizer.setUseUpdatedAlgorithm(
-                        FlagManager::getInstance().enable_color_correction_bugfix() ||
-                        FlagManager::getInstance().enable_color_correction_desktop_bugfix());
+                        FlagManager::getInstance().enable_color_correction_bugfix());
                 n = data.readInt32();
                 // frameworks/native/services/surfaceflinger/common/include/common/FlagManager.h
                 // to get which type of cc to use.

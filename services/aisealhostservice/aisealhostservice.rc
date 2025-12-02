@@ -1,0 +1,12 @@
+service aisealhostservice /system/bin/aisealhostservice
+    class core
+    user system
+    group system virtualmachine
+    task_profiles MaxPerformance
+    disabled
+
+on property:service.aiseal.enable=1
+    enable aisealhostservice
+    start aisealhostservice
+on property:service.aiseal.enable=0
+    stop aisealhostservice

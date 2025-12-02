@@ -414,12 +414,6 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
                 .setBoolValues({config.touchpadTapDraggingEnabled});
         mPropertyProvider.getProperty("Button Right Click Zone Enable")
                 .setBoolValues({config.touchpadRightClickZoneEnabled});
-        if (!input_flags::touchpad_bottom_right_click_region_fix()) {
-            // A recent Gestures library change restricts the bottom-right click zone to the actual
-            // bottom-right corner (whereas previously it was the whole right side of the pad).
-            // Since this is a behaviour change we need to disable it unless the flag is set.
-            mPropertyProvider.getProperty("Button Right Click Zone Height").setRealValues({-1.0});
-        }
         mTouchpadHardwareStateNotificationsEnabled = config.shouldNotifyTouchpadHardwareState;
         mGestureConverter.setThreeFingerTapShortcutEnabled(
                 config.touchpadThreeFingerTapShortcutEnabled);
