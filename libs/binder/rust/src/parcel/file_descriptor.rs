@@ -31,7 +31,10 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 #[cfg(feature = "std")]
 mod std_parcel_fd {
-    use std::os::fd::{AsRawFd, IntoRawFd, OwnedFd, RawFd};
+    use std::{
+        io,
+        os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd},
+    };
 
     /// Rust version of the Java class android.os.ParcelFileDescriptor
     #[derive(Debug)]
@@ -41,6 +44,12 @@ mod std_parcel_fd {
         /// Create a new `ParcelFileDescriptor`
         pub fn new<F: Into<OwnedFd>>(fd: F) -> Self {
             Self(fd.into())
+        }
+
+        /// Creates a new `ParcelFileDescriptor` referring to the same resource by duplicating the
+        /// underlying file descriptor.
+        pub fn try_clone(&self) -> Result<Self, io::Error> {
+            Ok(Self(self.0.try_clone()?))
         }
     }
 
@@ -65,6 +74,12 @@ mod std_parcel_fd {
     impl IntoRawFd for ParcelFileDescriptor {
         fn into_raw_fd(self) -> RawFd {
             self.0.into_raw_fd()
+        }
+    }
+
+    impl AsFd for ParcelFileDescriptor {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            self.0.as_fd()
         }
     }
 }

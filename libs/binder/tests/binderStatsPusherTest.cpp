@@ -92,6 +92,27 @@ BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t
     return stats;
 }
 
+// Helper function to create a BinderCallsStats for latency comparison
+BinderCallsStats createExpectedLatencyStatsWithCpu(const BinderCallData& datum, int64_t callCount,
+                                                   int64_t durationSumMicros,
+                                                   int32_t secondsWithAtLeast10Calls,
+                                                   int32_t secondsWithAtLeast50Calls,
+                                                   int64_t cpuTimeCount, int64_t cpuTimeSumMicros,
+                                                   int64_t cpuTimeSumSquaredMicros) {
+    auto stats = BinderCallsStats();
+    stats.clientUid = datum.senderUid;
+    stats.interfaceDescriptor = datum.interfaceDescriptor;
+    stats.aidlMethod = datum.aidlMethodName;
+    stats.callCount = callCount;
+    stats.durationSumMicros = durationSumMicros;
+    stats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
+    stats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
+    stats.cpuTimeCount = cpuTimeCount;
+    stats.cpuTimeSumMicros = cpuTimeSumMicros;
+    stats.cpuTimeSumSquaredMicros = cpuTimeSumSquaredMicros;
+    return stats;
+}
+
 MATCHER_P(SpamStatsEq, expectedStats, "") {
     return arg.clientUid == expectedStats.clientUid &&
             arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
@@ -109,6 +130,19 @@ MATCHER_P(CallStatsEq, expectedStats, "") {
             arg.durationSumMicros == expectedStats.durationSumMicros &&
             arg.secondsWithAtLeast10Calls == expectedStats.secondsWithAtLeast10Calls &&
             arg.secondsWithAtLeast50Calls == expectedStats.secondsWithAtLeast50Calls;
+}
+
+MATCHER_P(CallStatsWithCpuEq, expectedStats, "") {
+    return arg.clientUid == expectedStats.clientUid &&
+            arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
+            arg.aidlMethod == expectedStats.aidlMethod &&
+            arg.callCount == expectedStats.callCount &&
+            arg.durationSumMicros == expectedStats.durationSumMicros &&
+            arg.secondsWithAtLeast10Calls == expectedStats.secondsWithAtLeast10Calls &&
+            arg.secondsWithAtLeast50Calls == expectedStats.secondsWithAtLeast50Calls &&
+            arg.cpuTimeCount == expectedStats.cpuTimeCount &&
+            arg.cpuTimeSumMicros == expectedStats.cpuTimeSumMicros &&
+            arg.cpuTimeSumSquaredMicros == expectedStats.cpuTimeSumSquaredMicros;
 }
 
 class BinderStatsPusherTest : public Test {
@@ -149,7 +183,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamNoSpamBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 50; ++i) { // Less than kMinSpamCount (125)
-        data.push_back({
+        data.push_back(BinderCallData{
                 .startTimeNanos = (currentTimeSec - 5) * 1000000000LL,
                 .endTimeNanos = 0,
                 .interfaceDescriptor = String16("IFoo"),
@@ -173,7 +207,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
     int32_t totalCalls = 150;
     // Create enough data in the *same second* to trigger spam, far enough in the past
     for (int i = 0; i < totalCalls; ++i) { // More than kMinSpamCount (125)
-        data.push_back({
+        data.push_back(BinderCallData{
                 .startTimeNanos = currentTimeNanos - 8000'000'000,
                 .endTimeNanos = 0,
                 .interfaceDescriptor = String16("IFoo"),
@@ -198,13 +232,13 @@ TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
 
     // Create spam data within the delay window (kDelaySeconds = 2)
     for (int i = 0; i < 150; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("IBar"),
-                .transactionCode = 2,
+        data.push_back(BinderCallData{
                 .startTimeNanos = currentTimeNanos - 1000'000'000,
                 .endTimeNanos = 0,
-                .senderUid = 1002,
+                .interfaceDescriptor = String16("IBar"),
                 .aidlMethodName = String16("MethodName2"),
+                .transactionCode = 2,
+                .senderUid = 1002,
         });
     }
 
@@ -220,24 +254,24 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
     int64_t currentTimeNanos = 9'100'000'000;
     int32_t totalCalls = 130;
     for (int i = 0; i < totalCalls; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("IBaz"),
-                .transactionCode = 3,
+        data.push_back(BinderCallData{
                 .startTimeNanos = currentTimeNanos - 8000'000'000,
                 .endTimeNanos = 0,
-                .senderUid = 1003,
+                .interfaceDescriptor = String16("IBaz"),
                 .aidlMethodName = String16("MethodName3"),
+                .transactionCode = 3,
+                .senderUid = 1003,
         });
     }
     // Delayed spam data (within kDelaySeconds)
     for (int i = 0; i < 140; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("IQux"),
-                .transactionCode = 4,
+        data.push_back(BinderCallData{
                 .startTimeNanos = currentTimeNanos - 1000'000'000,
                 .endTimeNanos = 0,
-                .senderUid = 1004,
+                .interfaceDescriptor = String16("IQux"),
                 .aidlMethodName = String16("MethodName4"),
+                .transactionCode = 4,
+                .senderUid = 1004,
         });
     }
 
@@ -259,13 +293,13 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
 
     // Create data exceeding the second watermark (250 calls/sec)
     for (int i = 0; i < totalCalls; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("IHighVolume"),
-                .transactionCode = 5,
+        data.push_back(BinderCallData{
                 .startTimeNanos = spamTimeNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1005,
+                .interfaceDescriptor = String16("IHighVolume"),
                 .aidlMethodName = String16("MethodName5"),
+                .transactionCode = 5,
+                .senderUid = 1005,
         });
     }
 
@@ -288,26 +322,26 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
     // Spam for the first second
     int32_t totalCalls1 = 150;
     for (int i = 0; i < totalCalls1; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("IMultiSecond"),
-                .transactionCode = 6,
+        data.push_back(BinderCallData{
                 .startTimeNanos = firstSpamSecondNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1006,
+                .interfaceDescriptor = String16("IMultiSecond"),
                 .aidlMethodName = String16("MethodName6"),
+                .transactionCode = 6,
+                .senderUid = 1006,
         });
     }
     // Spam for the second second
     int32_t totalCalls2 = 160;
     for (int i = 0; i < totalCalls2; ++i) {
         // Use the same UID, code, desc for aggregation
-        data.push_back({
-                .interfaceDescriptor = String16("IMultiSecond"),
-                .transactionCode = 6,
+        data.push_back(BinderCallData{
                 .startTimeNanos = secondSpamSecondNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1006,
+                .interfaceDescriptor = String16("IMultiSecond"),
                 .aidlMethodName = String16("MethodName6"),
+                .transactionCode = 6,
+                .senderUid = 1006,
         });
     }
 
@@ -328,13 +362,13 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
 
     int32_t totalCalls = 150;
     for (int i = 0; i < totalCalls; ++i) {
-        callData1.push_back({
-                .interfaceDescriptor = String16("IDelayed"),
-                .transactionCode = 7,
+        callData1.push_back(BinderCallData{
                 .startTimeNanos = spamDataTimeNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1007,
+                .interfaceDescriptor = String16("IDelayed"),
                 .aidlMethodName = String16("MethodName7"),
+                .transactionCode = 7,
+                .senderUid = 1007,
         });
     }
 
@@ -416,13 +450,13 @@ TEST_F(BinderStatsPusherTest, SkipPushForLocalBinderWithoutJvm) {
     int64_t currentTimeSec = (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 8s
 
     for (int i = 0; i < 150; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("ILocalSkipped"),
-                .transactionCode = 10,
+        data.push_back(BinderCallData{
                 .startTimeNanos = spamTimeNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1009,
+                .interfaceDescriptor = String16("ILocalSkipped"),
                 .aidlMethodName = String16("MethodName10"),
+                .transactionCode = 10,
+                .senderUid = 1009,
         });
     }
 
@@ -441,13 +475,13 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
 
     int32_t totalCalls = 150;
     for (int i = 0; i < totalCalls; ++i) { // Enough to trigger kSpamFirstWatermark
-        spamCallData1.push_back({
-                .interfaceDescriptor = String16("IServiceSkipped"),
-                .transactionCode = 11,
+        spamCallData1.push_back(BinderCallData{
                 .startTimeNanos = spamDataTimeNanos,
                 .endTimeNanos = 0,
-                .senderUid = 1010,
+                .interfaceDescriptor = String16("IServiceSkipped"),
                 .aidlMethodName = String16("MethodName11"),
+                .transactionCode = 11,
+                .senderUid = 1010,
         });
     }
 
@@ -482,9 +516,9 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
 
 TEST_F(BinderStatsPusherTest, sizeOfStruct) {
 #ifdef __LP64__
-    EXPECT_EQ(sizeof(android::BinderCallData), 40);
+    EXPECT_EQ(sizeof(android::BinderCallData), 48);
 #else
-    EXPECT_EQ(sizeof(android::BinderCallData), 32);
+    EXPECT_EQ(sizeof(android::BinderCallData), 36);
 #endif
 }
 // --- Latency Tests ---
@@ -494,15 +528,15 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyNoLatencyBelowThreshold) {
     int64_t currentTimeSec = 14;
     // Create data within the delay window
     for (int i = 0; i < 5; ++i) { // Less than kLatencyCountFirstWatermark (10)
-        data.push_back({
-                .interfaceDescriptor = String16("ILatencyFoo"),
-                .transactionCode = 1,
+        data.push_back(BinderCallData{
                 .startTimeNanos =
                         (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL,
                 .endTimeNanos = (currentTimeSec - kLatencyAggregationWindowSec + 1) * 1000000000LL +
                         1000000 /* 1ms */,
-                .senderUid = 2001,
+                .interfaceDescriptor = String16("ILatencyFoo"),
                 .aidlMethodName = String16("MethodName1"),
+                .transactionCode = 1,
+                .senderUid = 2001,
         });
     }
 
@@ -523,13 +557,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
     // Create enough data in the *same second* to trigger latency reporting
     for (int i = 0; i < 15; ++i) {              // More than kLatencyCountFirstWatermark (10)
         int64_t durationMicros = (i + 1) * 100; // e.g. 100us, 200us ..
-        data.push_back({
-                .interfaceDescriptor = String16("ILatencyBar"),
-                .transactionCode = 2,
+        data.push_back(BinderCallData{
                 .startTimeNanos = callTimeNanos,
                 .endTimeNanos = callTimeNanos + durationMicros * 1000,
-                .senderUid = 2002,
+                .interfaceDescriptor = String16("ILatencyBar"),
                 .aidlMethodName = String16("MethodName2"),
+                .transactionCode = 2,
+                .senderUid = 2002,
         });
         totalDurationMicros += durationMicros;
     }
@@ -549,13 +583,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyDelayedLatency) {
 
     // Create latency data within the aggregation window
     for (int i = 0; i < 15; ++i) {
-        data.push_back({
-                .interfaceDescriptor = String16("ILatencyBaz"),
-                .transactionCode = 3,
+        data.push_back(BinderCallData{
                 .startTimeNanos = currentTimeNanos - 1000'000'000,
                 .endTimeNanos = currentTimeNanos - 1000'000'000 + 500000 /* 0.5ms */,
-                .senderUid = 2003,
+                .interfaceDescriptor = String16("ILatencyBaz"),
                 .aidlMethodName = String16("MethodName3"),
+                .transactionCode = 3,
+                .senderUid = 2003,
         });
     }
 
@@ -574,13 +608,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
 
     for (int i = 0; i < 15; ++i) {
         int64_t durationMicros = (i + 1) * 150;
-        callData1.push_back({
-                .interfaceDescriptor = String16("ILatencyDelayed"),
-                .transactionCode = 4,
+        callData1.push_back(BinderCallData{
                 .startTimeNanos = latencyDataTimeNanos,
                 .endTimeNanos = latencyDataTimeNanos + durationMicros * 1000,
-                .senderUid = 2004,
+                .interfaceDescriptor = String16("ILatencyDelayed"),
                 .aidlMethodName = String16("MethodName4"),
+                .transactionCode = 4,
+                .senderUid = 2004,
         });
         totalDurationMicros1 += durationMicros;
     }
@@ -604,6 +638,44 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
     pusher.pushLocked(callData2, call2_time_sec);
 }
 
+TEST_F(BinderStatsPusherTest, AggregateLatencyWithCpu) {
+    std::vector<BinderCallData> data;
+    int64_t callTimeNanos = 2'000'000'000LL; // 2s
+    int64_t currentTimeSec =
+            (callTimeNanos / 1000'000'000LL) + kLatencyAggregationWindowSec + 1; // 2 + 5 + 1 = 8s
+    int64_t totalDurationMicros = 0;
+    int64_t totalCpuTimeMicros = 0;
+    int64_t totalcpuTimeSumSquaredMicros = 0;
+
+    // Create enough data in the *same second* to trigger latency reporting
+    for (int i = 0; i < 15; ++i) {              // More than kLatencyCountFirstWatermark (10)
+        int64_t durationMicros = (i + 1) * 100; // e.g. 100us, 200us ..
+        int64_t cpuTimeMicros = (i + 1) * 50;
+        data.push_back(BinderCallData{
+                .startTimeNanos = callTimeNanos,
+                .endTimeNanos = callTimeNanos + durationMicros * 1000,
+                .cpuTimeNanos = cpuTimeMicros * 1000,
+                .interfaceDescriptor = String16("ILatencyCpu"),
+                .aidlMethodName = String16("MethodName2"),
+                .transactionCode = 2,
+                .senderUid = 2002,
+        });
+        totalDurationMicros += durationMicros;
+        totalCpuTimeMicros += cpuTimeMicros;
+        totalcpuTimeSumSquaredMicros += cpuTimeMicros * cpuTimeMicros;
+    }
+
+    auto expectedStats =
+            createExpectedLatencyStatsWithCpu(data[0], 15, totalDurationMicros, 1, 0, 15,
+                                              totalCpuTimeMicros, totalcpuTimeSumSquaredMicros);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
+
+    pusher.pushLocked(data, currentTimeSec);
+}
+
 TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     std::vector<BinderCallData> data;
     int64_t firstCallSecondNanos = 2'000'000'000LL;  // 2s
@@ -615,13 +687,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     // Data for the first second
     for (int i = 0; i < 12; ++i) { // 12 calls
         int64_t durationMicros = (i + 1) * 100;
-        data.push_back({
-                .interfaceDescriptor = String16("ILatencyMultiSec"),
-                .transactionCode = 5,
+        data.push_back(BinderCallData{
                 .startTimeNanos = firstCallSecondNanos,
                 .endTimeNanos = firstCallSecondNanos + durationMicros * 1000,
-                .senderUid = 2005,
+                .interfaceDescriptor = String16("ILatencyMultiSec"),
                 .aidlMethodName = String16("MethodName5"),
+                .transactionCode = 5,
+                .senderUid = 2005,
         });
         totalDurationMicros += durationMicros;
     }
@@ -629,13 +701,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     for (int i = 0; i < 8; ++i) { // 8 calls
         int64_t durationMicros = (i + 1) * 120;
         // Use the same UID, code, desc for aggregation
-        data.push_back({
-                .interfaceDescriptor = String16("ILatencyMultiSec"),
-                .transactionCode = 5,
+        data.push_back(BinderCallData{
                 .startTimeNanos = secondCallSecondNanos,
                 .endTimeNanos = secondCallSecondNanos + durationMicros * 1000,
-                .senderUid = 2005,
+                .interfaceDescriptor = String16("ILatencyMultiSec"),
                 .aidlMethodName = String16("MethodName5"),
+                .transactionCode = 5,
+                .senderUid = 2005,
         });
         totalDurationMicros += durationMicros;
     }

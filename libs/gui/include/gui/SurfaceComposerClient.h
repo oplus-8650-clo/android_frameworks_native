@@ -409,7 +409,12 @@ public:
     sp<SurfaceControl> mirrorSurface(SurfaceControl* mirrorFromSurface,
                                      SurfaceControl* stopAt = nullptr);
 
-    sp<SurfaceControl> mirrorDisplay(DisplayId displayId);
+    // Finds the layer stack associated with the provided `displayId`, and returns the
+    // `SurfaceControl` associated with the root layer of the mirrored hierarchy. Otherwise, nullptr
+    // if the client lacks necessary permissions, the `displayId` does not exist, the layer cannot
+    // be created due to a leak, or if there is a binder error. Note: The mirrored layer stack does
+    // not change, even if the display's layer stack does.
+    sp<SurfaceControl> mirrorLayerStack(DisplayId displayId);
 
     static const std::string kEmpty;
     static sp<IBinder> createVirtualDisplay(const std::string& displayName, bool isSecure,

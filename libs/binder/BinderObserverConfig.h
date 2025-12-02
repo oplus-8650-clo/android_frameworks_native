@@ -17,6 +17,7 @@
 
 #include <log/log.h>
 
+#include <atomic>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -38,6 +39,8 @@ public:
     struct TrackingInfo {
         bool trackSpam;
         bool trackLatency;
+        // trackCpu requires trackLatency to be true.
+        bool trackCpu;
 
         bool operator==(const TrackingInfo&) const = default;
         bool isTracked() const { return trackSpam || trackLatency; }
@@ -51,25 +54,7 @@ public:
     // within the lifecycle of a process.
     bool isEnabled() { return mEnabled; }
 
-    TrackingInfo getTrackingInfo(const std::u16string_view& interfaceDescriptor, uint32_t txnCode) {
-        if (!mEnabled) {
-            return {
-                    .trackSpam = false,
-                    .trackLatency = false,
-            };
-        }
-
-        // If present callMod must be a multiple of spamMod, so use it as a modulo.
-        size_t modulo = mSharding.callMod != 0 ? mSharding.callMod : mSharding.spamMod;
-        // As above, mod before addition too to ensure we don't overflow.
-        size_t token = mAidlOffset % modulo;
-        token += txnCode % modulo;
-        token += mEnvironment->hashString16(interfaceDescriptor) % modulo;
-        return {
-                .trackSpam = mSharding.spamMod > 0 && token % mSharding.spamMod == 0,
-                .trackLatency = mSharding.callMod > 0 && token % mSharding.callMod == 0,
-        };
-    }
+    TrackingInfo getTrackingInfo(const std::u16string_view& interfaceDescriptor, uint32_t txnCode);
 
 private:
     friend class BinderObserverConfigTest;
@@ -78,7 +63,9 @@ private:
         size_t processMod;
         size_t spamMod;
         size_t callMod;
-
+        // The sampling rate for CPU usage tracking. CPU usage is tracked for 1 in every
+        // cpuSamplingMod calls for which latency is also being tracked.
+        size_t cpuSamplingMod;
         bool operator==(const ShardingConfig&) const = default;
     };
 
@@ -110,11 +97,12 @@ private:
 
     BinderObserverConfig(std::unique_ptr<BinderObserverConfig::Environment>&& environment,
                          bool enabled, BinderObserverConfig::ShardingConfig sharding,
-                         size_t aidlOffset)
+                         size_t aidlOffset, size_t cpuSamplingOffset)
           : mEnvironment(std::move(environment)),
             mEnabled(enabled),
             mSharding(sharding),
-            mAidlOffset(aidlOffset) {
+            mAidlOffset(aidlOffset),
+            mLatencySequenceNumber(cpuSamplingOffset) {
         if (mEnabled) {
             LOG_ALWAYS_FATAL_IF(mSharding.spamMod == 0, "Enabled but nothing to monitor.");
 
@@ -124,14 +112,22 @@ private:
         }
     }
 
-    static std::pair<size_t, size_t> getBootStableTokens(Environment& environment);
-
+    static std::tuple<size_t, size_t, size_t> getBootStableTokens(Environment& environment);
     static std::unique_ptr<BinderObserverConfig> createConfig(
             std::unique_ptr<BinderObserverConfig::Environment>&& environment);
+
+    // Atomically Adds 1 to mLatencySequenceNumber and returns.
+    // Split out to allow no_sanitize(unsigned-integer-overflow).
+    size_t fetchAddOneLatencySequenceNumber();
 
     const std::unique_ptr<Environment> mEnvironment;
     const bool mEnabled;
     const ShardingConfig mSharding;
+    // A boot-stable random value used for sharding AIDL method tracking.
     const size_t mAidlOffset;
+    // A counter for latency-tracked calls, used to sample CPU usage tracking. Initialized with a
+    // "boot + process name"-stable random value to ensure different processes sample different
+    // calls.
+    std::atomic<size_t> mLatencySequenceNumber;
 };
 } // namespace android

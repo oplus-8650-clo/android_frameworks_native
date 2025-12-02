@@ -24,6 +24,16 @@
 
 namespace android {
 constexpr int kSendIntervalSec = 5;
+constexpr int64_t nanoSecondsPerSec = 1000'000'000LL;
+
+// Returns zero if clock isn't available.
+static int64_t getCpuTimeNanos() {
+    timespec now;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) == -1) {
+        return 0;
+    }
+    return now.tv_sec * nanoSecondsPerSec + now.tv_nsec;
+}
 
 BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uint32_t code,
                                                             uid_t callingUid) {
@@ -41,6 +51,7 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
 
     return {
             .startTimeNanos = trackingInfo.isTracked() ? uptimeNanos() : 0,
+            .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? getCpuTimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
             // TODO(b/299356196): Reduce std::string and String16 allocations.
             .aidlMethodName = trackingInfo.isTracked()
@@ -64,6 +75,9 @@ void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& que
     BinderCallData observerData = {
             .startTimeNanos = callInfo.startTimeNanos,
             .endTimeNanos = callInfo.trackingInfo.trackLatency ? uptimeNanos() : 0,
+            .cpuTimeNanos = callInfo.trackingInfo.trackCpu && callInfo.cpuUsageStartTimeNanos != 0
+                    ? getCpuTimeNanos()
+                    : 0,
             .interfaceDescriptor = callInfo.interfaceDescriptor,
             .aidlMethodName = callInfo.aidlMethodName,
             .transactionCode = callInfo.code,
@@ -87,7 +101,7 @@ bool BinderObserver::isFlushRequired(int64_t nowSec) {
 void BinderObserver::addStatMaybeFlush(const std::shared_ptr<BinderStatsSpscQueue>& queue,
                                        const BinderCallData& stat) {
     // If write fails, then buffer is full.
-    int64_t nowSec = stat.endTimeNanos / 1000'000'000;
+    int64_t nowSec = stat.endTimeNanos / nanoSecondsPerSec;
     if (!queue->push(stat)) {
         flushStats(nowSec);
         // If write fails again, we drop the stat.

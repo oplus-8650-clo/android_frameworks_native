@@ -109,6 +109,11 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: false,
     require_root: true,
+    cflags: select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER_V2"), {
+        true: ["-DLIBBINDER_BINDER_OBSERVER_V2"],
+        false: [],
+        default: [],
+    }),
 }
 
 cc_test {
@@ -137,6 +142,11 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: false,
     require_root: false,
+    cflags: select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER_V2"), {
+        true: ["-DLIBBINDER_BINDER_OBSERVER_V2"],
+        false: [],
+        default: [],
+    }),
 }
 
 // unit test only, which can run on host and doesn't use /dev/binder

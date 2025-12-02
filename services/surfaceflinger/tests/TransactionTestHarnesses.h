@@ -72,7 +72,7 @@ public:
                 constexpr ui::LayerStack layerStack{
                         848472}; // ASCII for TTH (TransactionTestHarnesses)
                 sp<SurfaceControl> mirrorSc =
-                        SurfaceComposerClient::getDefault()->mirrorDisplay(mDisplayId);
+                        SurfaceComposerClient::getDefault()->mirrorLayerStack(mDisplayId);
 
                 SurfaceComposerClient::Transaction t;
                 t.setDisplaySurface(vDisplay,

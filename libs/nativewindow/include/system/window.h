@@ -262,7 +262,31 @@ enum {
     NATIVE_WINDOW_SET_BUFFERS_ADDITIONAL_OPTIONS  = 50,
     NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED = 51,
     NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED = 52,
+    NATIVE_WINDOW_SET_PRESENT_MODE                = 53,
     // clang-format on
+};
+
+/* parameter for NATIVE_WINDOW_SET_PRESENT_MODE */
+enum {
+    /*
+     * No present mode has been explicitly set. The behavior is implementation-dependent
+     * and may differ from ANATIVEWINDOW_PRESENT_DEFAULT.
+     */
+    ANATIVEWINDOW_PRESENT_UNKNOWN = 0,
+
+    /*
+     * The consumer acquires the oldest buffer in the queue. This is the
+     * default behavior.
+     */
+    ANATIVEWINDOW_PRESENT_DEFAULT = 1,
+
+    /*
+     * The consumer acquires the latest buffer in the queue, dropping any
+     * previously queued buffers. This behavior is applied on a frame-by-frame
+     * basis, ensuring that already queued buffers are not overwritten, and is
+     * particularly useful for latency-sensitive applications.
+     */
+    ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY = 2,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -1159,6 +1183,10 @@ static inline int native_window_set_frame_rate(struct ANativeWindow* window, flo
 static inline int native_window_set_producer_throttling_enabled(struct ANativeWindow* window,
                                                                 bool enabled) {
     return window->perform(window, NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED, enabled);
+}
+
+static inline int native_window_set_present_mode(struct ANativeWindow* window, int32_t mode) {
+    return window->perform(window, NATIVE_WINDOW_SET_PRESENT_MODE, mode);
 }
 
 static inline int native_window_is_producer_throttling_enabled(struct ANativeWindow* window,

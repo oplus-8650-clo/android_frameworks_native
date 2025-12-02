@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <algorithm>
 
+#include <android-base/logging.h>
 #include <android/gui/BnWindowInfosReportedListener.h>
 #include <android/gui/DisplayState.h>
 #include <android/gui/EdgeExtensionParameters.h>
@@ -2678,17 +2679,19 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFr
     return nullptr;
 }
 
-sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
-    Mutex::Autolock _lm(mLock);
+sp<SurfaceControl> SurfaceComposerClient::mirrorLayerStack(DisplayId displayId) {
+    const Mutex::Autolock lock(mLock);
 
-    gui::CreateSurfaceResult result;
-    const binder::Status status = mClient->mirrorDisplay(displayId.value, &result);
-    const status_t err = statusTFromBinderStatus(status);
-    if (err == NO_ERROR) {
-        return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
-                                        result.handle, result.layerId, toString(result.layerName));
+    gui::CreateSurfaceResult outSurfaceResult;
+    const binder::Status status = mClient->mirrorLayerStack(displayId.value, &outSurfaceResult);
+    if (const status_t errorCode = statusTFromBinderStatus(status); errorCode != OK) {
+        LOG(ERROR) << "Failed to mirror layer stack for display ID " << to_string(displayId)
+                   << ". Error: " << statusToString(errorCode);
+        return nullptr;
     }
-    return nullptr;
+    return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
+                                    outSurfaceResult.handle, outSurfaceResult.layerId,
+                                    toString(outSurfaceResult.layerName));
 }
 
 status_t SurfaceComposerClient::clearLayerFrameStats(const sp<IBinder>& token) const {

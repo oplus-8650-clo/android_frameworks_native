@@ -26,6 +26,8 @@
 
 #include <binder/IInterface.h>
 
+#include <android/native_window.h>
+#include <system/window.h>
 #include <ui/BufferQueueDefs.h>
 #include <ui/Fence.h>
 #include <ui/GraphicBuffer.h>
@@ -735,6 +737,9 @@ public:
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
     virtual status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options);
 #endif
+
+    // setPresentMode sets the buffer acquisition mode.
+    virtual status_t setPresentMode(int32_t mode);
 
     struct RequestBufferOutput : public Flattenable<RequestBufferOutput> {
         RequestBufferOutput() = default;

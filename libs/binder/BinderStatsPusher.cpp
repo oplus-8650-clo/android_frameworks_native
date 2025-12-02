@@ -26,8 +26,10 @@
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <utils/SystemClock.h>
+#include <algorithm>
 #include <charconv>
 #include "BinderStatsUtils.h"
+#include "BuildFlags.h"
 #include "JvmUtils.h"
 
 namespace android {
@@ -67,7 +69,23 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
         it->second.totalCalls++;
         if (datum.hasLatencyData()) {
             it->second.callsWithLatency++;
-            it->second.durationSumMicros += (datum.endTimeNanos - datum.startTimeNanos) / 1000;
+            uint64_t durationMicros = (datum.endTimeNanos - datum.startTimeNanos) / 1000;
+            it->second.durationSumMicros += durationMicros;
+            // Limiting duration to 120'000'000 (2 minutes) to prevent overflow in 64-bit integer
+            // sum squared.
+            durationMicros = std::min<uint64_t>(durationMicros, 120'000'000);
+            if (kBinderObserverV2Enabled) {
+                it->second.callDurationSumSquaredMicros += durationMicros * durationMicros;
+            }
+        }
+        if (datum.cpuTimeNanos > 0) {
+            it->second.cpuTimeCount++;
+            int64_t cpuTimeMicros = datum.cpuTimeNanos / 1000;
+            it->second.cpuTimeSumMicros += cpuTimeMicros;
+            // Limiting duration to 120'000'000 (2 minutes) to prevent overflow in 64-bit integer
+            // sum squared.
+            cpuTimeMicros = std::min<int64_t>(cpuTimeMicros, 120'000'000);
+            it->second.cpuTimeSumSquaredMicros += cpuTimeMicros * cpuTimeMicros;
         }
     }
     if (!service) return;
@@ -100,8 +118,14 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
 
         uint64_t callsWithLatency = 0;
         uint64_t durationSumMicros = 0;
+        uint64_t callDurationSumSquaredMicros = 0;
         uint32_t secondsWithAtLeast10Calls = 0;
         uint32_t secondsWithAtLeast50Calls = 0;
+
+        int32_t cpuTimeCount = 0;
+        int64_t cpuTimeSumMicros = 0;
+        int64_t cpuTimeSumSquaredMicros = 0;
+
         for (auto innerIt = outerIt->second.begin(); innerIt != outerIt->second.end();
              /* no increment */) {
             // Check if the buffer period has passed.
@@ -118,12 +142,18 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
                 if (innerIt->second.callsWithLatency > 0) {
                     callsWithLatency += innerIt->second.callsWithLatency;
                     durationSumMicros += innerIt->second.durationSumMicros;
+                    callDurationSumSquaredMicros += innerIt->second.callDurationSumSquaredMicros;
                     if (innerIt->second.callsWithLatency >= kLatencyCountFirstWatermark) {
                         secondsWithAtLeast10Calls++;
                         if (innerIt->second.callsWithLatency >= kLatencyCountSecondWatermark) {
                             secondsWithAtLeast50Calls++;
                         }
                     }
+                }
+                if (innerIt->second.cpuTimeCount > 0) {
+                    cpuTimeCount += innerIt->second.cpuTimeCount;
+                    cpuTimeSumMicros += innerIt->second.cpuTimeSumMicros;
+                    cpuTimeSumSquaredMicros += innerIt->second.cpuTimeSumSquaredMicros;
                 }
                 // Erase the datum from the buffer so we don't aggregate it again
                 innerIt = outerIt->second.erase(innerIt);
@@ -146,6 +176,12 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             callsStats.durationSumMicros = static_cast<int64_t>(durationSumMicros);
             callsStats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
             callsStats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
+            if (kBinderObserverV2Enabled) {
+                callsStats.callDurationSumSquaredMicros = callDurationSumSquaredMicros;
+            }
+            callsStats.cpuTimeCount = cpuTimeCount;
+            callsStats.cpuTimeSumMicros = cpuTimeSumMicros;
+            callsStats.cpuTimeSumSquaredMicros = cpuTimeSumSquaredMicros;
         }
 
         if (mSpamStats.size() >= kMaxStatsCount) {
