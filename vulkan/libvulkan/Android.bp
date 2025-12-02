@@ -151,6 +151,7 @@ cc_library_shared {
         "libdl_android",
         "android.hardware.graphics.common@1.0",
         "libSurfaceFlingerProp",
+        "libaconfig_storage_read_api_cc",
     ],
     static_libs: [
         "libgrallocusage",

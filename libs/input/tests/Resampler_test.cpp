@@ -884,18 +884,6 @@ TEST_F(ResamplerTest, MultiplePointerShouldNotResampleToolTypeInterpolation) {
                                                          .isResampled = false}}}},
                                           AMOTION_EVENT_ACTION_MOVE};
 
-    const InputMessage futureSample = InputSample{15ms,
-                                                  {{.id = 0,
-                                                    .toolType = ToolType::PALM,
-                                                    .x = 3.0,
-                                                    .y = 3.0,
-                                                    .isResampled = false},
-                                                   {.id = 1,
-                                                    .toolType = ToolType::PALM,
-                                                    .x = 4.0,
-                                                    .y = 4.0,
-                                                    .isResampled = false}}};
-
     const MotionEvent originalMotionEvent = motionEvent;
 
     mResampler->resampleMotionEvent(16ms, motionEvent, /*futureSample=*/nullptr);

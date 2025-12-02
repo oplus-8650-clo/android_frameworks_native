@@ -75,17 +75,18 @@ struct PublishMotionArgs {
     std::vector<PointerProperties> pointerProperties;
     std::vector<PointerCoords> pointerCoords;
 
-    PublishMotionArgs(int32_t action, nsecs_t downTime, const std::vector<Pointer>& pointers,
-                      const uint32_t seq);
+    PublishMotionArgs(int32_t inAction, nsecs_t inDownTime, const std::vector<Pointer>& pointers,
+                      const uint32_t inSeq, nsecs_t inEventTime);
 };
 
 PublishMotionArgs::PublishMotionArgs(int32_t inAction, nsecs_t inDownTime,
-                                     const std::vector<Pointer>& pointers, const uint32_t inSeq)
+                                     const std::vector<Pointer>& pointers, const uint32_t inSeq,
+                                     nsecs_t inEventTime)
       : action(inAction),
         downTime(inDownTime),
         seq(inSeq),
         eventId(InputEvent::nextId()),
-        eventTime(systemTime(SYSTEM_TIME_MONOTONIC)) {
+        eventTime(inEventTime) {
     hmac = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
 
@@ -357,8 +358,8 @@ void InputPublisherAndConsumerTest::publishAndConsumeMotionDown(nsecs_t downTime
 void InputPublisherAndConsumerTest::publishAndConsumeBatchedMotionMove(nsecs_t downTime) {
     uint32_t seq = mSeq++;
     const std::vector<Pointer> pointers = {Pointer{.id = 0, .x = 20, .y = 30}};
-    PublishMotionArgs args(AMOTION_EVENT_ACTION_MOVE, downTime, pointers, seq);
     const nsecs_t publishTime = systemTime(SYSTEM_TIME_MONOTONIC);
+    PublishMotionArgs args(AMOTION_EVENT_ACTION_MOVE, downTime, pointers, seq, publishTime);
     publishMotionEvent(*mPublisher, args);
 
     // Consume leaving a batch behind.
@@ -379,8 +380,8 @@ void InputPublisherAndConsumerTest::publishAndConsumeBatchedMotionMove(nsecs_t d
 void InputPublisherAndConsumerTest::publishAndConsumeMotionEvent(
         int32_t action, nsecs_t downTime, const std::vector<Pointer>& pointers) {
     uint32_t seq = mSeq++;
-    PublishMotionArgs args(action, downTime, pointers, seq);
     nsecs_t publishTime = systemTime(SYSTEM_TIME_MONOTONIC);
+    PublishMotionArgs args(action, downTime, pointers, seq, publishTime);
     publishMotionEvent(*mPublisher, args);
 
     uint32_t consumeSeq;

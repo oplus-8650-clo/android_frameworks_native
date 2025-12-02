@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+#include <unordered_map>
+#include <vector>
 #include <binder/Binder.h>
 #include <binder/Parcel.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <input/InputDevice.h>
 #include <input/KeyLayoutMap.h>
@@ -24,6 +27,9 @@
 #include "android-base/file.h"
 
 namespace android {
+
+using ::testing::ElementsAre;
+using ::testing::IsEmpty;
 
 // --- InputDeviceIdentifierTest ---
 
@@ -148,6 +154,53 @@ TEST_F(InputDeviceKeyMapTest, keyCharacterMapApplyOverlayTest) {
 
     mapKeyResult = mKeyMap.keyCharacterMap->mapKey(KEY_E, /*usageCode=*/0, &outKeyCode);
     ASSERT_NE(mapKeyResult, OK) << "Mapping exists for KEY_E for " << frenchOverlayPath;
+}
+
+TEST_F(InputDeviceKeyMapTest, keyCharacterMapApplyKeyRemappingTest) {
+    std::unordered_map<int32_t, int32_t> keyRemapping;
+    keyRemapping[AKEYCODE_A] = AKEYCODE_B;
+    keyRemapping[AKEYCODE_C] = AKEYCODE_D;
+    keyRemapping[AKEYCODE_E] = AKEYCODE_E; // Remapping to itself.
+
+    mKeyMap.keyCharacterMap->setKeyRemapping(keyRemapping);
+
+    ASSERT_EQ(AKEYCODE_B, mKeyMap.keyCharacterMap->applyKeyRemapping(AKEYCODE_A));
+    ASSERT_EQ(AKEYCODE_D, mKeyMap.keyCharacterMap->applyKeyRemapping(AKEYCODE_C));
+    ASSERT_EQ(AKEYCODE_E, mKeyMap.keyCharacterMap->applyKeyRemapping(AKEYCODE_E));
+    // F is not in the remapping, so it should map to itself.
+    ASSERT_EQ(AKEYCODE_F, mKeyMap.keyCharacterMap->applyKeyRemapping(AKEYCODE_F));
+}
+
+TEST_F(InputDeviceKeyMapTest, keyCharacterMapFindKeyCodesMappedToKeyCodeTest) {
+    std::unordered_map<int32_t, int32_t> keyRemapping;
+    keyRemapping[AKEYCODE_A] = AKEYCODE_B;
+    keyRemapping[AKEYCODE_C] = AKEYCODE_D;
+    keyRemapping[AKEYCODE_E] = AKEYCODE_E; // Remapping to itself.
+
+    mKeyMap.keyCharacterMap->setKeyRemapping(keyRemapping);
+
+    std::vector<int32_t> fromKeyCodesToB =
+            mKeyMap.keyCharacterMap->findKeyCodesMappedToKeyCode(AKEYCODE_B);
+    ASSERT_THAT(fromKeyCodesToB, ElementsAre(AKEYCODE_A));
+
+    std::vector<int32_t> fromKeyCodesToD =
+            mKeyMap.keyCharacterMap->findKeyCodesMappedToKeyCode(AKEYCODE_D);
+    ASSERT_THAT(fromKeyCodesToD, ElementsAre(AKEYCODE_C));
+
+    std::vector<int32_t> fromKeyCodesToE =
+            mKeyMap.keyCharacterMap->findKeyCodesMappedToKeyCode(AKEYCODE_E);
+    ASSERT_THAT(fromKeyCodesToE, ElementsAre(AKEYCODE_E));
+
+    std::vector<int32_t> fromKeyCodesToF =
+            mKeyMap.keyCharacterMap->findKeyCodesMappedToKeyCode(AKEYCODE_F);
+    ASSERT_THAT(fromKeyCodesToF, IsEmpty());
+}
+
+TEST_F(InputDeviceKeyMapTest, keyCharacterMapEmptyRemappingTest) {
+    mKeyMap.keyCharacterMap->setKeyRemapping({});
+
+    ASSERT_EQ(AKEYCODE_A, mKeyMap.keyCharacterMap->applyKeyRemapping(AKEYCODE_A));
+    ASSERT_THAT(mKeyMap.keyCharacterMap->findKeyCodesMappedToKeyCode(AKEYCODE_B), IsEmpty());
 }
 
 TEST_F(InputDeviceKeyMapTest, keyCharacterMapBadAxisLabel) {

@@ -57,6 +57,9 @@ private:
     binder::Status mirrorLayerStack(int64_t displayId,
                                     gui::CreateSurfaceResult* outSurfaceResult) override;
 
+    binder::Status mirrorDisplay(int64_t displayId,
+                                 gui::CreateSurfaceResult* outSurfaceResult) override;
+
     binder::Status getSchedulingPolicy(gui::SchedulingPolicy* outPolicy) override;
 
     // constant

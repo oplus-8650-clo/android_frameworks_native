@@ -233,10 +233,10 @@ void HWComposer::allocatePhysicalDisplay(hal::HWDisplayId hwcDisplayId, Physical
              port);
 
     if (FlagManager::getInstance().stable_edid_ids()) {
-        LOG_ALWAYS_FATAL_IF(hasDisplayWithId(displayId),
-                            "Cannot attach display to HAL display %" PRIu64
-                            " with a duplicate display ID %" PRIu64 ".",
-                            hwcDisplayId, displayId.value);
+        ALOGE_IF(hasDisplayWithId(displayId),
+                 "Should not attach display to HAL display %" PRIu64
+                 " with a duplicate display ID %" PRIu64 ".",
+                 hwcDisplayId, displayId.value);
     }
 
     mPhysicalDisplayIdMap[hwcDisplayId] = displayId;

@@ -1129,8 +1129,13 @@ VkResult EnumerateDeviceExtensionProperties(
     std::vector<VkExtensionProperties> loader_extensions;
     loader_extensions.push_back({
         VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
-        VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION});
-
+        VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION,
+    });
+    if (flags::present_mode_fifo_latest_ready_ext()) {
+        loader_extensions.push_back(
+            {VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME,
+             VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_SPEC_VERSION});
+    }
     bool hdrBoardConfig = android::sysprop::has_HDR_display(false);
     if (hdrBoardConfig) {
         loader_extensions.push_back({VK_EXT_HDR_METADATA_EXTENSION_NAME,
@@ -1155,8 +1160,10 @@ VkResult EnumerateDeviceExtensionProperties(
 
     loader_extensions.push_back(
         {VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_KHR_PRESENT_ID_SPEC_VERSION});
-    loader_extensions.push_back(
-        {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
+    if (flags::present_id2_khr()) {
+        loader_extensions.push_back(
+            {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
+    }
 
     // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
     // support is provided by the driver
@@ -1720,10 +1727,12 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
             } break;
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR: {
-                VkPhysicalDevicePresentId2FeaturesKHR* features =
-                    reinterpret_cast<VkPhysicalDevicePresentId2FeaturesKHR*>(
-                        pFeats);
-                features->presentId2 = VK_TRUE;
+                if (flags::present_id2_khr()) {
+                    VkPhysicalDevicePresentId2FeaturesKHR* features =
+                        reinterpret_cast<VkPhysicalDevicePresentId2FeaturesKHR*>(
+                            pFeats);
+                    features->presentId2 = VK_TRUE;
+                }
                 break;
             }
 

@@ -128,6 +128,16 @@ props {
     deprecated: true
   }
   prop {
+    api_name: "resync_on_choreographer_timeout"
+    type: Long
+    prop_name: "ro.surface_flinger.resync_on_choreographer_timeout"
+  }
+  prop {
+    api_name: "resync_on_tx_timeout"
+    type: Long
+    prop_name: "ro.surface_flinger.resync_on_tx_timeout"
+  }
+  prop {
     api_name: "running_without_sync_framework"
     prop_name: "ro.surface_flinger.running_without_sync_framework"
   }

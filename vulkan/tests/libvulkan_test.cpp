@@ -980,6 +980,63 @@ TEST_F(AImageReaderVulkanSwapchainTest,
     EXPECT_EQ(res, VK_ERROR_LAYER_NOT_PRESENT);
 }
 
+TEST_F(AImageReaderVulkanSwapchainTest, TestFifoLatestReadySupport) {
+    // Test if VK_PRESENT_MODE_FIFO_LATEST_READY_EXT is supported
+    std::vector<const char*> instanceLayers;
+    std::vector<const char*> deviceLayers;
+
+    createVulkanInstance(instanceLayers);
+    createAImageReader(640, 480, AIMAGE_FORMAT_PRIVATE, 3);
+    getANativeWindowFromReader();
+    createVulkanSurface();
+    pickPhysicalDeviceAndQueueFamily();
+
+    // Check if the physical device supports the extension
+    uint32_t extensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(mPhysicalDev, nullptr, &extensionCount,
+                                         nullptr);
+    std::vector<VkExtensionProperties> extensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(mPhysicalDev, nullptr, &extensionCount,
+                                         extensions.data());
+
+    bool extensionSupported = false;
+    for (const auto& extension : extensions) {
+        if (strcmp(extension.extensionName,
+                   "VK_EXT_present_mode_fifo_latest_ready") == 0) {
+            extensionSupported = true;
+            break;
+        }
+    }
+
+    LOGI("VK_EXT_present_mode_fifo_latest_ready extension supported: %s",
+         extensionSupported ? "YES" : "NO");
+
+    createDeviceAndGetQueue(deviceLayers);
+
+    // Check if the present mode is supported
+    uint32_t presentModeCount = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(mPhysicalDev, mSurface,
+                                              &presentModeCount, nullptr);
+    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        mPhysicalDev, mSurface, &presentModeCount, presentModes.data());
+
+    bool modeSupported = false;
+    for (auto mode : presentModes) {
+        if (mode == VK_PRESENT_MODE_FIFO_LATEST_READY_EXT) {
+            modeSupported = true;
+            break;
+        }
+    }
+
+    LOGI(
+        "VK_PRESENT_MODE_FIFO_LATEST_READY_EXT present mode supported "
+        "natively: %s",
+        modeSupported ? "YES" : "NO");
+
+    cleanUpSwapchainForTest();
+}
+
 }  // namespace libvulkantest
 
 }  // namespace android

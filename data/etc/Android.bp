@@ -551,3 +551,9 @@ prebuilt_etc {
     src: "handheld_core_hardware.xml",
     defaults: ["frameworks_native_data_etc_defaults"],
 }
+
+prebuilt_etc {
+    name: "android.software.aiseal.prebuilt.xml",
+    src: "android.software.aiseal.xml",
+    defaults: ["frameworks_native_data_etc_defaults"],
+}

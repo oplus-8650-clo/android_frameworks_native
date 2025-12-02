@@ -308,6 +308,22 @@ int32_t display_update_imminent_timeout_ms(int32_t defaultValue) {
     return defaultValue;
 }
 
+int32_t resync_on_tx_timeout(int64_t defaultValue) {
+    auto temp = SurfaceFlingerProperties::resync_on_tx_timeout();
+    if (temp.has_value()) {
+        return *temp;
+    }
+    return defaultValue;
+}
+
+int32_t resync_on_choreographer_timeout(int64_t defaultValue) {
+    auto temp = SurfaceFlingerProperties::resync_on_choreographer_timeout();
+    if (temp.has_value()) {
+        return *temp;
+    }
+    return defaultValue;
+}
+
 #define DISPLAY_PRIMARY_SIZE 3
 
 constexpr float kSrgbRedX = 0.4123f;

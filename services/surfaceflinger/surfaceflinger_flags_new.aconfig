@@ -114,16 +114,6 @@ flag {
 } # enable_color_correction_bugfix
 
 flag {
-  name: "enable_color_correction_desktop_bugfix"
-  namespace: "accessibility"
-  description: "Enable a corrected color correction (daltonization) algorithm matching the one used in ChromeOS, on Desktop builds"
-  bug: "460493928"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # enable_color_correction_desktop_bugfix
-
-flag {
   name: "display_command_modeset"
   namespace: "desktop_display"
   description: "Guards use of the new display command modeset"

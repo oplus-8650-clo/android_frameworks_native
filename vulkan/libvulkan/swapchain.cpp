@@ -21,6 +21,7 @@
 #include <aidl/android/hardware/graphics/common/PixelFormat.h>
 #include <android/hardware/graphics/common/1.0/types.h>
 #include <android/hardware_buffer.h>
+#include <com_android_graphics_libvulkan_flags.h>
 #include <grallocusage/GrallocUsageConversion.h>
 #include <graphicsenv/GraphicsEnv.h>
 #include <hardware/gralloc.h>
@@ -42,6 +43,7 @@
 using PixelFormat = aidl::android::hardware::graphics::common::PixelFormat;
 using DataSpace = aidl::android::hardware::graphics::common::Dataspace;
 using android::hardware::graphics::common::V1_0::BufferUsage;
+using namespace com::android::graphics::libvulkan;
 
 namespace vulkan {
 namespace driver {
@@ -993,6 +995,7 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
                     ALOGE("Swapchain present mode VK_PRESENT_MODE_IMMEDIATE_KHR is not supported");
                     break;
                 case VK_PRESENT_MODE_MAILBOX_KHR:
+                case VK_PRESENT_MODE_FIFO_LATEST_READY_EXT:
                 case VK_PRESENT_MODE_FIFO_KHR:
                     capabilities->minImageCount = std::min(max_buffer_count,
                             min_undequeued_buffers + default_additional_buffers);
@@ -1281,6 +1284,9 @@ VkResult GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice pdev,
         // know if VK_PRESENT_MODE_SHARED_MAILBOX_KHR is supported without a
         // surface, and that cannot be relied upon.  Therefore, don't return it.
         present_modes.push_back(VK_PRESENT_MODE_FIFO_KHR);
+        if (flags::present_mode_fifo_latest_ready_ext()) {
+            present_modes.push_back(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT);
+        }
     } else {
         ANativeWindow* window = SurfaceFromHandle(surface)->window.get();
 
@@ -1308,6 +1314,9 @@ VkResult GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice pdev,
         if (min_undequeued_buffers + 1 < max_buffer_count)
             present_modes.push_back(VK_PRESENT_MODE_MAILBOX_KHR);
         present_modes.push_back(VK_PRESENT_MODE_FIFO_KHR);
+        if (flags::present_mode_fifo_latest_ready_ext()) {
+            present_modes.push_back(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT);
+        }
     }
 
     VkPhysicalDevicePresentationPropertiesANDROID present_properties;
@@ -1721,12 +1730,15 @@ VkResult CreateSwapchainKHR(VkDevice device,
     ALOGV_IF((create_info->preTransform & ~kSupportedTransforms) != 0,
              "swapchain preTransform=%#x not supported",
              create_info->preTransform);
-    ALOGV_IF(!(create_info->presentMode == VK_PRESENT_MODE_FIFO_KHR ||
-               create_info->presentMode == VK_PRESENT_MODE_MAILBOX_KHR ||
-               create_info->presentMode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
-               create_info->presentMode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR),
-             "swapchain presentMode=%u not supported",
-             create_info->presentMode);
+    ALOGV_IF(
+        !(create_info->presentMode == VK_PRESENT_MODE_FIFO_KHR ||
+          create_info->presentMode == VK_PRESENT_MODE_FIFO_LATEST_READY_EXT ||
+          create_info->presentMode == VK_PRESENT_MODE_MAILBOX_KHR ||
+          create_info->presentMode ==
+              VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
+          create_info->presentMode ==
+              VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR),
+        "swapchain presentMode=%u not supported", create_info->presentMode);
 
     Surface& surface = *SurfaceFromHandle(create_info->surface);
 
@@ -1783,6 +1795,17 @@ VkResult CreateSwapchainKHR(VkDevice device,
     if (err != android::OK) {
         ALOGE("native_window->setSwapInterval(1) failed: %s (%d)",
               strerror(-err), err);
+        return VK_ERROR_SURFACE_LOST_KHR;
+    }
+
+    err = native_window_set_present_mode(
+        window,
+        (create_info->presentMode == VK_PRESENT_MODE_FIFO_LATEST_READY_EXT)
+            ? ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY
+            : ANATIVEWINDOW_PRESENT_DEFAULT);
+    if (err != android::OK) {
+        ALOGE("native_window_set_present_mode failed: %s (%d)", strerror(-err),
+              err);
         return VK_ERROR_SURFACE_LOST_KHR;
     }
 

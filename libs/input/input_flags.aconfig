@@ -248,16 +248,6 @@ flag {
 }
 
 flag {
-  name: "touchpad_bottom_right_click_region_fix"
-  namespace: "input"
-  description: "Fix the 'Bottom-right click' touchpad setting so it actually only affects the bottom-right corner of the touchpad, rather than the whole right side."
-  bug: "352584365"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "touchpad_down_time_fix"
   namespace: "input"
   description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
@@ -279,6 +269,16 @@ flag {
   namespace: "input"
   description: "Fix a bug where unhandled finishInputEvent statuses were causing ANRs on cancelled motion events"
   bug: "422114163"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "fix_action_up_resampling"
+  namespace: "input"
+  description: "Fix a bug where ACTION_UP events are not resampled causing noticeable jank"
+  bug: "119214052"
   metadata {
     purpose: PURPOSE_BUGFIX
   }

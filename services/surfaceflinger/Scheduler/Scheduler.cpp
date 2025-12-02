@@ -947,17 +947,25 @@ Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,
 }
 
 void Scheduler::resync(ResyncCaller caller) {
-    static constexpr nsecs_t kRequestNextVsyncIgnoreDelay = ms2ns(750);
+    static constexpr int64_t kDefaultResyncOnChoreographerTimeout = ms2ns(750);
 
     const nsecs_t now = systemTime();
-    const nsecs_t last = (FlagManager::getInstance().resync_on_tx_separate_timer() &&
-                          caller == ResyncCaller::Transaction)
-            ? mLastResyncTimeOnTx.exchange(now)
-            : mLastResyncTime.exchange(now);
-
-    const auto ignoreDelay = caller == ResyncCaller::Transaction
-            ? VSyncTracker::kPredictorThreshold.ns()
-            : kRequestNextVsyncIgnoreDelay;
+    nsecs_t last, ignoreDelay;
+    if (FlagManager::getInstance().resync_on_tx_separate_timer()) {
+        static const int64_t resyncOnTxTimeout =
+                sysprop::resync_on_tx_timeout(VSyncTracker::kPredictorThreshold.ns());
+        static const int64_t resyncOnChoreographerTimeout =
+                sysprop::resync_on_choreographer_timeout(kDefaultResyncOnChoreographerTimeout);
+        last = (caller == ResyncCaller::Transaction) ? mLastResyncTimeOnTx.exchange(now)
+                                                     : mLastResyncTime.exchange(now);
+        ignoreDelay = (caller == ResyncCaller::Transaction) ? resyncOnTxTimeout
+                                                            : resyncOnChoreographerTimeout;
+        if (ignoreDelay == 0) return;
+    } else {
+        last = mLastResyncTime.exchange(now);
+        ignoreDelay = caller == ResyncCaller::Transaction ? VSyncTracker::kPredictorThreshold.ns()
+                                                          : kDefaultResyncOnChoreographerTimeout;
+    }
 
     if (now - last > ignoreDelay) {
         resyncAllToHardwareVsync(false /* allowToEnable */);
