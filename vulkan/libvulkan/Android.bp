@@ -43,6 +43,12 @@ aconfig_declarations {
     srcs: ["libvulkan_flags.aconfig"],
 }
 
+java_aconfig_library {
+    name: "libvulkan_flags_java_lib",
+    aconfig_declarations: "libvulkan_flags",
+    defaults: ["framework-minus-apex-aconfig-java-defaults"],
+}
+
 cc_aconfig_library {
     name: "libvulkanflags",
     aconfig_declarations: "libvulkan_flags",

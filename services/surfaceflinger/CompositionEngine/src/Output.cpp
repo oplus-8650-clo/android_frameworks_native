@@ -49,6 +49,7 @@
 #include <optional>
 #include <thread>
 
+#include "common/Panopticon.h"
 #include "renderengine/ExternalTexture.h"
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
@@ -465,6 +466,11 @@ void Output::prepare(const compositionengine::CompositionRefreshArgs& refreshArg
 
 ftl::Future<std::monostate> Output::present(
         const compositionengine::CompositionRefreshArgs& refreshArgs) {
+    std::optional<panopticon::ExclusiveToken> exclusive;
+    if (auto displayId = getDisplayId(); displayId) {
+        *exclusive = panopticon::exclusive(std::to_string(displayId->value));
+    }
+
     const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
         return getDisplayIdVariant()
                 .and_then(asPhysicalDisplayId)
@@ -488,7 +494,6 @@ ftl::Future<std::monostate> Output::present(
     SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
                    stringifyExpectedPresentTime().c_str());
     ALOGV(__FUNCTION__);
-
     updateColorProfile(refreshArgs);
     updateCompositionState(refreshArgs);
     planComposition();
@@ -1251,7 +1256,9 @@ void Output::prepareFrame() {
 }
 
 ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync(bool flushEvenWhenDisabled) {
-    return ftl::Future<bool>(mHwComposerAsyncWorker->send([this, flushEvenWhenDisabled]() {
+    return ftl::Future<bool>(mHwComposerAsyncWorker->send([this, flushEvenWhenDisabled,
+                                                           registration = panopticon::share()]() {
+               registration->start();
                presentFrameAndReleaseLayers(flushEvenWhenDisabled);
                return true;
            }))
@@ -1260,8 +1267,10 @@ ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync(bool flush
 
 std::future<bool> Output::chooseCompositionStrategyAsync(
         std::optional<android::HWComposer::DeviceRequestedChanges>* changes) {
-    return mHwComposerAsyncWorker->send(
-            [&, changes]() { return chooseCompositionStrategy(changes); });
+    return mHwComposerAsyncWorker->send([&, changes, registration = panopticon::share()]() {
+        registration->start();
+        return chooseCompositionStrategy(changes);
+    });
 }
 
 GpuCompositionResult Output::prepareFrameAsync() {
@@ -1347,8 +1356,6 @@ void Output::devOptRepaintFlash(const compositionengine::CompositionRefreshArgs&
     presentFrameAndReleaseLayers(kFlushEvenWhenDisabled);
 
     std::this_thread::sleep_for(*refreshArgs.devOptFlashDirtyRegionsDelay);
-
-    prepareFrame();
 }
 
 void Output::finishFrame(GpuCompositionResult&& result) {

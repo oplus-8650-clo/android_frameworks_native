@@ -23,6 +23,7 @@
 #include <android/binder_ibinder_platform.h>
 #include <android/binder_manager.h>
 #include <common/FlagManager.h>
+#include <common/Panopticon.h>
 #include <common/trace.h>
 #include <fmt/core.h>
 #include <ftl/algorithm.h>
@@ -764,6 +765,7 @@ Error AidlComposer::presentDisplay(Display display, int* outPresentFence) {
     auto reader = getReader(display);
     if (writer && reader) {
         writer->get().presentDisplay(displayId);
+        auto slice = panopticon::slice(panopticon::SliceType::CG_Hwc_Present);
         error = execute(display);
     } else {
         error = Error::BAD_DISPLAY;
@@ -898,6 +900,7 @@ Error AidlComposer::validateDisplay(Display display, nsecs_t expectedPresentTime
     if (writer && reader) {
         writer->get().validateDisplay(displayId, ClockMonotonicTimestamp{expectedPresentTime},
                                       frameIntervalNs);
+        auto slice = panopticon::slice(panopticon::SliceType::CG_Hwc_Validate);
         error = execute(display);
     } else {
         error = Error::BAD_DISPLAY;
@@ -929,6 +932,7 @@ Error AidlComposer::presentOrValidateDisplay(Display display, nsecs_t expectedPr
         writer->get().presentOrvalidateDisplay(displayId,
                                                ClockMonotonicTimestamp{expectedPresentTime},
                                                frameIntervalNs);
+        auto slice = panopticon::slice(panopticon::SliceType::CG_Hwc_PresentOrValidate);
         error = execute(display);
     } else {
         error = Error::BAD_DISPLAY;

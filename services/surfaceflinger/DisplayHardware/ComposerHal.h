@@ -57,6 +57,7 @@
 #pragma clang diagnostic pop // ignored "-Wconversion -Wextra"
 
 namespace android {
+
 namespace HWC2 {
 struct ComposerCallback;
 } // namespace HWC2

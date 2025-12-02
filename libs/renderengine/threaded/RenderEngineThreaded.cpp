@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "common/Panopticon.h"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "RenderEngineThreaded.h"
@@ -282,8 +283,10 @@ ftl::Future<FenceResult> RenderEngineThreaded::drawLayers(
         std::lock_guard lock(mThreadMutex);
         mNeedsPostRenderCleanup = true;
         mFunctionCalls.push(
-                [resultPromise, display, layers, buffer, fd](renderengine::RenderEngine& instance) {
+                [resultPromise, display, layers, buffer, fd,
+                 registration = panopticon::share()](renderengine::RenderEngine& instance) {
                     SFTRACE_NAME("REThreaded::drawLayers");
+                    registration->start();
                     instance.updateProtectedContext(layers, {buffer.get()});
                     instance.drawLayersInternal(std::move(resultPromise), display, layers, buffer,
                                                 base::unique_fd(fd));

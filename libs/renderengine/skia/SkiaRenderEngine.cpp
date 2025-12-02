@@ -51,6 +51,7 @@
 #include <SkTileMode.h>
 #include <android-base/stringprintf.h>
 #include <common/FlagManager.h>
+#include <common/Panopticon.h>
 #include <common/trace.h>
 #include <gui/FenceMonitor.h>
 #include <include/gpu/ganesh/GrBackendSemaphore.h>
@@ -276,10 +277,13 @@ namespace skia {
 
 namespace {
 void trace(sp<Fence> fence) {
-    if (SFTRACE_ENABLED()) {
-        static gui::FenceMonitor sMonitor("RE Completion");
-        sMonitor.queueFence(std::move(fence));
-    }
+    static gui::FenceMonitor sMonitor("RE Completion");
+    sMonitor.queueFence(std::move(fence),
+                        [registration = panopticon::share()](std::function<void()> inner) {
+                            registration->start();
+                            auto slice = panopticon::slice(panopticon::SliceType::CG_Re_gpu);
+                            inner();
+                        });
 }
 } // namespace
 
@@ -789,6 +793,8 @@ void SkiaRenderEngine::drawLayersInternal(
         const DisplaySettings& display, const std::vector<LayerSettings>& layers,
         const std::shared_ptr<ExternalTexture>& buffer, base::unique_fd&& bufferFence) {
     SFTRACE_FORMAT("%s for %s", __func__, display.namePlusId.c_str());
+
+    auto slice = panopticon::slice(panopticon::SliceType::CG_Re_drawLayers);
 
     std::lock_guard<std::mutex> lock(mRenderingMutex);
 
@@ -1363,6 +1369,7 @@ void SkiaRenderEngine::drawLayersInternal(
     mCapture->endCapture();
 
     LOG_ALWAYS_FATAL_IF(activeSurface != dstSurface);
+
     auto drawFence = sp<Fence>::make(flushAndSubmit(context, dstSurface));
     trace(drawFence);
     FenceTimePtr fenceTime = FenceTime::makeValid(drawFence);

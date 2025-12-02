@@ -21,6 +21,8 @@
 #include <include/gpu/ganesh/vk/GrVkBackendSemaphore.h>
 
 #include <android-base/stringprintf.h>
+#include <common/Panopticon.h>
+
 #include <common/trace.h>
 #include <log/log_main.h>
 #include <sync/sync.h>
@@ -86,6 +88,7 @@ base::unique_fd GaneshVkRenderEngine::flushAndSubmit(SkiaGpuContext* context,
         SFTRACE_NAME("flush surface");
         // TODO: Investigate feasibility of combining this "surface flush" into the "context flush"
         // below.
+        auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_flush);
         context->grDirectContext()->flush(dstSurface.get());
     }
 
@@ -102,6 +105,7 @@ base::unique_fd GaneshVkRenderEngine::flushAndSubmit(SkiaGpuContext* context,
         flushInfo.fFinishedProc = unref_semaphore;
         flushInfo.fFinishedContext = destroySemaphoreInfo;
     }
+    auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_submit);
     GrSemaphoresSubmitted submitted = grContext->flush(flushInfo);
     grContext->submit(GrSyncCpu::kNo);
     int drawFenceFd = -1;

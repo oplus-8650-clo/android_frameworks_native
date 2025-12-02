@@ -416,8 +416,7 @@ Error Display::getReleaseFences(std::unordered_map<HWC2::Layer*, sp<Fence>>* out
     return Error::NONE;
 }
 
-Error Display::present(sp<Fence>* outPresentFence)
-{
+Error Display::present(sp<Fence>* outPresentFence) {
     int32_t presentFenceFd = -1;
     auto intError = mComposer.presentDisplay(mId, &presentFenceFd);
     auto error = static_cast<Error>(intError);

@@ -26,6 +26,7 @@ cc_defaults {
     ],
     srcs: [
         "FlagManager.cpp",
+        "Panopticon.cpp",
     ],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
