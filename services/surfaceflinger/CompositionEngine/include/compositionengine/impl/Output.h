@@ -150,7 +150,7 @@ protected:
     bool chooseCompositionStrategy(
             std::optional<android::HWComposer::DeviceRequestedChanges>*) override {
         return true;
-    };
+    }
     void applyCompositionStrategy(const std::optional<DeviceRequestedChanges>&) override{};
     bool getSkipColorTransform() const override;
     compositionengine::Output::FrameFences presentFrame() override;

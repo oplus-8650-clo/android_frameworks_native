@@ -27,6 +27,7 @@
 
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
+#include "ui/DisplayMap.h"
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wconversion"
 #pragma clang diagnostic ignored "-Wextra"
@@ -57,6 +58,7 @@
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <common/FlagManager.h>
+#include <common/Panopticon.h>
 #include <common/WorkloadTracer.h>
 #include <common/trace.h>
 #include <compositionengine/CompositionEngine.h>
@@ -2952,6 +2954,18 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // future relative to frameTime, but may not be for delayed frames. Adjust mExpectedPresentTime
     // accordingly, but not mScheduledPresentTime.
     // const TimePoint lastScheduledPresentTime = mScheduledPresentTime;
+    panopticon::Ids ids;
+    {
+        Mutex::Autolock lock(mStateLock);
+
+        for (const auto& [_, display] : mDisplays) {
+            ids.emplace_back(std::to_string(display->getId().value));
+        }
+    }
+
+    panopticon::make(ids, panopticon::Source::CG_FrameSignal);
+    auto commitTokens = panopticon::slice(panopticon::SliceType::CG_Sf_Commit);
+
     const scheduler::FrameTarget& pacesetterFrameTarget = *frameTargets.get(pacesetterId)->get();
 
     const VsyncId vsyncId = pacesetterFrameTarget.vsyncId();
@@ -3274,6 +3288,7 @@ SurfaceFlinger::RefreshArgsPartition SurfaceFlinger::addOutputsToRefreshArgs(
         if (canOffloadGpuComposition && !anyMainThreadClientComposition &&
             display->isGpuVirtualDisplay()) {
             offloadedRefreshArgs.outputs.push_back(display->getCompositionDisplay());
+
         } else {
             mainThreadRefreshArgs.outputs.push_back(display->getCompositionDisplay());
         }
@@ -3297,9 +3312,21 @@ std::future<void> SurfaceFlinger::offloadGpuCompositedDisplays(
     auto offloadedCompositionPromise = std::make_shared<std::promise<void>>();
     auto offloadedCompositionFuture = offloadedCompositionPromise->get_future();
 
+    panopticon::Ids ids;
+
+    for (const auto& output : offloadedRefreshArgs.outputs) {
+        if (auto displayId = output->getDisplayId(); displayId) {
+            ids.emplace_back(std::to_string(displayId->value));
+        }
+    }
+
     BackgroundExecutor::getInstance().sendCallbacks(
             {[offloadedRefreshArgs = std::move(offloadedRefreshArgs),
-              promise = std::move(offloadedCompositionPromise), this]() mutable {
+              promise = std::move(offloadedCompositionPromise), this,
+              registrations = panopticon::share(ids)]() mutable {
+                for (const auto& registration : registrations) {
+                    registration->start();
+                }
                 mOffloadedCompositionEngine->present(offloadedRefreshArgs);
                 promise->set_value();
             }});
@@ -3310,6 +3337,10 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         PhysicalDisplayId pacesetterId, const scheduler::FrameTargeters& frameTargeters) {
     SFTRACE_ASYNC_FOR_TRACK_BEGIN(WorkloadTracer::TRACK_NAME, "Composition",
                                   WorkloadTracer::COMPOSITION_TRACE_COOKIE);
+
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+    panopticon::SliceTokens compositeTokens =
+            panopticon::slice(panopticon::SliceType::CG_Sf_Composite);
     const scheduler::FrameTarget& pacesetterTarget =
             frameTargeters.get(pacesetterId)->get()->target();
 
@@ -3319,7 +3350,6 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     compositionengine::CompositionRefreshArgs refreshArgs;
     // adpf load up hint
     refreshArgs.powerCallback = this;
-    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
     refreshArgs.outputs.reserve(displays.size());
 
     std::vector<DisplayId> displayIds;
@@ -3512,6 +3542,8 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     mPowerAdvisor->setCompositedWorkload(compositedWorkload);
     SFTRACE_ASYNC_FOR_TRACK_END(WorkloadTracer::TRACK_NAME,
                                 WorkloadTracer::COMPOSITION_TRACE_COOKIE);
+    compositeTokens.clear();
+    panopticon::terminate();
     SFTRACE_NAME_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Post Composition");
     SFTRACE_NAME("postComposition");
 

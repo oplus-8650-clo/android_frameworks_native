@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <common/Panopticon.h>
 #include <common/trace.h>
 #include <compositionengine/CompositionRefreshArgs.h>
 #include <compositionengine/LayerFE.h>
@@ -152,6 +153,9 @@ void CompositionEngine::present(CompositionRefreshArgs& args) {
     ui::DisplayVector<ftl::Future<std::monostate>> presentFutures;
     for (const auto& output : args.outputs) {
         presentFutures.push_back(output->present(args));
+        if (auto displayId = output->getDisplayId(); displayId) {
+            panopticon::terminate(std::to_string(displayId->value));
+        }
     }
 
     {

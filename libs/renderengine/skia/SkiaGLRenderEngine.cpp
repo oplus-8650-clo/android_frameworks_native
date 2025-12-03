@@ -27,7 +27,7 @@
 #include <include/gpu/ganesh/GrTypes.h>
 #include <include/gpu/ganesh/gl/GrGLDirectContext.h>
 #include <include/gpu/ganesh/gl/GrGLInterface.h>
-#include <log/log_main.h>
+#include <log/log.h>
 #include <sync/sync.h>
 #include <ui/DebugUtils.h>
 
@@ -36,6 +36,7 @@
 #include <memory>
 #include <numeric>
 
+#include <common/Panopticon.h>
 #include "GLExtensions.h"
 #include "compat/SkiaGpuContext.h"
 
@@ -354,6 +355,7 @@ base::unique_fd SkiaGLRenderEngine::flushAndSubmit(SkiaGpuContext* context,
     sk_sp<GrDirectContext> grContext = context->grDirectContext();
     {
         SFTRACE_NAME("flush surface");
+        auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_flush);
         grContext->flush(dstSurface.get());
     }
     base::unique_fd drawFence = flushGL();
@@ -364,6 +366,7 @@ base::unique_fd SkiaGLRenderEngine::flushAndSubmit(SkiaGpuContext* context,
     } else {
         SFTRACE_BEGIN("Submit(sync=false)");
     }
+    auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_submit);
     bool success = grContext->submit(requireSync ? GrSyncCpu::kYes : GrSyncCpu::kNo);
     SFTRACE_END();
     if (!success) {
