@@ -73,9 +73,6 @@
 
 using aidl::android::hardware::graphics::common::HdrConversionCapability;
 using aidl::android::hardware::graphics::common::HdrConversionStrategy;
-using aidl::android::hardware::graphics::composer3::Capability;
-using aidl::android::hardware::graphics::composer3::DisplayCapability;
-using aidl::android::hardware::graphics::composer3::DisplayConfiguration;
 using namespace std::string_literals;
 
 namespace android {
@@ -129,11 +126,12 @@ bool HWComposer::getDisplayIdentificationData(
     return true;
 }
 
-bool HWComposer::hasCapability(Capability capability) const {
+bool HWComposer::hasCapability(composer3::Capability capability) const {
     return mCapabilities.count(capability) > 0;
 }
 
-bool HWComposer::hasDisplayCapability(HalDisplayId displayId, DisplayCapability capability) const {
+bool HWComposer::hasDisplayCapability(HalDisplayId displayId,
+                                      composer3::DisplayCapability capability) const {
     RETURN_IF_INVALID_DISPLAY(displayId, false);
     return mDisplayData.at(displayId).hwcDisplay->hasCapability(capability);
 }
@@ -293,7 +291,7 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModes(PhysicalDisplayId d
     return getModesFromLegacyDisplayConfigs(hwcDisplayId);
 }
 
-DisplayConfiguration::Dpi HWComposer::getEstimatedDotsPerInchFromSize(
+composer3::DisplayConfiguration::Dpi HWComposer::getEstimatedDotsPerInchFromSize(
         uint64_t hwcDisplayId, const HWCDisplayMode& hwcMode) const {
     if (!FlagManager::getInstance().correct_dpi_with_display_size()) {
         return {-1, -1};
@@ -327,8 +325,9 @@ ui::DisplayConnectionType HWComposer::getHwcDisplayConnectionType(uint64_t hwcDi
                                                       : ui::DisplayConnectionType::External;
 }
 
-DisplayConfiguration::Dpi HWComposer::correctedDpiIfneeded(
-        DisplayConfiguration::Dpi dpi, DisplayConfiguration::Dpi estimatedDpi) const {
+composer3::DisplayConfiguration::Dpi HWComposer::correctedDpiIfneeded(
+        composer3::DisplayConfiguration::Dpi dpi,
+        composer3::DisplayConfiguration::Dpi estimatedDpi) const {
     // hwc can be unreliable when it comes to dpi. A rough estimated dpi may yield better
     // results. For instance, libdrm and bad edid may result in a dpi of {350, 290} for a
     // 16:9 3840x2160 display, which would match a 4:3 aspect ratio.
@@ -368,10 +367,10 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModesFromDisplayConfigura
                                       .vrrConfig = config.vrrConfig,
                                       .hdrOutputType = config.hdrOutputType};
 
-        const DisplayConfiguration::Dpi estimatedDPI =
+        const composer3::DisplayConfiguration::Dpi estimatedDPI =
                 getEstimatedDotsPerInchFromSize(hwcDisplayId, hwcMode);
         if (config.dpi) {
-            const DisplayConfiguration::Dpi dpi =
+            const composer3::DisplayConfiguration::Dpi dpi =
                     correctedDpiIfneeded(config.dpi.value(), estimatedDPI);
             hwcMode.dpiX = dpi.x;
             hwcMode.dpiY = dpi.y;
@@ -409,12 +408,12 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModesFromLegacyDisplayCon
 
         const int32_t dpiX = getAttribute(hwcDisplayId, configId, hal::Attribute::DPI_X);
         const int32_t dpiY = getAttribute(hwcDisplayId, configId, hal::Attribute::DPI_Y);
-        const DisplayConfiguration::Dpi hwcDpi =
-                DisplayConfiguration::Dpi{dpiX == -1 ? dpiX : dpiX / 1000.f,
-                                          dpiY == -1 ? dpiY : dpiY / 1000.f};
-        const DisplayConfiguration::Dpi estimatedDPI =
+        const composer3::DisplayConfiguration::Dpi hwcDpi =
+                composer3::DisplayConfiguration::Dpi{dpiX == -1 ? dpiX : dpiX / 1000.f,
+                                                     dpiY == -1 ? dpiY : dpiY / 1000.f};
+        const composer3::DisplayConfiguration::Dpi estimatedDPI =
                 getEstimatedDotsPerInchFromSize(hwcDisplayId, hwcMode);
-        const DisplayConfiguration::Dpi dpi = correctedDpiIfneeded(hwcDpi, estimatedDPI);
+        const composer3::DisplayConfiguration::Dpi dpi = correctedDpiIfneeded(hwcDpi, estimatedDPI);
         hwcMode.dpiX = dpi.x;
         hwcMode.dpiY = dpi.y;
 
@@ -875,8 +874,7 @@ status_t HWComposer::getHdrCapabilities(HalDisplayId displayId, HdrCapabilities*
     return NO_ERROR;
 }
 
-const aidl::android::hardware::graphics::composer3::OverlayProperties&
-HWComposer::getOverlaySupport() const {
+const composer3::OverlayProperties& HWComposer::getOverlaySupport() const {
     return mOverlayProperties;
 }
 
@@ -1152,9 +1150,9 @@ status_t HWComposer::startHdcpNegotiation(PhysicalDisplayId displayId,
     return NO_ERROR;
 }
 
-status_t HWComposer::getLuts(
-        PhysicalDisplayId displayId, const std::vector<sp<GraphicBuffer>>& buffers,
-        std::vector<aidl::android::hardware::graphics::composer3::Luts>* luts) {
+status_t HWComposer::getLuts(PhysicalDisplayId displayId,
+                             const std::vector<sp<GraphicBuffer>>& buffers,
+                             std::vector<composer3::Luts>* luts) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
     auto error = hwcDisplay->getLuts(buffers, luts);
@@ -1163,8 +1161,7 @@ status_t HWComposer::getLuts(
 }
 
 status_t HWComposer::getReadbackBufferAttributes(
-        PhysicalDisplayId displayId,
-        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes* outAttributes) {
+        PhysicalDisplayId displayId, composer3::ReadbackBufferAttributes* outAttributes) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     auto& hwcDisplay = mDisplayData[displayId].hwcDisplay;
     auto error = hwcDisplay->getReadbackBufferAttributes(outAttributes);
@@ -1187,6 +1184,37 @@ sp<Fence> HWComposer::getReadbackBufferFence(PhysicalDisplayId displayId) {
     auto error = hwcDisplay->getReadbackBufferFence(&fence);
     RETURN_IF_HWC_ERROR(error, displayId, Fence::NO_FENCE);
     return fence;
+}
+
+std::optional<composer3::VsyncSample> HWComposer::getDisplayKnownVsyncSample(
+        PhysicalDisplayId displayId) {
+    RETURN_IF_INVALID_DISPLAY(displayId, std::nullopt);
+    auto& displayData = mDisplayData[displayId];
+    if (displayData.getDisplayKnownVsyncSampleSupported.has_value() &&
+        !displayData.getDisplayKnownVsyncSampleSupported.value()) {
+        return std::nullopt;
+    }
+
+    const auto hwcId = fromPhysicalDisplayId(displayId);
+    if (!hwcId.has_value()) {
+        return std::nullopt;
+    }
+
+    composer3::VsyncSample vsyncSample;
+    const auto error =
+            static_cast<hal::Error>(mComposer->getDisplayKnownVsyncSample(*hwcId, &vsyncSample));
+    if (error != hal::Error::NONE) {
+        if (error == hal::Error::UNSUPPORTED) {
+            displayData.getDisplayKnownVsyncSampleSupported = false;
+            ALOGD("%s: getDisplayKnownVsyncSample is UNSUPPORTED for display %s", __func__,
+                  to_string(displayId).c_str());
+        } else {
+            LOG_HWC_ERROR("getDisplayKnownVsyncSample", error, displayId);
+        }
+        return std::nullopt;
+    }
+    displayData.getDisplayKnownVsyncSampleSupported = true;
+    return vsyncSample;
 }
 
 const std::unordered_map<std::string, bool>& HWComposer::getSupportedLayerGenericMetadata() const {

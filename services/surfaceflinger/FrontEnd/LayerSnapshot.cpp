@@ -589,7 +589,12 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
         }
     }
 
-    forceClientComposition = (renderCommandBufferConsumer != nullptr);
+    if (forceUpdate || requested.what & layer_state_t::eRenderResourceTokenChanged) {
+        renderResourceToken = requested.renderResourceToken;
+    }
+    if (renderCommandBufferConsumer != nullptr) {
+        forceClientComposition = true;
+    }
 }
 
 char LayerSnapshot::classifyCompositionForDebug(

@@ -68,10 +68,10 @@ namespace HWC2 {
 class Layer;
 
 namespace hal = android::hardware::graphics::composer::hal;
+namespace composer3 = hal::composer3;
 
 using aidl::android::hardware::drm::HdcpLevels;
 using aidl::android::hardware::graphics::common::DisplayHotplugEvent;
-using aidl::android::hardware::graphics::composer3::RefreshRateChangedDebugData;
 
 // Implement this interface to receive hardware composer events.
 //
@@ -87,7 +87,7 @@ struct ComposerCallback {
                                                        const hal::VsyncPeriodChangeTimeline&) = 0;
     virtual void onComposerHalSeamlessPossible(hal::HWDisplayId) = 0;
     virtual void onComposerHalVsyncIdle(hal::HWDisplayId) = 0;
-    virtual void onRefreshRateChangedDebug(const RefreshRateChangedDebugData&) = 0;
+    virtual void onRefreshRateChangedDebug(const composer3::RefreshRateChangedDebugData&) = 0;
     virtual void onComposerHalHdcpLevelsChanged(hal::HWDisplayId, const HdcpLevels& levels) = 0;
 
 protected:
@@ -102,16 +102,14 @@ public:
     virtual hal::HWDisplayId getId() const = 0;
     virtual bool isConnected() const = 0;
     virtual void setConnected(bool connected) = 0; // For use by HWComposer only
-    virtual bool hasCapability(
-            aidl::android::hardware::graphics::composer3::DisplayCapability) const = 0;
+    virtual bool hasCapability(composer3::DisplayCapability) const = 0;
     virtual bool isVsyncPeriodSwitchSupported() const = 0;
     virtual bool hasDisplayIdleTimerCapability() const = 0;
     virtual void onLayerDestroyed(hal::HWLayerId layerId) = 0;
     virtual std::optional<ui::Size> getPhysicalSizeInMm() const = 0;
 
     static const int kLutFileDescriptorMapperSize = 20;
-    using LutOffsetAndProperties = std::vector<
-            std::pair<int32_t, aidl::android::hardware::graphics::composer3::LutProperties>>;
+    using LutOffsetAndProperties = std::vector<std::pair<int32_t, composer3::LutProperties>>;
     using LayerLuts =
             ftl::SmallMap<HWC2::Layer*, LutOffsetAndProperties, kLutFileDescriptorMapperSize>;
     using LutFileDescriptorMapper =
@@ -121,8 +119,7 @@ public:
     [[nodiscard]] virtual base::expected<std::shared_ptr<HWC2::Layer>, hal::Error>
     createLayer() = 0;
     [[nodiscard]] virtual hal::Error getChangedCompositionTypes(
-            std::unordered_map<Layer*, aidl::android::hardware::graphics::composer3::Composition>*
-                    outTypes) = 0;
+            std::unordered_map<Layer*, composer3::Composition>* outTypes) = 0;
     [[nodiscard]] virtual hal::Error getColorModes(std::vector<hal::ColorMode>* outModes) const = 0;
     // Returns a bitmask which contains HdrMetadata::Type::*.
     [[nodiscard]] virtual int32_t getSupportedPerFrameMetadata() const = 0;
@@ -141,8 +138,7 @@ public:
     [[nodiscard]] virtual hal::Error getHdrCapabilities(
             android::HdrCapabilities* outCapabilities) const = 0;
     [[nodiscard]] virtual hal::Error getOverlaySupport(
-            aidl::android::hardware::graphics::composer3::OverlayProperties* outProperties)
-            const = 0;
+            composer3::OverlayProperties* outProperties) const = 0;
     [[nodiscard]] virtual hal::Error getDisplayedContentSamplingAttributes(
             hal::PixelFormat* outFormat, hal::Dataspace* outDataspace,
             uint8_t* outComponentMask) const = 0;
@@ -191,8 +187,7 @@ public:
             std::vector<hal::ContentType>*) const = 0;
     [[nodiscard]] virtual hal::Error setContentType(hal::ContentType) = 0;
     [[nodiscard]] virtual hal::Error getClientTargetProperty(
-            aidl::android::hardware::graphics::composer3::ClientTargetPropertyWithBrightness*
-                    outClientTargetProperty) = 0;
+            composer3::ClientTargetPropertyWithBrightness* outClientTargetProperty) = 0;
     [[nodiscard]] virtual hal::Error getRequestedLuts(
             LayerLuts* outLuts, LutFileDescriptorMapper& lutFileDescriptorMapper) = 0;
     [[nodiscard]] virtual hal::Error getDisplayDecorationSupport(
@@ -208,10 +203,10 @@ public:
             const aidl::android::hardware::drm::HdcpLevels& levels) = 0;
     [[nodiscard]] virtual hal::Error getLuts(
             const std::vector<android::sp<android::GraphicBuffer>>&,
-            std::vector<aidl::android::hardware::graphics::composer3::Luts>*) = 0;
+            std::vector<composer3::Luts>*) = 0;
 
     [[nodiscard]] virtual hal::Error getReadbackBufferAttributes(
-            aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes*) = 0;
+            composer3::ReadbackBufferAttributes*) = 0;
     [[nodiscard]] virtual hal::Error setReadbackBuffer(const sp<GraphicBuffer>&,
                                                        const android::sp<android::Fence>&) = 0;
     [[nodiscard]] virtual hal::Error getReadbackBufferFence(android::sp<android::Fence>*) = 0;
@@ -223,8 +218,7 @@ class Layer;
 
 class Display : public HWC2::Display {
 public:
-    Display(android::Hwc2::Composer&,
-            const std::unordered_set<aidl::android::hardware::graphics::composer3::Capability>&,
+    Display(android::Hwc2::Composer&, const std::unordered_set<composer3::Capability>&,
             hal::HWDisplayId, hal::DisplayType);
     ~Display() override;
 
@@ -232,9 +226,7 @@ public:
     hal::Error acceptChanges() override;
     base::expected<std::shared_ptr<HWC2::Layer>, hal::Error> createLayer() override;
     hal::Error getChangedCompositionTypes(
-            std::unordered_map<HWC2::Layer*,
-                               aidl::android::hardware::graphics::composer3::Composition>* outTypes)
-            override;
+            std::unordered_map<HWC2::Layer*, composer3::Composition>* outTypes) override;
     hal::Error getColorModes(std::vector<hal::ColorMode>* outModes) const override;
     // Returns a bitmask which contains HdrMetadata::Type::*.
     int32_t getSupportedPerFrameMetadata() const override;
@@ -249,8 +241,7 @@ public:
     ftl::Expected<ui::DisplayConnectionType, hal::Error> getConnectionType() const override;
     hal::Error supportsDoze(bool* outSupport) const override EXCLUDES(DisplayCapabilities::mutex);
     hal::Error getHdrCapabilities(android::HdrCapabilities* outCapabilities) const override;
-    hal::Error getOverlaySupport(aidl::android::hardware::graphics::composer3::OverlayProperties*
-                                         outProperties) const override;
+    hal::Error getOverlaySupport(composer3::OverlayProperties* outProperties) const override;
     hal::Error getDisplayedContentSamplingAttributes(hal::PixelFormat* outFormat,
                                                      hal::Dataspace* outDataspace,
                                                      uint8_t* outComponentMask) const override;
@@ -291,8 +282,7 @@ public:
             std::vector<hal::ContentType>* outSupportedContentTypes) const override;
     hal::Error setContentType(hal::ContentType) override;
     hal::Error getClientTargetProperty(
-            aidl::android::hardware::graphics::composer3::ClientTargetPropertyWithBrightness*
-                    outClientTargetProperty) override;
+            composer3::ClientTargetPropertyWithBrightness* outClientTargetProperty) override;
     hal::Error getRequestedLuts(LayerLuts* outLuts,
                                 LutFileDescriptorMapper& lutFileDescriptorMapper) override;
     hal::Error getDisplayDecorationSupport(
@@ -304,11 +294,10 @@ public:
     hal::Error startHdcpNegotiation(
             const aidl::android::hardware::drm::HdcpLevels& levels) override;
     hal::Error getLuts(const std::vector<android::sp<android::GraphicBuffer>>&,
-                       std::vector<aidl::android::hardware::graphics::composer3::Luts>*) override;
+                       std::vector<composer3::Luts>*) override;
 
     hal::Error getReadbackBufferAttributes(
-            aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes* outAttributes)
-            override;
+            composer3::ReadbackBufferAttributes* outAttributes) override;
     virtual hal::Error setReadbackBuffer(const sp<GraphicBuffer>& buffer,
                                          const android::sp<android::Fence>& acquireFence) override;
     virtual hal::Error getReadbackBufferFence(
@@ -318,8 +307,8 @@ public:
     hal::HWDisplayId getId() const override { return mId; }
     bool isConnected() const override { return mIsConnected; }
     void setConnected(bool connected) override;
-    bool hasCapability(aidl::android::hardware::graphics::composer3::DisplayCapability)
-            const override EXCLUDES(DisplayCapabilities::mutex);
+    bool hasCapability(composer3::DisplayCapability) const override
+            EXCLUDES(DisplayCapabilities::mutex);
     bool isVsyncPeriodSwitchSupported() const override;
     bool hasDisplayIdleTimerCapability() const override;
     void onLayerDestroyed(hal::HWLayerId layerId) override;
@@ -340,9 +329,7 @@ private:
     // this HWC2::Display, so these references are guaranteed to be valid for
     // the lifetime of this object.
     android::Hwc2::Composer& mComposer;
-    const std::unordered_set<aidl::android::hardware::graphics::composer3::Capability>&
-            mCapabilities;
-
+    const std::unordered_set<composer3::Capability>& mCapabilities;
     const hal::HWDisplayId mId;
     hal::DisplayType mType;
     // Cached on first call to getConnectionType.
@@ -353,8 +340,8 @@ private:
     Layers mLayers;
 
     class DisplayCapabilities {
-        using Capability = ::aidl::android::hardware::graphics::composer3::Capability;
-        using DisplayCapability = ::aidl::android::hardware::graphics::composer3::DisplayCapability;
+        using Capability = composer3::Capability;
+        using DisplayCapability = composer3::DisplayCapability;
 
     public:
         mutable std::mutex mutex;
@@ -390,10 +377,8 @@ public:
     [[nodiscard]] virtual hal::Error setSurfaceDamage(const android::Region& damage) = 0;
 
     [[nodiscard]] virtual hal::Error setBlendMode(hal::BlendMode mode) = 0;
-    [[nodiscard]] virtual hal::Error setColor(
-            aidl::android::hardware::graphics::composer3::Color color) = 0;
-    [[nodiscard]] virtual hal::Error setCompositionType(
-            aidl::android::hardware::graphics::composer3::Composition type) = 0;
+    [[nodiscard]] virtual hal::Error setColor(composer3::Color color) = 0;
+    [[nodiscard]] virtual hal::Error setCompositionType(composer3::Composition type) = 0;
     [[nodiscard]] virtual hal::Error setDataspace(hal::Dataspace dataspace) = 0;
     [[nodiscard]] virtual hal::Error setPerFrameMetadata(const int32_t supportedPerFrameMetadata,
                                                          const android::HdrMetadata& metadata) = 0;
@@ -416,8 +401,7 @@ public:
     // AIDL HAL
     [[nodiscard]] virtual hal::Error setBrightness(float brightness) = 0;
     [[nodiscard]] virtual hal::Error setBlockingRegion(const android::Region& region) = 0;
-    [[nodiscard]] virtual hal::Error setLuts(
-            aidl::android::hardware::graphics::composer3::Luts& luts) = 0;
+    [[nodiscard]] virtual hal::Error setLuts(composer3::Luts& luts) = 0;
     [[nodiscard]] virtual hal::Error setPictureProfileHandle(
             const PictureProfileHandle& handle) = 0;
 };
@@ -429,9 +413,8 @@ namespace impl {
 class Layer : public HWC2::Layer {
 public:
     Layer(android::Hwc2::Composer& composer,
-          const std::unordered_set<aidl::android::hardware::graphics::composer3::Capability>&
-                  capabilities,
-          HWC2::Display& display, hal::HWLayerId layerId);
+          const std::unordered_set<composer3::Capability>& capabilities, HWC2::Display& display,
+          hal::HWLayerId layerId);
     ~Layer() override;
 
     void onOwningDisplayDestroyed();
@@ -453,9 +436,8 @@ public:
     hal::Error setSurfaceDamage(const android::Region& damage) override;
 
     hal::Error setBlendMode(hal::BlendMode mode) override;
-    hal::Error setColor(aidl::android::hardware::graphics::composer3::Color color) override;
-    hal::Error setCompositionType(
-            aidl::android::hardware::graphics::composer3::Composition type) override;
+    hal::Error setColor(composer3::Color color) override;
+    hal::Error setCompositionType(composer3::Composition type) override;
     hal::Error setDataspace(hal::Dataspace dataspace) override;
     hal::Error setPerFrameMetadata(const int32_t supportedPerFrameMetadata,
                                    const android::HdrMetadata& metadata) override;
@@ -477,7 +459,7 @@ public:
     // AIDL HAL
     hal::Error setBrightness(float brightness) override;
     hal::Error setBlockingRegion(const android::Region& region) override;
-    hal::Error setLuts(aidl::android::hardware::graphics::composer3::Luts&) override;
+    hal::Error setLuts(composer3::Luts&) override;
     hal::Error setPictureProfileHandle(const PictureProfileHandle& handle) override;
 
 private:
@@ -485,8 +467,7 @@ private:
     // this HWC2::Layer, so these references are guaranteed to be valid for
     // the lifetime of this object.
     android::Hwc2::Composer& mComposer;
-    const std::unordered_set<aidl::android::hardware::graphics::composer3::Capability>&
-            mCapabilities;
+    const std::unordered_set<composer3::Capability>& mCapabilities;
 
     HWC2::Display* mDisplay;
     hal::HWLayerId mId;

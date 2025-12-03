@@ -107,6 +107,7 @@
 #include "MutexUtils.h"
 #include "PowerAdvisor/PowerAdvisor.h"
 #include "QueuedTransactionState.h"
+#include "RenderResourceCache.h"
 #include "Scheduler/ISchedulerCallback.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/Scheduler.h"
@@ -1724,6 +1725,12 @@ private:
     // Map of displayid to mirrorRoot
     ftl::SmallMap<int64_t, sp<SurfaceControl>, 3> mMirrorMapForDebug;
 
+    // The IPC cache is used to manage render resources that are transferred from
+    // client processes to SurfaceFlinger. It is populated via the
+    // registerGraphicBuffers and unregisterGraphicBuffers AIDL calls, and is
+    // used to resolve resources during layer snapshotting.
+    sp<RenderResourceCache> mIpcCache = sp<RenderResourceCache>::make();
+
     // NotifyExpectedPresentHint
     enum class NotifyExpectedPresentHintStatus {
         // Represents that framework can start sending hint if required.
@@ -1784,8 +1791,7 @@ private:
     //  to rebuild layer stack instead of crashing.
     void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);
 
-    void setForcedClientCompositionLayerStacks(
-            compositionengine::CompositionRefreshArgs& refreshArgs) EXCLUDES(mStateLock);
+    void setForcedClientCompositionLayerStacks(compositionengine::CompositionRefreshArgs&);
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1929,6 +1935,8 @@ public:
     binder::Status removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
     binder::Status forcePacesetter(int64_t displayId) override;
     binder::Status resetForcedPacesetter() override;
+    binder::Status registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) override;
+    binder::Status unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) override;
 
 private:
     static const constexpr bool kUsePermissionCache = true;

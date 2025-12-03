@@ -55,6 +55,7 @@ cc_defaults {
         "libsurfaceflinger_common",
         "libsurfaceflingerflags",
         "libgui_window_info_static",
+        "libipcrenderbuffer_static",
     ],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
@@ -136,6 +137,7 @@ cc_defaults {
         "libEGL_blobCache",
         "libgui_window_info_static",
         "libskia_renderengine",
+        "libipcrenderbuffer_static",
     ],
     shared_libs: [
         "libbinder",
@@ -182,6 +184,7 @@ cc_library_static {
     static_libs: [
         "libgtest",
         "libgmock",
+        "libipcrenderbuffer_static",
     ],
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],

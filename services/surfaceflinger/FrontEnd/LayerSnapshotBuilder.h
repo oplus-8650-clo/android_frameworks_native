@@ -22,6 +22,10 @@
 #include "LayerSnapshot.h"
 #include "RequestedLayerState.h"
 
+namespace android::surfaceflinger {
+class RenderResourceCache;
+}
+
 namespace android::surfaceflinger::frontend {
 
 namespace caching {
@@ -67,6 +71,7 @@ public:
         bool skipRoundCornersWhenProtected = false;
         LayerSnapshot rootSnapshot = getRootSnapshot();
         caching::MergeableHierarchyManager* mergeableHierarchyManager = nullptr;
+        RenderResourceCache* renderResourceCache = nullptr;
     };
     LayerSnapshotBuilder();
 

@@ -228,6 +228,8 @@ filegroup {
         "android/gui/InputApplicationInfo.aidl",
         "android/gui/WindowInfo.aidl",
         "android/gui/WindowInfosUpdate.aidl",
+        "aidl/android/gui/GraphicBuffersRegisterInfo.aidl",
+        "aidl/android/gui/GraphicBuffersUnregisterInfo.aidl",
     ],
 }
 
@@ -311,6 +313,8 @@ filegroup {
         "FenceMonitor.cpp",
         "Flags.cpp",
         "GLConsumer.cpp",
+        "GraphicBuffersRegisterInfo.cpp",
+        "GraphicBuffersUnregisterInfo.cpp",
         "IGraphicBufferProducer.cpp",
         "IProducerListener.cpp",
         "ISurfaceComposer.cpp",

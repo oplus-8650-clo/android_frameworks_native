@@ -17,7 +17,7 @@ per-file include/gui/IGraphicBuffer* = set noparent
 per-file include/gui/IGraphicBuffer* = jreck@google.com, alecmouri@google.com, jshargo@google.com, carlosmr@google.com
 
 # SF front end related
-per-file **BLASTBufferQueue.* = file:/services/surfaceflinger/OWNERS
+per-file **BLASTBufferQueue* = file:/services/surfaceflinger/OWNERS
 per-file **BufferReleaseChannel.* = file:/services/surfaceflinger/OWNERS
 per-file **ITransactionCompletedListener.* = file:/services/surfaceflinger/OWNERS
 per-file **Layer* = file:/services/surfaceflinger/OWNERS

@@ -749,6 +749,12 @@ inline bool Iterate(Visitor* visitor,
 }
 
 template <typename Visitor>
+inline bool Iterate(Visitor* visitor, VkJsonARMDataGraph* structs) {
+  return visitor->Visit("dataGraphFeaturesARM",
+                        &structs->data_graph_features_arm);
+}
+
+template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonARMFormatPack* structs) {
   return visitor->Visit("formatPackFeaturesARM",
                         &structs->format_pack_features_arm);
@@ -1261,13 +1267,6 @@ inline bool Iterate(Visitor* visitor, VkJsonExtPipelineRobustness* structs) {
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor,
-                    VkJsonExtPresentModeFifoLatestReady* structs) {
-  return visitor->Visit("presentModeFifoLatestReadyFeaturesEXT",
-                        &structs->present_mode_fifo_latest_ready_features_ext);
-}
-
-template <typename Visitor>
-inline bool Iterate(Visitor* visitor,
                     VkJsonExtPrimitiveTopologyListRestart* structs) {
   return visitor->Visit("primitiveTopologyListRestartFeaturesEXT",
                         &structs->primitive_topology_list_restart_features_ext);
@@ -1765,6 +1764,13 @@ inline bool Iterate(Visitor* visitor, VkJsonKHRPresentId2* structs) {
 }
 
 template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkJsonKHRPresentModeFifoLatestReady* structs) {
+  return visitor->Visit("presentModeFifoLatestReadyFeaturesKHR",
+                        &structs->present_mode_fifo_latest_ready_features_khr);
+}
+
+template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonKHRPresentWait* structs) {
   return visitor->Visit("presentWaitFeaturesKHR",
                         &structs->present_wait_features_khr);
@@ -1935,6 +1941,18 @@ inline bool Iterate(Visitor* visitor,
 }
 
 template <typename Visitor>
+inline bool Iterate(Visitor* visitor, VkJsonKHRShaderUntypedPointers* structs) {
+  return visitor->Visit("shaderUntypedPointersFeaturesKHR",
+                        &structs->shader_untyped_pointers_features_khr);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor, VkJsonKHRSwapchainMaintenance1* structs) {
+  return visitor->Visit("swapchainMaintenance1FeaturesKHR",
+                        &structs->swapchain_maintenance1_features_khr);
+}
+
+template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonKHRSynchronization2* structs) {
   return visitor->Visit("synchronization2FeaturesKHR",
                         &structs->synchronization2_features_khr);
@@ -1988,6 +2006,13 @@ template <typename Visitor>
 inline bool Iterate(Visitor* visitor, VkJsonKHRVideoEncodeAv1* structs) {
   return visitor->Visit("videoEncodeAV1FeaturesKHR",
                         &structs->video_encode_av1_features_khr);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkJsonKHRVideoEncodeIntraRefresh* structs) {
+  return visitor->Visit("videoEncodeIntraRefreshFeaturesKHR",
+                        &structs->video_encode_intra_refresh_features_khr);
 }
 
 template <typename Visitor>
@@ -2420,9 +2445,27 @@ inline bool Iterate(Visitor* visitor, VkJsonSECAmigoProfiling* structs) {
 
 template <typename Visitor>
 inline bool Iterate(Visitor* visitor,
+                    VkJsonSECPipelineCacheIncrementalMode* structs) {
+  return visitor->Visit("pipelineCacheIncrementalModeFeaturesSEC",
+                        &structs->pipeline_cache_incremental_mode_features_sec);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
                     VkJsonVALVEDescriptorSetHostMapping* structs) {
   return visitor->Visit("descriptorSetHostMappingFeaturesVALVE",
                         &structs->descriptor_set_host_mapping_features_valve);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkJsonVALVEFragmentDensityMapLayered* structs) {
+  return visitor->Visit(
+             "fragmentDensityMapLayeredFeaturesVALVE",
+             &structs->fragment_density_map_layered_features_valve) &&
+         visitor->Visit(
+             "fragmentDensityMapLayeredPropertiesVALVE",
+             &structs->fragment_density_map_layered_properties_valve);
 }
 
 template <typename Visitor>
@@ -2945,6 +2988,21 @@ inline bool Iterate(
 
       visitor->Visit("maxCustomBorderColorSamplers",
                      &properties->maxCustomBorderColorSamplers);
+}
+
+template <typename Visitor>
+inline bool Iterate(Visitor* visitor,
+                    VkPhysicalDeviceDataGraphFeaturesARM* features) {
+  return
+
+      visitor->Visit("dataGraph", &features->dataGraph) &&
+      visitor->Visit("dataGraphUpdateAfterBind",
+                     &features->dataGraphUpdateAfterBind) &&
+      visitor->Visit("dataGraphSpecializationConstants",
+                     &features->dataGraphSpecializationConstants) &&
+      visitor->Visit("dataGraphDescriptorBuffer",
+                     &features->dataGraphDescriptorBuffer) &&
+      visitor->Visit("dataGraphShaderModule", &features->dataGraphShaderModule);
 }
 
 template <typename Visitor>
@@ -3748,6 +3806,26 @@ inline bool Iterate(Visitor* visitor,
                      &features->fragmentDensityMapDynamic) &&
       visitor->Visit("fragmentDensityMapNonSubsampledImages",
                      &features->fragmentDensityMapNonSubsampledImages);
+}
+
+template <typename Visitor>
+inline bool Iterate(
+    Visitor* visitor,
+    VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE* features) {
+  return
+
+      visitor->Visit("fragmentDensityMapLayered",
+                     &features->fragmentDensityMapLayered);
+}
+
+template <typename Visitor>
+inline bool Iterate(
+    Visitor* visitor,
+    VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE* properties) {
+  return
+
+      visitor->Visit("maxFragmentDensityMapLayers",
+                     &properties->maxFragmentDensityMapLayers);
 }
 
 template <typename Visitor>
@@ -4824,6 +4902,16 @@ inline bool Iterate(Visitor* visitor,
 template <typename Visitor>
 inline bool Iterate(
     Visitor* visitor,
+    VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC* features) {
+  return
+
+      visitor->Visit("pipelineCacheIncrementalMode",
+                     &features->pipelineCacheIncrementalMode);
+}
+
+template <typename Visitor>
+inline bool Iterate(
+    Visitor* visitor,
     VkPhysicalDevicePipelineCreationCacheControlFeatures* features) {
   return
 
@@ -4938,7 +5026,7 @@ inline bool Iterate(Visitor* visitor,
 template <typename Visitor>
 inline bool Iterate(
     Visitor* visitor,
-    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT* features) {
+    VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR* features) {
   return
 
       visitor->Visit("presentModeFifoLatestReady",
@@ -5879,6 +5967,15 @@ inline bool Iterate(Visitor* visitor,
 }
 
 template <typename Visitor>
+inline bool Iterate(
+    Visitor* visitor,
+    VkPhysicalDeviceShaderUntypedPointersFeaturesKHR* features) {
+  return
+
+      visitor->Visit("shaderUntypedPointers", &features->shaderUntypedPointers);
+}
+
+template <typename Visitor>
 inline bool Iterate(Visitor* visitor,
                     VkPhysicalDeviceShadingRateImageFeaturesNV* features) {
   return
@@ -5964,7 +6061,7 @@ inline bool Iterate(
 template <typename Visitor>
 inline bool Iterate(
     Visitor* visitor,
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT* features) {
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR* features) {
   return
 
       visitor->Visit("swapchainMaintenance1", &features->swapchainMaintenance1);
@@ -6282,6 +6379,16 @@ inline bool Iterate(Visitor* visitor,
   return
 
       visitor->Visit("videoEncodeAV1", &features->videoEncodeAV1);
+}
+
+template <typename Visitor>
+inline bool Iterate(
+    Visitor* visitor,
+    VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR* features) {
+  return
+
+      visitor->Visit("videoEncodeIntraRefresh",
+                     &features->videoEncodeIntraRefresh);
 }
 
 template <typename Visitor>
@@ -7523,6 +7630,9 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
         ret &= visitor->Visit("VK_ANDROID_external_format_resolve",
                               &device->android_external_format_resolve);
       }
+      if (device->arm_data_graph.reported) {
+        ret &= visitor->Visit("VK_ARM_data_graph", &device->arm_data_graph);
+      }
       if (device->arm_format_pack.reported) {
         ret &= visitor->Visit("VK_ARM_format_pack", &device->arm_format_pack);
       }
@@ -7808,10 +7918,6 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
         ret &= visitor->Visit("VK_EXT_pipeline_robustness",
                               &device->ext_pipeline_robustness);
       }
-      if (device->ext_present_mode_fifo_latest_ready.reported) {
-        ret &= visitor->Visit("VK_EXT_present_mode_fifo_latest_ready",
-                              &device->ext_present_mode_fifo_latest_ready);
-      }
       if (device->ext_primitive_topology_list_restart.reported) {
         ret &= visitor->Visit("VK_EXT_primitive_topology_list_restart",
                               &device->ext_primitive_topology_list_restart);
@@ -8082,6 +8188,10 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
       if (device->khr_present_id2.reported) {
         ret &= visitor->Visit("VK_KHR_present_id2", &device->khr_present_id2);
       }
+      if (device->khr_present_mode_fifo_latest_ready.reported) {
+        ret &= visitor->Visit("VK_KHR_present_mode_fifo_latest_ready",
+                              &device->khr_present_mode_fifo_latest_ready);
+      }
       if (device->khr_present_wait.reported) {
         ret &= visitor->Visit("VK_KHR_present_wait", &device->khr_present_wait);
       }
@@ -8179,6 +8289,14 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
         ret &= visitor->Visit("VK_KHR_shader_terminate_invocation",
                               &device->khr_shader_terminate_invocation);
       }
+      if (device->khr_shader_untyped_pointers.reported) {
+        ret &= visitor->Visit("VK_KHR_shader_untyped_pointers",
+                              &device->khr_shader_untyped_pointers);
+      }
+      if (device->khr_swapchain_maintenance1.reported) {
+        ret &= visitor->Visit("VK_KHR_swapchain_maintenance1",
+                              &device->khr_swapchain_maintenance1);
+      }
       if (device->khr_synchronization2.reported) {
         ret &= visitor->Visit("VK_KHR_synchronization2",
                               &device->khr_synchronization2);
@@ -8210,6 +8328,10 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
       if (device->khr_video_encode_av1.reported) {
         ret &= visitor->Visit("VK_KHR_video_encode_av1",
                               &device->khr_video_encode_av1);
+      }
+      if (device->khr_video_encode_intra_refresh.reported) {
+        ret &= visitor->Visit("VK_KHR_video_encode_intra_refresh",
+                              &device->khr_video_encode_intra_refresh);
       }
       if (device->khr_video_encode_quantization_map.reported) {
         ret &= visitor->Visit("VK_KHR_video_encode_quantization_map",
@@ -8444,9 +8566,17 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
         ret &= visitor->Visit("VK_SEC_amigo_profiling",
                               &device->sec_amigo_profiling);
       }
+      if (device->sec_pipeline_cache_incremental_mode.reported) {
+        ret &= visitor->Visit("VK_SEC_pipeline_cache_incremental_mode",
+                              &device->sec_pipeline_cache_incremental_mode);
+      }
       if (device->valve_descriptor_set_host_mapping.reported) {
         ret &= visitor->Visit("VK_VALVE_descriptor_set_host_mapping",
                               &device->valve_descriptor_set_host_mapping);
+      }
+      if (device->valve_fragment_density_map_layered.reported) {
+        ret &= visitor->Visit("VK_VALVE_fragment_density_map_layered",
+                              &device->valve_fragment_density_map_layered);
       }
       if (device->valve_mutable_descriptor_type.reported) {
         ret &= visitor->Visit("VK_VALVE_mutable_descriptor_type",

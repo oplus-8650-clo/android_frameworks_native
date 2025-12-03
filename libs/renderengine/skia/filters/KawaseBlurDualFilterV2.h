@@ -22,11 +22,14 @@
 #include <SkSurface.h>
 #include "BlurFilter.h"
 
+#include "../AutoBackendTexture.h"
 #include "RuntimeEffectManager.h"
 
 namespace android {
 namespace renderengine {
 namespace skia {
+
+using android::hardware::graphics::common::V1_2::BufferUsage;
 
 /**
  * This is an implementation of a Kawase blur with dual-filtering passes, as described in here:
@@ -37,20 +40,39 @@ namespace skia {
  */
 class KawaseBlurDualFilterV2 : public BlurFilter {
 public:
+    static constexpr int kMaxSurfaces = 4;
+    static constexpr float kInverseInputScale = 1.0f / kInputScale;
+    static constexpr float kScales[kMaxSurfaces] = {1 * kInverseInputScale, 2 * kInverseInputScale,
+                                                    4 * kInverseInputScale, 8 * kInverseInputScale};
+
     explicit KawaseBlurDualFilterV2(RuntimeEffectManager& effectManager);
     virtual ~KawaseBlurDualFilterV2() {}
 
     // Execute blur, saving it to a texture
-    sk_sp<SkImage> generate(SkiaGpuContext* context, const uint32_t radius,
-                            const sk_sp<SkImage> blurInput, const SkRect& blurRect) const override;
+    sk_sp<SkImage> generate(SkiaGpuContext* context, const DisplaySettings& display,
+                            const uint32_t radius, const sk_sp<SkImage> blurInput,
+                            const SkRect& blurRect) const override;
+
+    void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) override;
+    bool isBufferPreallocated() const override { return mProtectedTextures[0] != nullptr; }
 
 private:
+    static constexpr int64_t kProtectedUsageFlags = BufferUsage::PROTECTED |
+            BufferUsage::GPU_RENDER_TARGET | BufferUsage::GPU_TEXTURE;
+
     sk_sp<SkRuntimeEffect> mQuarterResDownSampleBlurEffect;
     sk_sp<SkRuntimeEffect> mHalfResDownSampleBlurEffect;
     sk_sp<SkRuntimeEffect> mUpSampleBlurEffect;
 
-    void blurInto(const sk_sp<SkSurface>& drawSurface, const sk_sp<SkImage>& readImage,
-                  const float radius, const float alpha, const sk_sp<SkRuntimeEffect>&) const;
+    AutoBackendTexture::CleanupManager mTextureCleanupMgr GUARDED_BY(mRenderingMutex);
+    // Mutex guarding rendering operations, so that internal state related to
+    // rendering that is potentially modified by multiple threads is guaranteed thread-safe.
+    mutable std::mutex mRenderingMutex;
+    std::shared_ptr<AutoBackendTexture::LocalRef> mProtectedTextures[kMaxSurfaces];
+
+    void blurInto(const sk_sp<SkSurface>& drawSurface, const int destWidth,
+                  const sk_sp<SkImage>& readImage, const float radius, const float alpha,
+                  const sk_sp<SkRuntimeEffect>&) const;
 
     void blurInto(const sk_sp<SkSurface>& drawSurface, const sk_sp<SkShader> input,
                   const float radius, const float alpha, const sk_sp<SkRuntimeEffect>&) const;

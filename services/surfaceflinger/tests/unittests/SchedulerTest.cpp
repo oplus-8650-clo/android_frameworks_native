@@ -1014,19 +1014,18 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
     EXPECT_EQ(makeVsyncIds(VsyncId(44), true), compositor.vsyncIds.composite);
 }
 
-TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBackpressure) {
+TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysIgnoreBackpressureForLockstepFollower) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
 
-    constexpr Fps k120Hz = 120_Hz;
     auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
-    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return(k120Hz.getPeriodNsecs()));
+    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((60_Hz).getPeriodNsecs()));
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
-                                                                      kDisplay1Mode120->getId()),
+                                                                      kDisplay1Mode60->getId()),
                                 mockVsyncTracker1);
+
     auto mockVsyncTracker2 = std::make_shared<android::mock::VSyncTracker>();
-    constexpr Fps k60Hz = 60_Hz;
-    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return(k60Hz.getPeriodNsecs()));
+    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return((60_Hz).getPeriodNsecs()));
     mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()),
@@ -1036,8 +1035,8 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBack
 
     fake::FakeClock* fakeClock = mScheduler->injectFakeClock();
     TimePoint now(fakeClock->now());
-    TimePoint expectedPacesetterPresentTime(now + k120Hz.getPeriod());
-    TimePoint expectedFollowerPresentTime(now + k60Hz.getPeriod());
+    TimePoint expectedPacesetterPresentTime(now + (60_Hz).getPeriod());
+    TimePoint expectedFollowerPresentTime(now + (60_Hz).getPeriod());
 
     // Advance time by some offset to simulate wakeup.
     fakeClock->advanceTime(1ms);
@@ -1075,9 +1074,84 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBack
     }
 
     // Advance to the next pacestter vsync wakeup time.
-    fakeClock->advanceTime(k120Hz.getPeriod());
+    fakeClock->advanceTime((60_Hz).getPeriod());
 
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (60_Hz).getPeriod());
+    // `expectedFollowerPresentTime` remains the same
+
+    advanceMockVsyncTrackers();
+    // Both pacesetter and follower should composite despite follower backpressure.
+    compositor.committed = true;
+    mScheduler->doFrameSignal(compositor, VsyncId(43), expectedPacesetterPresentTime);
+
+    expectedTargets = {{kDisplayId1, VsyncId(43)}, {kDisplayId2, VsyncId(43)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+}
+
+TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBackpressure) {
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+
+    auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
+    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((120_Hz).getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode120->getId()),
+                                mockVsyncTracker1);
+
+    auto mockVsyncTracker2 = std::make_shared<android::mock::VSyncTracker>();
+    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return((60_Hz).getPeriodNsecs()));
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay2Modes,
+                                                                      kDisplay2Mode60->getId()),
+                                mockVsyncTracker2);
+
+    FakeMultiDisplayCompositor compositor(*mScheduler);
+
+    fake::FakeClock* fakeClock = mScheduler->injectFakeClock();
+    TimePoint now(fakeClock->now());
+    TimePoint expectedPacesetterPresentTime(now + (120_Hz).getPeriod());
+    TimePoint expectedFollowerPresentTime(now + (60_Hz).getPeriod());
+
+    // Advance time by some offset to simulate wakeup.
+    fakeClock->advanceTime(1ms);
+
+    auto advanceMockVsyncTrackers = [&]() {
+        EXPECT_CALL(*mockVsyncTracker1,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedPacesetterPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(expectedPacesetterPresentTime.ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+        EXPECT_CALL(*mockVsyncTracker2,
+                    nextAnticipatedVSyncTimeFrom(TimePoint(fakeClock->now()).ns(), _))
+                .WillRepeatedly(Return(expectedFollowerPresentTime.ns()));
+    };
+    advanceMockVsyncTrackers();
+
+    mScheduler->doFrameSignal(compositor, VsyncId(42), expectedPacesetterPresentTime);
+
+    EXPECT_EQ(kDisplayId1, compositor.pacesetterIds.commit);
+    EXPECT_EQ(kDisplayId1, compositor.pacesetterIds.composite);
+    VsyncIds expectedTargets = {{kDisplayId1, VsyncId(42)}, {kDisplayId2, VsyncId(42)}};
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.commit);
+    EXPECT_EQ(expectedTargets, compositor.vsyncIds.composite);
+
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId1];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        fenceTimePtr->signalForTest(expectedPacesetterPresentTime.ns());
+    }
+    {
+        auto& [fence, fenceTimePtr, vsyncId] = compositor.lastPresentationFences[kDisplayId2];
+        EXPECT_EQ(vsyncId, VsyncId(42));
+        // pending presentation due to slower nature of the second display.
+    }
+
+    // Advance to the next pacestter vsync wakeup time.
+    fakeClock->advanceTime((120_Hz).getPeriod());
+
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
     // `expectedFollowerPresentTime` remains the same
 
     advanceMockVsyncTrackers();
@@ -1101,10 +1175,10 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBack
     }
 
     // Advance to the next pacestter vsync wakeup time.
-    fakeClock->advanceTime(k120Hz.getPeriod());
+    fakeClock->advanceTime((120_Hz).getPeriod());
 
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
-    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + (60_Hz).getPeriod());
 
     advanceMockVsyncTrackers();
     // Both pacesetter and follower should commit
@@ -1119,16 +1193,15 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBack
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMissedPresentation) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
 
-    constexpr Fps k120Hz = 120_Hz;
     auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
-    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return(k120Hz.getPeriodNsecs()));
+    ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((120_Hz).getPeriodNsecs()));
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode120->getId()),
                                 mockVsyncTracker1);
     auto mockVsyncTracker2 = std::make_shared<android::mock::VSyncTracker>();
-    constexpr Fps k60Hz = 60_Hz;
-    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return(k60Hz.getPeriodNsecs()));
+
+    ON_CALL(*mockVsyncTracker2, currentPeriod).WillByDefault(Return((60_Hz).getPeriodNsecs()));
     mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()),
@@ -1138,8 +1211,8 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
 
     fake::FakeClock* fakeClock = mScheduler->injectFakeClock();
     TimePoint now(fakeClock->now());
-    TimePoint expectedPacesetterPresentTime(now + k120Hz.getPeriod());
-    TimePoint expectedFollowerPresentTime(now + k60Hz.getPeriod());
+    TimePoint expectedPacesetterPresentTime(now + (120_Hz).getPeriod());
+    TimePoint expectedFollowerPresentTime(now + (60_Hz).getPeriod());
 
     // Advance time by some offset to simulate wakeup.
     fakeClock->advanceTime(1ms);
@@ -1175,8 +1248,8 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
     }
 
     // Advance to the next pacestter vsync wakeup time.
-    fakeClock->advanceTime(k120Hz.getPeriod());
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    fakeClock->advanceTime((120_Hz).getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
 
     advanceMockVsyncTrackers();
 
@@ -1211,9 +1284,9 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
         firstFollowerPresentFenceTime = fenceTimePtr;
     }
 
-    fakeClock->advanceTime(k120Hz.getPeriod());
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
-    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+    fakeClock->advanceTime((120_Hz).getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + (60_Hz).getPeriod());
 
     advanceMockVsyncTrackers();
 
@@ -1236,8 +1309,8 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
     }
 
     // Advance to the next pacestter vsync wakeup time.
-    fakeClock->advanceTime(k120Hz.getPeriod());
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
+    fakeClock->advanceTime((120_Hz).getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
 
     advanceMockVsyncTrackers();
 
@@ -1255,9 +1328,9 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
         firstFollowerPresentFenceTime->signalForTest(expectedFollowerPresentTime.ns() + 300000);
     }
 
-    fakeClock->advanceTime(k120Hz.getPeriod());
-    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + k120Hz.getPeriod());
-    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + k60Hz.getPeriod());
+    fakeClock->advanceTime((120_Hz).getPeriod());
+    expectedPacesetterPresentTime = TimePoint(expectedPacesetterPresentTime + (120_Hz).getPeriod());
+    expectedFollowerPresentTime = TimePoint(expectedFollowerPresentTime + (60_Hz).getPeriod());
 
     advanceMockVsyncTrackers();
 

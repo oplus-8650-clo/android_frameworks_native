@@ -41,8 +41,8 @@ public:
     virtual ~BlurFilter(){}
 
     // Execute blur, saving it to a texture
-    virtual sk_sp<SkImage> generate(SkiaGpuContext* context, const uint32_t radius,
-                                    const sk_sp<SkImage> blurInput,
+    virtual sk_sp<SkImage> generate(SkiaGpuContext* context, const DisplaySettings& display,
+                                    const uint32_t radius, const sk_sp<SkImage> blurInput,
                                     const SkRect& blurRect) const = 0;
 
     /**
@@ -61,6 +61,9 @@ public:
                                 sk_sp<SkImage> blurredImage, sk_sp<SkImage> input);
 
     float getMaxCrossFadeRadius() const;
+
+    virtual void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) {}
+    virtual bool isBufferPreallocated() const { return true; }
 
 private:
     // To avoid downscaling artifacts, we interpolate the blurred fbo with the full composited

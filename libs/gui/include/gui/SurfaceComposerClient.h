@@ -850,6 +850,31 @@ public:
                 const std::shared_ptr<RenderCommandBufferProducer>& producer);
 
         /**
+         * Associates a render resource token with a layer. This token is used to identify a
+         * client-managed cache of resources, such as GraphicBuffers, that can be used by a
+         * RenderCommandBuffer.
+         *
+         * When a RenderCommandBuffer is drawn, it may contain commands that reference these
+         * resources by their unique IDs. SurfaceFlinger uses the provided token to look up the
+         * corresponding RenderResourceCache, which contains the actual resource data (e.g.,
+         * the GraphicBuffer). This allows for efficient, cross-process rendering without needing
+         * to serialize the entire resource with each command.
+         *
+         * The lifecycle of the cache is tied to the lifecycle of the token. When the token is
+         * destroyed (e.g., the client process dies), SurfaceFlinger will automatically clean up
+         * the associated resource cache.
+         *
+         * @param sc The SurfaceControl for the layer to which the token will be applied.
+         * @param token A binder token that uniquely identifies the client's RenderResourceCache.
+         * @return A reference to the Transaction object for chaining calls.
+         *
+         * @see registerGraphicBuffers
+         * @see unregisterGraphicBuffers
+         * @see setRenderCommandBuffer
+         */
+        Transaction& setRenderResourceToken(const sp<SurfaceControl>& sc, const sp<IBinder>& token);
+
+        /**
          * Advance the frameId of the RenderCommandBuffer consumer. SurfaceFlinger
          * will not acquire a RenderCommandBuffer with frameId < the last buffer
          * applied here, and so this allows for a barrier mechanism.

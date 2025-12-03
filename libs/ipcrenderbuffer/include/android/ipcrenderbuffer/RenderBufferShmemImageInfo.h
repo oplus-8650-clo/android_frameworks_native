@@ -28,11 +28,4 @@ struct ShmemImageInfo {
 ShmemImageInfo toShmemImageInfo(const SkImageInfo& info);
 SkImageInfo fromShmemImageInfo(const ShmemImageInfo& info);
 
-// TODO: This is used with the BitmapArenaAllocator system from the prototype and
-// may not be needed in an immutable bitmap only implementation. We keep it around for now though
-// until the new bitmap implementation is finished.
-struct OffsetToImageCache {
-    std::map<int, sk_sp<SkImage>> images;
-};
-
 } // namespace android

@@ -1085,6 +1085,18 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     properties.pNext = &device.qcom_tile_shading.tile_shading_properties_qcom;
   }
 
+  if (HasExtension("VK_VALVE_fragment_density_map_layered",
+                   device.extensions)) {
+    device.valve_fragment_density_map_layered.reported = true;
+    device.valve_fragment_density_map_layered
+        .fragment_density_map_layered_properties_valve.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_LAYERED_PROPERTIES_VALVE;
+    device.valve_fragment_density_map_layered
+        .fragment_density_map_layered_properties_valve.pNext = properties.pNext;
+    properties.pNext = &device.valve_fragment_density_map_layered
+                            .fragment_density_map_layered_properties_valve;
+  }
+
   vkGetPhysicalDeviceProperties2(physical_device, &properties);
 
   if (device.ext_host_image_copy.host_image_copy_properties_ext
@@ -1170,6 +1182,14 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
         .external_format_resolve_features_android.pNext = features.pNext;
     features.pNext = &device.android_external_format_resolve
                           .external_format_resolve_features_android;
+  }
+
+  if (HasExtension("VK_ARM_data_graph", device.extensions)) {
+    device.arm_data_graph.reported = true;
+    device.arm_data_graph.data_graph_features_arm.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DATA_GRAPH_FEATURES_ARM;
+    device.arm_data_graph.data_graph_features_arm.pNext = features.pNext;
+    features.pNext = &device.arm_data_graph.data_graph_features_arm;
   }
 
   if (HasExtension("VK_ARM_format_pack", device.extensions)) {
@@ -1858,18 +1878,6 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
         &device.ext_pipeline_robustness.pipeline_robustness_features_ext;
   }
 
-  if (HasExtension("VK_EXT_present_mode_fifo_latest_ready",
-                   device.extensions)) {
-    device.ext_present_mode_fifo_latest_ready.reported = true;
-    device.ext_present_mode_fifo_latest_ready
-        .present_mode_fifo_latest_ready_features_ext.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT;
-    device.ext_present_mode_fifo_latest_ready
-        .present_mode_fifo_latest_ready_features_ext.pNext = features.pNext;
-    features.pNext = &device.ext_present_mode_fifo_latest_ready
-                          .present_mode_fifo_latest_ready_features_ext;
-  }
-
   if (HasExtension("VK_EXT_primitive_topology_list_restart",
                    device.extensions)) {
     device.ext_primitive_topology_list_restart.reported = true;
@@ -2067,7 +2075,7 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     device.ext_swapchain_maintenance1.reported = true;
     device.ext_swapchain_maintenance1.swapchain_maintenance1_features_ext
         .sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
     device.ext_swapchain_maintenance1.swapchain_maintenance1_features_ext
         .pNext = features.pNext;
     features.pNext =
@@ -2484,6 +2492,18 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     features.pNext = &device.khr_present_id2.present_id2_features_khr;
   }
 
+  if (HasExtension("VK_KHR_present_mode_fifo_latest_ready",
+                   device.extensions)) {
+    device.khr_present_mode_fifo_latest_ready.reported = true;
+    device.khr_present_mode_fifo_latest_ready
+        .present_mode_fifo_latest_ready_features_khr.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_KHR;
+    device.khr_present_mode_fifo_latest_ready
+        .present_mode_fifo_latest_ready_features_khr.pNext = features.pNext;
+    features.pNext = &device.khr_present_mode_fifo_latest_ready
+                          .present_mode_fifo_latest_ready_features_khr;
+  }
+
   if (HasExtension("VK_KHR_present_wait", device.extensions)) {
     device.khr_present_wait.reported = true;
     device.khr_present_wait.present_wait_features_khr.sType =
@@ -2726,6 +2746,28 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
                           .shader_terminate_invocation_features_khr;
   }
 
+  if (HasExtension("VK_KHR_shader_untyped_pointers", device.extensions)) {
+    device.khr_shader_untyped_pointers.reported = true;
+    device.khr_shader_untyped_pointers.shader_untyped_pointers_features_khr
+        .sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
+    device.khr_shader_untyped_pointers.shader_untyped_pointers_features_khr
+        .pNext = features.pNext;
+    features.pNext = &device.khr_shader_untyped_pointers
+                          .shader_untyped_pointers_features_khr;
+  }
+
+  if (HasExtension("VK_KHR_swapchain_maintenance1", device.extensions)) {
+    device.khr_swapchain_maintenance1.reported = true;
+    device.khr_swapchain_maintenance1.swapchain_maintenance1_features_khr
+        .sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
+    device.khr_swapchain_maintenance1.swapchain_maintenance1_features_khr
+        .pNext = features.pNext;
+    features.pNext =
+        &device.khr_swapchain_maintenance1.swapchain_maintenance1_features_khr;
+  }
+
   if (HasExtension("VK_KHR_synchronization2", device.extensions)) {
     device.khr_synchronization2.reported = true;
     device.khr_synchronization2.synchronization2_features_khr.sType =
@@ -2810,6 +2852,17 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     device.khr_video_encode_av1.video_encode_av1_features_khr.pNext =
         features.pNext;
     features.pNext = &device.khr_video_encode_av1.video_encode_av1_features_khr;
+  }
+
+  if (HasExtension("VK_KHR_video_encode_intra_refresh", device.extensions)) {
+    device.khr_video_encode_intra_refresh.reported = true;
+    device.khr_video_encode_intra_refresh
+        .video_encode_intra_refresh_features_khr.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_INTRA_REFRESH_FEATURES_KHR;
+    device.khr_video_encode_intra_refresh
+        .video_encode_intra_refresh_features_khr.pNext = features.pNext;
+    features.pNext = &device.khr_video_encode_intra_refresh
+                          .video_encode_intra_refresh_features_khr;
   }
 
   if (HasExtension("VK_KHR_video_encode_quantization_map", device.extensions)) {
@@ -3382,6 +3435,18 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     features.pNext = &device.sec_amigo_profiling.amigo_profiling_features_sec;
   }
 
+  if (HasExtension("VK_SEC_pipeline_cache_incremental_mode",
+                   device.extensions)) {
+    device.sec_pipeline_cache_incremental_mode.reported = true;
+    device.sec_pipeline_cache_incremental_mode
+        .pipeline_cache_incremental_mode_features_sec.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CACHE_INCREMENTAL_MODE_FEATURES_SEC;
+    device.sec_pipeline_cache_incremental_mode
+        .pipeline_cache_incremental_mode_features_sec.pNext = features.pNext;
+    features.pNext = &device.sec_pipeline_cache_incremental_mode
+                          .pipeline_cache_incremental_mode_features_sec;
+  }
+
   if (HasExtension("VK_VALVE_descriptor_set_host_mapping", device.extensions)) {
     device.valve_descriptor_set_host_mapping.reported = true;
     device.valve_descriptor_set_host_mapping
@@ -3391,6 +3456,18 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
         .descriptor_set_host_mapping_features_valve.pNext = features.pNext;
     features.pNext = &device.valve_descriptor_set_host_mapping
                           .descriptor_set_host_mapping_features_valve;
+  }
+
+  if (HasExtension("VK_VALVE_fragment_density_map_layered",
+                   device.extensions)) {
+    device.valve_fragment_density_map_layered.reported = true;
+    device.valve_fragment_density_map_layered
+        .fragment_density_map_layered_features_valve.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_LAYERED_FEATURES_VALVE;
+    device.valve_fragment_density_map_layered
+        .fragment_density_map_layered_features_valve.pNext = features.pNext;
+    features.pNext = &device.valve_fragment_density_map_layered
+                          .fragment_density_map_layered_features_valve;
   }
 
   if (HasExtension("VK_VALVE_mutable_descriptor_type", device.extensions)) {

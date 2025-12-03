@@ -45,6 +45,8 @@
 namespace android {
 namespace protolog {
 
+const std::string DATASOURCE_NAME = "android.protolog";
+
 class ProtoLogTest : public ::testing::Test {
 protected:
     void SetUp() override { android::protolog::Initialize(perfetto::kInProcessBackend); }
@@ -53,14 +55,17 @@ protected:
 
     // Helper to start a tracing session configured for the ProtoLog data source.
     std::unique_ptr<perfetto::TracingSession> StartTracing(
+            perfetto::protos::ProtoLogConfig_TracingMode tracing_mode =
+                    perfetto::protos::ProtoLogConfig_TracingMode_ENABLE_ALL,
             perfetto::protos::ProtoLogLevel min_level =
                     perfetto::protos::ProtoLogLevel::PROTOLOG_LEVEL_INFO) {
         perfetto::TraceConfig cfg;
         cfg.add_buffers()->set_size_kb(1024);
         auto* ds_cfg = cfg.add_data_sources()->mutable_config();
-        ds_cfg->set_name("android.protolog");
+        ds_cfg->set_name(DATASOURCE_NAME);
 
         perfetto::protos::ProtoLogConfig protolog_cfg;
+        protolog_cfg.set_tracing_mode(tracing_mode);
         protolog_cfg.set_default_log_from_level(min_level);
         ds_cfg->set_protolog_config_raw(protolog_cfg.SerializeAsString());
 
@@ -287,7 +292,7 @@ TEST_F_WITH_FLAGS(ProtoLogTest, ConcurrentSessions,
 
     // Session 1: Log INFO and above for "InfoGroup"
     auto* ds_cfg1 = cfg1.add_data_sources()->mutable_config();
-    ds_cfg1->set_name("android.protolog");
+    ds_cfg1->set_name(DATASOURCE_NAME);
     perfetto::protos::ProtoLogConfig protolog_cfg1;
     auto* group1_override = protolog_cfg1.add_group_overrides();
     group1_override->set_group_name("InfoGroup");
@@ -296,7 +301,7 @@ TEST_F_WITH_FLAGS(ProtoLogTest, ConcurrentSessions,
 
     // Session 2: Log ERROR and above for "ErrorGroup"
     auto* ds_cfg2 = cfg2.add_data_sources()->mutable_config();
-    ds_cfg2->set_name("android.protolog");
+    ds_cfg2->set_name(DATASOURCE_NAME);
     perfetto::protos::ProtoLogConfig protolog_cfg2;
     auto* group2_override = protolog_cfg2.add_group_overrides();
     group2_override->set_group_name("ErrorGroup");
@@ -345,7 +350,7 @@ TEST_F_WITH_FLAGS(ProtoLogTest, ConcurrentSessions,
 TEST_F_WITH_FLAGS(ProtoLogTest, FiltersByLevel,
                   REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_PACKAGE, native_proto_logging))) {
     auto count_messages = [this](perfetto::protos::ProtoLogLevel level) -> int {
-        auto session = StartTracing(level);
+        auto session = StartTracing(perfetto::protos::ProtoLogConfig_TracingMode_ENABLE_ALL, level);
         PROTOLOG_V("FilterGroup", "Verbose");
         PROTOLOG_D("FilterGroup", "Debug");
         PROTOLOG_I("FilterGroup", "Info");
@@ -376,13 +381,14 @@ TEST_F_WITH_FLAGS(ProtoLogTest, LogsWithStacktrace,
     perfetto::TraceConfig cfg;
     cfg.add_buffers()->set_size_kb(1024);
     auto* ds_cfg = cfg.add_data_sources()->mutable_config();
-    ds_cfg->set_name("android.protolog");
+    ds_cfg->set_name(DATASOURCE_NAME);
 
     perfetto::protos::ProtoLogConfig protolog_cfg;
     auto* group_override = protolog_cfg.add_group_overrides();
     group_override->set_group_name("StackTraceGroup");
     group_override->set_log_from(perfetto::protos::PROTOLOG_LEVEL_INFO);
     group_override->set_collect_stacktrace(true);
+    protolog_cfg.set_tracing_mode(perfetto::protos::ProtoLogConfig_TracingMode_ENABLE_ALL);
     protolog_cfg.set_default_log_from_level(perfetto::protos::PROTOLOG_LEVEL_INFO);
     ds_cfg->set_protolog_config_raw(protolog_cfg.SerializeAsString());
 

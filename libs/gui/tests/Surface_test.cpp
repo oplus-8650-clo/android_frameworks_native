@@ -1066,6 +1066,16 @@ public:
 
     binder::Status resetForcedPacesetter() { return binder::Status::ok(); }
 
+    binder::Status registerGraphicBuffers(
+            const gui::GraphicBuffersRegisterInfo& /*info*/) override {
+        return binder::Status::ok();
+    }
+
+    binder::Status unregisterGraphicBuffers(
+            const gui::GraphicBuffersUnregisterInfo& /*info*/) override {
+        return binder::Status::ok();
+    }
+
 protected:
     IBinder* onAsBinder() override { return nullptr; }
 

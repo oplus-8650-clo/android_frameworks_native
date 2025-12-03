@@ -94,6 +94,8 @@ static constexpr const int FLAG_STORAGE_SDK = InstalldNativeService::FLAG_STORAG
 static constexpr const int FLAG_CLEAR_CACHE_ONLY = InstalldNativeService::FLAG_CLEAR_CACHE_ONLY;
 static constexpr const int FLAG_CLEAR_CODE_CACHE_ONLY =
         InstalldNativeService::FLAG_CLEAR_CODE_CACHE_ONLY;
+static constexpr const uid_t kTestPccAppId = kTestAppId + 20000;
+const uid_t kTestPccAppUid = multiuser_get_uid(kTestUserId, kTestPccAppId);
 
 const gid_t kTestAppUid = multiuser_get_uid(kTestUserId, kTestAppId);
 const gid_t kTestCacheGid = multiuser_get_cache_gid(kTestUserId, kTestAppId);
@@ -168,6 +170,12 @@ static int stat_mode(const char* path) {
     return buf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO | S_ISGID);
 }
 
+static uid_t stat_uid(const char* path) {
+    struct stat buf;
+    EXPECT_EQ(::stat(get_full_path(path).c_str(), &buf), 0);
+    return buf.st_uid;
+}
+
 static bool exists(const std::string& path) {
     return ::access(get_full_path(path).c_str(), F_OK) == 0;
 }
@@ -215,9 +223,11 @@ protected:
         service = new InstalldNativeService();
         testUuid = kTestUuid;
         system("rm -rf /data/local/tmp/user");
+        system("rm -rf /data/local/tmp/user_de");
         system("rm -rf /data/local/tmp/misc_ce");
         system("rm -rf /data/local/tmp/misc_de");
         system("mkdir -p /data/local/tmp/user/0");
+        system("mkdir -p /data/local/tmp/user_de/0");
         system("mkdir -p /data/local/tmp/misc_ce/0/sdksandbox");
         system("mkdir -p /data/local/tmp/misc_de/0/sdksandbox");
         init_globals_from_data_and_root();
@@ -1478,6 +1488,145 @@ TEST_F(DestroyUserDataTest, DestroySdkData_WithDeFlag) {
     ASSERT_BINDER_SUCCESS(service->destroyUserData(args.uuid, args.userId, FLAG_STORAGE_DE));
     ASSERT_TRUE(exists("/data/local/tmp/misc_ce/0/sdksandbox"));
     ASSERT_FALSE(exists("/data/local/tmp/misc_de/0/sdksandbox"));
+}
+
+TEST_F(ServiceTest, CreateAppData_WithPcc) {
+    LOG(INFO) << "CreateAppData_WithPcc";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId; // Specify the PCC UID
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    // Define all expected paths
+    const std::string cePath = "user/0/com.foo";
+    const std::string dePath = "user_de/0/com.foo";
+    const std::string pccCePath = "user/0/com.foo-pcc";
+    const std::string pccDePath = "user_de/0/com.foo-pcc";
+
+    // Verify all four directories were created
+    EXPECT_TRUE(exists(cePath));
+    EXPECT_TRUE(exists(dePath));
+    EXPECT_TRUE(exists(pccCePath));
+    EXPECT_TRUE(exists(pccDePath));
+
+    // Verify correct ownership
+    EXPECT_EQ(kTestAppUid, stat_uid(cePath.c_str()));
+    EXPECT_EQ(kTestAppUid, stat_uid(dePath.c_str()));
+    EXPECT_EQ(kTestPccAppUid, stat_uid(pccCePath.c_str()));
+    EXPECT_EQ(kTestPccAppUid, stat_uid(pccDePath.c_str()));
+
+    // Verify cache subdirectories were also created
+    EXPECT_TRUE(exists(cePath + "/cache"));
+    EXPECT_TRUE(exists(pccCePath + "/cache"));
+}
+
+TEST_F(ServiceTest, CreateAppData_PccDowngrade) {
+    LOG(INFO) << "CreateAppData_PccDowngrade";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId; // Start with PCC support
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    // Phase 1: Install the app with PCC support
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+    EXPECT_TRUE(exists("user/0/com.foo-pcc"));
+    EXPECT_TRUE(exists("user_de/0/com.foo-pcc"));
+
+    // Phase 2: "Upgrade" the app to a version without PCC support
+    args.pccId = -1; // INVALID_UID
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    // Verify main directories still exist
+    EXPECT_TRUE(exists("user/0/com.foo"));
+    EXPECT_TRUE(exists("user_de/0/com.foo"));
+
+    // Verify PCC directories have been cleaned up
+    EXPECT_FALSE(exists("user/0/com.foo-pcc"));
+    EXPECT_FALSE(exists("user_de/0/com.foo-pcc"));
+}
+
+TEST_F(ServiceTest, ClearAppData_WithPcc) {
+    LOG(INFO) << "ClearAppData_WithPcc";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    // Setup: Create app data and add dummy files
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+    const std::string cePath = "user/0/com.foo";
+    const std::string dePath = "user_de/0/com.foo";
+    const std::string pccCePath = "user/0/com.foo-pcc";
+    const std::string pccDePath = "user_de/0/com.foo-pcc";
+    touch(cePath + "/dummy.txt", kTestAppUid, kTestAppUid, 0600);
+    touch(dePath + "/dummy.txt", kTestAppUid, kTestAppUid, 0600);
+    touch(pccCePath + "/dummy.txt", kTestPccAppUid, kTestPccAppUid, 0600);
+    touch(pccDePath + "/dummy.txt", kTestPccAppUid, kTestPccAppUid, 0600);
+    ASSERT_FALSE(is_empty(get_full_path(cePath)));
+    ASSERT_FALSE(is_empty(get_full_path(pccCePath)));
+
+    // Action: Clear app data
+    ASSERT_BINDER_SUCCESS(service->clearAppData(testUuid, "com.foo", kTestUserId,
+                                                FLAG_STORAGE_CE | FLAG_STORAGE_DE,
+                                                result.ceDataInode));
+
+    // Verification: Directories should still exist but be empty
+    EXPECT_TRUE(exists(cePath));
+    EXPECT_TRUE(exists(dePath));
+    EXPECT_TRUE(exists(pccCePath));
+    EXPECT_TRUE(exists(pccDePath));
+    EXPECT_TRUE(is_empty(get_full_path(cePath)));
+    EXPECT_TRUE(is_empty(get_full_path(dePath)));
+    EXPECT_TRUE(is_empty(get_full_path(pccCePath)));
+    EXPECT_TRUE(is_empty(get_full_path(pccDePath)));
+}
+
+TEST_F(ServiceTest, DestroyAppData_WithPcc) {
+    LOG(INFO) << "DestroyAppData_WithPcc";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    // Setup: Create app data
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+    EXPECT_TRUE(exists("user/0/com.foo"));
+    EXPECT_TRUE(exists("user_de/0/com.foo"));
+    EXPECT_TRUE(exists("user/0/com.foo-pcc"));
+    EXPECT_TRUE(exists("user_de/0/com.foo-pcc"));
+
+    // Action: Destroy app data
+    ASSERT_BINDER_SUCCESS(service->destroyAppData(testUuid, "com.foo", kTestUserId,
+                                                  FLAG_STORAGE_CE | FLAG_STORAGE_DE,
+                                                  result.ceDataInode));
+
+    // Verification: All directories should be gone
+    EXPECT_FALSE(exists("user/0/com.foo"));
+    EXPECT_FALSE(exists("user_de/0/com.foo"));
+    EXPECT_FALSE(exists("user/0/com.foo-pcc"));
+    EXPECT_FALSE(exists("user_de/0/com.foo-pcc"));
 }
 
 }  // namespace installd

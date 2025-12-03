@@ -412,6 +412,16 @@ TEST_F(BLASTBufferQueueTest, SyncNextTransaction) {
     ASSERT_NE(nullptr, adapter.getTransactionReadyCallback());
 }
 
+TEST_F(BLASTBufferQueueTest, SyncNextTransaction_InvokedOnDtor) {
+    bool callbackInvoked = false;
+    auto callback = [&](Transaction*) { callbackInvoked = true; };
+    {
+    BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+    adapter.syncNextTransaction(callback);
+    }
+    ASSERT_TRUE(callbackInvoked);
+}
+
 TEST_F(BLASTBufferQueueTest, DISABLED_onFrameAvailable_ApplyDesiredPresentTime) {
     BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
     sp<IGraphicBufferProducer> igbProducer;
