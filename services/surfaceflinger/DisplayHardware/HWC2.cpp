@@ -1000,18 +1000,14 @@ Error Layer::setPerFrameMetadata(const int32_t supportedPerFrameMetadata,
 
         perFrameMetadataBlobs.push_back(
                 {Hwc2::PerFrameMetadataKey::HDR10_PLUS_SEI, mHdrMetadata.hdr10plus});
-// QTI_BEGIN: 2023-04-19: Display: sf: Don't send empty metadata blobs to hwc
         const Error error = static_cast<Error>(
            mComposer.setLayerPerFrameMetadataBlobs(mDisplay->getId(), mId, perFrameMetadataBlobs));
         if (error != Error::NONE) {
             return error;
         }
-// QTI_END: 2023-04-19: Display: sf: Don't send empty metadata blobs to hwc
 
-// QTI_BEGIN: 2023-04-19: Display: sf: Don't send empty metadata blobs to hwc
     }
     return Error::NONE;
-// QTI_END: 2023-04-19: Display: sf: Don't send empty metadata blobs to hwc
 }
 
 Error Layer::setDisplayFrame(const Rect& frame)
