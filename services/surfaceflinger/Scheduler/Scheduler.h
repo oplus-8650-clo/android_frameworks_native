@@ -18,7 +18,9 @@
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_END: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -262,7 +264,10 @@ public:
     }
 
     void resync(ResyncCaller) override EXCLUDES(mDisplayLock);
-    void forceNextResync() { mLastResyncTime = 0; }
+    void forceNextResync() {
+        mLastResyncTime = 0;
+        mLastResyncTimeOnTx = 0;
+    }
 
     // Passes a vsync sample to VsyncController. Returns true if
     // VsyncController detected that the vsync period changed and false
@@ -382,9 +387,15 @@ public:
         return mLayerHistory.getLayerFramerate(now, id);
     }
 
+// QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
     void qtiUpdateThermalFps(float fps);
+// QTI_END: 2023-04-17: Display: sf: Add support for thermal fps
+// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
     void qtiUpdateSmoMoRefreshRateVote(std::map<int, int>& refresh_rate_votes);
+// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
+// QTI_BEGIN: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
     bool isGameFrameRateOverridePresent();
+// QTI_END: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
 
     // Returns true if frame rate overrides has changed.
     bool updateFrameRateOverrides(GlobalSignals, Fps displayRefreshRate) EXCLUDES(mPolicyLock);
@@ -421,7 +432,7 @@ private:
     bool hasEventThreads() const {
         return CC_LIKELY(
                 mRenderEventThread &&
-                (FlagManager::getInstance().deprecate_vsync_sf() || mLastCompositeEventThread));
+                (FlagManager::getInstance().deprecate_vsync_sf_v2() || mLastCompositeEventThread));
     }
 
     EventThread& eventThreadFor(Cycle cycle) const {
@@ -455,16 +466,6 @@ private:
     void promotePacesetterDisplay(PromotionParams,
                                   std::optional<PhysicalDisplayId> pacesetterId = std::nullopt)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
-
-    // Changes to the displays (e.g. registering and unregistering) must be made
-    // while mDisplayLock is locked, and the new pacesetter then must be promoted while
-    // mDisplayLock is still locked. However, a new pacesetter means that
-    // MessageQueue and EventThread need to use the new pacesetter's
-    // VsyncSchedule, and this must happen while mDisplayLock is *not* locked,
-    // or else we may deadlock with EventThread.
-    std::shared_ptr<VsyncSchedule> promotePacesetterDisplayLocked(
-            PromotionParams, std::optional<PhysicalDisplayId> pacesetterId = std::nullopt)
-            REQUIRES(kMainThreadContext, mDisplayLock);
 
     void applyNewVsyncSchedule(std::shared_ptr<VsyncSchedule>) EXCLUDES(mDisplayLock);
 
@@ -562,6 +563,7 @@ private:
     std::unique_ptr<EventThread> mLastCompositeEventThread;
 
     std::atomic<nsecs_t> mLastResyncTime = 0;
+    std::atomic<nsecs_t> mLastResyncTimeOnTx = 0;
 
     const FeatureFlags mFeatures;
 
@@ -706,8 +708,10 @@ private:
 
     std::atomic<std::optional<TimePoint>> mDebugPresentDelay;
 
+// QTI_BEGIN: 2023-04-17: Display: sf: Add support for thermal fps
     // Cache thermal Fps, and limit to the given level
     float mQtiThermalFps = 90.0f;
+// QTI_END: 2023-04-17: Display: sf: Add support for thermal fps
 
     std::unique_ptr<android::Clock> mClock = std::make_unique<SteadyClock>();
 };

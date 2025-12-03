@@ -733,10 +733,10 @@ private:
 
 static SkRRect getBlurRRect(const BlurRegion& region) {
     const auto rect = SkRect::MakeLTRB(region.left, region.top, region.right, region.bottom);
-    const SkVector radii[4] = {SkVector::Make(region.cornerRadiusTL, region.cornerRadiusTL),
-                               SkVector::Make(region.cornerRadiusTR, region.cornerRadiusTR),
-                               SkVector::Make(region.cornerRadiusBR, region.cornerRadiusBR),
-                               SkVector::Make(region.cornerRadiusBL, region.cornerRadiusBL)};
+    const SkVector radii[4] = {SkVector::Make(region.cornerRadiusTLX, region.cornerRadiusTLY),
+                               SkVector::Make(region.cornerRadiusTRX, region.cornerRadiusTRY),
+                               SkVector::Make(region.cornerRadiusBRX, region.cornerRadiusBRY),
+                               SkVector::Make(region.cornerRadiusBLX, region.cornerRadiusBLY)};
     SkRRect roundedRect;
     roundedRect.setRectRadii(rect, radii);
     return roundedRect;
@@ -779,6 +779,16 @@ private:
     DISALLOW_COPY_AND_ASSIGN(DeferTextureCleanup);
     AutoBackendTexture::CleanupManager& mMgr;
 };
+
+void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
+    // If the fence is already signaled, we can skip waiting on it.
+    if (FlagManager::getInstance().re_check_fence() && fenceFd.get() >= 0) {
+        if (sync_wait(fenceFd.get(), 0) >= 0) {
+            return;
+        }
+    }
+    waitFenceImpl(context, fenceFd);
+}
 
 void SkiaRenderEngine::drawLayersInternal(
         const std::shared_ptr<std::promise<FenceResult>>&& resultPromise,
@@ -1470,6 +1480,14 @@ void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {
     // conservative default based on that analysis.
     const float SURFACE_SIZE_MULTIPLIER = 3.5f * bytesPerPixel(mDefaultPixelFormat);
     const int maxResourceBytes = size.width * size.height * SURFACE_SIZE_MULTIPLIER;
+    if (FlagManager::getInstance().re_powered_off_displays_inform_cache_budgets()) {
+        LOG_ALWAYS_FATAL_IF(maxResourceBytes <= 0,
+                            "Invalid maxResourceBytes (size: %dx%d, bytesPerPixel(%d): %" PRIu32
+                            ")",
+                            size.getWidth(), size.getHeight(),
+                            static_cast<int>(mDefaultPixelFormat),
+                            bytesPerPixel(mDefaultPixelFormat));
+    }
 
     // start by resizing the current context
     getActiveContext()->setResourceCacheLimit(maxResourceBytes);

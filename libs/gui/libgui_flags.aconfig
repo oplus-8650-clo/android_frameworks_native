@@ -81,20 +81,20 @@ flag {
 } # wb_libcameraservice
 
 flag {
+  name: "wb_surfacetexture"
+  namespace: "core_graphics"
+  description: "Updates the implementation of SurfaceTexture to avoid a ConsumerBase override."
+  bug: "447613760"
+  is_fixed_read_only: true
+} # wb_surfacetexture
+
+flag {
   name: "wb_unlimited_slots"
   namespace: "core_graphics"
   description: "Adds APIs and updates the implementation of bufferqueues to have a user-defined slot count."
   bug: "341359814"
   is_fixed_read_only: true
 } # wb_unlimited_slots
-
-flag {
-  name: "bq_producer_throttles_only_async_mode"
-  namespace: "core_graphics"
-  description: "BufferQueueProducer only CPU throttle on queueBuffer() in async mode."
-  bug: "359252619"
-  is_fixed_read_only: true
-} # bq_producer_throttles_only_async_mode
 
 flag {
   name: "bq_gl_fence_cleanup"
@@ -122,3 +122,20 @@ flag {
   }
 } # default_scaling_mode_freeze
 
+flag {
+  name: "remove_controlled_by_app"
+  namespace: "core_graphics"
+  description: "ControlledByApp is inconsistent and weird, nuke it from orbit"
+  bug: "447611028"
+  is_fixed_read_only: true
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "bq_producer_backpressure_control"
+  namespace: "core_graphics"
+  description: "BufferQueueProducer API to control CPU throttling."
+  bug: "359252619"
+} # bq_producer_backpressure_control

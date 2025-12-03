@@ -27,6 +27,7 @@
 #include <gui/LayerState.h>
 #include <gui/ScreenCaptureResults.h>
 #include <gui/TransactionState.h>
+#include <ui/DisplayId.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <ui/ScreenPartStatus.h>
 
@@ -878,7 +879,7 @@ public:
                                                          mHwcDisplayType);
             display->mutableIsConnected() = true;
 
-            display->setPowerMode(mPowerMode);
+            display->setPowerMode(mPowerMode).get();
 
             const auto halDisplayId = asHalDisplayId(mDisplayIdVariant);
             ASSERT_TRUE(halDisplayId);
@@ -978,19 +979,19 @@ public:
         }
 
         DisplayDeviceState& mutableDrawingDisplayState() {
-            return mFlinger.mutableDrawingState().displays.editValueFor(mDisplayToken);
+            return mFlinger.mutableDrawingState().displays.get(mDisplayToken)->get();
         }
 
         DisplayDeviceState& mutableCurrentDisplayState() {
-            return mFlinger.mutableCurrentState().displays.editValueFor(mDisplayToken);
+            return mFlinger.mutableCurrentState().displays.get(mDisplayToken)->get();
         }
 
         const auto& getDrawingDisplayState() {
-            return mFlinger.mutableDrawingState().displays.valueFor(mDisplayToken);
+            return mFlinger.mutableDrawingState().displays.get(mDisplayToken)->get();
         }
 
         const auto& getCurrentDisplayState() {
-            return mFlinger.mutableCurrentState().displays.valueFor(mDisplayToken);
+            return mFlinger.mutableCurrentState().displays.get(mDisplayToken)->get();
         }
 
         const sp<DisplayDevice>& mutableDisplayDevice() {
@@ -1068,8 +1069,7 @@ public:
             auto& modes = mDisplayModes;
             auto& activeModeId = mActiveModeId;
 
-            DisplayDeviceState state;
-            state.isSecure = mCreationArgs.isSecure;
+            std::optional<DisplayDeviceState> stateOpt;
 
             if (const auto physicalId =
                         mCreationArgs.compositionDisplay->getDisplayIdVariant().and_then(
@@ -1110,9 +1110,8 @@ public:
                 // Save a copy for use after `modes` is consumed.
                 const Fps refreshRate = activeModeOpt->get()->getPeakFps();
 
-                state.physical = {.id = *physicalId,
-                                  .hwcDisplayId = *mHwcDisplayId,
-                                  .activeMode = activeModeOpt->get()};
+                stateOpt = DisplayDeviceState::createPhysical(*physicalId, *mHwcDisplayId, *mPort,
+                                                              activeModeOpt->get());
 
                 const auto it =
                         mFlinger.mutablePhysicalDisplays()
@@ -1135,13 +1134,22 @@ public:
                                                           std::move(controller),
                                                           std::move(tracker));
                 }
+            } else if (mCreationArgs.compositionDisplay->getDisplayIdVariant()
+                               .transform([](auto id) -> bool { return isVirtualDisplayId(id); })
+                               .value_or(false)) {
+                constexpr uid_t kOwnerUid = 123;
+                stateOpt = DisplayDeviceState::createVirtual(kOwnerUid);
             }
+
+            LOG_ALWAYS_FATAL_IF(!stateOpt);
+            DisplayDeviceState& state = *stateOpt;
+            state.isSecure = mCreationArgs.isSecure;
 
             sp<DisplayDevice> display = sp<DisplayDevice>::make(mCreationArgs);
             mFlinger.mutableDisplays().emplace_or_replace(mDisplayToken, display);
 
-            mFlinger.mutableCurrentState().displays.add(mDisplayToken, state);
-            mFlinger.mutableDrawingState().displays.add(mDisplayToken, state);
+            mFlinger.mutableCurrentState().displays.emplace_or_replace(mDisplayToken, state);
+            mFlinger.mutableDrawingState().displays.emplace_or_replace(mDisplayToken, state);
 
             return display;
         }

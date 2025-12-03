@@ -413,22 +413,15 @@ TEST(RpcBinderAllocation, SetupRpcServer) {
 
 // Helper function to create BinderCallData for tests
 android::BinderCallData createStatsData(uid_t uid, uint32_t code, const char* desc,
-                                        int64_t startNanos) {
-    return {.interfaceDescriptor = String16(desc),
-            .transactionCode = code,
-            .startTimeNanos = startNanos,
-            .endTimeNanos = 0,
-            .senderUid = uid};
-}
-
-android::BinderCallData createStatsData(uid_t uid, const char* desc, uint32_t code,
-                                        int64_t startNanos, int64_t endNanos) {
+                                        String16& aidlMethodName, int64_t startNanos,
+                                        int64_t endNanos) {
     return {
-            .interfaceDescriptor = String16(desc),
-            .transactionCode = code,
             .startTimeNanos = startNanos,
             .endTimeNanos = endNanos,
-            .senderUid = uid,
+            .interfaceDescriptor = String16(desc),
+            .aidlMethodName = aidlMethodName,
+            .transactionCode = code,
+            .senderUid = static_cast<uint32_t>(uid),
     };
 }
 
@@ -437,9 +430,12 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
 
     int64_t currentTimeNanos = 9'100'000'000;
     // Create enough data in the *same second* to trigger spam, far enough in the past
+    String16 myAidlMethod1(u"myAidlMethod1");
     for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
-        data.push_back(createStatsData(1001, 1, "IFoo", currentTimeNanos - 8000'000'000));
-        data.push_back(createStatsData(1002, 1, "IFoo", currentTimeNanos - 8000'000'000));
+        data.push_back(createStatsData(1001, 1, "IFoo", myAidlMethod1,
+                                       currentTimeNanos - 8000'000'000, 0));
+        data.push_back(createStatsData(1002, 1, "IFoo", myAidlMethod1,
+                                       currentTimeNanos - 8000'000'000, 0));
     }
 
     android::BinderStatsPusher pusher;
@@ -452,18 +448,21 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
         });
         pusher.aggregateStatsLocked(data, service, currentTimeNanos);
     }
-    EXPECT_EQ(mallocs, 13u);
-    EXPECT_EQ(totalBytes, 838u);
+    EXPECT_EQ(mallocs, 12u);
+    EXPECT_EQ(totalBytes, 1096u);
 
     currentTimeNanos = 18'100'000'000;
+
     for (int i = 0; i < 150; ++i) {     // More than kMinSpamCount (125)
         for (int j = 0; j < 100; ++j) { // multiple txnCodes
-            data.push_back(
-                    createStatsData(1003, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
-            data.push_back(
-                    createStatsData(1004, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
-            data.push_back(
-                    createStatsData(1005, j, "IFoo2", currentTimeNanos - 8000'000'000 + i * 1000));
+            String16 myAidlMethod(u"myAidlMethod");
+            myAidlMethod.append(String16(std::to_string(j).c_str()));
+            data.push_back(createStatsData(1003, j, "IFoo2", myAidlMethod,
+                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
+            data.push_back(createStatsData(1004, j, "IFoo2", myAidlMethod,
+                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
+            data.push_back(createStatsData(1005, j, "IFoo2", myAidlMethod,
+                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
         }
     }
     mallocs = 0;
@@ -475,8 +474,8 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
         });
         pusher.aggregateStatsLocked(data, service, currentTimeNanos);
     }
-    EXPECT_EQ(mallocs, 1264u);
-    EXPECT_EQ(totalBytes, 117546u);
+    EXPECT_EQ(mallocs, 967u);
+    EXPECT_EQ(totalBytes, 135252u);
 }
 
 int main(int argc, char** argv) {

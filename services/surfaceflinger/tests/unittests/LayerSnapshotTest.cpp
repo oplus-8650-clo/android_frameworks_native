@@ -1679,6 +1679,36 @@ TEST_F(LayerSnapshotTest, SetClientDrawnClippedRadii) {
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.clientDrawnRadii, CLIPPED_RADIUS);
 }
 
+TEST_F(LayerSnapshotTest, reportedRadiiWithCornerRegionOverlap) {
+    static const gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
+
+    // set parent(1) crop to clip the bottom half of child(11) with some corner region overlap
+    setCrop(1, Rect{1000, 900});
+
+    setRoundedCorners(11, 111.f, 222.f, 333.f, 444.f);
+    setCrop(11, Rect{1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, reportedRadiiWithoutCornerRegionOverlap) {
+    static const gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
+    static const gui::CornerRadii CLIPPED_RADIUS = gui::CornerRadii(111.f, 222.f, 0.f, 0.f);
+
+    // set parent(1) crop to clip the bottom half of child(11) with no corner region overlap for
+    // bottom right and bottom left corners
+    setCrop(1, Rect{1000, 500});
+
+    setRoundedCorners(11, 111.f, 222.f, 333.f, 444.f);
+    setCrop(11, Rect{1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, CLIPPED_RADIUS);
+}
+
 TEST_F(LayerSnapshotTest, childInheritsParentClientDrawnCornerRadius) {
     // ROOT
     // ├── 1 (crop rect set to contain child layers )

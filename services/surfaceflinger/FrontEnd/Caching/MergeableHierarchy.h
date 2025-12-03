@@ -18,10 +18,13 @@
 
 #include <memory>
 #include <vector>
+#include "FrontEnd/LayerSnapshotBuilder.h"
+#include "compositionengine/CompositionEngine.h"
 
 namespace android::surfaceflinger::frontend {
 
 class LayerHierarchy;
+struct LayerSnapshot;
 
 namespace caching {
 
@@ -51,24 +54,52 @@ public:
         bool canBuild() { return !mHierarchies.empty(); }
 
         // Builds an MergeableHierarchy, and ascribes an owner for it.
-        std::unique_ptr<MergeableHierarchy> build(uint32_t owner) {
-            return std::make_unique<MergeableHierarchy>(owner, std::move(mHierarchies));
+        std::unique_ptr<MergeableHierarchy> build() {
+            mSnapshots.clear();
+            return std::make_unique<MergeableHierarchy>(std::move(mHierarchies));
         }
 
     private:
         std::vector<HierarchyState> mHierarchies;
+        std::vector<LayerSnapshot*> mSnapshots;
     };
 
-    MergeableHierarchy(uint32_t owner, std::vector<HierarchyState>&& hierarchies)
-          : mHierarchies(std::move(hierarchies)), mId(owner) {}
+    MergeableHierarchy(std::vector<HierarchyState>&& hierarchies)
+          : mHierarchies(std::move(hierarchies)) {}
 
-    uint32_t getId() const { return mId; }
+    uint32_t getId() const { return getFirstLayer(); }
+
+    uint32_t getFirstLayer() const { return mHierarchies.front().layerId; }
+    uint32_t getLastLayer() const { return mHierarchies.back().layerId; }
+
+    bool hasLayer(uint32_t id) const {
+        return std::any_of(mHierarchies.cbegin(), mHierarchies.cend(),
+                           [=](const auto& hierarchy) { return hierarchy.layerId == id; });
+    }
+
+    void constructSnapshot(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
+                           compositionengine::CompositionEngine& compositionEngine);
+    void constructSnapshotForHierarchy(LayerSnapshotBuilder& builder,
+                                       const LayerSnapshotBuilder::Args& args,
+                                       const LayerHierarchy* hierarchy, const LayerSnapshot& parent,
+                                       std::vector<std::unique_ptr<LayerSnapshot>>& outSnapshots);
+
+    void materializeSnapshot(std::vector<std::unique_ptr<LayerSnapshot>> snapshots,
+                             compositionengine::CompositionEngine& compositionEngine);
+
+    std::unique_ptr<LayerSnapshot> getSnapshotCopy() {
+        if (!mSnapshot) {
+            return nullptr;
+        }
+
+        return std::make_unique<LayerSnapshot>(*mSnapshot);
+    };
 
     void dump(std::ostream& out) const;
 
 private:
     std::vector<HierarchyState> mHierarchies;
-    const uint32_t mId;
+    std::unique_ptr<LayerSnapshot> mSnapshot = nullptr;
 };
 
 } // namespace caching

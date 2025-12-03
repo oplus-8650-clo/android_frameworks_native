@@ -283,18 +283,14 @@ status_t EventThreadConnection::postEvent(const DisplayEventReceiver::Event& eve
         return size < 0 ? status_t(size) : status_t(NO_ERROR);
     };
 
-    if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
-        event.header.type == DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE) {
-        mPendingEvents.emplace_back(event);
-        if (event.header.type == DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE ||
-            event.header.type == DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE) {
-            return status_t(NO_ERROR);
-        }
-
-        auto size = DisplayEventReceiver::sendEvents(&mChannel, mPendingEvents.data(),
-                                                     mPendingEvents.size());
-        mPendingEvents.clear();
-        return toStatus(size);
+    switch (event.header.type) {
+        case DisplayEventType::DISPLAY_EVENT_FRAME_RATE_OVERRIDE:
+            [[fallthrough]];
+        case DisplayEventType::DISPLAY_EVENT_SUPPORTED_REFRESH_RATE:
+            mPendingEvents.emplace_back(event);
+            return NO_ERROR;
+        default:
+            break;
     }
 
     mPendingEvents.emplace_back(event);

@@ -58,7 +58,8 @@ static const char* kNdkTrace = "AIDL::ndk::";
 static const char* kServerTrace = "::server";
 static const char* kClientTrace = "::client";
 static const char* kSeparator = "::";
-static const char* kUnknownCode = "name=?_code=";
+static const char* kUnknownCode = "#";
+static const char* kBackendType = "ndk";
 
 namespace ABBinderTag {
 
@@ -229,6 +230,9 @@ bool AIBinder::associateClass(const AIBinder_Class* clazz) {
 ABBinder::ABBinder(const AIBinder_Class* clazz, void* userData)
     : AIBinder(clazz), BBinder(), mUserData(userData) {
     LOG_ALWAYS_FATAL_IF(clazz == nullptr, "clazz == nullptr");
+    if (clazz->mTransactionCodeData.names != nullptr) {
+        BBinder::setTransactionCodeMap(&clazz->mTransactionCodeData);
+    }
 }
 ABBinder::~ABBinder() {
     getClass()->onDestroy(mUserData);
@@ -350,8 +354,6 @@ void ABBinder::addDeathRecipient(const ::android::sp<AIBinder_DeathRecipient>& /
 ABpBinder::ABpBinder(const ::android::sp<::android::IBinder>& binder)
     : AIBinder(nullptr /*clazz*/), mRemote(binder) {
     LOG_ALWAYS_FATAL_IF(binder == nullptr, "binder == nullptr");
-
-    mRemote->getWeakRefs()->tag(RefBase::OBJECT_TAG_NDK_PROXY);
 }
 
 ABpBinder::~ABpBinder() {
@@ -361,8 +363,6 @@ ABpBinder::~ABpBinder() {
             strongRecip->pruneThisTransferEntry(getBinder(), recip.cookie);
         }
     }
-
-    mRemote->getWeakRefs()->untag(RefBase::OBJECT_TAG_NDK_PROXY);
 }
 
 sp<AIBinder> ABpBinder::lookupOrCreateFromBinder(const ::android::sp<::android::IBinder>& binder) {
@@ -462,31 +462,32 @@ AIBinder_Class::AIBinder_Class(const char* interfaceDescriptor, AIBinder_Class_o
       onDestroy(onDestroy),
       onTransact(onTransact),
       mInterfaceDescriptor(interfaceDescriptor),
-      mWideInterfaceDescriptor(interfaceDescriptor) {}
+      mWideInterfaceDescriptor(interfaceDescriptor),
+      mTransactionCodeData{sizeof(android::TransactionCodeData), kBackendType, nullptr, 0} {}
 
 bool AIBinder_Class::setTransactionCodeMap(const char* const* transactionCodeMap, size_t length) {
-    if (mTransactionCodeToFunction != nullptr) {
+    if (mTransactionCodeData.names != nullptr) {
         ALOGE("mTransactionCodeToFunction is already set!");
         return false;
     }
-    mTransactionCodeToFunction = transactionCodeMap;
-    mTransactionCodeToFunctionLength = length;
+    mTransactionCodeData.names = transactionCodeMap;
+    mTransactionCodeData.count = length;
     return true;
 }
 
 const char* AIBinder_Class::getFunctionName(transaction_code_t code) const {
-    if (mTransactionCodeToFunction == nullptr) {
+    if (mTransactionCodeData.names == nullptr) {
         ALOGE("mTransactionCodeToFunction is not set!");
         return nullptr;
     }
 
     if (code < FIRST_CALL_TRANSACTION ||
-        code - FIRST_CALL_TRANSACTION >= mTransactionCodeToFunctionLength) {
+        code - FIRST_CALL_TRANSACTION >= mTransactionCodeData.count) {
         ALOGE("Function name for requested code not found!");
         return nullptr;
     }
 
-    return mTransactionCodeToFunction[code - FIRST_CALL_TRANSACTION];
+    return mTransactionCodeData.names[code - FIRST_CALL_TRANSACTION];
 }
 
 AIBinder_Class* AIBinder_Class_define(const char* interfaceDescriptor,
@@ -518,7 +519,7 @@ void AIBinder_Class_setTransactionCodeToFunctionNameMap(
                         "transactionCodeToFunction already set?");
 }
 
-const char* AIBinder_Class_getFunctionName(AIBinder_Class* clazz, transaction_code_t code) {
+const char* AIBinder_Class_getFunctionName(const AIBinder_Class* clazz, transaction_code_t code) {
     LOG_ALWAYS_FATAL_IF(
             clazz == nullptr,
             "Valid clazz is needed to get function name for requested transaction code");
@@ -610,8 +611,8 @@ binder_status_t AIBinder_DeathRecipient::linkToDeath(const sp<IBinder>& binder, 
     }
     if (!mOnUnlinked && cookie) {
         ALOGW("AIBinder_linkToDeath is being called with a non-null cookie and no onUnlink "
-              "callback set. This might not be intended. AIBinder_DeathRecipient_setOnUnlinked "
-              "should be called first.");
+              "callback set. Use AIBinder_DeathRecipient_setOnUnlinked to manage the lifetime "
+              "of the cookie. This will become an abort.");
     }
 
     sp<TransferDeathRecipient> recipient =

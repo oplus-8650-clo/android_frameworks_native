@@ -59,7 +59,7 @@ namespace android {
 
 LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(HWComposer& hwc,
                                                          VirtualDisplayIdVariant virtualIdVariant,
-                                                         const sp<IGraphicBufferProducer>& sink,
+                                                         const sp<Surface>& sink,
                                                          const std::string& name, bool qtiSecure)
       : ConsumerBase(),
         mHwc(hwc),
@@ -83,7 +83,7 @@ LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(HWComposer& hwc,
         mQtiVdsDataSpace(ui::Dataspace::UNKNOWN),
 // QTI_END: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
         mForceHwcCopy(SurfaceFlinger::useHwcForRgbToYuv) {
-    mSource[SOURCE_SINK] = sink;
+    mSource[SOURCE_SINK] = sink->getIGraphicBufferProducer();
     mSource[SOURCE_SCRATCH] = mSurface->getIGraphicBufferProducer();
 
     resetPerFrameState();

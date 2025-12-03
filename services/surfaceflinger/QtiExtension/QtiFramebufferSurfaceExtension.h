@@ -12,7 +12,7 @@ namespace surfaceflingerextension {
 class QtiFramebufferSurfaceExtension : public QtiDisplaySurfaceExtensionIntf {
 public:
     QtiFramebufferSurfaceExtension() {}
-    QtiFramebufferSurfaceExtension(FramebufferSurface* fbs);
+    QtiFramebufferSurfaceExtension(LegacyFramebufferSurface* fbs);
     ~QtiFramebufferSurfaceExtension() = default;
 
     int getClientTargetCurrentSlot() override;
@@ -24,7 +24,7 @@ public:
     uint64_t qtiExcludeVideoFromScratchBuffer(std::string source, uint64_t usage) override;
 
 private:
-    FramebufferSurface* mQtiFBS = nullptr;
+   LegacyFramebufferSurface* mQtiFBS = nullptr;
 };
 
 } // namespace surfaceflingerextension

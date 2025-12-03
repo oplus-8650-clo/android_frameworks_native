@@ -686,7 +686,7 @@ bool EventHub::Device::populateAbsoluteAxisStates() {
                   identifier.name.c_str(),
                   InputEventLookup::getLinuxEvdevLabel(EV_ABS, axis, 0).code.c_str(), fd,
                   strerror(errno));
-            if (input_flags::abort_device_opening_on_enodev() && errno == ENODEV) {
+            if (errno == ENODEV) {
                 // The device no longer exists. There's no point trying to query any more axes.
                 return false;
             }

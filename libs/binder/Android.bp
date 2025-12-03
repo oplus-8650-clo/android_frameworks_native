@@ -247,6 +247,7 @@ cc_defaults {
     host_supported: true,
 
     defaults: [
+        "libbinder_bpbinder_decstrong_last_flag_default",
         "libbinder_defer_bc_request_freeze_notification_flag_default",
     ],
 
@@ -553,6 +554,14 @@ libbinder_addservice_cache_config {
             },
         },
     },
+}
+
+cc_defaults {
+    name: "libbinder_bpbinder_decstrong_last_flag_default",
+    cflags: select(release_flag("RELEASE_LIBBINDER_BPBINDER_DECSTRONG_LAST"), {
+        true: ["-DLIBBINDER_BPBINDER_DECSTRONG_LAST"],
+        default: [],
+    }),
 }
 
 cc_defaults {

@@ -85,7 +85,7 @@ Display::Display(android::Hwc2::Composer& composer,
       : mComposer(composer), mCapabilities(capabilities), mId(id), mType(type) {
     ALOGV("Created display %" PRIu64, id);
     if (mType == hal::DisplayType::VIRTUAL) {
-        loadDisplayCapabilities();
+        mDisplayCapabilities->load(mId, mComposer, mCapabilities);
     }
 }
 
@@ -315,9 +315,9 @@ ftl::Expected<ui::DisplayConnectionType, hal::Error> Display::getConnectionType(
 }
 
 bool Display::hasCapability(DisplayCapability capability) const {
-    std::scoped_lock lock(mDisplayCapabilitiesMutex);
-    if (mDisplayCapabilities) {
-        return mDisplayCapabilities->count(capability) > 0;
+    std::scoped_lock lock(mDisplayCapabilities->mutex);
+    if (mDisplayCapabilities->mCapabilites) {
+        return mDisplayCapabilities->mCapabilites->count(capability) > 0;
     }
 
     ALOGW("Can't query capability %s."
@@ -329,8 +329,8 @@ bool Display::hasCapability(DisplayCapability capability) const {
 
 Error Display::supportsDoze(bool* outSupport) const {
     {
-        std::scoped_lock lock(mDisplayCapabilitiesMutex);
-        if (!mDisplayCapabilities) {
+        std::scoped_lock lock(mDisplayCapabilities->mutex);
+        if (!mDisplayCapabilities->mCapabilites) {
             // The display has not turned on since boot, so DOZE support is unknown.
             ALOGW("%s: haven't queried capabilities yet!", __func__);
             return Error::NO_RESOURCES;
@@ -498,16 +498,18 @@ Error Display::setOutputBuffer(const sp<GraphicBuffer>& buffer,
     return static_cast<Error>(intError);
 }
 
-Error Display::setPowerMode(PowerMode mode)
-{
+ftl::Future<Error> Display::setPowerMode(PowerMode mode) {
     auto intMode = static_cast<Hwc2::IComposerClient::PowerMode>(mode);
-    auto intError = mComposer.setPowerMode(mId, intMode);
-
-    if (mode == PowerMode::ON) {
-        loadDisplayCapabilities();
-    }
-
-    return static_cast<Error>(intError);
+    return ftl::defer([composer = &mComposer, id = mId, intMode] {
+               return composer->setPowerMode(id, intMode);
+           })
+            .then([displayCapabilities = mDisplayCapabilities, id = mId, composer = &mComposer,
+                   capabilities = &mCapabilities, mode](Error error) -> Error {
+                if (mode == PowerMode::ON) {
+                    displayCapabilities->load(id, *composer, *capabilities);
+                }
+                return error;
+            });
 }
 
 Error Display::setVsyncEnabled(Vsync enabled)
@@ -734,27 +736,27 @@ std::shared_ptr<HWC2::Layer> Display::getLayerById(HWLayerId id) const {
     return it != mLayers.end() ? it->second.lock() : nullptr;
 }
 
-void Display::loadDisplayCapabilities() {
-    std::call_once(mDisplayCapabilityQueryFlag, [this]() {
+void Display::DisplayCapabilities::load(hal::HWDisplayId id, android::Hwc2::Composer& composer,
+                                        const std::unordered_set<Capability>& capabilities) {
+    std::call_once(mQueryFlag, [this, &composer, &capabilities, id]() {
         std::vector<DisplayCapability> tmpCapabilities;
-        auto error =
-                static_cast<Error>(mComposer.getDisplayCapabilities(mId, &tmpCapabilities));
+        auto error = static_cast<Error>(composer.getDisplayCapabilities(id, &tmpCapabilities));
         if (error == Error::NONE) {
-            std::scoped_lock lock(mDisplayCapabilitiesMutex);
-            mDisplayCapabilities.emplace();
+            std::scoped_lock lock(mutex);
+            mCapabilites.emplace();
             for (auto capability : tmpCapabilities) {
-                mDisplayCapabilities->emplace(capability);
+                mCapabilites->emplace(capability);
             }
         } else if (error == Error::UNSUPPORTED) {
-            std::scoped_lock lock(mDisplayCapabilitiesMutex);
-            mDisplayCapabilities.emplace();
-            if (mCapabilities.count(AidlCapability::SKIP_CLIENT_COLOR_TRANSFORM)) {
-                mDisplayCapabilities->emplace(DisplayCapability::SKIP_CLIENT_COLOR_TRANSFORM);
+            std::scoped_lock lock(mutex);
+            mCapabilites.emplace();
+            if (capabilities.count(AidlCapability::SKIP_CLIENT_COLOR_TRANSFORM)) {
+                mCapabilites->emplace(DisplayCapability::SKIP_CLIENT_COLOR_TRANSFORM);
             }
             bool dozeSupport = false;
-            error = static_cast<Error>(mComposer.getDozeSupport(mId, &dozeSupport));
+            error = static_cast<Error>(composer.getDozeSupport(id, &dozeSupport));
             if (error == Error::NONE && dozeSupport) {
-                mDisplayCapabilities->emplace(DisplayCapability::DOZE);
+                mCapabilites->emplace(DisplayCapability::DOZE);
             }
         }
     });

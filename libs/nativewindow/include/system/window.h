@@ -260,6 +260,8 @@ enum {
     NATIVE_WINDOW_SET_FRAME_TIMELINE_INFO         = 48,    /* private */
     NATIVE_WINDOW_GET_LAST_QUEUED_BUFFER2         = 49,    /* private */
     NATIVE_WINDOW_SET_BUFFERS_ADDITIONAL_OPTIONS  = 50,
+    NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED = 51,
+    NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED = 52,
     // clang-format on
 };
 
@@ -1151,6 +1153,19 @@ static inline int native_window_set_frame_rate(struct ANativeWindow* window, flo
                            (int)compatibility, (int)changeFrameRateStrategy);
 }
 
+/*
+ * Control BufferQueueProducer throttling when queuing a buffer
+ */
+static inline int native_window_set_producer_throttling_enabled(struct ANativeWindow* window,
+                                                                bool enabled) {
+    return window->perform(window, NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED, enabled);
+}
+
+static inline int native_window_is_producer_throttling_enabled(struct ANativeWindow* window,
+                                                               bool* outEnabled) {
+    return window->perform(window, NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED, outEnabled);
+}
+
 struct ANativeWindowFrameTimelineInfo {
     // Frame Id received from ANativeWindow_getNextFrameId.
     uint64_t frameNumber;
@@ -1173,6 +1188,9 @@ struct ANativeWindowFrameTimelineInfo {
 
     // The start time of a frame that was not drawn and squashed into this frame.
     int64_t skippedFrameStartTimeNanos;
+
+    // The amount of fixup added to the vsync time by the app to correct for jitter.
+    int64_t vsyncResyncedJitterNanos;
 };
 
 static inline int native_window_set_frame_timeline_info(

@@ -324,6 +324,8 @@ void TouchpadInputMapper::dump(std::string& dump) {
     dump += addLinePrefix(mTimerProvider.dump(), INDENT4);
     dump += INDENT3 "Captured event converter:\n";
     dump += addLinePrefix(mCapturedEventConverter.dump(), INDENT4);
+    dump += INDENT3 "Relative mode gesture converter:\n";
+    dump += addLinePrefix(mRelativeModeGestureConverter.dump(), INDENT4);
     dump += StringPrintf(INDENT3 "DisplayId: %s\n",
                          toString(mDisplayId, streamableToString).c_str());
 }
@@ -450,7 +452,7 @@ std::list<NotifyArgs> TouchpadInputMapper::reset(nsecs_t when) {
             mCapturedEventConverter.reset();
             break;
         case PointerCaptureMode::RELATIVE:
-            // mRelativeModeGestureConverter is stateless, and so doesn't need resetting.
+            out += mRelativeModeGestureConverter.reset(when);
             break;
     }
     out += InputMapper::reset(when);

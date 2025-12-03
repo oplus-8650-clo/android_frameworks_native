@@ -17,14 +17,13 @@
 #include <gtest/gtest.h>
 #include <ui/GraphicBuffer.h>
 
-#include "DisplayHardware/VirtualDisplay/VirtualDisplayBufferSlotTracker.h"
+#include "DisplayHardware/HwcSlotTracker.h"
 
 namespace android {
 namespace {
 
-
-TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_NewBuffer) {
-    VirtualDisplayBufferSlotTracker tracker(3);
+TEST(HwcSlotTrackerTest, GetSlot_NewBuffer) {
+    HwcSlotTracker tracker(3);
     sp<GraphicBuffer> buffer = sp<GraphicBuffer>::make();
 
     auto [requiresRefresh, slot] = tracker.getSlot(buffer);
@@ -33,8 +32,8 @@ TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_NewBuffer) {
     EXPECT_EQ(0u, slot);
 }
 
-TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_ExistingBuffer) {
-    VirtualDisplayBufferSlotTracker tracker(3);
+TEST(HwcSlotTrackerTest, GetSlot_ExistingBuffer) {
+    HwcSlotTracker tracker(3);
     sp<GraphicBuffer> buffer = sp<GraphicBuffer>::make();
 
     auto [requiresRefresh1, slot1] = tracker.getSlot(buffer);
@@ -46,8 +45,8 @@ TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_ExistingBuffer) {
     EXPECT_EQ(slot1, slot2);
 }
 
-TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_CacheFullEvictsLru) {
-    VirtualDisplayBufferSlotTracker tracker(3);
+TEST(HwcSlotTrackerTest, GetSlot_CacheFullEvictsLru) {
+    HwcSlotTracker tracker(3);
     sp<GraphicBuffer> b1 = sp<GraphicBuffer>::make();
     sp<GraphicBuffer> b2 = sp<GraphicBuffer>::make();
     sp<GraphicBuffer> b3 = sp<GraphicBuffer>::make();
@@ -77,8 +76,8 @@ TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_CacheFullEvictsLru) {
     EXPECT_EQ(1u, s1_again);
 }
 
-TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_LruUpdatedOnAccess) {
-    VirtualDisplayBufferSlotTracker tracker(3);
+TEST(HwcSlotTrackerTest, GetSlot_LruUpdatedOnAccess) {
+    HwcSlotTracker tracker(3);
     sp<GraphicBuffer> b1 = sp<GraphicBuffer>::make();
     sp<GraphicBuffer> b2 = sp<GraphicBuffer>::make();
     sp<GraphicBuffer> b3 = sp<GraphicBuffer>::make();
@@ -101,8 +100,8 @@ TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_LruUpdatedOnAccess) {
     EXPECT_EQ(1u, s4); // Slot 1 was b2's slot.
 }
 
-TEST(VirtualDisplayBufferSlotTrackerTest, GetSlot_MaxCapacityOne) {
-    VirtualDisplayBufferSlotTracker tracker(1);
+TEST(HwcSlotTrackerTest, GetSlot_MaxCapacityOne) {
+    HwcSlotTracker tracker(1);
     sp<GraphicBuffer> b1 = sp<GraphicBuffer>::make();
     sp<GraphicBuffer> b2 = sp<GraphicBuffer>::make();
 

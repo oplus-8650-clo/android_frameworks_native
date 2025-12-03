@@ -342,9 +342,9 @@ bool SkiaGLRenderEngine::useProtectedContextImpl(GrProtected isProtected) {
     return eglMakeCurrent(mEGLDisplay, surface, surface, context) == EGL_TRUE;
 }
 
-void SkiaGLRenderEngine::waitFence(SkiaGpuContext*, base::borrowed_fd fenceFd) {
+void SkiaGLRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {
     if (fenceFd.get() >= 0 && !waitGpuFence(fenceFd)) {
-        SFTRACE_NAME("SkiaGLRenderEngine::waitFence");
+        SFTRACE_NAME("SkiaGLRenderEngine::waitFenceImpl");
         sync_wait(fenceFd.get(), -1);
     }
 }

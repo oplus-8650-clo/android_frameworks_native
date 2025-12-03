@@ -15,6 +15,7 @@
  */
 
 // #define LOG_NDEBUG 0
+#include "FrontEnd/LayerCreationArgs.h"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 #include "FrontEnd/LayerSnapshot.h"
 #include "ui/Transform.h"
@@ -433,11 +434,15 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         }
     }
 
-    std::optional<caching::MergeableHierarchy::Accumulator> accumulator = std::nullopt;
+    mMergedSnapshots.clear();
 
     if (args.mergeableHierarchyManager) {
-        accumulator = caching::MergeableHierarchy::Accumulator();
-        accumulator->add(&args.root);
+        const auto hierarchy =
+                args.mergeableHierarchyManager->getOwnedHierarchy(UNASSIGNED_LAYER_ID);
+        if (hierarchy) {
+            auto mergedSnapshot = hierarchy->getSnapshotCopy();
+            mMergedSnapshots.emplace_back(std::move(mergedSnapshot));
+        }
     }
 
     LayerHierarchy::TraversalPath root = LayerHierarchy::TraversalPath::ROOT;
@@ -446,8 +451,7 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         // multiple children.
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
-        updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0,
-                                   accumulator);
+        updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
         if (FlagManager::getInstance().stop_layer()) {
             applyStopLayers(args.root, childPath);
         }
@@ -455,20 +459,10 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
-            updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0,
-                                       accumulator);
+            updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
             if (FlagManager::getInstance().stop_layer()) {
                 applyStopLayers(*childHierarchy, childPath);
             }
-        }
-    }
-
-    if (accumulator) {
-        if (accumulator->canBuild()) {
-            uint32_t id = args.root.getLayer() ? args.root.getLayer()->id : UNASSIGNED_LAYER_ID;
-            auto mergeableHierarchy = accumulator->build(id);
-            args.mergeableHierarchyManager->remove(id);
-            args.mergeableHierarchyManager->add(std::move(mergeableHierarchy));
         }
     }
 
@@ -534,19 +528,10 @@ void LayerSnapshotBuilder::update(const Args& args) {
 const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
         const Args& args, const LayerHierarchy& hierarchy,
         const LayerHierarchy::TraversalPath& traversalPath, const LayerSnapshot& parentSnapshot,
-        int depth, std::optional<caching::MergeableHierarchy::Accumulator>& accumulator) {
+        int depth) {
     LLOG_ALWAYS_FATAL_WITH_TRACE_IF(depth > 50,
                                     "Cycle detected in LayerSnapshotBuilder. See "
                                     "builder_stack_overflow_transactions.winscope");
-
-    if (accumulator) {
-        if (!accumulator->add(&hierarchy) && accumulator->canBuild()) {
-            uint32_t id = args.root.getLayer() ? args.root.getLayer()->id : UNASSIGNED_LAYER_ID;
-            auto mergeableHierarchy = accumulator->build(id);
-            args.mergeableHierarchyManager->remove(id);
-            args.mergeableHierarchyManager->add(std::move(mergeableHierarchy));
-        }
-    }
 
     const RequestedLayerState* layer = hierarchy.getLayer();
     LayerSnapshot* snapshot = getSnapshot(traversalPath);
@@ -569,13 +554,25 @@ const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
         updateSnapshot(*snapshot, args, *layer, parentSnapshot, traversalPath);
     }
 
+    if (args.mergeableHierarchyManager) {
+        const auto hierarchy = args.mergeableHierarchyManager->getOwnedHierarchy(layer->id);
+        if (hierarchy) {
+            auto mergedSnapshot = hierarchy->getSnapshotCopy();
+            updateSnapshot(*mergedSnapshot, args, *layer, parentSnapshot, traversalPath);
+            mMergedSnapshots.emplace_back(std::move(mergedSnapshot));
+        }
+
+        if (!args.mergeableHierarchyManager->isMemberOfAnyHierarchy(layer->id)) {
+            mMergedSnapshots.emplace_back(std::make_unique<LayerSnapshot>(*snapshot));
+        }
+    }
+
     bool childHasValidFrameRate = false;
     for (auto& [childHierarchy, variant] : hierarchy.mChildren) {
         LayerHierarchy::TraversalPath childPath =
                 traversalPath.makeChild(childHierarchy->getLayer()->id, variant);
         const LayerSnapshot& childSnapshot =
-                updateSnapshotsInHierarchy(args, *childHierarchy, childPath, *snapshot, depth + 1,
-                                           accumulator);
+                updateSnapshotsInHierarchy(args, *childHierarchy, childPath, *snapshot, depth + 1);
         updateFrameRateFromChildSnapshot(*snapshot, childSnapshot, *childHierarchy->getLayer(),
                                          args, &childHasValidFrameRate);
     }
@@ -1040,68 +1037,79 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
         return;
     }
 
-    snapshot.roundedCorner = RoundedCornerState();
+    RoundedCornerState finalSettings = RoundedCornerState();
 
     // Populate parent settings to inherit
-    RoundedCornerState parentSettings = RoundedCornerState();
-    if (parentSnapshot.roundedCorner.hasRequestedRadius() ||
-        parentSnapshot.roundedCorner.hasRoundedCorners()) {
-        // Check for both radii and requestedRadii because parent's radii may be set to 0.f
-        // due to client rounding.
-        ui::Transform t = snapshot.localTransform.inverse();
-        parentSettings.cropRect = t.transform(parentSnapshot.roundedCorner.cropRect);
-
-        // If the parent has client drawn radii, then we should inherit the requested radii,
-        // otherwise, you can simply inherit the radii.
-        parentSettings.radii = parentSnapshot.roundedCorner.hasClientDrawnRadius()
-                ? parentSnapshot.roundedCorner.requestedRadii
-                : parentSnapshot.roundedCorner.radii;
-        parentSettings.radii.transform(t);
-    }
-    const bool parentSettingsValid = parentSettings.hasRoundedCorners();
+    RoundedCornerState parentSettings =
+            calculateParentRoundedCornerSettings(parentSnapshot, snapshot);
+    const bool parentSettingsValid = !parentSettings.radii.isEmpty();
 
     // Populate layer settings
-    RoundedCornerState layerSettings;
-    layerSettings.radii = requested.cornerRadii;
-    layerSettings.requestedRadii = requested.cornerRadii;
-
-    FloatRect layerCropRect = snapshot.croppedBufferSize;
-    layerSettings.cropRect = layerCropRect;
-
-    const bool layerSettingsValid = layerSettings.hasRequestedRadius() && !layerCropRect.isEmpty();
+    RoundedCornerState layerSettings = calculateLayerRoundedCornerSettings(snapshot, requested);
+    const bool layerSettingsValid =
+            layerSettings.hasRequestedRadius() && !layerSettings.cropRect.isEmpty();
 
     if (layerSettingsValid && parentSettingsValid) {
         // If the parent and the layer have rounded corner settings, use the parent settings if
         // the parent crop is entirely inside the layer crop. This has limitations and cause
         // rendering artifacts. See b/200300845 for correct fix.
-        if (parentSettings.cropRect.left > layerCropRect.left &&
-            parentSettings.cropRect.top > layerCropRect.top &&
-            parentSettings.cropRect.right < layerCropRect.right &&
-            parentSettings.cropRect.bottom < layerCropRect.bottom) {
-            snapshot.roundedCorner = parentSettings;
+        if (parentSettings.cropRect.left > layerSettings.cropRect.left &&
+            parentSettings.cropRect.top > layerSettings.cropRect.top &&
+            parentSettings.cropRect.right < layerSettings.cropRect.right &&
+            parentSettings.cropRect.bottom < layerSettings.cropRect.bottom) {
+            finalSettings = parentSettings;
         } else {
-            snapshot.roundedCorner = layerSettings;
+            finalSettings = layerSettings;
         }
     } else if (layerSettingsValid) {
-        snapshot.roundedCorner = layerSettings;
+        finalSettings = layerSettings;
     } else if (parentSettingsValid &&
-               childOverlapsParentCornerRegion(layerCropRect, parentSettings.cropRect,
+               childOverlapsParentCornerRegion(snapshot.geomLayerBounds, parentSettings.cropRect,
                                                parentSettings.radii)) {
-        snapshot.roundedCorner = parentSettings;
+        finalSettings = parentSettings;
     }
+
+    snapshot.roundedCorner = finalSettings;
+
+    snapshot.roundedCorner.effectiveRadii = snapshot.roundedCorner.radii;
     snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
-    snapshot.roundedCorner.croppedRequestedRadii =
+    snapshot.roundedCorner.reportedRadii =
             getClippedClientRadii(snapshot.roundedCorner.radii, snapshot.roundedCorner.cropRect,
                                   snapshot.sourceBounds());
 
-    if (!requested.clientDrawnCornerRadii.isEmpty() &&
-        requested.clientDrawnCornerRadii == snapshot.roundedCorner.croppedRequestedRadii &&
-        snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop) {
-        // If the client drawn radius matches the inherited/requested radius
-        // and the geometric layer bounds match the client crop then surfaceflinger
-        // does not need to draw rounded corners for this layer
+    if (shouldDisableCornerRounding(snapshot, requested)) {
         snapshot.roundedCorner.radii = gui::CornerRadii(0.f);
     }
+}
+
+bool LayerSnapshotBuilder::shouldDisableCornerRounding(LayerSnapshot& snapshot,
+                                                       const RequestedLayerState& requested) {
+    bool radiiMatch = requested.clientDrawnCornerRadii == snapshot.roundedCorner.reportedRadii;
+    bool boundsMatch = snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop;
+    return !requested.clientDrawnCornerRadii.isEmpty() && radiiMatch && boundsMatch;
+}
+
+RoundedCornerState LayerSnapshotBuilder::calculateLayerRoundedCornerSettings(
+        LayerSnapshot& snapshot, const RequestedLayerState& requested) {
+    RoundedCornerState layerSettings;
+    layerSettings.radii = requested.cornerRadii;
+    layerSettings.requestedRadii = requested.cornerRadii;
+    layerSettings.cropRect = snapshot.croppedBufferSize;
+    return layerSettings;
+}
+
+RoundedCornerState LayerSnapshotBuilder::calculateParentRoundedCornerSettings(
+        const LayerSnapshot& parentSnapshot, const LayerSnapshot& snapshot) {
+    RoundedCornerState parentSettings;
+
+    const auto& parentRoundedCorner = parentSnapshot.roundedCorner;
+    if (parentRoundedCorner.hasRoundedCorners()) {
+        ui::Transform t = snapshot.localTransform.inverse();
+        parentSettings.cropRect = t.transform(parentRoundedCorner.cropRect);
+        parentSettings.radii = parentRoundedCorner.effectiveRadii;
+        parentSettings.radii.transform(t);
+    }
+    return parentSettings;
 }
 
 bool LayerSnapshotBuilder::childOverlapsParentCornerRegion(const FloatRect& childCropRect,
@@ -1113,6 +1121,7 @@ bool LayerSnapshotBuilder::childOverlapsParentCornerRegion(const FloatRect& chil
         // overlap computation will return false.
         return true;
     }
+    // TODO(452272969): refactor to compute corner region in separate function
     FloatRect parentCornerRegionTL(parentCropRect.left, parentCropRect.top,
                                    parentCropRect.left + parentRadii.topLeft.x,
                                    parentCropRect.top + parentRadii.topLeft.y);
@@ -1144,9 +1153,10 @@ gui::CornerRadii LayerSnapshotBuilder::getClippedClientRadii(const gui::CornerRa
     auto calculateClippedCorner = [&](const android::gui::Vec2& cornerRadius, float left, float top,
                                       float right, float bottom) {
         FloatRect cornerRegion(left, top, right, bottom);
-        return layerBounds.contains(cornerRegion) ? cornerRadius : zeroVec;
+        return layerBounds.intersect(cornerRegion).isEmpty() ? zeroVec : cornerRadius;
     };
 
+    // TODO(452272969): refactor to compute corner region in separate function
     clippedRadii.topLeft =
             calculateClippedCorner(requestedRadii.topLeft, layerCropRect.left, layerCropRect.top,
                                    layerCropRect.left + requestedRadii.topLeft.x,
@@ -1249,7 +1259,6 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
     snapshot.transformedBoundsWithoutTransparentRegion =
             snapshot.geomLayerTransform.transform(geomLayerBoundsWithoutTransparentRegion);
     snapshot.parentTransform = parentSnapshot.geomLayerTransform;
-
     if (requested.potentialCursor) {
         // Subtract the transparent region and snap to the bounds
         const Rect bounds = RequestedLayerState::reduce(Rect(snapshot.croppedBufferSize),
@@ -1437,6 +1446,12 @@ void LayerSnapshotBuilder::forEachNonNullSnapshot(const Visitor& visitor,
 
 void LayerSnapshotBuilder::forEachSnapshot(const ConstVisitor& visitor) const {
     for (auto& snapshot : mSnapshots) {
+        visitor(*snapshot);
+    }
+}
+
+void LayerSnapshotBuilder::forEachMergedSnapshot(const ConstVisitor& visitor) const {
+    for (auto& snapshot : mMergedSnapshots) {
         visitor(*snapshot);
     }
 }

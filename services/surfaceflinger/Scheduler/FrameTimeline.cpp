@@ -342,6 +342,7 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
                            TraceCookieCounter* traceCookieCounter, bool isBuffer, GameMode gameMode)
       : mToken(frameTimelineInfo.vsyncId),
         mInputEventId(frameTimelineInfo.inputEventId),
+        mVsyncResyncedJitter(frameTimelineInfo.vsyncResyncedJitterNanos),
         mOwnerPid(ownerPid),
         mOwnerUid(ownerUid),
         mLayerName(std::move(layerName)),
@@ -579,6 +580,9 @@ void SurfaceFrame::dumpPresentTime(std::string& result) const {
 void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankType, const Fps& refreshRate,
                                       Fps displayFrameRenderRate, nsecs_t* outDeadlineDelta,
                                       nsecs_t* outPresentDelta) {
+    // TODO: remove and start using.
+    static_cast<void>(mVsyncResyncedJitter);
+
     if (mActuals.presentTime == Fence::SIGNAL_TIME_INVALID) {
         // Cannot do any classification for invalid present time.
         mJankType = JankType::Unknown;

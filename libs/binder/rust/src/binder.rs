@@ -27,12 +27,16 @@ use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::ffi::{c_void, CStr, CString};
 use std::fmt;
+#[cfg(feature = "std")]
 use std::io::Write;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::fd::AsRawFd;
 use std::os::raw::c_char;
 use std::ptr;
+
+#[cfg(all(not(trusty), feature = "std"))]
+use binder_rs_ndk_compat::set_transaction_code_to_function_name_map;
 
 /// Binder action to perform.
 ///
@@ -62,6 +66,7 @@ pub trait Interface: Send + Sync + DowncastSync {
     ///
     /// This handler is a no-op by default and should be implemented for each
     /// Binder service struct that wishes to respond to dump transactions.
+    #[cfg(feature = "std")]
     fn dump(&self, _writer: &mut dyn Write, _args: &[&CStr]) -> Result<()> {
         Ok(())
     }
@@ -190,6 +195,7 @@ pub trait Remotable: Send + Sync + 'static {
 
     /// Handle a request to invoke the dump transaction on this
     /// object.
+    #[cfg(feature = "std")]
     fn on_dump(&self, file: &mut dyn Write, args: &[&CStr]) -> Result<()>;
 
     /// Retrieve the class of this remote object.
@@ -197,6 +203,44 @@ pub trait Remotable: Send + Sync + 'static {
     /// This method should always return the same InterfaceClass for the same
     /// type.
     fn get_class() -> InterfaceClass;
+}
+
+/// A struct to hold a list of C-string pointers for function names.
+///
+/// This is required to be able to create a static array of pointers,
+/// which can be safely shared across threads.
+#[allow(dead_code)]
+pub struct FunctionNames<const LEN: usize> {
+    pub(crate) arr: [*const std::ffi::c_char; LEN],
+}
+
+// SAFETY: The `FunctionNames` struct only contains pointers to C strings
+// with a 'static lifetime, so it is safe to share across threads.
+unsafe impl<const LEN: usize> Sync for FunctionNames<LEN> {}
+
+impl<const LEN: usize> FunctionNames<LEN> {
+    /// Creates a new `FunctionNames` instance from an array of C-string slices.
+    ///
+    /// This function is `const`, so it can be used in static initializers.
+    pub const fn new(strs: [&'static std::ffi::CStr; LEN]) -> Self {
+        let mut arr = [std::ptr::null(); LEN];
+        let mut i = 0;
+        while i < LEN {
+            arr[i] = strs[i].as_ptr();
+            i += 1;
+        }
+        Self { arr }
+    }
+
+    /// Returns the number of function names in the list.
+    pub const fn len(&self) -> usize {
+        LEN
+    }
+
+    /// Returns if the list is empty.
+    pub const fn is_empty(&self) -> bool {
+        LEN == 0
+    }
 }
 
 /// First transaction code available for user commands (inclusive)
@@ -321,6 +365,14 @@ pub trait IBinder {
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct InterfaceClass(*const sys::AIBinder_Class);
 
+// SAFETY: The AIBinder_Class object is immutable after creation, so it is
+// safe to send and share across threads.
+unsafe impl Send for InterfaceClass {}
+
+// SAFETY: The AIBinder_Class object is immutable after creation, so it is
+// safe to send and share across threads.
+unsafe impl Sync for InterfaceClass {}
+
 impl InterfaceClass {
     /// Get a Binder NDK `AIBinder_Class` pointer for this object type.
     ///
@@ -330,7 +382,7 @@ impl InterfaceClass {
     /// [`crate::declare_binder_interface!`].
     pub fn new<I: InterfaceClassMethods>() -> InterfaceClass {
         let descriptor = CString::new(I::get_descriptor()).unwrap();
-        // Safety: `AIBinder_Class_define` expects a valid C string, and three
+        // SAFETY: `AIBinder_Class_define` expects a valid C string, and three
         // valid callback functions, all non-null pointers. The C string is
         // copied and need not be valid for longer than the call, so we can drop
         // it after the call. We can safely assign null to the onDump and
@@ -351,6 +403,50 @@ impl InterfaceClass {
             class
         };
         InterfaceClass(ptr)
+    }
+
+    /// Get a Binder NDK `AIBinder_Class` pointer for this object type. It takes string array of
+    /// function name strings which will be used to map the transaction code to function names.
+    ///
+    /// Note: the returned pointer will not be constant. Calling this method
+    /// multiple times for the same type will result in distinct class
+    /// pointers. A static getter for this value is implemented in
+    /// [`crate::declare_binder_interface!`].
+    ///
+    pub fn new_with_function_names<I: InterfaceClassMethods, const LEN: usize>(
+        _function_names: &'static FunctionNames<LEN>,
+    ) -> InterfaceClass {
+        let descriptor = CString::new(I::get_descriptor()).unwrap();
+        // SAFETY: `AIBinder_Class_define` expects a valid C string for the
+        // descriptor, which is valid for the duration of the call. The
+        // callbacks are all valid function pointers.
+        let class = unsafe {
+            sys::AIBinder_Class_define(
+                descriptor.as_ptr(),
+                Some(I::on_create),
+                Some(I::on_destroy),
+                Some(I::on_transact),
+            )
+        };
+        if class.is_null() {
+            panic!("Expected non-null class pointer from AIBinder_Class_define!");
+        }
+
+        if LEN > 0 {
+            // SAFETY: The caller guarantees that the pointers in `function_names`
+            // have a 'static lifetime. The `class` pointer is valid and non-null.
+            #[cfg(all(not(trusty), feature = "std"))]
+            unsafe {
+                set_transaction_code_to_function_name_map(class, _function_names.arr.as_ptr(), LEN);
+            }
+        }
+
+        // SAFETY: `on_dump` is a valid function pointer and `class` is
+        // a valid pointer returned by `AIBinder_Class_define`.
+        unsafe {
+            sys::AIBinder_Class_setOnDump(class, Some(I::on_dump));
+        }
+        InterfaceClass(class)
     }
 
     /// Construct an `InterfaceClass` out of a raw, non-null `AIBinder_Class`
@@ -566,7 +662,7 @@ macro_rules! binder_fn_get_class {
 
     ($constructor:expr) => {
         fn get_class() -> $crate::binder_impl::InterfaceClass {
-            static CLASS_INIT: std::sync::Once = std::sync::Once::new();
+            static CLASS_INIT: $crate::binder_impl::Once = $crate::binder_impl::Once::new();
             static mut CLASS: Option<$crate::binder_impl::InterfaceClass> = None;
 
             // Safety: This assignment is guarded by the `CLASS_INIT` `Once`
@@ -724,6 +820,39 @@ pub struct BinderFeatures {
     pub _non_exhaustive: (),
 }
 
+/// A helper to generate on_dump.
+/// This is pulled out into its own macro so that it's
+/// correctly conditionally generated based on feature = "std".
+///
+/// It is not expected that callers use this directly, but it is
+/// exported because it's used in declare_binder_interface!
+/// TODO: b/25915863 - Once AIDL is std-aware and sets its own "std" feature,
+/// the contents of this macro can be moved back into the `declare_binder_interface!` macro.
+#[doc(hidden)]
+#[cfg(feature = "std")]
+#[macro_export]
+macro_rules! on_dump_impl {
+    () => {
+        fn on_dump(
+            &self,
+            writer: &mut dyn std::io::Write,
+            args: &[&std::ffi::CStr],
+        ) -> std::result::Result<(), $crate::StatusCode> {
+            self.0.dump(writer, args)
+        }
+    };
+}
+
+/// no-op version of `on_dump_impl` for `no_std` builds
+/// TODO: b/25915863 - Once AIDL is std-aware and sets its own "std" feature,
+/// the contents of this macro can be moved back into the `declare_binder_interface!` macro.
+#[doc(hidden)]
+#[cfg(not(feature = "std"))]
+#[macro_export]
+macro_rules! on_dump_impl {
+    () => {};
+}
+
 /// Declare typed interfaces for a binder object.
 ///
 /// Given an interface trait and descriptor string, create a native and remote
@@ -795,6 +924,7 @@ macro_rules! declare_binder_interface {
             native: $native:ident($on_transact:path),
             proxy: $proxy:ident,
             $(async: $async_interface:ident $(($try_into_local_async:ident))?,)?
+             $(functionNames: [$($fn:expr),* $(,)?],)?
         }
     } => {
         $crate::declare_binder_interface! {
@@ -803,6 +933,7 @@ macro_rules! declare_binder_interface {
                 proxy: $proxy {},
                 $(async: $async_interface $(($try_into_local_async))?,)?
                 stability: $crate::binder_impl::Stability::default(),
+                $(functionNames: [$($fn),*],)?
             }
         }
     };
@@ -813,6 +944,7 @@ macro_rules! declare_binder_interface {
             proxy: $proxy:ident,
             $(async: $async_interface:ident $(($try_into_local_async:ident))?,)?
             stability: $stability:expr,
+             $(functionNames: [$($fn:expr),* $(,)?],)?
         }
     } => {
         $crate::declare_binder_interface! {
@@ -821,6 +953,7 @@ macro_rules! declare_binder_interface {
                 proxy: $proxy {},
                 $(async: $async_interface $(($try_into_local_async))?,)?
                 stability: $stability,
+                $(functionNames: [$($fn),*],)?
             }
         }
     };
@@ -832,6 +965,7 @@ macro_rules! declare_binder_interface {
                 $($fname:ident: $fty:ty = $finit:expr),*
             },
             $(async: $async_interface:ident $(($try_into_local_async:ident))?,)?
+             $(functionNames: [$($fn:expr),* $(,)?],)?
         }
     } => {
         $crate::declare_binder_interface! {
@@ -842,6 +976,7 @@ macro_rules! declare_binder_interface {
                 },
                 $(async: $async_interface $(($try_into_local_async))?,)?
                 stability: $crate::binder_impl::Stability::default(),
+                $(functionNames: [$($fn),*],)?
             }
         }
     };
@@ -854,6 +989,7 @@ macro_rules! declare_binder_interface {
             },
             $(async: $async_interface:ident $(($try_into_local_async:ident))?,)?
             stability: $stability:expr,
+             $(functionNames: [$($fn:expr),* $(,)?],)?
         }
     } => {
         $crate::declare_binder_interface! {
@@ -866,6 +1002,7 @@ macro_rules! declare_binder_interface {
                 },
                 $(async: $async_interface $(($try_into_local_async))?,)?
                 stability: $stability,
+                $(functionNames: [$($fn),*],)?
             }
         }
     };
@@ -883,6 +1020,7 @@ macro_rules! declare_binder_interface {
             $(async: $async_interface:ident $(($try_into_local_async:ident))?,)?
 
             stability: $stability:expr,
+            $(functionNames: [$($fn:expr),* $(,)?],)?
         }
     } => {
         #[doc = $proxy_doc]
@@ -964,25 +1102,31 @@ macro_rules! declare_binder_interface {
                 }
             }
 
-            fn on_dump(&self, writer: &mut dyn std::io::Write, args: &[&std::ffi::CStr]) -> std::result::Result<(), $crate::StatusCode> {
-                self.0.dump(writer, args)
-            }
+            $crate::on_dump_impl!();
 
             fn get_class() -> $crate::binder_impl::InterfaceClass {
-                static CLASS_INIT: std::sync::Once = std::sync::Once::new();
-                static mut CLASS: Option<$crate::binder_impl::InterfaceClass> = None;
+                static CLASS: std::sync::OnceLock<$crate::binder_impl::InterfaceClass> =
+                    std::sync::OnceLock::new();
 
-                // Safety: This assignment is guarded by the `CLASS_INIT` `Once`
-                // variable, and therefore is thread-safe, as it can only occur
-                // once.
-                CLASS_INIT.call_once(|| unsafe {
-                    CLASS = Some($crate::binder_impl::InterfaceClass::new::<$crate::binder_impl::Binder<$native>>());
-                });
-                // Safety: The `CLASS` variable can only be mutated once, above,
-                // and is subsequently safe to read from any thread.
-                unsafe {
-                    CLASS.unwrap()
-                }
+                *CLASS.get_or_init(|| {
+                    // This optional block will expand if `functionNames` are provided.
+                    $(
+                        const STRS: [&'static std::ffi::CStr; {[$($fn),*].len()}] = [$($fn),*];
+
+                        static FUNCTION_NAMES: $crate::binder_impl::FunctionNames<{STRS.len()}> =
+                            $crate::binder_impl::FunctionNames::new(STRS);
+
+                        // The 'return' here exits the closure early with the correct value.
+                        return $crate::binder_impl::InterfaceClass::new_with_function_names::<
+                            $crate::binder_impl::Binder<$native>,
+                            { FUNCTION_NAMES.len() },
+                        >(&FUNCTION_NAMES);
+                    )?
+
+                    // This code only executes if the optional block above did not expand.
+                    // It becomes the return value of the closure.
+                    $crate::binder_impl::InterfaceClass::new::<$crate::binder_impl::Binder<$native>>()
+                })
             }
         }
 

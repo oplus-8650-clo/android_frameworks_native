@@ -23,7 +23,10 @@ use crate::proxy::SpIBinder;
 use crate::sys;
 
 use std::convert::TryFrom;
-use std::ffi::{c_void, CStr};
+use std::ffi::c_void;
+#[cfg(feature = "std")]
+use std::ffi::CStr;
+#[cfg(feature = "std")]
 use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
@@ -261,6 +264,11 @@ impl<T: Remotable> Interface for Binder<T> {
             SpIBinder::from_raw(self.ibinder).unwrap()
         }
     }
+
+    #[cfg(feature = "std")]
+    fn dump(&self, writer: &mut dyn Write, args: &[&CStr]) -> Result<()> {
+        self.on_dump(writer, args)
+    }
 }
 
 impl<T: Remotable> InterfaceClassMethods for Binder<T> {
@@ -344,7 +352,7 @@ impl<T: Remotable> InterfaceClassMethods for Binder<T> {
     /// contains a `T` pointer in its user data. fd should be a non-owned file
     /// descriptor, and args must be an array of null-terminated string
     /// pointers with length num_args.
-    #[cfg(not(trusty))]
+    #[cfg(all(not(trusty), feature = "std"))]
     unsafe extern "C" fn on_dump(
         binder: *mut sys::AIBinder,
         fd: i32,
@@ -391,15 +399,15 @@ impl<T: Remotable> InterfaceClassMethods for Binder<T> {
     }
 
     /// Called to handle the `dump` transaction.
-    #[cfg(trusty)]
+    #[cfg(any(trusty, not(feature = "std")))]
     unsafe extern "C" fn on_dump(
         _binder: *mut sys::AIBinder,
         _fd: i32,
         _args: *mut *const c_char,
         _num_args: u32,
     ) -> status_t {
-        // This operation is not supported on Trusty right now
-        // because we do not have a uniform way of writing to handles
+        // This operation is not supported on Trusty or no_std environments
+        // right now because we do not have a uniform way of writing to handles.
         StatusCode::INVALID_OPERATION as status_t
     }
 }
@@ -494,6 +502,7 @@ impl Remotable for () {
         Ok(())
     }
 
+    #[cfg(feature = "std")]
     fn on_dump(&self, _writer: &mut dyn Write, _args: &[&CStr]) -> Result<()> {
         Ok(())
     }
@@ -502,3 +511,44 @@ impl Remotable for () {
 }
 
 impl Interface for () {}
+
+// The only test in here at the moment is for dump() which is not supported
+// in no_std environments.
+#[cfg(feature = "std")]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestRemotable;
+
+    impl Remotable for TestRemotable {
+        fn get_descriptor() -> &'static str {
+            "test"
+        }
+
+        fn on_transact(
+            &self,
+            _code: TransactionCode,
+            _data: &BorrowedParcel<'_>,
+            _reply: &mut BorrowedParcel<'_>,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_dump(&self, writer: &mut dyn Write, args: &[&CStr]) -> Result<()> {
+            write!(writer, "TestRemotable dumped with {:?}", args).unwrap();
+            Ok(())
+        }
+
+        binder_fn_get_class!(Binder::<Self>);
+    }
+
+    #[test]
+    fn dump() {
+        let binder_object = Binder::new(TestRemotable);
+
+        let mut buffer: Vec<u8> = Vec::new();
+        binder_object.dump(&mut buffer, &[c"arg1", c"arg2"]).unwrap();
+        assert_eq!(str::from_utf8(&buffer), Ok("TestRemotable dumped with [\"arg1\", \"arg2\"]"));
+    }
+}

@@ -44,6 +44,8 @@ namespace {
 const auto TOUCHPAD_PALM_REJECTION_V2 =
         ACONFIG_FLAG(input_flags, enable_v2_touchpad_typing_palm_rejection);
 
+const auto TOUCHPAD_DOWN_TIME_FIX = ACONFIG_FLAG(input_flags, touchpad_down_time_fix);
+
 constexpr stime_t GESTURE_TIME = 1.2;
 
 } // namespace
@@ -279,6 +281,50 @@ TEST_F(UncapturedGestureConverterTest, DragWithButton) {
                 Each(VariantWith<NotifyMotionArgs>(
                         AllOf(WithButtonState(0), WithCoords(0, 0), WithToolType(ToolType::FINGER),
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
+}
+
+TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, DownTime,
+                  REQUIRES_FLAGS_ENABLED(TOUCHPAD_DOWN_TIME_FIX)) {
+    InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
+    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
+    converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
+
+    // A move event before any buttons are pressed should have a down time of 0.
+    Gesture moveGesture1(kGestureMove, GESTURE_TIME, GESTURE_TIME, -5, 10);
+    std::list<NotifyArgs> args =
+            converter.handleGesture(ARBITRARY_TIME, ARBITRARY_TIME, ARBITRARY_TIME, moveGesture1);
+    ASSERT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithDownTime(0))));
+
+    // Press the button. The down time should be updated to the event time.
+    constexpr nsecs_t downEventTime = 5678;
+    Gesture downGesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
+                        /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_NONE,
+                        /*is_tap=*/false);
+    args = converter.handleGesture(downEventTime, downEventTime, ARBITRARY_TIME, downGesture);
+    ASSERT_THAT(args,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
+                                          WithDownTime(0))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
+                                          WithDownTime(downEventTime))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
+                                          WithDownTime(downEventTime)))));
+
+    // Events from subsequent movements and button releases should have the updated down time.
+    constexpr nsecs_t move2Time = downEventTime + 200;
+    Gesture moveGesture2(kGestureMove, GESTURE_TIME, GESTURE_TIME, -5, 10);
+    args = converter.handleGesture(move2Time, move2Time, move2Time, moveGesture2);
+    ASSERT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithDownTime(downEventTime))));
+
+    // Release the button. The down time should still be the same.
+    constexpr nsecs_t upTime = downEventTime + 400;
+    Gesture upGesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
+                      /*down=*/GESTURES_BUTTON_NONE, /*up=*/GESTURES_BUTTON_LEFT,
+                      /*is_tap=*/false);
+    args = converter.handleGesture(upTime, upTime, upTime, upGesture);
+    ASSERT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithDownTime(downEventTime))));
 }
 
 TEST_F(UncapturedGestureConverterTest, Scroll) {
@@ -1677,9 +1723,10 @@ protected:
     }
 
     base::Result<void> processMotionArgs(NotifyMotionArgs arg) {
-        return mVerifier->processMovement(arg.deviceId, arg.source, arg.action, arg.actionButton,
-                                          arg.getPointerCount(), arg.pointerProperties.data(),
-                                          arg.pointerCoords.data(), arg.flags, arg.buttonState);
+        return mVerifier->processMovement(arg.deviceId, arg.eventTime, arg.source, arg.action,
+                                          arg.actionButton, arg.getPointerCount(),
+                                          arg.pointerProperties.data(), arg.pointerCoords.data(),
+                                          arg.flags, arg.buttonState, arg.downTime);
     }
 
     void verifyArgsFromGesture(const Gesture& gesture, size_t gestureIndex) {

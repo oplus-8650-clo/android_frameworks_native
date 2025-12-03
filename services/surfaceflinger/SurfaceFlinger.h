@@ -17,7 +17,9 @@
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
+// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -47,8 +49,10 @@
 #include <cutils/atomic.h>
 #include <cutils/compiler.h>
 #include <ftl/algorithm.h>
+#include <ftl/finalizer.h>
 #include <ftl/future.h>
 #include <ftl/non_null.h>
+#include <ftl/small_map.h>
 #include <gui/BufferQueue.h>
 #include <gui/CompositorTiming.h>
 #include <gui/FrameTimestamps.h>
@@ -373,9 +377,11 @@ public:
         return sFrontInternalDisplayRotationFlags;
     }
 
+// QTI_BEGIN: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
     bool mRequestDisplayModeFlag = false;
     std::thread::id mFlagThread = std::this_thread::get_id();
 
+// QTI_END: 2024-02-28: Display: sf: Add check to acquire mStateLock in qtiCheckVirtualDisplayHint
 protected:
     // We're reference counted, never destroy SurfaceFlinger directly
     virtual ~SurfaceFlinger();
@@ -436,19 +442,7 @@ private:
 
         const LayerVector::StateSet stateSet = LayerVector::StateSet::Invalid;
 
-        // TODO(b/241285876): Replace deprecated DefaultKeyedVector with ftl::SmallMap.
-        DefaultKeyedVector<wp<IBinder>, DisplayDeviceState> displays;
-
-        std::optional<size_t> getDisplayIndex(PhysicalDisplayId displayId) const {
-            for (size_t i = 0; i < displays.size(); i++) {
-                const auto& state = displays.valueAt(i);
-                if (state.physical && state.physical->id == displayId) {
-                    return i;
-                }
-            }
-
-            return {};
-        }
+        ui::DisplayMap<wp<IBinder>, DisplayDeviceState> displays;
 
         bool colorMatrixChanged = true;
         mat4 colorMatrix;
@@ -618,7 +612,9 @@ private:
     void setAutoLowLatencyMode(const sp<IBinder>& displayToken, bool on);
     void setGameContentType(const sp<IBinder>& displayToken, bool on);
     status_t getMaxLayerPictureProfiles(const sp<IBinder>& displayToken, int32_t* outMaxProfiles);
+    // TODO b/339477240 - Remove.
     void setPowerMode(const sp<IBinder>& displayToken, int mode);
+    void setPowerModeAsync(const sp<IBinder>& displayToken, int mode);
     status_t overrideHdrTypes(const sp<IBinder>& displayToken,
                               const std::vector<ui::Hdr>& hdrTypes);
     status_t onPullAtom(const int32_t atomId, std::vector<uint8_t>* pulledData, bool* success);
@@ -776,6 +772,12 @@ private:
     // Called on the main thread in response to setPowerMode()
     void setPhysicalDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
             REQUIRES(mStateLock, kMainThreadContext);
+    // Returns a future for the slow hardware operation which can run on any
+    // thread and a finalizer whose function must be scheduled on the main
+    // thread.
+    [[nodiscard]] std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
+    setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display, hal::PowerMode mode)
+            REQUIRES(mStateLock, kMainThreadContext);
     void setVirtualDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
             REQUIRES(mStateLock, kMainThreadContext);
 
@@ -814,6 +816,9 @@ private:
     void moveSnapshotsFromCompositionArgs(compositionengine::CompositionRefreshArgs& refreshArgs,
                                           const std::vector<std::pair<Layer*, LayerFE*>>& layers)
             REQUIRES(kMainThreadContext);
+    std::vector<std::pair<Layer*, LayerFE*>> copyMergedSnapshots(
+            compositionengine::CompositionRefreshArgs& refreshArgs) REQUIRES(kMainThreadContext);
+
     // Return true if we must composite this frame
     bool updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs, nsecs_t expecedPresentTimeNs,
                               bool transactionsFlushed, bool& out) REQUIRES(kMainThreadContext);
@@ -1686,7 +1691,9 @@ private:
 // QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     surfaceflingerextension::QtiSurfaceFlingerExtensionIntf* mQtiSFExtnIntf = nullptr;
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
+// QTI_BEGIN: 2024-02-29: Display: sf: consider smomo vote for content detection
     std::mutex mSmomoMutex;
+// QTI_END: 2024-02-29: Display: sf: consider smomo vote for content detection
 
 
     TransactionHandler mTransactionHandler GUARDED_BY(kMainThreadContext);

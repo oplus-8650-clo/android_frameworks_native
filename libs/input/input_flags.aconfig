@@ -26,6 +26,16 @@ flag {
 }
 
 flag {
+  name: "enable_down_time_verification"
+  namespace: "input"
+  description: "Set to true to enable crashing whenever inbound events with bad down times are going into InputDispatcher"
+  bug: "452569734"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"
@@ -248,16 +258,6 @@ flag {
 }
 
 flag {
-  name: "abort_device_opening_on_enodev"
-  namespace: "input"
-  description: "Stop opening a device if it is removed before we can cache all of its axis information"
-  bug: "424789999"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "low_level_tracing"
   namespace: "input"
   description: "Log low-level events from evdev and the Gestures library in traces"
@@ -275,20 +275,20 @@ flag {
 }
 
 flag {
-  name: "simultaneous_outside_and_hover_fix"
+  name: "touchpad_bottom_right_click_region_fix"
   namespace: "input"
-  description: "Bug fix to prevent dispatcher from crashing when a window is expected to receive simultaneous action-outside and hover-exit events"
-  bug: "423393151"
+  description: "Fix the 'Bottom-right click' touchpad setting so it actually only affects the bottom-right corner of the touchpad, rather than the whole right side."
+  bug: "352584365"
   metadata {
     purpose: PURPOSE_BUGFIX
   }
 }
 
 flag {
-  name: "touchpad_bottom_right_click_region_fix"
+  name: "touchpad_down_time_fix"
   namespace: "input"
-  description: "Fix the 'Bottom-right click' touchpad setting so it actually only affects the bottom-right corner of the touchpad, rather than the whole right side."
-  bug: "352584365"
+  description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
+  bug: "447603159"
   metadata {
     purpose: PURPOSE_BUGFIX
   }

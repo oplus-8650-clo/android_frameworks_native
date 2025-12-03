@@ -33,6 +33,7 @@
 #include <gui/DisplayLuts.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/ITransactionCompletedListener.h>
+#include <gui/view/Surface.h>
 #include <math/mat4.h>
 
 #include <android/gui/DropInputMode.h>
@@ -596,7 +597,7 @@ struct DisplayState {
     uint32_t height = 0;
 
     // For virtual displays, this is the sink surface into which the virtual display is rendered.
-    sp<IGraphicBufferProducer> surface;
+    view::Surface surface;
 
     status_t write(Parcel& output) const;
     status_t read(const Parcel& input);

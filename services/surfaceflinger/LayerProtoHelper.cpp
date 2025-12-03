@@ -244,10 +244,14 @@ void LayerProtoHelper::readFromProto(
 void LayerProtoHelper::writeToProto(const android::BlurRegion region,
                                     perfetto::protos::BlurRegion* proto) {
     proto->set_blur_radius(region.blurRadius);
-    proto->set_corner_radius_tl(region.cornerRadiusTL);
-    proto->set_corner_radius_tr(region.cornerRadiusTR);
-    proto->set_corner_radius_bl(region.cornerRadiusBL);
-    proto->set_corner_radius_br(region.cornerRadiusBR);
+    proto->set_corner_radius_tlx(region.cornerRadiusTLX);
+    proto->set_corner_radius_tly(region.cornerRadiusTLY);
+    proto->set_corner_radius_trx(region.cornerRadiusTRX);
+    proto->set_corner_radius_try(region.cornerRadiusTRY);
+    proto->set_corner_radius_blx(region.cornerRadiusBLX);
+    proto->set_corner_radius_bly(region.cornerRadiusBLY);
+    proto->set_corner_radius_brx(region.cornerRadiusBRX);
+    proto->set_corner_radius_bry(region.cornerRadiusBRY);
     proto->set_alpha(region.alpha);
     proto->set_left(region.left);
     proto->set_top(region.top);
@@ -258,10 +262,14 @@ void LayerProtoHelper::writeToProto(const android::BlurRegion region,
 void LayerProtoHelper::readFromProto(const perfetto::protos::BlurRegion& proto,
                                      android::BlurRegion& outRegion) {
     outRegion.blurRadius = proto.blur_radius();
-    outRegion.cornerRadiusTL = proto.corner_radius_tl();
-    outRegion.cornerRadiusTR = proto.corner_radius_tr();
-    outRegion.cornerRadiusBL = proto.corner_radius_bl();
-    outRegion.cornerRadiusBR = proto.corner_radius_br();
+    outRegion.cornerRadiusTLX = proto.corner_radius_tlx();
+    outRegion.cornerRadiusTLY = proto.corner_radius_tly();
+    outRegion.cornerRadiusTRX = proto.corner_radius_trx();
+    outRegion.cornerRadiusTRY = proto.corner_radius_try();
+    outRegion.cornerRadiusBLX = proto.corner_radius_blx();
+    outRegion.cornerRadiusBLY = proto.corner_radius_bly();
+    outRegion.cornerRadiusBRX = proto.corner_radius_brx();
+    outRegion.cornerRadiusBRY = proto.corner_radius_bry();
     outRegion.alpha = proto.alpha();
     outRegion.left = proto.left();
     outRegion.top = proto.top();

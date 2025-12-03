@@ -21,6 +21,7 @@
 #include <input/Input.h>
 #include <input/InputVerifier.h>
 #include <input/PrintTools.h>
+#include <utils/Timers.h>
 #include "input_cxx_bridge.rs.h"
 
 using android::base::Error;
@@ -36,26 +37,27 @@ namespace android {
 // --- InputVerifier ---
 
 InputVerifier::InputVerifier(const std::string& name)
-      : mVerifier(
-                android::input::verifier::create(rust::String::lossy(name),
-                                                 input_flags::enable_button_state_verification())) {
-}
+      : mVerifier(android::input::verifier::create(rust::String::lossy(name),
+                                                   input_flags::enable_button_state_verification(),
+                                                   input_flags::enable_down_time_verification())) {}
 
-Result<void> InputVerifier::processMovement(DeviceId deviceId, int32_t source, int32_t action,
-                                            int32_t actionButton, uint32_t pointerCount,
+Result<void> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime, int32_t source,
+                                            int32_t action, int32_t actionButton,
+                                            uint32_t pointerCount,
                                             const PointerProperties* pointerProperties,
                                             const PointerCoords* pointerCoords, int32_t flags,
-                                            int32_t buttonState) {
+                                            int32_t buttonState, nsecs_t downTime) {
     std::vector<RustPointerProperties> rpp;
     for (size_t i = 0; i < pointerCount; i++) {
         rpp.emplace_back(RustPointerProperties{.id = pointerProperties[i].id});
     }
     rust::Slice<const RustPointerProperties> properties{rpp.data(), rpp.size()};
     rust::String errorMessage =
-            android::input::verifier::process_movement(*mVerifier, deviceId, source, action,
-                                                       actionButton, properties,
+            android::input::verifier::process_movement(*mVerifier, deviceId, eventTime, source,
+                                                       action, actionButton, properties,
                                                        static_cast<uint32_t>(flags),
-                                                       static_cast<uint32_t>(buttonState));
+                                                       static_cast<uint32_t>(buttonState),
+                                                       downTime);
     if (errorMessage.empty()) {
         return {};
     } else {

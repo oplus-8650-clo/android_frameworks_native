@@ -727,6 +727,11 @@ public:
     virtual status_t setFrameRate(float frameRate, int8_t compatibility,
                                   int8_t changeFrameRateStrategy);
 
+    // Control CPU throttling for Vulkan/EGL producers
+    virtual status_t setProducerThrottlingEnabled(bool enabled);
+    // Returns whether CPU throttling is enabled for Vulkan/EGL producers
+    virtual status_t isProducerThrottlingEnabled(bool* outEnabled) const;
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
     virtual status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options);
 #endif

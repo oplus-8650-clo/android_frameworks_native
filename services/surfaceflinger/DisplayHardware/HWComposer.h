@@ -192,7 +192,7 @@ public:
     virtual status_t executeCommands(HalDisplayId) = 0;
 
     // set power mode
-    virtual status_t setPowerMode(PhysicalDisplayId, hal::PowerMode) = 0;
+    virtual ftl::Future<status_t> setPowerMode(PhysicalDisplayId, hal::PowerMode) = 0;
 
     // Sets a color transform to be applied to the result of composition
     virtual status_t setColorTransform(HalDisplayId, const mat4& transform) = 0;
@@ -415,7 +415,7 @@ public:
     status_t executeCommands(HalDisplayId) override;
 
     // set power mode
-    status_t setPowerMode(PhysicalDisplayId, hal::PowerMode mode) override;
+    ftl::Future<status_t> setPowerMode(PhysicalDisplayId, hal::PowerMode mode) override;
 
     // Sets a color transform to be applied to the result of composition
     status_t setColorTransform(HalDisplayId, const mat4& transform) override;
@@ -568,7 +568,7 @@ private:
 
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     struct DisplayData {
-        std::unique_ptr<HWC2::Display> hwcDisplay;
+        std::shared_ptr<HWC2::Display> hwcDisplay;
         std::optional<uint8_t> port; // Set on hotplug for physical displays
 
         sp<Fence> lastPresentFence = Fence::NO_FENCE; // signals when the last set op retires
@@ -589,6 +589,7 @@ private:
     std::optional<display::DisplayIdentificationInfo> onHotplugDisconnect(hal::HWDisplayId);
     std::optional<display::DisplayIdentificationInfo> onHotplugLinkTrainingFailure(
             hal::HWDisplayId);
+    bool shouldUseStableEdidIdsForHwcDisplay(hal::HWDisplayId hwcDisplayId) const;
     bool shouldIgnoreHotplugConnect(hal::HWDisplayId, uint8_t port,
                                     bool hasDisplayIdentificationData) const;
 

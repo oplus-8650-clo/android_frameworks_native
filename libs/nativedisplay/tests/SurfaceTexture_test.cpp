@@ -1,0 +1,393 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define LOG_TAG "SurfaceTextureTest"
+
+#include <gtest/gtest.h>
+
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <com_android_graphics_libgui_flags.h>
+#include <gui/IConsumerListener.h>
+#include <gui/Surface.h>
+#include <system/window.h>
+#include <ui/GraphicBuffer.h>
+#include <ui/Rect.h>
+#include <utils/Errors.h>
+
+#include <surfacetexture/LegacySurfaceTexture.h>
+#include <surfacetexture/SurfaceTexture.h>
+
+#include <cstdint>
+#include <vector>
+#include "hardware/gralloc.h"
+
+namespace android {
+
+constexpr uint32_t kRed = 0xff0000ff;
+constexpr uint32_t kGreen = 0x00ff00ff;
+constexpr uint32_t kBlue = 0x0000ffff;
+constexpr ui::Size kTextureSize = {4, 4};
+
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_SURFACETEXTURE)
+typedef SurfaceTexture SurfaceTextureType;
+typedef SurfaceTexture::SurfaceTextureListener SurfaceTextureListenerType;
+#else
+typedef LegacySurfaceTexture SurfaceTextureType;
+typedef LegacySurfaceTexture::LegacySurfaceTextureListener SurfaceTextureListenerType;
+#endif
+
+status_t DoNothingFenceFn(bool useFenceSync, EGLSyncKHR* eglFence, EGLDisplay* display,
+                          int* releaseFence, void* passThroughHandle) {
+    (void)useFenceSync;
+    (void)eglFence;
+    (void)display;
+    (void)releaseFence;
+    (void)passThroughHandle;
+    return OK;
+}
+
+status_t DoNothingFenceWaitFn(int fence, void* passThroughHandle) {
+    (void)fence;
+    (void)passThroughHandle;
+    return OK;
+}
+
+class SurfaceTextureTest : public testing::Test {
+public:
+    virtual ~SurfaceTextureTest() = default;
+
+    virtual void SetUp() override {
+        // We need a valid GL context so we can test updateTexImage()
+        // This initializes EGL and create a GL context placeholder with a
+        // pbuffer render target.
+        mEglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+        ASSERT_NE(EGL_NO_DISPLAY, mEglDisplay);
+
+        EGLint majorVersion, minorVersion;
+        EXPECT_TRUE(eglInitialize(mEglDisplay, &majorVersion, &minorVersion));
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+
+        EGLConfig myConfig;
+        EGLint numConfigs = 0;
+        EXPECT_TRUE(eglChooseConfig(mEglDisplay, getConfigAttribs(), &myConfig, 1, &numConfigs));
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+
+        mEglConfig = myConfig;
+        EGLint pbufferAttribs[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
+        mEglSurface = eglCreatePbufferSurface(mEglDisplay, myConfig, pbufferAttribs);
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+        ASSERT_NE(EGL_NO_SURFACE, mEglSurface);
+
+        EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+        mEglContext = eglCreateContext(mEglDisplay, myConfig, EGL_NO_CONTEXT, contextAttribs);
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+        ASSERT_NE(EGL_NO_CONTEXT, mEglContext);
+
+        EXPECT_TRUE(eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext));
+        ASSERT_EQ(EGL_SUCCESS, eglGetError());
+    }
+
+    virtual void TearDown() override {
+        eglMakeCurrent(mEglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroyContext(mEglDisplay, mEglContext);
+        eglDestroySurface(mEglDisplay, mEglSurface);
+        eglTerminate(mEglDisplay);
+    }
+
+    sp<SurfaceTextureType> createSurfaceTexture(GLuint textureId) {
+        return sp<SurfaceTextureType>::make(textureId, GL_TEXTURE_EXTERNAL_OES,
+                                            /* useFenceSync */ true,
+                                            /* isControlledByApp */ true);
+    }
+
+    sp<SurfaceTextureType> createSingleBufferSurfaceTexture(GLuint textureId) {
+        // See frameworks/base/core/jni/android_graphics_SurfaceTexture.cpp
+        auto surfaceTexture = sp<SurfaceTextureType>::make(textureId, GL_TEXTURE_EXTERNAL_OES,
+                                                           /* useFenceSync */ true,
+                                                           /* isControlledByApp */ false);
+
+        surfaceTexture->setMaxBufferCount(1);
+
+        return surfaceTexture;
+    }
+
+    void queueColorToSurface(const sp<Surface>& surface, uint32_t color,
+                             sp<GraphicBuffer>* outBuffer = nullptr) {
+        sp<GraphicBuffer> buffer;
+        sp<Fence> fence;
+        ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+        fillGraphicBuffer(buffer, fence, color);
+        // We wait for the fence in the previous function and do all the work locally, so no need to
+        // pass a fence to queue.
+        ASSERT_EQ(OK, surface->queueBuffer(buffer, Fence::NO_FENCE));
+
+        if (outBuffer) {
+            *outBuffer = buffer;
+        }
+    }
+
+    sp<GraphicBuffer> dequeueFromSurfaceTextureConsumer(
+            const sp<SurfaceTextureType>& surfaceTexture) {
+        int outSlotid;
+        android_dataspace outDataspace;
+        HdrMetadata outHdrMetadata;
+        float outTransformMatrix[16];
+        uint32_t outTransform;
+        bool outQueueEmpty;
+        void* fencePassThroughHandle = nullptr;
+        ARect currentCrop;
+        return surfaceTexture->dequeueBuffer(&outSlotid, &outDataspace, &outHdrMetadata,
+                                             outTransformMatrix, &outTransform, &outQueueEmpty,
+                                             DoNothingFenceFn, DoNothingFenceWaitFn,
+                                             fencePassThroughHandle, &currentCrop);
+    }
+
+    void fillGraphicBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
+                           uint32_t color) {
+        ASSERT_NE(nullptr, buffer);
+        ASSERT_NE(nullptr, fence);
+        ASSERT_EQ(PIXEL_FORMAT_RGBA_8888, buffer->getPixelFormat());
+
+        ASSERT_EQ(OK, fence->waitForever("fillGraphicBuffer"));
+
+        uint8_t* dst = nullptr;
+        status_t err = buffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN, (void**)&dst);
+        ASSERT_EQ(OK, err);
+        ASSERT_NE(nullptr, dst);
+
+        const int stride = buffer->getStride();
+        const int bytesPerPixel = 4;
+        const uint8_t r = (color >> 24) & 0xff;
+        const uint8_t g = (color >> 16) & 0xff;
+        const uint8_t b = (color >> 8) & 0xff;
+        const uint8_t a = color & 0xff;
+
+        for (uint32_t y = 0; y < buffer->getHeight(); y++) {
+            for (uint32_t x = 0; x < buffer->getWidth(); x++) {
+                dst[(y * stride + x) * bytesPerPixel + 0] = r;
+                dst[(y * stride + x) * bytesPerPixel + 1] = g;
+                dst[(y * stride + x) * bytesPerPixel + 2] = b;
+                dst[(y * stride + x) * bytesPerPixel + 3] = a;
+            }
+        }
+
+        err = buffer->unlock();
+        ASSERT_EQ(OK, err);
+    }
+
+    testing::AssertionResult checkAllPixelsMatch(GLuint textureId, uint32_t color) {
+        std::vector<uint8_t> pixels = getTexturePixelData(textureId);
+        const uint8_t r = (color >> 24) & 0xff;
+        const uint8_t g = (color >> 16) & 0xff;
+        const uint8_t b = (color >> 8) & 0xff;
+        const uint8_t a = color & 0xff;
+        for (size_t i = 0; i < pixels.size(); i += 4) {
+            if (pixels[i + 0] != r || pixels[i + 1] != g || pixels[i + 2] != b ||
+                pixels[i + 3] != a) {
+                return testing::AssertionFailure()
+                        << "Pixel at index " << i << " was (" << (int)pixels[i + 0] << ", "
+                        << (int)pixels[i + 1] << ", " << (int)pixels[i + 2] << ", "
+                        << (int)pixels[i + 3] << "), expected (" << (int)r << ", " << (int)g << ", "
+                        << (int)b << ", " << (int)a << ").";
+            }
+        }
+        return testing::AssertionSuccess();
+    }
+
+    std::vector<uint8_t> getTexturePixelData(GLuint textureId) {
+        GLuint fbo;
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_EXTERNAL_OES,
+                               textureId, 0);
+
+        int width = kTextureSize.width;
+        int height = kTextureSize.height;
+        std::vector<uint8_t> pixels(width * height * 4);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fbo);
+
+        EXPECT_EQ(EGL_SUCCESS, eglGetError());
+
+        return pixels;
+    }
+
+private:
+    EGLint const* getConfigAttribs() {
+        static EGLint sDefaultConfigAttribs[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
+                                                 EGL_NONE};
+
+        return sDefaultConfigAttribs;
+    }
+
+    EGLDisplay mEglDisplay = EGL_NO_DISPLAY;
+    EGLSurface mEglSurface = EGL_NO_SURFACE;
+    EGLContext mEglContext = EGL_NO_CONTEXT;
+    EGLConfig mEglConfig = nullptr;
+};
+
+TEST_F(SurfaceTextureTest, UpdateTexImage) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId);
+
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    queueColorToSurface(surface, kRed);
+
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    ASSERT_EQ(EGL_SUCCESS, eglGetError());
+
+    EXPECT_TRUE(checkAllPixelsMatch(textureId, kRed));
+}
+
+TEST_F(SurfaceTextureTest, DequeueBuffer) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId);
+
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    sp<GraphicBuffer> queuedBuffer;
+    queueColorToSurface(surface, kRed, &queuedBuffer);
+
+    EXPECT_EQ(nullptr, dequeueFromSurfaceTextureConsumer(surfaceTexture));
+
+    surfaceTexture->takeConsumerOwnership();
+    EXPECT_EQ(nullptr, dequeueFromSurfaceTextureConsumer(surfaceTexture))
+            << "Take consumer ownership should have failed, making this call fail.";
+
+    EXPECT_EQ(OK, surfaceTexture->detachFromContext());
+    surfaceTexture->takeConsumerOwnership();
+
+    sp<GraphicBuffer> consumerBuffer = dequeueFromSurfaceTextureConsumer(surfaceTexture);
+    EXPECT_EQ(queuedBuffer, consumerBuffer);
+}
+
+class TestFrameAvailableListener : public SurfaceTextureListenerType {
+public:
+    virtual void onFrameAvailable(const BufferItem&) override { mFrameCount++; }
+    virtual void onSetFrameRate(float /* frameRate */, int8_t /* compatibility */,
+                                int8_t /* changeFrameRateStrategy */) override {}
+
+    size_t getFrameAvailableCount() { return mFrameCount; }
+
+private:
+    size_t mFrameCount;
+};
+
+TEST_F(SurfaceTextureTest, FrameAvailableListenerCallback) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId);
+    sp<TestFrameAvailableListener> listener = sp<TestFrameAvailableListener>::make();
+    surfaceTexture->setSurfaceTextureListener(listener);
+
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> surfaceListener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, surfaceListener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    queueColorToSurface(surface, kGreen);
+    ASSERT_EQ(1u, listener->getFrameAvailableCount());
+
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+
+    queueColorToSurface(surface, kBlue);
+    ASSERT_EQ(2u, listener->getFrameAvailableCount());
+}
+
+TEST_F(SurfaceTextureTest, UpdateTexImageWithNoNewFrame) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    queueColorToSurface(surface, kRed);
+
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId, kRed));
+
+    // Calling updateTexImage again should be a no-op and return no error.
+    ASSERT_EQ(NO_ERROR, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId, kRed));
+}
+
+TEST_F(SurfaceTextureTest, SingleBufferMode) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSingleBufferSurfaceTexture(textureId);
+
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    // Set the dequeue timeout so we don't block.
+    ASSERT_EQ(OK, surface->setDequeueTimeout(0));
+
+    // After queuing one buffer, we can't queue another unless it's been released.
+    queueColorToSurface(surface, kRed);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(TIMED_OUT, surface->dequeueBuffer(&buffer, &fence));
+
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId, kRed));
+
+    EXPECT_EQ(OK, surfaceTexture->releaseTexImage());
+
+    queueColorToSurface(surface, kGreen);
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    EXPECT_TRUE(checkAllPixelsMatch(textureId, kGreen));
+}
+
+} // namespace android

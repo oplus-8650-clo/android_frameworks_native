@@ -144,16 +144,6 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
         &device.arm_shader_core_builtins.shader_core_builtins_properties_arm;
   }
 
-  if (HasExtension("VK_ARM_shader_core_properties", device.extensions)) {
-    device.arm_shader_core_properties.reported = true;
-    device.arm_shader_core_properties.shader_core_properties_arm.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM;
-    device.arm_shader_core_properties.shader_core_properties_arm.pNext =
-        properties.pNext;
-    properties.pNext =
-        &device.arm_shader_core_properties.shader_core_properties_arm;
-  }
-
   if (HasExtension("VK_ARM_tensors", device.extensions)) {
     device.arm_tensors.reported = true;
     device.arm_tensors.tensor_properties_arm.sType =

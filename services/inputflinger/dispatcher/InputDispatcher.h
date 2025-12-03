@@ -19,7 +19,7 @@
 #include <com_android_input_flags.h>
 
 #include "AnrTracker.h"
-#include "CancelationOptions.h"
+#include "CancellationOptions.h"
 #include "DragState.h"
 #include "Entry.h"
 #include "FocusResolver.h"
@@ -432,8 +432,8 @@ private:
         std::string dump() const;
 
         // Updates the touchState for display from WindowInfo,
-        // returns list of CancelationOptions for every cancelled touch
-        std::list<CancelationOptions> updateFromWindowInfo(
+        // returns list of CancellationOptions for every cancelled touch
+        std::list<CancellationOptions> updateFromWindowInfo(
                 ui::LogicalDisplayId displayId,
                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker);
 
@@ -443,12 +443,12 @@ private:
         // pointers, list of cancelled windows and pointers on successful transfer.
         std::optional<
                 std::tuple<sp<gui::WindowInfoHandle>, DeviceId, std::vector<PointerProperties>,
-                           std::list<CancelationOptions>, std::list<PointerDownArgs>>>
+                           std::list<CancellationOptions>, std::list<PointerDownArgs>>>
         transferTouchGesture(const sp<IBinder>& fromToken, const sp<IBinder>& toToken,
                              bool transferEntireGesture,
                              const std::unique_ptr<trace::EventTrackerInterface>& traceTracker);
 
-        base::Result<std::list<CancelationOptions>, status_t> pilferPointers(
+        base::Result<std::list<CancellationOptions>, status_t> pilferPointers(
                 const sp<IBinder>& token, const Connection& requestingConnection,
                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker);
 
@@ -483,7 +483,8 @@ private:
         std::optional<std::tuple<TouchState&, TouchedWindow&, ui::LogicalDisplayId>>
         findTouchStateWindowAndDisplay(const sp<IBinder>& token);
 
-        std::pair<std::list<CancelationOptions>, std::list<PointerDownArgs>> transferWallpaperTouch(
+        std::pair<std::list<CancellationOptions>, std::list<PointerDownArgs>>
+        transferWallpaperTouch(
                 const sp<gui::WindowInfoHandle> fromWindowHandle,
                 const sp<gui::WindowInfoHandle> toWindowHandle, TouchState& state,
                 DeviceId deviceId, const std::vector<PointerProperties>& pointers,
@@ -505,11 +506,11 @@ private:
         // and false otherwise.
         bool isStylusActiveInDisplay(ui::LogicalDisplayId displayId) const;
 
-        std::list<CancelationOptions> eraseRemovedWindowsFromWindowInfo(
+        std::list<CancellationOptions> eraseRemovedWindowsFromWindowInfo(
                 TouchState& state, ui::LogicalDisplayId displayId,
                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker);
 
-        std::list<CancelationOptions> updateHoveringStateFromWindowInfo(
+        std::list<CancellationOptions> updateHoveringStateFromWindowInfo(
                 TouchState& state, ui::LogicalDisplayId displayId,
                 const std::unique_ptr<trace::EventTrackerInterface>& traceTracker);
 
@@ -871,18 +872,18 @@ private:
     void dispatchPointerDownOutsideFocus(uint32_t source, int32_t action,
                                          const sp<IBinder>& newToken) REQUIRES(mLock);
 
-    void synthesizeCancelationEventsForAllConnectionsLocked(CancelationOptions&& options)
+    void synthesizeCancellationEventsForAllConnectionsLocked(CancellationOptions&& options)
             REQUIRES(mLock);
-    void synthesizeCancelationEventsForMonitorsLocked(const CancelationOptions& options)
+    void synthesizeCancellationEventsForMonitorsLocked(const CancellationOptions& options)
             REQUIRES(mLock);
-    void synthesizeCancelationEventsForWindowLocked(const CancelationOptions&,
-                                                    const std::shared_ptr<Connection>& = nullptr)
+    void synthesizeCancellationEventsForWindowLocked(const CancellationOptions&,
+                                                     const std::shared_ptr<Connection>& = nullptr)
             REQUIRES(mLock);
     // This is a convenience function used to generate cancellation for a connection without having
     // to check whether it's a monitor or a window. For non-monitors, the window handle must not be
     // null. Always prefer the "-ForWindow" method above when explicitly dealing with windows.
-    void synthesizeCancelationEventsForConnectionLocked(
-            const std::shared_ptr<Connection>& connection, const CancelationOptions& options,
+    void synthesizeCancellationEventsForConnectionLocked(
+            const std::shared_ptr<Connection>& connection, const CancellationOptions& options,
             const sp<gui::WindowInfoHandle>& window) REQUIRES(mLock);
 
     void synthesizePointerDownEventsForConnectionLocked(
@@ -929,6 +930,9 @@ private:
                                   const std::string& reason) REQUIRES(mLock);
     void updateLastAnrStateLocked(const std::string& windowLabel, const std::string& reason)
             REQUIRES(mLock);
+    // Input verifiers for each display.
+    // In the case of mouse/touchpad cursor events, the verifier on the primary display
+    // in the topology group will be used.
     std::map<ui::LogicalDisplayId, InputVerifier> mVerifiersByDisplay;
     // Returns a fallback KeyEntry that should be sent to the connection, if required.
     std::unique_ptr<const KeyEntry> afterKeyEventLockedInterruptable(

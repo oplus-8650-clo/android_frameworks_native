@@ -329,4 +329,31 @@ TEST_F(BufferItemConsumerTest, UnlimitedSlots_AcquireDetachAll) {
 }
 #endif
 
+TEST_F(BufferItemConsumerTest, OnSetFrameRateCallback) {
+    class MockListener : public BufferItemConsumer::FrameAvailableListener {
+    public:
+        virtual void onFrameAvailable(const BufferItem&) override {}
+
+        MOCK_METHOD(void, onSetFrameRate,
+                    (float frameRate, int8_t compatibility, int8_t changeFrameRateStrategy),
+                    (override));
+    };
+
+    sp<MockListener> mockListener = sp<MockListener>::make();
+    mBIC->setFrameAvailableListener(mockListener);
+
+    float expectedFrameRate = 60.0f;
+    int8_t expectedCompatibility = ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE;
+    int8_t expectedChangeFrameRateStrategy = ANATIVEWINDOW_CHANGE_FRAME_RATE_ALWAYS;
+
+    EXPECT_CALL(*mockListener,
+                onSetFrameRate(expectedFrameRate, expectedCompatibility,
+                               expectedChangeFrameRateStrategy))
+            .Times(1);
+
+    status_t ret = mProducer->setFrameRate(expectedFrameRate, expectedCompatibility,
+                                           expectedChangeFrameRateStrategy);
+    ASSERT_EQ(NO_ERROR, ret);
+}
+
 }  // namespace android

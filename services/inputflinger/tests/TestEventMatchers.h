@@ -291,20 +291,20 @@ public:
     using is_gtest_matcher = void;
     explicit WithDownTimeMatcher(nsecs_t downTime) : mDownTime(downTime) {}
 
-    bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream*) const {
-        return mDownTime == args.downTime;
+    bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream* os) const {
+        return check(args.downTime, os);
     }
 
-    bool MatchAndExplain(const NotifyKeyArgs& args, std::ostream*) const {
-        return mDownTime == args.downTime;
+    bool MatchAndExplain(const NotifyKeyArgs& args, std::ostream* os) const {
+        return check(args.downTime, os);
     }
 
-    bool MatchAndExplain(const MotionEvent& event, std::ostream*) const {
-        return mDownTime == event.getDownTime();
+    bool MatchAndExplain(const MotionEvent& event, std::ostream* os) const {
+        return check(event.getDownTime(), os);
     }
 
-    bool MatchAndExplain(const KeyEvent& event, std::ostream*) const {
-        return mDownTime == event.getDownTime();
+    bool MatchAndExplain(const KeyEvent& event, std::ostream* os) const {
+        return check(event.getDownTime(), os);
     }
 
     void DescribeTo(std::ostream* os) const { *os << "with down time " << mDownTime; }
@@ -313,6 +313,14 @@ public:
 
 private:
     const nsecs_t mDownTime;
+
+    bool check(nsecs_t actual, std::ostream* os) const {
+        if (mDownTime != actual) {
+            *os << "expected down time " << mDownTime << ", but got " << actual;
+            return false;
+        }
+        return true;
+    }
 };
 
 inline WithDownTimeMatcher WithDownTime(nsecs_t downTime) {

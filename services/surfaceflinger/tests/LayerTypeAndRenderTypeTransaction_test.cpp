@@ -252,7 +252,6 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetCornerRadiusInvalidCrop) {
         const uint8_t bottom = size - 1;
         const uint8_t right = size - 1;
         auto shot = getScreenCapture();
-        std::this_thread::sleep_for(std::chrono::seconds(5));
         // Solid corners since we don't round a layer without a valid crop
         shot->expectColor(Rect(0, 0, testArea, testArea), Color::RED);
         shot->expectColor(Rect(size - testArea, 0, right, testArea), Color::RED);
@@ -854,8 +853,8 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetClientDrawnCornerRadiiWithMisma
     ASSERT_NO_FATAL_FAILURE(fillLayerColor(layer, Color::RED, size, size));
 
     Transaction()
-            .setClientDrawnCornerRadius(layer, cornerRadius, clientCrop)
             .setCornerRadius(layer, cornerRadius)
+            .setClientDrawnCornerRadius(layer, cornerRadius, clientCrop)
             .apply();
     {
         const uint8_t bottom = size - 1;

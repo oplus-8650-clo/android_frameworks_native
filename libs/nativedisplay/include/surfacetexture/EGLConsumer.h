@@ -25,13 +25,13 @@
 
 namespace android {
 
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 namespace libnativedisplay {
 class QtiEglImageExtension;
 } // namespace libnativedisplay
 
 
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 class SurfaceTexture;
 
 /*
@@ -208,10 +208,10 @@ protected:
         // mCropRect is the crop rectangle passed to EGL when mEglImage
         // was created.
         Rect mCropRect;
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 
         std::shared_ptr<android::libnativedisplay::QtiEglImageExtension> mQtiEglImageExtn = nullptr;
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
     };
 
     /**
@@ -276,7 +276,7 @@ protected:
 
     /**
      * mEglDisplay is the EGLDisplay with which this EGLConsumer is currently
-     * associated.  It is intialized to EGL_NO_DISPLAY and gets set to the
+     * associated.  It is initialized to EGL_NO_DISPLAY and gets set to the
      * current display when updateTexImage is called for the first time and when
      * attachToContext is called.
      */
@@ -312,10 +312,10 @@ protected:
      */
     static sp<GraphicBuffer> sReleasedTexImageBuffer;
     sp<EglImage> mReleasedTexImage;
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 
     friend class android::libnativedisplay::QtiEglImageExtension;
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 };
 
 } // namespace android

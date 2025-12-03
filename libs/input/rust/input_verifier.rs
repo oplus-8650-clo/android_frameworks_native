@@ -26,6 +26,9 @@ use std::collections::HashSet;
 /// C++ NotifyMotionArgs struct.
 #[derive(Clone, Copy)]
 pub struct NotifyMotionArgs<'a> {
+    /// The time at which the event occurred, in nanoseconds.
+    pub event_time_nanos: i64,
+
     /// The ID of the device that emitted the event.
     pub device_id: DeviceId,
 
@@ -57,6 +60,9 @@ pub struct NotifyMotionArgs<'a> {
     /// | `BUTTON_PRESS` | `SECONDARY`   | `PRIMARY`, `SECONDARY` |
     /// | `MOVE`         | -             | `PRIMARY`, `SECONDARY` |
     pub button_state: MotionButton,
+
+    /// The time of the last DOWN event from this device, in nanoseconds.
+    pub down_time_nanos: i64,
 }
 
 /// Verifies the properties of an event that should always be true, regardless of the current state.
@@ -196,14 +202,16 @@ pub struct InputVerifier {
     name: String,
     should_log: bool,
     verify_buttons: bool,
+    verify_down_time: bool,
     touching_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
     hovering_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
     button_verifier_by_device: HashMap<DeviceId, ButtonVerifier>,
+    down_time_by_device: HashMap<DeviceId, i64>,
 }
 
 impl InputVerifier {
     /// Create a new InputVerifier.
-    pub fn new(name: &str, should_log: bool, verify_buttons: bool) -> Self {
+    pub fn new(name: &str, should_log: bool, verify_buttons: bool, verify_down_time: bool) -> Self {
         logger::init(
             logger::Config::default()
                 .with_tag_on_device("InputVerifier")
@@ -213,9 +221,11 @@ impl InputVerifier {
             name: name.to_owned(),
             should_log,
             verify_buttons,
+            verify_down_time,
             touching_pointer_ids_by_device: HashMap::new(),
             hovering_pointer_ids_by_device: HashMap::new(),
             button_verifier_by_device: HashMap::new(),
+            down_time_by_device: HashMap::new(),
         }
     }
 
@@ -244,6 +254,19 @@ impl InputVerifier {
                 .entry(event.device_id)
                 .or_default()
                 .process_event(event)?;
+        }
+
+        if self.verify_down_time {
+            let old_down_time_nanos =
+                *(self.down_time_by_device.get(&event.device_id).unwrap_or(&0));
+            if event.down_time_nanos < old_down_time_nanos {
+                return Err(format!(
+                    "{}: Down time went backwards for device {:?} - new time {}ns < old time {}ns",
+                    self.name, event.device_id, event.down_time_nanos, old_down_time_nanos
+                ));
+            } else if event.down_time_nanos > old_down_time_nanos {
+                self.down_time_by_device.insert(event.device_id, event.down_time_nanos);
+            }
         }
 
         match event.action {
@@ -403,11 +426,19 @@ impl InputVerifier {
     pub fn reset_device(&mut self, device_id: DeviceId) {
         self.touching_pointer_ids_by_device.remove(&device_id);
         self.hovering_pointer_ids_by_device.remove(&device_id);
+        self.down_time_by_device.remove(&device_id);
     }
 
     /// Dump the current state of the verifier
     pub fn dump(&self) -> String {
-        format!("{:?}", self.touching_pointer_ids_by_device)
+        format!(
+            "Touching pointer IDs by device: {:?}\n\
+             Hovering pointer IDs by device: {:?}\n\
+             Down times by device: {:?}\n",
+            self.touching_pointer_ids_by_device,
+            self.hovering_pointer_ids_by_device,
+            self.down_time_by_device,
+        )
     }
 
     fn ensure_touching_pointers_match(
@@ -446,23 +477,31 @@ mod tests {
 
     const BASE_POINTER_PROPERTIES: [RustPointerProperties; 1] = [RustPointerProperties { id: 0 }];
     const BASE_EVENT: NotifyMotionArgs = NotifyMotionArgs {
+        event_time_nanos: 0,
         device_id: DeviceId(1),
         source: Source::Touchscreen,
         action: MotionAction::Down,
         pointer_properties: &BASE_POINTER_PROPERTIES,
         flags: MotionFlags::empty(),
         button_state: MotionButton::empty(),
+        down_time_nanos: 0,
     };
     const BASE_MOUSE_EVENT: NotifyMotionArgs =
         NotifyMotionArgs { source: Source::Mouse, ..BASE_EVENT };
+
+    fn make_test_verifier() -> InputVerifier {
+        InputVerifier::new(
+            "Test", /*should_log*/ false, /*verify_buttons*/ true,
+            /*verify_down_times*/ true,
+        )
+    }
 
     #[test]
     /**
      * Send a DOWN event with 2 pointers and ensure that it's marked as invalid.
      */
-    fn bad_down_event() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ true, /*verify_buttons*/ true);
+    fn down_with_two_pointers() {
+        let mut verifier = make_test_verifier();
         let pointer_properties =
             Vec::from([RustPointerProperties { id: 0 }, RustPointerProperties { id: 1 }]);
         assert!(verifier
@@ -476,8 +515,7 @@ mod tests {
 
     #[test]
     fn single_pointer_stream() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         let pointer_properties = Vec::from([RustPointerProperties { id: 0 }]);
         assert!(verifier
             .process_movement(NotifyMotionArgs {
@@ -504,8 +542,7 @@ mod tests {
 
     #[test]
     fn two_pointer_stream() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         let pointer_properties = Vec::from([RustPointerProperties { id: 0 }]);
         assert!(verifier
             .process_movement(NotifyMotionArgs {
@@ -545,8 +582,7 @@ mod tests {
 
     #[test]
     fn multi_device_stream() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 device_id: DeviceId(1),
@@ -586,8 +622,7 @@ mod tests {
 
     #[test]
     fn action_cancel() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::Down,
@@ -606,8 +641,7 @@ mod tests {
 
     #[test]
     fn invalid_action_cancel() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::Down, ..BASE_EVENT })
             .is_ok());
@@ -618,8 +652,7 @@ mod tests {
 
     #[test]
     fn invalid_up() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::Up, ..BASE_EVENT })
             .is_err());
@@ -627,8 +660,7 @@ mod tests {
 
     #[test]
     fn correct_hover_sequence() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::HoverEnter, ..BASE_EVENT })
             .is_ok());
@@ -648,8 +680,7 @@ mod tests {
 
     #[test]
     fn correct_down_to_hover_sequence() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::Down, ..BASE_EVENT })
             .is_ok());
@@ -669,8 +700,7 @@ mod tests {
 
     #[test]
     fn double_hover_enter() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::HoverEnter, ..BASE_EVENT })
             .is_ok());
@@ -682,8 +712,7 @@ mod tests {
 
     #[test]
     fn down_to_hover_enter_without_up() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::Down, ..BASE_EVENT })
             .is_ok());
@@ -695,8 +724,7 @@ mod tests {
 
     #[test]
     fn down_to_hover_move_without_up() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs { action: MotionAction::Down, ..BASE_EVENT })
             .is_ok());
@@ -710,8 +738,7 @@ mod tests {
     // MOUSE_RELATIVE, which is used during pointer capture. The verifier should allow such event.
     #[test]
     fn relative_mouse_move() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 device_id: DeviceId(2),
@@ -725,8 +752,7 @@ mod tests {
     // Send a MOVE event with incorrect number of pointers (one of the pointers is missing).
     #[test]
     fn move_with_wrong_number_of_pointers() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         let pointer_properties = Vec::from([RustPointerProperties { id: 0 }]);
         assert!(verifier
             .process_movement(NotifyMotionArgs {
@@ -756,9 +782,33 @@ mod tests {
     }
 
     #[test]
+    fn down_time_goes_backwards() {
+        // Check that the down time verification would have caught b/447603159, where the button
+        // press event after a down on a touchpad had the old down time.
+        let mut verifier = make_test_verifier();
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::Down,
+                button_state: MotionButton::Primary,
+                down_time_nanos: 100,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
+                button_state: MotionButton::Primary,
+                down_time_nanos: 0,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_err());
+    }
+
+    #[test]
     fn correct_button_press() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
@@ -770,8 +820,7 @@ mod tests {
 
     #[test]
     fn button_press_without_action_button() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::empty() },
@@ -783,8 +832,7 @@ mod tests {
 
     #[test]
     fn button_press_with_multiple_action_buttons() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress {
@@ -798,8 +846,7 @@ mod tests {
 
     #[test]
     fn button_press_without_action_button_in_state() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
@@ -811,8 +858,7 @@ mod tests {
 
     #[test]
     fn button_release_with_action_button_in_state() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
@@ -831,8 +877,7 @@ mod tests {
 
     #[test]
     fn nonbutton_action_with_button_state_change() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::HoverEnter,
@@ -851,8 +896,7 @@ mod tests {
 
     #[test]
     fn nonbutton_action_missing_button_state() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::HoverEnter,
@@ -878,8 +922,7 @@ mod tests {
 
     #[test]
     fn up_without_button_release() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::Down,
@@ -906,8 +949,7 @@ mod tests {
 
     #[test]
     fn button_press_for_already_pressed_button() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Back },
@@ -926,8 +968,7 @@ mod tests {
 
     #[test]
     fn button_release_for_unpressed_button() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonRelease { action_button: MotionButton::Back },
@@ -939,19 +980,22 @@ mod tests {
 
     #[test]
     fn correct_multiple_button_presses_without_down() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
                 action: MotionAction::ButtonPress { action_button: MotionButton::Back },
                 button_state: MotionButton::Back,
+                down_time_nanos: 0,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 101,
                 action: MotionAction::ButtonPress { action_button: MotionButton::Forward },
                 button_state: MotionButton::Back | MotionButton::Forward,
+                down_time_nanos: 0,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
@@ -959,26 +1003,31 @@ mod tests {
 
     #[test]
     fn correct_down_with_button_press() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
                 action: MotionAction::Down,
                 button_state: MotionButton::Primary | MotionButton::Secondary,
+                down_time_nanos: 100,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
                 action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
                 button_state: MotionButton::Primary,
+                down_time_nanos: 100,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
                 action: MotionAction::ButtonPress { action_button: MotionButton::Secondary },
                 button_state: MotionButton::Primary | MotionButton::Secondary,
+                down_time_nanos: 100,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
@@ -986,8 +1035,10 @@ mod tests {
         // enough BUTTON_PRESSes were sent.
         assert!(verifier
             .process_movement(NotifyMotionArgs {
+                event_time_nanos: 110,
                 action: MotionAction::Move,
                 button_state: MotionButton::Primary | MotionButton::Secondary,
+                down_time_nanos: 100,
                 ..BASE_MOUSE_EVENT
             })
             .is_ok());
@@ -995,8 +1046,7 @@ mod tests {
 
     #[test]
     fn down_with_button_state_change_not_followed_by_button_press() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::Down,
@@ -1016,8 +1066,7 @@ mod tests {
 
     #[test]
     fn down_with_button_state_change_not_followed_by_enough_button_presses() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::Down,
@@ -1045,8 +1094,7 @@ mod tests {
 
     #[test]
     fn down_missing_already_pressed_button() {
-        let mut verifier =
-            InputVerifier::new("Test", /*should_log*/ false, /*verify_buttons*/ true);
+        let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Back },

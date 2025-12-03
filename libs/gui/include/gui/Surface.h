@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #ifndef ANDROID_GUI_SURFACE_H
 #define ANDROID_GUI_SURFACE_H
 
@@ -40,13 +42,21 @@
 #include <shared_mutex>
 #include <unordered_set>
 
+// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 #include "../../QtiExtension/QtiSurfaceExtension.h"
+// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
+// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 #include "../../QtiExtension/QtiSurfaceExtensionGPP.h"
+// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 namespace android {
 
+// QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 namespace libguiextension {
 class QtiSurfaceExtension;
+// QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
+// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 class QtiSurfaceExtensionGPP;
+// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 }
 class GraphicBuffer;
 
@@ -148,6 +158,12 @@ public:
      * Get the underlying Surface from the given ANativeWindow.
      */
     static sp<Surface> from(ANativeWindow* anw);
+
+    /*
+     * Null-safe check of whether two surfaces represent the same underlying object. Roughly
+     * equivalent to ensuring the underlying binder objects are the same.
+     */
+    static bool areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b);
 
     /* getIGraphicBufferProducer() returns the IGraphicBufferProducer this
      * Surface was created with. Usually it's an error to use the
@@ -292,6 +308,9 @@ public:
     status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options);
 #endif
 
+    status_t setProducerThrottlingEnabled(bool enabled);
+    status_t isProducerThrottlingEnabled(bool* outEnabled) const;
+
 protected:
     virtual ~Surface();
 
@@ -382,6 +401,8 @@ private:
     int dispatchGetLastQueuedBuffer2(va_list args);
     int dispatchSetFrameTimelineInfo(va_list args);
     int dispatchSetAdditionalOptions(va_list args);
+    int dispatchSetProducerThrottlingEnabled(va_list args);
+    int dispatchIsProducerThrottlingEnabled(va_list args);
 
 protected:
     virtual int dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd);
@@ -412,6 +433,7 @@ public:
     virtual int setAutoRefresh(bool autoRefresh);
     virtual int setAutoPrerotation(bool autoPrerotation);
     virtual int setBuffersDimensions(uint32_t width, uint32_t height);
+    virtual int setLegacyBufferDrop(bool legacyBufferDrop);
     virtual int lock(ANativeWindow_Buffer* outBuffer, ARect* inOutDirtyBounds);
     virtual int unlockAndPost();
     virtual int query(int what, int* value) const;
@@ -551,9 +573,11 @@ protected:
         bool requiresFreeOnReturn = false;
     };
 
+// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     friend class libguiextension::QtiSurfaceExtension;
     libguiextension::QtiSurfaceExtension* mQtiSurfaceExtn = nullptr;
 
+// QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     // mSurfaceTexture is the interface to the surface texture server. All
     // operations on the surface texture client ultimately translate into
     // interactions with the server using this interface.
@@ -777,7 +801,9 @@ protected:
     std::unordered_set<int> mDequeuedSlots;
 
     friend class libguiextension::QtiSurfaceExtensionGPP;
+// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     std::shared_ptr<libguiextension::QtiSurfaceExtensionGPP> mQtiSurfaceGPPExtn = nullptr;
+// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 
     // Indicates whether this surface holds the mouse cursor, and subsequently determines whether
     // the GRALLOC_USAGE_CURSOR usage flag should be set on the buffer created when this surface is

@@ -59,6 +59,11 @@ _BLOCKED_EXTENSIONS = [
     'VK_QNX_screen_surface',
 ]
 
+# Extensions not to probe in vkjson, but otherwise may be supportable
+_VKJSON_BLOCKED_EXTENSIONS = [
+    'VK_ARM_shader_core_properties'     # b/446075812
+]
+
 # Extensions having functions exported by the loader.
 _EXPORTED_EXTENSIONS = [
     'VK_ANDROID_external_memory_android_hardware_buffer',

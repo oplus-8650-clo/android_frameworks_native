@@ -38,6 +38,7 @@
 #include <ftl/finalizer.h>
 #include <ftl/flags.h>
 #include <ftl/ignore.h>
+#include <ftl/non_null.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 #include <ui/DisplayId.h>
@@ -86,10 +87,11 @@ void SFController::useHwcService(std::string_view fqn) {
     base::SetProperty("debug.sf.hwc_service_name", std::string(fqn));
 }
 
-auto SFController::make() -> base::expected<std::shared_ptr<SFController>, std::string> {
+auto SFController::make(ftl::NonNull<std::weak_ptr<core::TestService>> service)
+        -> base::expected<std::shared_ptr<SFController>, std::string> {
     using namespace std::string_literals;
 
-    auto controller = std::make_unique<SFController>(Passkey{});
+    auto controller = std::make_shared<SFController>(std::move(service), Passkey{});
     if (controller == nullptr) {
         return base::unexpected("Failed to construct the SFController instance."s);
     }
@@ -101,7 +103,8 @@ auto SFController::make() -> base::expected<std::shared_ptr<SFController>, std::
     return controller;
 }
 
-SFController::SFController(Passkey passkey) {
+SFController::SFController(ftl::NonNull<std::weak_ptr<core::TestService>> service, Passkey passkey)
+    : mTestService(std::move(service)) {
     ftl::ignore(passkey);
 }
 
@@ -222,7 +225,7 @@ auto SFController::makeDisplayEventReceiver()
 auto SFController::makeSurface(const Surface::CreationArgs& args)
         -> base::expected<std::shared_ptr<Surface>, std::string> {
     CHECK(mSurfaceComposerClient != nullptr);
-    return Surface::make(mSurfaceComposerClient, args);
+    return Surface::make(ftl::as_non_null(shared_from_this()), args);
 }
 
 auto SFController::mapPhysicalDisplayIdToTestDisplayId(PhysicalDisplayId displayId)

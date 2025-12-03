@@ -64,7 +64,7 @@ struct Layer {
 
 namespace {
 
-const char kSystemLayerLibraryDir[] = "/data/local/debug/vulkan";
+const char kSystemDebugLayerLibraryDir[] = "/data/local/debug/vulkan";
 
 class LayerLibrary {
    public:
@@ -137,7 +137,7 @@ bool LayerLibrary::Open() {
         // (among several) we only allow them in non-user builds.
         auto app_namespace = android::GraphicsEnv::getInstance().getAppNamespace();
         if (app_namespace &&
-            !android::base::StartsWith(path_, kSystemLayerLibraryDir)) {
+            !android::base::StartsWith(path_, kSystemDebugLayerLibraryDir)) {
             char* error_msg = nullptr;
             dlhandle_ = android::OpenNativeLibraryInNamespace(
                 app_namespace, path_.c_str(), &native_bridge_, &error_msg);
@@ -480,7 +480,7 @@ void DiscoverLayers() {
     ATRACE_CALL();
 
     if (android::GraphicsEnv::getInstance().isDebuggable()) {
-        DiscoverLayersInPathList(kSystemLayerLibraryDir);
+        DiscoverLayersInPathList(kSystemDebugLayerLibraryDir);
     }
     if (!android::GraphicsEnv::getInstance().getLayerPaths().empty())
         DiscoverLayersInPathList(android::GraphicsEnv::getInstance().getLayerPaths());

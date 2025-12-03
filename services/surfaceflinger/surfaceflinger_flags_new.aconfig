@@ -91,15 +91,15 @@ flag {
 } # deprecate_frame_tracker
 
 flag {
-  name: "deprecate_vsync_sf"
+  name: "deprecate_vsync_sf_v2"
   namespace: "core_graphics"
   description: "Depracate eVsyncSourceSurfaceFlinger and use vsync_app everywhere"
   bug: "162235855"
-  is_fixed_read_only: true
   metadata {
     purpose: PURPOSE_BUGFIX
   }
-} # deprecate_vsync_sf
+} # deprecate_vsync_sf_v2
+
 
 flag {
   name: "disable_synthetic_vsync_for_performance"
@@ -229,6 +229,13 @@ flag {
 } # increase_missed_frame_jank_threshold
 
 flag {
+  name: "jank_classification_v2"
+  namespace: "core_graphics"
+  description: "Refined jank classification"
+  bug: "416904263"
+} # jank_classification_v2
+
+flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"
@@ -245,6 +252,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 } # md_degrade_hdr
+
+flag {
+  name: "mirror_uid_filtering"
+  namespace: "window_surfaces"
+  description: "Enables UID filtering when building layer snapshots of mirrors. Layers that have different UID from the mirror root's will be dropped "
+  bug: "437391557"
+} # mirror_uid_filtering
 
 flag {
   name: "modeset_state_machine"
@@ -287,12 +301,42 @@ flag {
 } # parse_edid_version_and_input_type
 
 flag {
+  name: "re_check_fence"
+  namespace: "core_graphics"
+  description: "Check fence status before waiting for fence in RenderEngine"
+  bug: "446240423"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # re_check_fence
+
+flag {
+  name: "re_powered_off_displays_inform_cache_budgets"
+  namespace: "core_graphics"
+  description: "Allow powered off displays to contribute to RenderEngine's cache budgets, since displays aren't fully initialized when cache budget calculations are needed during boot."
+  bug: "446658240"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # re_powered_off_displays_inform_cache_budgets
+
+flag {
   name: "readback_screenshot"
   namespace: "core_graphics"
   description: "Allows devices to use DPU readback for fullscreen screenshots"
   bug: "384816457"
   is_exported: true
 } # readback_screenshot
+
+flag {
+  name: "resync_on_tx_separate_timer"
+  namespace: "core_graphics"
+  description: "Keep a seaprate resync timer for resync triggered by transactions"
+  bug: "439654802"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # resync_on_tx_separate_timer
 
 flag {
   name: "set_client_drawn_corner_radii"
@@ -373,6 +417,13 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 } # use_at_least_60_for_min_vote
+
+flag {
+  name: "wb_framebuffersurface2"
+  namespace: "core_graphics"
+  description: "When enabled, use an updated FrameBufferSurface instead of the legacy one"
+  bug: "340933138"
+} # wb_framebuffersurface2
 
 flag {
   name: "wb_virtualdisplay2"
