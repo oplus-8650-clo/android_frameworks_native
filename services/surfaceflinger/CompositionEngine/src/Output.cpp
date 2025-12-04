@@ -1101,18 +1101,18 @@ ui::Dataspace Output::getBestDataspace(ui::Dataspace* outHdrDataSpace,
                 break;
             case ui::Dataspace::BT2020_PQ:
             case ui::Dataspace::BT2020_ITU_PQ:
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 *outHdrDataSpace = ui::Dataspace::BT2020_PQ;
                 *outIsHdrClientComposition =
                         layer->getLayerFE().getCompositionState()->forceClientComposition;
                 break;
             case ui::Dataspace::BT2020_HLG:
             case ui::Dataspace::BT2020_ITU_HLG:
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 // When there's mixed PQ content and HLG content, we set the HDR
                 // data space to be BT2020_HLG and convert PQ to HLG.
                 if (*outHdrDataSpace == ui::Dataspace::UNKNOWN) {
@@ -1145,11 +1145,11 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
         case ui::ColorMode::DISPLAY_P3:
             bestDataSpace = ui::Dataspace::DISPLAY_P3;
             break;
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
         case ui::ColorMode::DISPLAY_BT2020:
             bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
             break;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
         default:
             break;
     }

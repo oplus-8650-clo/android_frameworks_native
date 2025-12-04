@@ -200,7 +200,9 @@ auto DisplayDevice::getFrontEndInfo() const -> frontend::DisplayInfo {
     if (mUseFbScaling && isPrimary()) {
         info.transform = displayTransform_s.inverse();
         return {.info = info,
+// QTI_END: 2024-07-03: Display: sf: Align Display roi with fb scale
                 .displayId = getId(),
+// QTI_BEGIN: 2024-07-03: Display: sf: Align Display roi with fb scale
                 .transform = displayTransform_s,
                 .receivesInput = receivesInput(),
                 .isSecure = isSecure(),
@@ -212,8 +214,8 @@ auto DisplayDevice::getFrontEndInfo() const -> frontend::DisplayInfo {
     else {
         info.transform = displayTransform.inverse();
         return {.info = info,
-                .displayId = getId(),
 // QTI_END: 2024-07-03: Display: sf: Align Display roi with fb scale
+                .displayId = getId(),
                 .transform = displayTransform,
                 .receivesInput = receivesInput(),
                 .isSecure = isSecure(),
