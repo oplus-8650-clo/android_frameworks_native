@@ -186,7 +186,8 @@ public:
     bool setBuffer(std::shared_ptr<renderengine::ExternalTexture>& /* buffer */,
                    const BufferData& /* bufferData */, nsecs_t /* postTime */,
                    nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/,
-                   const FrameTimelineInfo& /*info*/, gui::GameMode gameMode);
+                   const FrameTimelineInfo& /*info*/, gui::GameMode gameMode,
+                   int32_t systemContentPriority);
     void setDesiredPresentTime(nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/);
     bool setDataspace(ui::Dataspace /*dataspace*/);
     bool setExtendedRangeBrightness(float currentBufferRatio, float desiredRatio);
@@ -194,7 +195,7 @@ public:
     void setUseLuts(bool useLuts) { mDrawingState.useLuts = useLuts; }
     bool setSidebandStream(const sp<NativeHandle>& /*sidebandStream*/,
                            const FrameTimelineInfo& /* info*/, nsecs_t /* postTime */,
-                           gui::GameMode gameMode);
+                           gui::GameMode gameMode, int32_t systemContentPriority);
     bool setTransactionCompletedListeners(const std::vector<sp<CallbackHandle>>& /*handles*/,
                                           bool willPresent);
 
@@ -335,9 +336,11 @@ public:
     Rect getCroppedBufferSize(const Layer::State& s) const;
 
     void setFrameTimelineVsyncForBufferTransaction(const FrameTimelineInfo& info, nsecs_t postTime,
-                                                   gui::GameMode gameMode);
+                                                   gui::GameMode gameMode,
+                                                   int32_t systemContentPriority);
     void setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInfo& info,
-                                                       nsecs_t postTime, gui::GameMode gameMode);
+                                                       nsecs_t postTime, gui::GameMode gameMode,
+                                                       int32_t systemContentPriority);
 
     void addSurfaceFrameDroppedForBuffer(std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame,
                                          nsecs_t dropTime);
@@ -346,12 +349,14 @@ public:
                                            nsecs_t expectedPresentTime);
 
     std::shared_ptr<scheduler::SurfaceFrame> createSurfaceFrameForTransaction(
-            const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode);
+            const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode,
+            int32_t systemContentPriority);
     std::shared_ptr<scheduler::SurfaceFrame> createSurfaceFrameForBuffer(
             const FrameTimelineInfo& info, nsecs_t queueTime, std::string debugName,
-            gui::GameMode gameMode);
+            gui::GameMode gameMode, int32_t systemContentPriority);
     void setFrameTimelineVsyncForSkippedFrames(const FrameTimelineInfo& info, nsecs_t postTime,
-                                               std::string debugName, gui::GameMode gameMode);
+                                               std::string debugName, gui::GameMode gameMode,
+                                               int32_t systemContentPriority);
 
     bool setTrustedPresentationInfo(TrustedPresentationThresholds const& thresholds,
                                     TrustedPresentationListener const& listener);

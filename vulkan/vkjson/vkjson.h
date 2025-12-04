@@ -111,6 +111,16 @@ struct VkJsonANDROIDExternalFormatResolve {
       external_format_resolve_properties_android;
 };
 
+struct VkJsonARMDataGraph {
+  VkJsonARMDataGraph() {
+    reported = false;
+    memset(&data_graph_features_arm, 0,
+           sizeof(VkPhysicalDeviceDataGraphFeaturesARM));
+  }
+  bool reported;
+  VkPhysicalDeviceDataGraphFeaturesARM data_graph_features_arm;
+};
+
 struct VkJsonARMFormatPack {
   VkJsonARMFormatPack() {
     reported = false;
@@ -981,17 +991,6 @@ struct VkJsonExtPipelineRobustness {
       pipeline_robustness_properties_ext;
 };
 
-struct VkJsonExtPresentModeFifoLatestReady {
-  VkJsonExtPresentModeFifoLatestReady() {
-    reported = false;
-    memset(&present_mode_fifo_latest_ready_features_ext, 0,
-           sizeof(VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT));
-  }
-  bool reported;
-  VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT
-      present_mode_fifo_latest_ready_features_ext;
-};
-
 struct VkJsonExtPrimitiveTopologyListRestart {
   VkJsonExtPrimitiveTopologyListRestart() {
     reported = false;
@@ -1826,6 +1825,17 @@ struct VkJsonKHRPresentId2 {
   VkPhysicalDevicePresentId2FeaturesKHR present_id2_features_khr;
 };
 
+struct VkJsonKHRPresentModeFifoLatestReady {
+  VkJsonKHRPresentModeFifoLatestReady() {
+    reported = false;
+    memset(&present_mode_fifo_latest_ready_features_khr, 0,
+           sizeof(VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR));
+  }
+  bool reported;
+  VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR
+      present_mode_fifo_latest_ready_features_khr;
+};
+
 struct VkJsonKHRPresentWait {
   VkJsonKHRPresentWait() {
     reported = false;
@@ -2104,6 +2114,28 @@ struct VkJsonKHRShaderTerminateInvocation {
       shader_terminate_invocation_features_khr;
 };
 
+struct VkJsonKHRShaderUntypedPointers {
+  VkJsonKHRShaderUntypedPointers() {
+    reported = false;
+    memset(&shader_untyped_pointers_features_khr, 0,
+           sizeof(VkPhysicalDeviceShaderUntypedPointersFeaturesKHR));
+  }
+  bool reported;
+  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
+      shader_untyped_pointers_features_khr;
+};
+
+struct VkJsonKHRSwapchainMaintenance1 {
+  VkJsonKHRSwapchainMaintenance1() {
+    reported = false;
+    memset(&swapchain_maintenance1_features_khr, 0,
+           sizeof(VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR));
+  }
+  bool reported;
+  VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR
+      swapchain_maintenance1_features_khr;
+};
+
 struct VkJsonKHRSynchronization2 {
   VkJsonKHRSynchronization2() {
     reported = false;
@@ -2196,6 +2228,17 @@ struct VkJsonKHRVideoEncodeAv1 {
   }
   bool reported;
   VkPhysicalDeviceVideoEncodeAV1FeaturesKHR video_encode_av1_features_khr;
+};
+
+struct VkJsonKHRVideoEncodeIntraRefresh {
+  VkJsonKHRVideoEncodeIntraRefresh() {
+    reported = false;
+    memset(&video_encode_intra_refresh_features_khr, 0,
+           sizeof(VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR));
+  }
+  bool reported;
+  VkPhysicalDeviceVideoEncodeIntraRefreshFeaturesKHR
+      video_encode_intra_refresh_features_khr;
 };
 
 struct VkJsonKHRVideoEncodeQuantizationMap {
@@ -2898,6 +2941,17 @@ struct VkJsonSECAmigoProfiling {
   VkPhysicalDeviceAmigoProfilingFeaturesSEC amigo_profiling_features_sec;
 };
 
+struct VkJsonSECPipelineCacheIncrementalMode {
+  VkJsonSECPipelineCacheIncrementalMode() {
+    reported = false;
+    memset(&pipeline_cache_incremental_mode_features_sec, 0,
+           sizeof(VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC));
+  }
+  bool reported;
+  VkPhysicalDevicePipelineCacheIncrementalModeFeaturesSEC
+      pipeline_cache_incremental_mode_features_sec;
+};
+
 struct VkJsonVALVEDescriptorSetHostMapping {
   VkJsonVALVEDescriptorSetHostMapping() {
     reported = false;
@@ -2907,6 +2961,21 @@ struct VkJsonVALVEDescriptorSetHostMapping {
   bool reported;
   VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE
       descriptor_set_host_mapping_features_valve;
+};
+
+struct VkJsonVALVEFragmentDensityMapLayered {
+  VkJsonVALVEFragmentDensityMapLayered() {
+    reported = false;
+    memset(&fragment_density_map_layered_features_valve, 0,
+           sizeof(VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE));
+    memset(&fragment_density_map_layered_properties_valve, 0,
+           sizeof(VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE));
+  }
+  bool reported;
+  VkPhysicalDeviceFragmentDensityMapLayeredFeaturesVALVE
+      fragment_density_map_layered_features_valve;
+  VkPhysicalDeviceFragmentDensityMapLayeredPropertiesVALVE
+      fragment_density_map_layered_properties_valve;
 };
 
 struct VkJsonVALVEMutableDescriptorType {
@@ -3109,6 +3178,7 @@ struct VkJsonDevice {
   VkJsonAMDShaderEarlyAndLateFragmentTests
       amd_shader_early_and_late_fragment_tests;
   VkJsonANDROIDExternalFormatResolve android_external_format_resolve;
+  VkJsonARMDataGraph arm_data_graph;
   VkJsonARMFormatPack arm_format_pack;
   VkJsonARMPipelineOpacityMicromap arm_pipeline_opacity_micromap;
   VkJsonARMRasterizationOrderAttachmentAccess
@@ -3186,7 +3256,6 @@ struct VkJsonDevice {
   VkJsonExtPipelineProperties ext_pipeline_properties;
   VkJsonExtPipelineProtectedAccess ext_pipeline_protected_access;
   VkJsonExtPipelineRobustness ext_pipeline_robustness;
-  VkJsonExtPresentModeFifoLatestReady ext_present_mode_fifo_latest_ready;
   VkJsonExtPrimitiveTopologyListRestart ext_primitive_topology_list_restart;
   VkJsonExtPrimitivesGeneratedQuery ext_primitives_generated_query;
   VkJsonExtPrivateData ext_private_data;
@@ -3260,6 +3329,7 @@ struct VkJsonDevice {
   VkJsonKHRPipelineExecutableProperties khr_pipeline_executable_properties;
   VkJsonKHRPresentId khr_present_id;
   VkJsonKHRPresentId2 khr_present_id2;
+  VkJsonKHRPresentModeFifoLatestReady khr_present_mode_fifo_latest_ready;
   VkJsonKHRPresentWait khr_present_wait;
   VkJsonKHRPresentWait2 khr_present_wait2;
   VkJsonKHRPushDescriptor khr_push_descriptor;
@@ -3287,6 +3357,8 @@ struct VkJsonDevice {
   VkJsonKHRShaderSubgroupUniformControlFlow
       khr_shader_subgroup_uniform_control_flow;
   VkJsonKHRShaderTerminateInvocation khr_shader_terminate_invocation;
+  VkJsonKHRShaderUntypedPointers khr_shader_untyped_pointers;
+  VkJsonKHRSwapchainMaintenance1 khr_swapchain_maintenance1;
   VkJsonKHRSynchronization2 khr_synchronization2;
   VkJsonKHRTimelineSemaphore khr_timeline_semaphore;
   VkJsonKHRUnifiedImageLayouts khr_unified_image_layouts;
@@ -3295,6 +3367,7 @@ struct VkJsonDevice {
   VkJsonKHRVertexAttributeDivisor khr_vertex_attribute_divisor;
   VkJsonKHRVideoDecodeVp9 khr_video_decode_vp9;
   VkJsonKHRVideoEncodeAv1 khr_video_encode_av1;
+  VkJsonKHRVideoEncodeIntraRefresh khr_video_encode_intra_refresh;
   VkJsonKHRVideoEncodeQuantizationMap khr_video_encode_quantization_map;
   VkJsonKHRVideoMaintenance1 khr_video_maintenance1;
   VkJsonKHRVideoMaintenance2 khr_video_maintenance2;
@@ -3356,7 +3429,9 @@ struct VkJsonDevice {
   VkJsonQCOMTileShading qcom_tile_shading;
   VkJsonQCOMYcbcrDegamma qcom_ycbcr_degamma;
   VkJsonSECAmigoProfiling sec_amigo_profiling;
+  VkJsonSECPipelineCacheIncrementalMode sec_pipeline_cache_incremental_mode;
   VkJsonVALVEDescriptorSetHostMapping valve_descriptor_set_host_mapping;
+  VkJsonVALVEFragmentDensityMapLayered valve_fragment_density_map_layered;
   VkJsonVALVEMutableDescriptorType valve_mutable_descriptor_type;
   VkJsonCore11 core11;
   VkJsonCore12 core12;

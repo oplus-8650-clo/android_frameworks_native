@@ -814,7 +814,8 @@ static binder::Status createAppDataDirs(const std::string& path, int32_t uid, in
 binder::Status InstalldNativeService::createAppDataLocked(
         const std::optional<std::string>& uuid, const std::string& packageName, int32_t userId,
         int32_t flags, int32_t appId, int32_t previousAppId, const std::string& seInfo,
-        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode) {
+        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
+        int32_t previousPccId) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -870,6 +871,15 @@ binder::Status InstalldNativeService::createAppDataLocked(
             }
             *ceDataInode = static_cast<uint64_t>(result);
         }
+
+        // Prepare the PCC sibling directory.
+        status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
+                                                  cacheGid, seInfo, targetMode, projectIdApp,
+                                                  projectIdCache, /* isCeStorage */ true);
+
+        if (!status.isOk()) {
+            return status;
+        }
     }
     if (flags & FLAG_STORAGE_DE) {
         ScopedTrace tracer("de");
@@ -891,6 +901,13 @@ binder::Status InstalldNativeService::createAppDataLocked(
 
         if (!prepare_app_profile_dir(packageName, appId, userId)) {
             return error("Failed to prepare profiles for " + packageName);
+        }
+
+        status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
+                                                  cacheGid, seInfo, targetMode, projectIdApp,
+                                                  projectIdCache, /* isCeStorage */ false);
+        if (!status.isOk()) {
+            return status;
         }
 
         if (deDataInode != nullptr) {
@@ -963,14 +980,15 @@ binder::Status InstalldNativeService::createSdkSandboxDataPackageDirectory(
 binder::Status InstalldNativeService::createAppData(
         const std::optional<std::string>& uuid, const std::string& packageName, int32_t userId,
         int32_t flags, int32_t appId, int32_t previousAppId, const std::string& seInfo,
-        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode) {
+        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
+        int32_t previousPccId) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
     CHECK_ARGUMENT_PACKAGE_NAME(packageName);
     LOCK_PACKAGE_USER();
     return createAppDataLocked(uuid, packageName, userId, flags, appId, previousAppId, seInfo,
-                               targetSdkVersion, ceDataInode, deDataInode);
+                               targetSdkVersion, ceDataInode, deDataInode, pccId, previousPccId);
 }
 
 binder::Status InstalldNativeService::createAppData(
@@ -984,7 +1002,7 @@ binder::Status InstalldNativeService::createAppData(
     int64_t deDataInode = -1;
     auto status = createAppData(args.uuid, args.packageName, args.userId, args.flags, args.appId,
                                 args.previousAppId, args.seInfo, args.targetSdkVersion,
-                                &ceDataInode, &deDataInode);
+                                &ceDataInode, &deDataInode, args.pccId, args.previousPccId);
     _aidl_return->ceDataInode = ceDataInode;
     _aidl_return->deDataInode = deDataInode;
     _aidl_return->exceptionCode = status.exceptionCode();
@@ -1201,18 +1219,14 @@ binder::Status InstalldNativeService::clearAppData(const std::optional<std::stri
     binder::Status res = ok();
     if (flags & FLAG_STORAGE_CE) {
         auto path = create_data_user_ce_package_path(uuid_, userId, pkgname, ceDataInode);
-        if (flags & FLAG_CLEAR_CACHE_ONLY) {
-            path = read_path_inode(path, "cache", kXattrInodeCache);
-        } else if (flags & FLAG_CLEAR_CODE_CACHE_ONLY) {
-            path = read_path_inode(path, "code_cache", kXattrInodeCodeCache);
-        }
-        if (access(path.c_str(), F_OK) == 0) {
-            if (delete_dir_contents(path) != 0) {
-                res = error("Failed to delete contents of " + path);
-            } else if ((flags & (FLAG_CLEAR_CACHE_ONLY | FLAG_CLEAR_CODE_CACHE_ONLY)) == 0) {
-                remove_path_xattr(path, kXattrInodeCache);
-                remove_path_xattr(path, kXattrInodeCodeCache);
-            }
+        res = clearCeDirectoryLocked(path, flags);
+
+        if (res.isOk()) {
+            const std::string pccPackageName = packageName + kPccDataSuffix;
+            // TODO(b/http://b/460401607) : Track inode for PCC Directories
+            auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
+                                                            /* ce_data_inode= */ 0);
+            res = clearCeDirectoryLocked(pccPath, flags);
         }
     }
     if (flags & FLAG_STORAGE_DE) {
@@ -1223,11 +1237,13 @@ binder::Status InstalldNativeService::clearAppData(const std::optional<std::stri
             suffix = CODE_CACHE_DIR_POSTFIX;
         }
 
-        auto path = create_data_user_de_package_path(uuid_, userId, pkgname) + suffix;
-        if (access(path.c_str(), F_OK) == 0) {
-            if (delete_dir_contents(path) != 0) {
-                res = error("Failed to delete contents of " + path);
-            }
+        auto path = create_data_user_de_package_path(uuid_, userId, pkgname);
+        res = clearDeDirectoryLocked(path, suffix);
+
+        if (res.isOk()) {
+            const std::string pccPackageName = packageName + kPccDataSuffix;
+            auto pccPath = create_data_user_de_package_path(uuid_, userId, pccPackageName.c_str());
+            res = clearDeDirectoryLocked(pccPath, suffix);
         }
     }
     if (flags & FLAG_STORAGE_EXTERNAL) {
@@ -1383,12 +1399,27 @@ binder::Status InstalldNativeService::destroyAppData(const std::optional<std::st
         if (rename_delete_dir_contents_and_dir(path) != 0) {
             res = error("Failed to delete " + path);
         }
+
+        const std::string pccPackageName = packageName + kPccDataSuffix;
+        // TODO(b/460401607) : Track inode for PCC Directories
+        auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
+                                                        /* ce_data_inode= */ 0);
+        if (res.isOk() && rename_delete_dir_contents_and_dir(pccPath) != 0) {
+            res = error("Failed to delete " + pccPath);
+        }
     }
     if (flags & FLAG_STORAGE_DE) {
         auto path = create_data_user_de_package_path(uuid_, userId, pkgname);
         if (rename_delete_dir_contents_and_dir(path) != 0) {
             res = error("Failed to delete " + path);
         }
+
+        const std::string pccPackageName = packageName + kPccDataSuffix;
+        auto pccPath = create_data_user_de_package_path(uuid_, userId, pccPackageName.c_str());
+        if (res.isOk() && rename_delete_dir_contents_and_dir(pccPath) != 0) {
+            res = error("Failed to delete " + pccPath);
+        }
+
         if ((flags & FLAG_CLEAR_APP_DATA_KEEP_ART_PROFILES) == 0) {
             destroy_app_current_profiles(packageName, userId);
             // TODO(calin): If the package is still installed by other users it's probably
@@ -1912,9 +1943,10 @@ binder::Status InstalldNativeService::moveCompleteApp(const std::optional<std::s
             continue;
         }
 
+        // TODO(b/459419210): Pass the correct pccId
         if (!createAppDataLocked(toUuid, packageName, userId, FLAG_STORAGE_CE | FLAG_STORAGE_DE,
                                  appId, /* previousAppId */ -1, seInfo, targetSdkVersion, nullptr,
-                                 nullptr)
+                                 nullptr, /* pccId */ -1, /* previousPccId */ 0)
                      .isOk()) {
             res = error("Failed to create package target");
             goto fail;
@@ -3496,6 +3528,86 @@ binder::Status InstalldNativeService::restoreconSdkDataLocked(
             res = error("Failed to restorecon for subdirs of " + packagePath);
         }
     }
+    return res;
+}
+
+binder::Status InstalldNativeService::createOrDeletePccDirectoryLocked(
+        const char* volumeUuid, userid_t userId, const char* packageName, int32_t pccId,
+        int32_t previousPccId, int32_t cacheGid, const std::string& seInfo, mode_t targetMode,
+        long projectIdApp, long projectIdCache, bool isCeStorage) {
+    binder::Status res = ok();
+
+    const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
+    auto pccPath = isCeStorage
+            ? create_data_user_ce_package_path(volumeUuid, userId, pccPackageName.c_str())
+            : create_data_user_de_package_path(volumeUuid, userId, pccPackageName.c_str());
+
+    if (pccId > 0) {
+        int32_t pccUid = multiuser_get_uid(userId, pccId);
+        int32_t previousPccUid =
+                previousPccId > 0 ? (int32_t)multiuser_get_uid(userId, previousPccId) : -1;
+        // Create the PCC directory and its subdirectories (cache, code_cache).
+        res = createAppDataDirs(pccPath, pccId, pccUid, previousPccUid, cacheGid, seInfo,
+                                targetMode, projectIdApp, projectIdCache);
+        if (!res.isOk()) {
+            return res;
+        }
+
+        // The write_path_inode calls are only necessary for CE storage.
+        if (isCeStorage) {
+            if (write_path_inode(pccPath, "cache", kXattrInodeCache) ||
+                write_path_inode(pccPath, "code_cache", kXattrInodeCodeCache)) {
+                res = error("Failed to write_path_inode for " + pccPath);
+                return res;
+            }
+        }
+    } else {
+        // If no pccId is provided, ensure the directory is cleaned up.
+        if (rename_delete_dir_contents_and_dir(pccPath) != 0) {
+            res = error("Failed to delete " + pccPath);
+            return res;
+        }
+    }
+
+    return res;
+}
+
+binder::Status InstalldNativeService::clearCeDirectoryLocked(const std::string& path,
+                                                             int32_t flags) {
+    binder::Status res = ok();
+
+    auto pathToClear = path;
+    if (flags & FLAG_CLEAR_CACHE_ONLY) {
+        pathToClear = read_path_inode(path, "cache", kXattrInodeCache);
+    } else if (flags & FLAG_CLEAR_CODE_CACHE_ONLY) {
+        pathToClear = read_path_inode(path, "code_cache", kXattrInodeCodeCache);
+    }
+
+    if (access(pathToClear.c_str(), F_OK) == 0) {
+        if (delete_dir_contents(pathToClear) != 0) {
+            res = error("Failed to delete contents of " + pathToClear);
+        } else if ((flags & (FLAG_CLEAR_CACHE_ONLY | FLAG_CLEAR_CODE_CACHE_ONLY)) == 0) {
+            // For a full clear, remove the remembered cache inodes.
+            remove_path_xattr(path, kXattrInodeCache);
+            remove_path_xattr(path, kXattrInodeCodeCache);
+        }
+    }
+
+    return res;
+}
+
+// Helper to clear Device Encrypted (DE) storage for a given base path and suffix.
+binder::Status InstalldNativeService::clearDeDirectoryLocked(const std::string& path,
+                                                             const std::string& suffix) {
+    binder::Status res = ok();
+
+    auto pathToClear = path + suffix;
+    if (access(pathToClear.c_str(), F_OK) == 0) {
+        if (delete_dir_contents(pathToClear) != 0) {
+            res = error("Failed to delete contents of " + pathToClear);
+        }
+    }
+
     return res;
 }
 

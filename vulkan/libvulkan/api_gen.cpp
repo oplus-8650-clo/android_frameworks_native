@@ -733,6 +733,8 @@ VKAPI_ATTR PFN_vkVoidFunction GetDeviceProcAddr(VkDevice device, const char* pNa
         "vkGetPhysicalDeviceProperties",
         "vkGetPhysicalDeviceProperties2",
         "vkGetPhysicalDeviceProperties2KHR",
+        "vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM",
+        "vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM",
         "vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR",
         "vkGetPhysicalDeviceQueueFamilyProperties",
         "vkGetPhysicalDeviceQueueFamilyProperties2",

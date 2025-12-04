@@ -93,6 +93,10 @@ TimePoint VsyncSchedule::vsyncDeadlineAfter(TimePoint timePoint,
                                                            [](TimePoint t) { return t.ns(); })));
 }
 
+nsecs_t VsyncSchedule::getModelAccuracyInNs(nsecs_t knownVsync) const {
+    return mTracker->getModelAccuracyInNs(knownVsync);
+}
+
 void VsyncSchedule::dump(std::string& out) const {
     utils::Dumper dumper(out);
     {

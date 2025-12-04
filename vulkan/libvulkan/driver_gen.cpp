@@ -165,7 +165,7 @@ VKAPI_ATTR void checkedGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2
     }
 }
 
-VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoEXT* pReleaseInfo) {
+VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoKHR* pReleaseInfo) {
     if (GetData(device).hook_extensions[ProcHook::EXT_swapchain_maintenance1]) {
         return ReleaseSwapchainImagesEXT(device, pReleaseInfo);
     } else {

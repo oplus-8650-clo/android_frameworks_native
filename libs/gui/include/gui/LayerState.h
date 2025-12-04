@@ -268,6 +268,7 @@ struct layer_state_t {
         eSystemContentPriorityChanged = 0x4000000'00000000,
         eRenderCommandBufferChanged = 0x8000000'00000000,
         eRenderCommandBufferFrameIdChanged = 0x10000000'00000000,
+        eRenderResourceTokenChanged = 0x20000000'00000000,
     };
 
     layer_state_t();
@@ -527,6 +528,7 @@ struct layer_state_t {
     std::shared_ptr<RenderCommandBufferProducer> renderCommandBufferProducer;
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
     uint64_t renderCommandBufferFrameId;
+    sp<IBinder> renderResourceToken;
 
 protected:
     struct NotDefaultComparableState {

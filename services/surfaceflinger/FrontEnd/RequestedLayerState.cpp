@@ -191,6 +191,10 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
                 RequestedLayerState::Changes::Buffer;
     }
 
+    if (clientState.what & layer_state_t::eRenderResourceTokenChanged) {
+        changes |= RequestedLayerState::Changes::Content;
+    }
+
     if (clientState.what & layer_state_t::eBufferChanged) {
         externalTexture = resolvedComposerState.externalTexture;
         const bool hasBuffer = externalTexture != nullptr;

@@ -265,7 +265,8 @@ protected:
         binder::Status status =
                 service_->createAppData(volume_uuid_, package_name_, kTestUserId, kAppDataFlags,
                                         kTestAppUid, 0 /* previousAppId */, se_info_, kOSdkVersion,
-                                        &ce_data_inode_, &de_data_inode_);
+                                        &ce_data_inode_, &de_data_inode_, /*pccUid= */ -1,
+                                        /*previousPccUid=*/0);
         if (!status.isOk()) {
             return ::testing::AssertionFailure() << "Could not create app data: "
                                                  << status.toString8().c_str();
@@ -1348,7 +1349,8 @@ TEST_F(ProfileTest, ProfileDirOkAfterFixup) {
     ASSERT_BINDER_SUCCESS(service_->createAppData(volume_uuid_, package_name_, kTestUserId,
                                                   kAppDataFlags, kTestAppUid, 0 /* previousAppId */,
                                                   se_info_, kOSdkVersion, &ce_data_inode_,
-                                                  &de_data_inode_));
+                                                  &de_data_inode_, /*pccUid= */ -1,
+                                                  /*previousPccUid=*/0));
 
     // Check the file access.
     CheckFileAccess(cur_profile_dir, kTestAppUid, kTestAppUid, 0700 | S_IFDIR);
@@ -1487,7 +1489,8 @@ class BootProfileTest : public ProfileTest {
             ASSERT_BINDER_SUCCESS(
                     service_->createAppData(volume_uuid_, package_name, kTestUserId, kAppDataFlags,
                                             kTestAppUid, 0 /* previousAppId */, se_info_,
-                                            kOSdkVersion, &ce_data_inode, &de_data_inode));
+                                            kOSdkVersion, &ce_data_inode, &de_data_inode,
+                                            /*pccUid= */ -1, /*previousPccUid=*/0));
             extra_apps_.push_back(package_name);
             extra_ce_data_inodes_.push_back(ce_data_inode);
             std::string profile = create_current_profile_path(

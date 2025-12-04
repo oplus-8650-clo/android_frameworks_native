@@ -79,6 +79,7 @@ public:
     // VsyncController detected that the VSYNC period changed. Enable or disable
     // hardware VSYNCs depending on whether more samples are needed.
     bool addResyncSample(TimePoint timestamp, ftl::Optional<Period> hwcVsyncPeriod);
+    nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const;
 
     // TODO(b/185535769): Hide behind API.
     VsyncTracker& getTracker() const { return *mTracker; }

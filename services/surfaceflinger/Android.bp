@@ -298,6 +298,7 @@ filegroup {
         "FrontEnd/Caching/TexturePool.cpp",
         "HdrLayerInfoReporter.cpp",
         "HdrSdrRatioOverlay.cpp",
+        "RenderResourceCache.cpp",
         "Jank/JankTracker.cpp",
         "Layer.cpp",
         "LayerFE.cpp",

@@ -45,8 +45,8 @@ static const float BLUR_SIGMA_SCALE = 0.57735f;
 GaussianBlurFilter::GaussianBlurFilter(RuntimeEffectManager& effectManager)
       : BlurFilter(effectManager, /* maxCrossFadeRadius= */ 0.0f) {}
 
-sk_sp<SkImage> GaussianBlurFilter::generate(SkiaGpuContext* context, const uint32_t blurRadius,
-                                            const sk_sp<SkImage> input,
+sk_sp<SkImage> GaussianBlurFilter::generate(SkiaGpuContext* context, const DisplaySettings& display,
+                                            const uint32_t blurRadius, const sk_sp<SkImage> input,
                                             const SkRect& blurRect) const {
     // Create blur surface with the bit depth and colorspace of the original surface
     SkImageInfo scaledInfo = input->imageInfo().makeWH(std::ceil(blurRect.width() * kInputScale),

@@ -284,13 +284,42 @@ nsecs_t VSyncPredictor::snapToVsync(nsecs_t timePoint) const {
     if (mTimestamps.empty()) {
         traceInt64("VSP-mode", 1);
         auto const knownTimestamp = mKnownTimestamp ? *mKnownTimestamp : timePoint;
-        auto const numPeriodsOut = ((timePoint - knownTimestamp) / idealPeriod()) + 1;
-        return knownTimestamp + numPeriodsOut * idealPeriod();
+        if (FlagManager::getInstance().get_display_known_vsync_sample_enabled()) {
+            auto const timeDifference = timePoint - knownTimestamp;
+            auto const period = idealPeriod();
+
+            // Calculate the number of full periods from knownTimestamp to the VSync just before or
+            // at timePoint.
+            nsecs_t numPeriods = timeDifference / period;
+            // Ensure floor division for negative timeDifference.
+            if (timeDifference < 0 && timeDifference % period != 0) {
+                numPeriods--;
+            }
+            // The ordinal for the next VSync is numPeriods + 1.
+            auto const numPeriodsOut = numPeriods + 1;
+
+            return knownTimestamp + numPeriodsOut * idealPeriod();
+        } else {
+            auto const numPeriodsOut = ((timePoint - knownTimestamp) / idealPeriod()) + 1;
+            return knownTimestamp + numPeriodsOut * idealPeriod();
+        }
     }
 
+    // The `zeroPoint` is the time of VSync event 0.
     // See b/145667109, the ordinal calculation must take into account the intercept.
     auto const zeroPoint = mOldestVsync + intercept;
-    auto const ordinalRequest = (timePoint - zeroPoint + slope) / slope;
+    auto ordinalRequest = (timePoint - zeroPoint + slope) / slope;
+
+    if (FlagManager::getInstance().get_display_known_vsync_sample_enabled()) {
+        // The `numerator` is the timePoint relative to the VSync 0 time, plus a '+1' for correct
+        // index calculation.
+        auto const numerator = timePoint - zeroPoint + 1;
+
+        // Calculate the VSync ordinal number (index) for the timePoint.
+        //      N > 0: (N + D - 1) / D  --> equivalent to ceil(N / D)
+        //      N <= 0: N / D           --> standard floor division
+        ordinalRequest = (numerator > 0) ? (numerator + slope - 1) / slope : numerator / slope;
+    }
     auto const prediction = (ordinalRequest * slope) + intercept + mOldestVsync;
 
     traceInt64("VSP-mode", 0);
@@ -383,6 +412,16 @@ nsecs_t VSyncPredictor::nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
     }
 
     return vsyncOpt->ns();
+}
+
+nsecs_t VSyncPredictor::getModelAccuracyInNs(nsecs_t knownVsync) const {
+    std::lock_guard lock(mMutex);
+    const nsecs_t predictedVsync = snapToVsync(knownVsync - idealPeriod() / 2);
+    ALOGV("%s : knownVsync=%" PRId64 ", inputtime=%" PRId64 ", predictedVsync=%" PRId64
+          ", period=%" PRId64 ", error=%" PRId64,
+          __func__, knownVsync, knownVsync - idealPeriod() / 2, predictedVsync, idealPeriod(),
+          std::abs(predictedVsync - knownVsync));
+    return std::abs(predictedVsync - knownVsync);
 }
 
 /*

@@ -20,12 +20,15 @@
 #include <renderengine/RenderEngine.h>
 
 #include <android-base/thread_annotations.h>
+#include <android/ipcrenderbuffer/IPCRecordingCanvas.h>
+#include <android/ipcrenderbuffer/RenderBufferHelpers.h>
+#include <gui/RenderCommandBuffer.h>
+#include <gui/RenderCommandBufferConsumer.h>
 #include <include/core/SkImageInfo.h>
 #include <include/core/SkSurface.h>
 #include <include/gpu/ganesh/GrBackendSemaphore.h>
 #include <include/gpu/ganesh/GrContextOptions.h>
 #include <renderengine/ExternalTexture.h>
-#include <renderengine/RenderEngine.h>
 #include <sys/types.h>
 
 #include <memory>

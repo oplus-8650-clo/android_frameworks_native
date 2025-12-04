@@ -94,8 +94,9 @@ class OverrideLayerNames {
         if (arr.result != VK_SUCCESS)
             return arr.result;
 
-        // No need to override when there are no implicit layers
-        uint32_t layersToAdd = arr.count;
+        // No need to override when there are no implicit layers nor OPLs
+        uint32_t oemAndPlatformLayerCount = GetOemAndPlatformLayerCount();
+        uint32_t layersToAdd = arr.count + oemAndPlatformLayerCount;
         if (!layersToAdd)
             return VK_SUCCESS;
 
@@ -108,6 +109,7 @@ class OverrideLayerNames {
         for (uint32_t i = 0; i < arr.count; i++)
             names_[i] = GetImplicitLayerName(i);
 
+        // Update name_count_
         name_count_ = arr.count;
 
         // Add explicit layer names
@@ -117,6 +119,12 @@ class OverrideLayerNames {
                 continue;
 
             names_[name_count_++] = names[i];
+        }
+
+        // Add platform and OEM layer names
+        uint32_t oplStartIdx = GetEnumeratedLayerCount();
+        for (uint32_t i = oplStartIdx; i < oemAndPlatformLayerCount; i++) {
+            names_[i] = GetLayerProperties(GetLayer(i)).layerName;
         }
 
         return VK_SUCCESS;
@@ -1318,6 +1326,8 @@ VkResult EnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
     if (!EnsureInitialized())
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+    // NOTE: GetEnumeratedLayerCount relies on all IMPLICIT and EXPLICIT Layer's
+    // being added to g_instance_layers before any PLATFORM or OEM Layer's.
     uint32_t count = GetEnumeratedLayerCount();
 
     if (!pProperties) {

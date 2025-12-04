@@ -459,7 +459,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
             followerBeginFrameArgs.expectedVsyncTime = nextFollowerVsync;
 
             FrameTargeter& targeter = *display.targeterPtr;
-            if (followerDisplayBackpressure) {
+            if (followerDisplayBackpressure && !isLockstepFollowerLocked(id)) {
                 const size_t pendingFenceCount =
                         targeter.countPresentFencesPendingAt(beginFrameArgs.frameBeginTime);
                 const TimePoint nextFollowerVsync =
@@ -925,6 +925,28 @@ void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderFrameRate, bool ap
     std::vector<FrameRateOverride> overrides = mFrameRateOverrideMappings.getAllFrameRateOverrides(
             display.selectorPtr->supportsAppFrameRateOverrideByContent());
     display.schedulePtr->getTracker().setRenderRate(renderFrameRate, applyImmediately, overrides);
+}
+
+bool Scheduler::isLockstepFollower(PhysicalDisplayId id) const {
+    std::scoped_lock lock(mDisplayLock);
+    ftl::FakeGuard guard(kMainThreadContext);
+    return isLockstepFollowerLocked(id);
+}
+
+bool Scheduler::isLockstepFollowerLocked(PhysicalDisplayId id) const {
+    const auto displayOpt = mDisplays.get(id);
+    if (!displayOpt) {
+        ALOGW("%s: Invalid display %s!", __func__, to_string(id).c_str());
+        return false;
+    }
+    const Display& display = *displayOpt;
+
+    const Fps pacesetterRefreshRate = pacesetterSelectorPtrLocked()->getActiveMode().fps;
+    const Fps followerRefreshRate = display.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+    const float rateDiff = pacesetterRefreshRate.getValue() - followerRefreshRate.getValue();
+
+    constexpr float kRefreshRateEpsilon = 0.1f;
+    return rateDiff < kRefreshRateEpsilon;
 }
 
 Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,

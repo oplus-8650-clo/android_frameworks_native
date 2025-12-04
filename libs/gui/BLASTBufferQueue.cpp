@@ -268,6 +268,11 @@ BLASTBufferQueue::~BLASTBufferQueue() {
     }
 // QTI_END: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
     TransactionCompletedListener::getInstance()->removeQueueStallListener(this);
+
+    if (mTransactionReadyCallback) {
+        mTransactionReadyCallback(mSyncTransaction);
+    }
+
     if (mPendingTransactions.empty()) {
         return;
     }
@@ -277,10 +282,6 @@ BLASTBufferQueue::~BLASTBufferQueue() {
     mergePendingTransactions(&t, std::numeric_limits<uint64_t>::max() /* frameNumber */);
     // All transactions on our apply token are one-way. See comment on mAppliedLastTransaction
     t.setApplyToken(mApplyToken).apply(false, true);
-
-    if (mTransactionReadyCallback) {
-        mTransactionReadyCallback(mSyncTransaction);
-    }
 }
 
 void BLASTBufferQueue::onFirstRef() {

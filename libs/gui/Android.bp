@@ -228,6 +228,8 @@ filegroup {
         "android/gui/InputApplicationInfo.aidl",
         "android/gui/WindowInfo.aidl",
         "android/gui/WindowInfosUpdate.aidl",
+        "aidl/android/gui/GraphicBuffersRegisterInfo.aidl",
+        "aidl/android/gui/GraphicBuffersUnregisterInfo.aidl",
     ],
 }
 
@@ -311,6 +313,8 @@ filegroup {
         "FenceMonitor.cpp",
         "Flags.cpp",
         "GLConsumer.cpp",
+        "GraphicBuffersRegisterInfo.cpp",
+        "GraphicBuffersUnregisterInfo.cpp",
         "IGraphicBufferProducer.cpp",
         "IProducerListener.cpp",
         "ISurfaceComposer.cpp",
@@ -689,9 +693,7 @@ qtidisplayextension_cc_library_static {
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
         "QtiExtension/QtiSurfaceExtension.cpp",
 // QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
         "QtiExtension/QtiSurfaceExtensionGPP.cpp",
-// QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     ],
     local_include_dirs: ["QtiExtension"],

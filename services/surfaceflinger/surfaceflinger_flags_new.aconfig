@@ -385,6 +385,13 @@ flag {
 } # true_hdr_screenshots
 
 flag {
+    name: "use_content_priority_for_jank_classification"
+    namespace: "core_graphics"
+    description: "Use content priority for jank classification"
+    bug: "423713756"
+} # use_content_priority_for_jank_classification
+
+flag {
     name: "use_experimental_jank_classification"
     namespace: "core_graphics"
     description: "Use experimental jank classification"

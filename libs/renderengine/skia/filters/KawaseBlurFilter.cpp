@@ -72,8 +72,8 @@ static sk_sp<SkImage> makeImage(SkSurface* surface, SkRuntimeShaderBuilder* buil
     return surface->makeTemporaryImage();
 }
 
-sk_sp<SkImage> KawaseBlurFilter::generate(SkiaGpuContext* context, const uint32_t blurRadius,
-                                          const sk_sp<SkImage> input,
+sk_sp<SkImage> KawaseBlurFilter::generate(SkiaGpuContext* context, const DisplaySettings& display,
+                                          const uint32_t blurRadius, const sk_sp<SkImage> input,
                                           const SkRect& blurRect) const {
     LOG_ALWAYS_FATAL_IF(context == nullptr, "%s: Needs GPU context", __func__);
     LOG_ALWAYS_FATAL_IF(input == nullptr, "%s: Invalid input image", __func__);

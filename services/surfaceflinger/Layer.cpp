@@ -413,7 +413,8 @@ bool Layer::isLayerFocusedBasedOnPriority(int32_t priority) {
 };
 
 void Layer::setFrameTimelineVsyncForBufferTransaction(const FrameTimelineInfo& info,
-                                                      nsecs_t postTime, gui::GameMode gameMode)
+                                                      nsecs_t postTime, gui::GameMode gameMode,
+                                                      int32_t systemContentPriority)
         REQUIRES(mFlinger->mStateLock) {
     mDrawingState.postTime = postTime;
 
@@ -430,15 +431,17 @@ void Layer::setFrameTimelineVsyncForBufferTransaction(const FrameTimelineInfo& i
         mDrawingState.bufferSurfaceFrameTX->setActualQueueTime(postTime);
     } else {
         mDrawingState.bufferSurfaceFrameTX =
-                createSurfaceFrameForBuffer(info, postTime, mTransactionName, gameMode);
+                createSurfaceFrameForBuffer(info, postTime, mTransactionName, gameMode,
+                                            systemContentPriority);
     }
 
-    setFrameTimelineVsyncForSkippedFrames(info, postTime, mTransactionName, gameMode);
+    setFrameTimelineVsyncForSkippedFrames(info, postTime, mTransactionName, gameMode,
+                                          systemContentPriority);
 }
 
 void Layer::setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInfo& info,
-                                                          nsecs_t postTime,
-                                                          gui::GameMode gameMode) {
+                                                          nsecs_t postTime, gui::GameMode gameMode,
+                                                          int32_t systemContentPriority) {
     mDrawingState.frameTimelineInfo = info;
     mDrawingState.postTime = postTime;
     setTransactionFlags(eTransactionNeeded);
@@ -456,17 +459,20 @@ void Layer::setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInf
     // targeting different vsyncs).
     auto it = mDrawingState.bufferlessSurfaceFramesTX.find(info.vsyncId);
     if (it == mDrawingState.bufferlessSurfaceFramesTX.end()) {
-        auto surfaceFrame = createSurfaceFrameForTransaction(info, postTime, gameMode);
+        auto surfaceFrame =
+                createSurfaceFrameForTransaction(info, postTime, gameMode, systemContentPriority);
         mDrawingState.bufferlessSurfaceFramesTX[info.vsyncId] = surfaceFrame;
     } else {
         if (it->second->getPresentState() == PresentState::Presented) {
             // If the SurfaceFrame was already presented, its safe to overwrite it since it must
             // have been from previous vsync.
-            it->second = createSurfaceFrameForTransaction(info, postTime, gameMode);
+            it->second = createSurfaceFrameForTransaction(info, postTime, gameMode,
+                                                          systemContentPriority);
         }
     }
 
-    setFrameTimelineVsyncForSkippedFrames(info, postTime, mTransactionName, gameMode);
+    setFrameTimelineVsyncForSkippedFrames(info, postTime, mTransactionName, gameMode,
+                                          systemContentPriority);
 }
 
 void Layer::addSurfaceFrameDroppedForBuffer(std::shared_ptr<scheduler::SurfaceFrame>& surfaceFrame,
@@ -487,13 +493,14 @@ void Layer::addSurfaceFramePresentedForBuffer(
 }
 
 std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForTransaction(
-        const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode)
-        REQUIRES(mFlinger->mStateLock) {
+        const FrameTimelineInfo& info, nsecs_t postTime, gui::GameMode gameMode,
+        int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {
     auto surfaceFrame =
             mFlinger->mFrameTimeline->createSurfaceFrameForToken(info, mOwnerPid, mOwnerUid,
                                                                  getSequence(), mName,
                                                                  mTransactionName,
-                                                                 /*isBuffer*/ false, gameMode);
+                                                                 /*isBuffer*/ false, gameMode,
+                                                                 systemContentPriority);
     // Buffer hasn't yet been latched, so use mDrawingState
     surfaceFrame->setDesiredPresentTime(mDrawingState.desiredPresentTime);
 
@@ -510,11 +517,12 @@ std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForTransaction
 
 std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForBuffer(
         const FrameTimelineInfo& info, nsecs_t queueTime, std::string debugName,
-        gui::GameMode gameMode) REQUIRES(mFlinger->mStateLock) {
+        gui::GameMode gameMode, int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {
     auto surfaceFrame =
             mFlinger->mFrameTimeline->createSurfaceFrameForToken(info, mOwnerPid, mOwnerUid,
                                                                  getSequence(), mName, debugName,
-                                                                 /*isBuffer*/ true, gameMode);
+                                                                 /*isBuffer*/ true, gameMode,
+                                                                 systemContentPriority);
     // Buffer hasn't yet been latched, so use mDrawingState
     surfaceFrame->setDesiredPresentTime(mDrawingState.desiredPresentTime);
     surfaceFrame->setActualStartTime(info.startTimeNanos);
@@ -528,7 +536,8 @@ std::shared_ptr<scheduler::SurfaceFrame> Layer::createSurfaceFrameForBuffer(
 }
 
 void Layer::setFrameTimelineVsyncForSkippedFrames(const FrameTimelineInfo& info, nsecs_t postTime,
-                                                  std::string debugName, gui::GameMode gameMode)
+                                                  std::string debugName, gui::GameMode gameMode,
+                                                  int32_t systemContentPriority)
         REQUIRES(mFlinger->mStateLock) {
     if (info.skippedFrameVsyncId == FrameTimelineInfo::INVALID_VSYNC_ID) {
         return;
@@ -541,7 +550,8 @@ void Layer::setFrameTimelineVsyncForSkippedFrames(const FrameTimelineInfo& info,
             mFlinger->mFrameTimeline->createSurfaceFrameForToken(skippedFrameTimelineInfo,
                                                                  mOwnerPid, mOwnerUid,
                                                                  getSequence(), mName, debugName,
-                                                                 /*isBuffer*/ false, gameMode);
+                                                                 /*isBuffer*/ false, gameMode,
+                                                                 systemContentPriority);
     // Buffer hasn't yet been latched, so use mDrawingState
     surfaceFrame->setDesiredPresentTime(mDrawingState.desiredPresentTime);
     surfaceFrame->setActualStartTime(skippedFrameTimelineInfo.skippedFrameStartTimeNanos);
@@ -926,8 +936,8 @@ void Layer::resetDrawingStateBufferInfo() {
 
 bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
                       const BufferData& bufferData, nsecs_t postTime, nsecs_t desiredPresentTime,
-                      bool isAutoTimestamp, const FrameTimelineInfo& info, gui::GameMode gameMode)
-        REQUIRES(mFlinger->mStateLock) {
+                      bool isAutoTimestamp, const FrameTimelineInfo& info, gui::GameMode gameMode,
+                      int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {
     SFTRACE_FORMAT("setBuffer %s - hasBuffer=%s", getDebugName(), (buffer ? "true" : "false"));
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -954,12 +964,13 @@ bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
         resetDrawingStateBufferInfo();
         setTransactionFlags(eTransactionNeeded);
         mDrawingState.bufferSurfaceFrameTX = nullptr;
-        setFrameTimelineVsyncForBufferlessTransaction(info, postTime, gameMode);
+        setFrameTimelineVsyncForBufferlessTransaction(info, postTime, gameMode,
+                                                      systemContentPriority);
         return true;
     } else {
         // release sideband stream if it exists and a non null buffer is being set
         if (mDrawingState.sidebandStream != nullptr) {
-            setSidebandStream(nullptr, info, postTime, gameMode);
+            setSidebandStream(nullptr, info, postTime, gameMode, systemContentPriority);
         }
     }
 
@@ -988,7 +999,7 @@ bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
     mFlinger->mTimeStats->setPostTime(layerId, mDrawingState.frameNumber, getName().c_str(),
                                       mOwnerUid, postTime, gameMode);
 
-    setFrameTimelineVsyncForBufferTransaction(info, postTime, gameMode);
+    setFrameTimelineVsyncForBufferTransaction(info, postTime, gameMode, systemContentPriority);
 
     if (bufferData.dequeueTime > 0) {
         const uint64_t bufferId = mDrawingState.buffer->getId();
@@ -1107,8 +1118,8 @@ bool Layer::setDesiredHdrHeadroom(float desiredRatio) {
 }
 
 bool Layer::setSidebandStream(const sp<NativeHandle>& sidebandStream, const FrameTimelineInfo& info,
-                              nsecs_t postTime, gui::GameMode gameMode)
-        REQUIRES(mFlinger->mStateLock) {
+                              nsecs_t postTime, gui::GameMode gameMode,
+                              int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {
     if (mDrawingState.sidebandStream == sidebandStream) return false;
 
     if (mDrawingState.sidebandStream != nullptr && sidebandStream == nullptr) {
@@ -1122,7 +1133,8 @@ bool Layer::setSidebandStream(const sp<NativeHandle>& sidebandStream, const Fram
         releasePreviousBuffer();
         resetDrawingStateBufferInfo();
         mDrawingState.bufferSurfaceFrameTX = nullptr;
-        setFrameTimelineVsyncForBufferlessTransaction(info, postTime, gameMode);
+        setFrameTimelineVsyncForBufferlessTransaction(info, postTime, gameMode,
+                                                      systemContentPriority);
     }
     setTransactionFlags(eTransactionNeeded);
     if (!mSidebandStreamChanged.exchange(true)) {

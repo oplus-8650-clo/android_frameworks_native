@@ -42,6 +42,9 @@
 #include <iosfwd>
 
 namespace android {
+
+struct IPCServerResourceCache;
+
 namespace renderengine {
 
 // Metadata describing the input buffer to render from.
@@ -168,6 +171,7 @@ struct LayerSettings {
 
     std::shared_ptr<gui::DisplayLuts> luts;
 
+    std::shared_ptr<IPCServerResourceCache> renderResourceCache;
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
 };
 

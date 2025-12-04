@@ -36,10 +36,8 @@ public:
                 (HWDisplayId, uint8_t*, display::DisplayIdentificationData*,
                  android::ScreenPartStatus*),
                 (const, override));
-    MOCK_METHOD(bool, hasCapability, (aidl::android::hardware::graphics::composer3::Capability),
-                (const, override));
-    MOCK_METHOD(bool, hasDisplayCapability,
-                (HalDisplayId, aidl::android::hardware::graphics::composer3::DisplayCapability),
+    MOCK_METHOD(bool, hasCapability, (composer3::Capability), (const, override));
+    MOCK_METHOD(bool, hasDisplayCapability, (HalDisplayId, composer3::DisplayCapability),
                 (const, override));
 
     MOCK_METHOD(size_t, getMaxVirtualDisplayCount, (), (const, override));
@@ -147,8 +145,7 @@ public:
     MOCK_METHOD(Hwc2::AidlTransform, getPhysicalDisplayOrientation, (PhysicalDisplayId),
                 (const, override));
     MOCK_METHOD(bool, getValidateSkipped, (HalDisplayId), (const, override));
-    MOCK_METHOD(const aidl::android::hardware::graphics::composer3::OverlayProperties&,
-                getOverlaySupport, (), (const, override));
+    MOCK_METHOD(const composer3::OverlayProperties&, getOverlaySupport, (), (const, override));
     MOCK_METHOD(status_t, setRefreshRateChangedCallbackDebugEnabled, (PhysicalDisplayId, bool));
     MOCK_METHOD(status_t, notifyExpectedPresent, (PhysicalDisplayId, TimePoint, Fps));
     MOCK_METHOD(HWC2::Display::LutFileDescriptorMapper&, getLutFileDescriptorMapper, (),
@@ -160,14 +157,15 @@ public:
                 (PhysicalDisplayId, const aidl::android::hardware::drm::HdcpLevels&));
     MOCK_METHOD(status_t, getLuts,
                 (PhysicalDisplayId, const std::vector<sp<GraphicBuffer>>&,
-                 std::vector<aidl::android::hardware::graphics::composer3::Luts>*));
+                 std::vector<composer3::Luts>*));
 
     MOCK_METHOD(status_t, getReadbackBufferAttributes,
-                (PhysicalDisplayId,
-                 aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes*));
+                (PhysicalDisplayId, composer3::ReadbackBufferAttributes*));
     MOCK_METHOD(status_t, setReadbackBuffer,
                 (PhysicalDisplayId, const sp<GraphicBuffer>&, const android::sp<android::Fence>&));
     MOCK_METHOD(sp<Fence>, getReadbackBufferFence, (PhysicalDisplayId));
+    MOCK_METHOD(std::optional<composer3::VsyncSample>, getDisplayKnownVsyncSample,
+                (PhysicalDisplayId));
 };
 
 } // namespace android::mock

@@ -378,7 +378,8 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
                            scheduler::TimelineItem&& predictions,
                            std::shared_ptr<TimeStats> timeStats,
                            JankClassificationThresholds thresholds,
-                           TraceCookieCounter* traceCookieCounter, bool isBuffer, GameMode gameMode)
+                           TraceCookieCounter* traceCookieCounter, bool isBuffer, GameMode gameMode,
+                           int32_t systemContentPriority)
       : mToken(frameTimelineInfo.vsyncId),
         mInputEventId(frameTimelineInfo.inputEventId),
         mVsyncResyncedJitter(frameTimelineInfo.vsyncResyncedJitterNanos),
@@ -395,7 +396,8 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
         mJankClassificationThresholds(thresholds),
         mTraceCookieCounter(*traceCookieCounter),
         mIsBuffer(isBuffer),
-        mGameMode(gameMode) {}
+        mGameMode(gameMode),
+        mSystemContentPriority(systemContentPriority) {}
 
 void SurfaceFrame::setActualStartTime(nsecs_t actualStartTime) {
     std::scoped_lock lock(mMutex);
@@ -892,6 +894,13 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         return;
     }
 
+    if (FlagManager::getInstance().use_content_priority_for_jank_classification() &&
+        mSystemContentPriority < 0) {
+        mJankType.experimental() = JankType::NonAnimating;
+        mJankSeverityScore = static_cast<float>(mSystemContentPriority);
+        return;
+    }
+
     if (mFramePresentMetadata.experimental() == FramePresentMetadata::OnTimePresent) {
         // Frames presented on time are not janky, but might be buffer stuffed.
         if (std::abs(mPresentDelay) <= presentThreshold) {
@@ -1231,14 +1240,15 @@ void FrameTimeline::registerDataSource() {
 
 std::shared_ptr<SurfaceFrame> FrameTimeline::createSurfaceFrameForToken(
         const FrameTimelineInfo& frameTimelineInfo, pid_t ownerPid, uid_t ownerUid, int32_t layerId,
-        std::string layerName, std::string debugName, bool isBuffer, GameMode gameMode) {
+        std::string layerName, std::string debugName, bool isBuffer, GameMode gameMode,
+        int32_t systemContentPriority) {
     SFTRACE_CALL();
     if (frameTimelineInfo.vsyncId == FrameTimelineInfo::INVALID_VSYNC_ID) {
         return std::make_shared<SurfaceFrame>(frameTimelineInfo, ownerPid, ownerUid, layerId,
                                               std::move(layerName), std::move(debugName),
                                               PredictionState::None, TimelineItem(), mTimeStats,
                                               mJankClassificationThresholds, &mTraceCookieCounter,
-                                              isBuffer, gameMode);
+                                              isBuffer, gameMode, systemContentPriority);
     }
     std::optional<TimelineItem> predictions =
             mTokenManager.getPredictionsForToken(frameTimelineInfo.vsyncId);
@@ -1247,13 +1257,14 @@ std::shared_ptr<SurfaceFrame> FrameTimeline::createSurfaceFrameForToken(
                                               std::move(layerName), std::move(debugName),
                                               PredictionState::Valid, std::move(*predictions),
                                               mTimeStats, mJankClassificationThresholds,
-                                              &mTraceCookieCounter, isBuffer, gameMode);
+                                              &mTraceCookieCounter, isBuffer, gameMode,
+                                              systemContentPriority);
     }
     return std::make_shared<SurfaceFrame>(frameTimelineInfo, ownerPid, ownerUid, layerId,
                                           std::move(layerName), std::move(debugName),
                                           PredictionState::Expired, TimelineItem(), mTimeStats,
                                           mJankClassificationThresholds, &mTraceCookieCounter,
-                                          isBuffer, gameMode);
+                                          isBuffer, gameMode, systemContentPriority);
 }
 
 FrameTimeline::DisplayFrame::DisplayFrame(std::shared_ptr<TimeStats> timeStats,

@@ -109,7 +109,7 @@ ExclusiveToken::~ExclusiveToken() {
 
 void make(std::string id, Source source) {
     if (auto panopticon = sPanopticons.get(id.c_str()); panopticon) {
-        ALOGW("Clobbering metrics for: %s, %s", id.c_str(),
+        ALOGV("Clobbering metrics for: %s, %s", id.c_str(),
               panopticon->get()->getSourceName().data());
     }
 

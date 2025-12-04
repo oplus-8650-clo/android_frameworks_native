@@ -37,6 +37,7 @@
 #include "Layer.h" // eFrameRateSelectionPriority constants
 #include "LayerLog.h"
 #include "LayerSnapshotBuilder.h"
+#include "RenderResourceCache.h"
 #include "TimeStats/TimeStats.h"
 #include "Tracing/TransactionTracing.h"
 
@@ -1012,6 +1013,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderCommandBufferChanged) {
         snapshot.renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+    }
+
+    if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderResourceTokenChanged) {
+        snapshot.renderResourceToken = requested.renderResourceToken;
+        if (snapshot.renderResourceToken) {
+            snapshot.renderResourceCache =
+                    args.renderResourceCache->getCache(snapshot.renderResourceToken);
+        } else {
+            snapshot.renderResourceCache = nullptr;
+        }
     }
 
     // computed snapshot properties

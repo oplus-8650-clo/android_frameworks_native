@@ -255,6 +255,8 @@ status_t layer_state_t::write(Parcel& output) const
             renderCommandBufferProducer->writeToParcel(&output);
         }
 
+        SAFE_PARCEL(output.writeStrongBinder, renderResourceToken);
+
         SAFE_PARCEL(output.writeUint64, renderCommandBufferFrameId);
     }
 
@@ -452,6 +454,8 @@ status_t layer_state_t::read(const Parcel& input)
             renderCommandBufferConsumer = std::make_shared<RenderCommandBufferConsumer>();
             RenderCommandBufferConsumer::readFromParcel(input, renderCommandBufferConsumer.get());
         }
+
+        SAFE_PARCEL(input.readNullableStrongBinder, &renderResourceToken);
         SAFE_PARCEL(input.readUint64, &renderCommandBufferFrameId);
     }
     return NO_ERROR;
@@ -892,6 +896,10 @@ void layer_state_t::merge(const layer_state_t& other) {
             what |= eRenderCommandBufferFrameIdChanged;
             renderCommandBufferFrameId = other.renderCommandBufferFrameId;
         }
+        if (other.what & eRenderResourceTokenChanged) {
+            what |= eRenderResourceTokenChanged;
+            renderResourceToken = other.renderResourceToken;
+        }
     }
     if ((other.what & what) != other.what) {
         ALOGE("Unmerged SurfaceComposer Transaction properties. LayerState::merge needs updating? "
@@ -989,6 +997,8 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
         if (other.what & eRenderCommandBufferChanged) diff |= eRenderCommandBufferChanged;
         if (other.what & eRenderCommandBufferFrameIdChanged)
             diff |= eRenderCommandBufferFrameIdChanged;
+
+        if (other.what & eRenderResourceTokenChanged) diff |= eRenderResourceTokenChanged;
     }
 
     return diff;

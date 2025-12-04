@@ -2556,6 +2556,18 @@ SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<Surfa
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderResourceToken(
+        const sp<SurfaceControl>& sc, const sp<IBinder>& token) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderResourceTokenChanged;
+    s->renderResourceToken = token;
+    return *this;
+}
+
 // ---------------------------------------------------------------------------
 
 SurfaceComposerClient::SurfaceComposerClient() : mStatus(NO_INIT) {}

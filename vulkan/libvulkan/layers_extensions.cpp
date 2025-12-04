@@ -39,6 +39,10 @@
 #include <utils/Trace.h>
 #include <ziparchive/zip_archive.h>
 
+#include <com_android_graphics_libvulkan_flags.h>
+
+using namespace com::android::graphics::libvulkan;
+
 // TODO(b/143296676): This file currently builds up global data structures as it
 // loads, and never cleans them up. This means we're doing heap allocations
 // without going through an app-provided allocator, but worse, we'll leak those
@@ -74,6 +78,8 @@ struct Layer {
 namespace {
 
 const char kSystemDebugLayerLibraryDir[] = "/data/local/debug/vulkan";
+const char kSystemPlatformLayerLibraryDir[] = "/system/lib64/vulkan";
+const char kSystemOEMLayerLibraryDir[] = "/product/lib64/vulkan";
 
 class LayerLibrary {
    public:
@@ -541,6 +547,15 @@ void DiscoverLayers() {
         DiscoverLayersInPathList(
             android::GraphicsEnv::getInstance().getLayerPaths(),
             LayerType::EXPLICIT);
+    // TODO: We'll need a different method because: 1) we need to look at system
+    // properties; 2) longer term, we may want to load/Open() OPLs in Zygote and
+    // inherit them into this process (i.e. not Open() and Close() them for each
+    // process).
+    if (flags::oem_and_platform_layers()) {
+        DiscoverLayersInPathList(kSystemPlatformLayerLibraryDir,
+                                 LayerType::PLATFORM);
+        DiscoverLayersInPathList(kSystemOEMLayerLibraryDir, LayerType::OEM);
+    }
 }
 
 /* Return the number of IMPLICIT and EXPLICIT Layer's (not PLATFORM nor OEM
@@ -550,7 +565,26 @@ void DiscoverLayers() {
  * g_instance_layers before any PLATFORM or OEM Layer's.
  */
 uint32_t GetEnumeratedLayerCount() {
-    return static_cast<uint32_t>(g_instance_layers.size());
+    uint32_t count = 0;
+    for (size_t i = 0; i < g_instance_layers.size(); i++) {
+        LayerType type = g_instance_layers[i].type;
+        if (type == LayerType::PLATFORM || type == LayerType::OEM) {
+            break;
+        }
+        count++;
+    }
+    return count;
+}
+
+/* Return the number of PLATFORM and OEM Layer's (not IMPLICIT nor EXPLICIT
+ * Layer's), that LayerChain::ActivateLayers() should activate.
+ *
+ * NOTE: This relies on all IMPLICIT and EXPLICIT Layer's being added to
+ * g_instance_layers before any PLATFORM or OEM Layer's.
+ */
+uint32_t GetOemAndPlatformLayerCount() {
+    uint32_t count = g_instance_layers.size() - GetEnumeratedLayerCount();
+    return count;
 }
 
 const Layer& GetLayer(uint32_t index) {
