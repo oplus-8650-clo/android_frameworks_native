@@ -225,7 +225,9 @@ sp<GraphicBuffer> allocateClearSlotBuffer() {
 void HidlComposer::CommandWriter::qtiSetDisplayElapseTime(uint64_t time) {
     constexpr uint16_t kSetDisplayElapseTimeLength = 2;
 // QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
+// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #ifdef QTI_DISPLAY_EXTENSION
+// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 // QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
     beginCommand(static_cast<V2_1::IComposerClient::Command>(
                          IQtiComposerClient::Command::SET_DISPLAY_ELAPSE_TIME),
@@ -233,7 +235,9 @@ void HidlComposer::CommandWriter::qtiSetDisplayElapseTime(uint64_t time) {
     write64(time);
     endCommand();
 // QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
+// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #endif
+// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 // QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
 }
 // QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
