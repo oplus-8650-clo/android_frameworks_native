@@ -425,14 +425,22 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
         LOG(INFO) << "Changing pointer capture mode from " << ftl::enum_string(mCaptureMode)
                   << " to " << ftl::enum_string(config.pointerCaptureRequest.mode);
         resetGestureInterpreter(when);
-        if (mCaptureMode == PointerCaptureMode::RELATIVE) {
-            // We're transitioning out of relative mode, so re-enable three-finger swipes.
-            mPropertyProvider.getProperty("Three Finger Swipe Enable").setBoolValues({true});
-        }
-        switch (config.pointerCaptureRequest.mode) {
+        // Clear up as we exit the current capture mode.
+        switch (mCaptureMode) {
             case PointerCaptureMode::UNCAPTURED:
                 out += mGestureConverter.reset(when);
                 break;
+            case PointerCaptureMode::RELATIVE:
+                // mRelativeModeGestureConverter is stateless, and so doesn't need resetting, but we
+                // do need to re-enable three-finger swipes.
+                mPropertyProvider.getProperty("Three Finger Swipe Enable").setBoolValues({true});
+                break;
+            default:
+                break;
+        }
+        mCaptureMode = config.pointerCaptureRequest.mode;
+        // Set up for the new capture mode.
+        switch (mCaptureMode) {
             case PointerCaptureMode::ABSOLUTE:
                 mCapturedEventConverter.reset();
                 // We've just had a period during which events weren't being sent to the
@@ -440,13 +448,13 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
                 mStateConverter.reset();
                 break;
             case PointerCaptureMode::RELATIVE:
-                // mRelativeModeGestureConverter is stateless, and so doesn't need resetting.
                 // We don't use three-finger swipes in relative capture mode, so stop the Gestures
                 // library from reporting them.
                 mPropertyProvider.getProperty("Three Finger Swipe Enable").setBoolValues({false});
                 break;
+            default:
+                break;
         }
-        mCaptureMode = config.pointerCaptureRequest.mode;
         configureAccelerationCurves();
         // The motion ranges are going to change, so bump the generation to clear the cached ones.
         bumpGeneration();

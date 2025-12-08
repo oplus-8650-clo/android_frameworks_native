@@ -17,6 +17,7 @@
 #include <cinttypes>
 #include <memory>
 #include <optional>
+#include <thread>
 
 #include <CursorInputMapper.h>
 #include <InputDevice.h>
@@ -27,7 +28,6 @@
 #include <MultiTouchInputMapper.h>
 #include <NotifyArgsBuilders.h>
 #include <PeripheralController.h>
-#include <ScopedFlagOverride.h>
 #include <SingleTouchInputMapper.h>
 #include <TestEventMatchers.h>
 #include <TestInputListener.h>
@@ -41,7 +41,6 @@
 #include <gtest/gtest.h>
 #include <ui/Rotation.h>
 
-#include <thread>
 #include "FakeEventHub.h"
 #include "FakeInputReaderPolicy.h"
 #include "InputMapperTest.h"
@@ -50,6 +49,7 @@
 #include "gmock/gmock.h"
 #include "input/DisplayViewport.h"
 #include "input/Input.h"
+#include "input/ScopedFlagOverride.h"
 
 namespace android {
 

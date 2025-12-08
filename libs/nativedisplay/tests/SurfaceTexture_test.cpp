@@ -24,7 +24,9 @@
 #include <com_android_graphics_libgui_flags.h>
 #include <gui/IConsumerListener.h>
 #include <gui/Surface.h>
+#include <hardware/gralloc.h>
 #include <system/window.h>
+#include <ui/BufferQueueDefs.h>
 #include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
 #include <utils/Errors.h>
@@ -34,7 +36,6 @@
 
 #include <cstdint>
 #include <vector>
-#include "hardware/gralloc.h"
 
 namespace android {
 
@@ -492,5 +493,22 @@ TEST_F(SurfaceTextureTest, DetachAndReattachToContext) {
     ASSERT_EQ(OK, surfaceTexture->updateTexImage());
     EXPECT_TRUE(checkAllPixelsMatch(textureId2, kRed));
 }
+
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
+// See b/458169755.
+TEST_F(SurfaceTextureTest, UnlimitedSlots_NotAllowed) {
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    EXPECT_NE(OK, surface->setMaxDequeuedBufferCount(BufferQueueDefs::NUM_BUFFER_SLOTS * 2));
+}
+#endif
 
 } // namespace android

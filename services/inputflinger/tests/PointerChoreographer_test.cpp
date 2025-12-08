@@ -24,9 +24,9 @@
 #include "FakePointerController.h"
 #include "InterfaceMocks.h"
 #include "NotifyArgsBuilders.h"
-#include "ScopedFlagOverride.h"
 #include "TestEventMatchers.h"
 #include "TestInputListener.h"
+#include "input/ScopedFlagOverride.h"
 
 namespace android {
 

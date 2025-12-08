@@ -23,8 +23,8 @@
 
 #include "InputMapperTest.h"
 #include "InterfaceMocks.h"
-#include "ScopedFlagOverride.h"
 #include "TestEventMatchers.h"
+#include "input/ScopedFlagOverride.h"
 
 #define TAG "MultiTouchpadInputMapperUnit_test"
 

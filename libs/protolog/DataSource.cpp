@@ -149,23 +149,19 @@ void InitDataSource(uint32_t backends) {
 InternResult IncrementalState::internMessage(ProtoLogLevel level, std::string_view group,
                                              std::string_view format) {
     auto key = std::make_tuple(level, group, format);
-    auto it = message_intern_table.get(key);
-    if (it.has_value()) {
-        return {it.value(), false};
+    auto [id, is_new] = message_intern_table.getOrEmplace(key, next_message_id);
+    if (is_new) {
+        next_message_id++;
     }
-    uint64_t id = next_message_id++;
-    message_intern_table.put({level, std::string(group), std::string(format)}, id);
-    return {id, true};
+    return {id, is_new};
 }
 
 InternResult IncrementalState::internString(std::string_view str) {
-    auto it = string_intern_table.get(str);
-    if (it.has_value()) {
-        return {it.value(), false};
+    auto [id, is_new] = string_intern_table.getOrEmplace(str, next_string_id);
+    if (is_new) {
+        next_string_id++;
     }
-    uint64_t id = next_string_id++;
-    string_intern_table.put(std::string(str), id);
-    return {id, true};
+    return {id, is_new};
 }
 
 } // namespace datasource

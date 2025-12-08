@@ -19,7 +19,6 @@
 #include "FakeInputDispatcherPolicy.h"
 #include "FakeInputTracingBackend.h"
 #include "FakeWindows.h"
-#include "ScopedFlagOverride.h"
 #include "TestEventMatchers.h"
 
 #include <NotifyArgsBuilders.h>
@@ -30,7 +29,6 @@
 #include <android-base/thread_annotations.h>
 #include <android/configuration.h>
 #include <binder/Binder.h>
-#include <com_android_input_flags.h>
 #include <fcntl.h>
 #include <flag_macros.h>
 #include <gmock/gmock.h>
@@ -40,6 +38,7 @@
 #include <input/InputConsumer.h>
 #include <input/KeyCharacterMap.h>
 #include <input/PrintTools.h>
+#include <input/ScopedFlagOverride.h>
 #include <linux/input.h>
 #include <sys/epoll.h>
 #include <utils/Timers.h>
@@ -1304,7 +1303,6 @@ TEST_F(InputDispatcherTest, TouchTransferDoesNotSendEntireGesture_legacy) {
  * still go through the normal hit testing.
  */
 TEST_F(InputDispatcherTest, TouchTransferDoesNotSendEntireGesture) {
-    SCOPED_FLAG_OVERRIDE(allow_transfer_of_entire_gesture, true);
     std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
     sp<FakeWindowHandle> topWindow =
             sp<FakeWindowHandle>::make(application, mDispatcher, "Top window",
@@ -1354,7 +1352,6 @@ TEST_F(InputDispatcherTest, TouchTransferDoesNotSendEntireGesture) {
  * as long as they first land into the top window.
  */
 TEST_F(InputDispatcherTest, TouchTransferSendsEntireGesture) {
-    SCOPED_FLAG_OVERRIDE(allow_transfer_of_entire_gesture, true);
     std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
     sp<FakeWindowHandle> topWindow =
             sp<FakeWindowHandle>::make(application, mDispatcher, "Top window",
@@ -1387,6 +1384,385 @@ TEST_F(InputDispatcherTest, TouchTransferSendsEntireGesture) {
                                       .build());
 
     bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+}
+
+/**
+ * If a window has requested touch to be transferred, all subsequent pointers from the same gesture
+ * should be transferred if 'transferEntireGesture' was set to 'true'.
+ *
+ * This test is similar to 'TouchTransferSendsEntireGesture' but adds more pointers to ensure that
+ * all subsequent pointers are transferred, not just the second one.
+ *
+ * In this test, there are 2 windows - one above and one below.
+ * First pointer goes to the top window. Then top window calls 'transferTouch' upon receiving
+ * ACTION_DOWN and transfers touch to the bottom window.
+ * Subsequent pointers (2nd, 3rd, and 4th) from the same gesture should still be forwarded to the
+ * bottom window, as long as they first land into the top window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferWithEntireGestureTransfersManyPointers) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top window",
+                                       ui::LogicalDisplayId::DEFAULT);
+
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom window",
+                                       ui::LogicalDisplayId::DEFAULT);
+
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer touch from the top window to the bottom window.
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // When the second pointer goes down, it will hit the top window, but since the top window has
+    // requested the whole gesture to be transferred, it should be redirected to the bottom window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // When the third pointer goes down, it should also be redirected to the bottom window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_2_DOWN));
+
+    // Also send a 4th pointer. Tt should also be redirected to the bottom window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_3_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .pointer(PointerBuilder(3, ToolType::FINGER).x(80).y(80))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_3_DOWN));
+
+    topWindow->assertNoEvents();
+}
+
+/**
+ * A finger touches down, then a second finger touches down. The gesture is transferred to another
+ * window.  Ensure that the two pointers are correctly transferred to the botom window. Then, third
+ * and fourth fingers touch down. Ensure they are automatically sent to the bottom window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferAfterTwoPointers) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top window", DISPLAY_ID);
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom window", DISPLAY_ID);
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
+
+    // First pointer down, on top window
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down, on top window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Transfer touch from the top window to the bottom window.
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Third pointer down on the top window, should be transferred.
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_2_DOWN));
+
+    // Fourth pointer down on the top window, should be transferred.
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_3_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .pointer(PointerBuilder(3, ToolType::FINGER).x(80).y(80))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_3_DOWN));
+}
+
+/**
+ * A finger touches down on top window. The gesture is transferred to the bottom window. Then, the
+ * gesture is again transferred to the top window. The second finger goes down. It should be
+ * delivered to the top window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferBackAndForthTwoPointers) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top", DISPLAY_ID);
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom", DISPLAY_ID);
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
+
+    // First pointer down on topWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer to bottom
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Now transfer back to the top window
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(bottomWindow->getToken(), topWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down, should go to the top window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+}
+
+/**
+ * A finger touches down on top window. The gesture is transferred to the bottom window. Then, a
+ * second finger touches and gets sent to the bottom. Now, the pointers are transferred from the
+ * bottom window to the top window. A third pointer goes down. It should go to the top window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferBackAndForthThreePointers) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top", DISPLAY_ID);
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom", DISPLAY_ID);
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
+
+    // First pointer down on topWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer to window2
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down, should go to bottom window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Transfer back to the top window. The top window should now get 2 pointers.
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(bottomWindow->getToken(), topWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    bottomWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_CANCEL), WithPointerCount(2)));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    topWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Third pointer down, should go to top window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(POINTER_2_DOWN));
+}
+
+/**
+ * A finger touches down and goes to the top window. The gesture is transferred to the middle
+ * window. A second finger touches down and gets delivered to the middle window. The gesture is
+ * transferred to the bottom window. A third finger touches down - where should it go?
+ * Generally, we expect it to be delivered to the bottom  window.
+ * However, the current implementation does not store windows that aren't currently being touched.
+ * As a result, in the current implementation, the pointer would simply go to window Top.
+ */
+TEST_F(InputDispatcherTest, TouchTransferWithEntireGesture_ChainedTransfer) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> top =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top", DISPLAY_ID);
+    sp<FakeWindowHandle> middle =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Middle", DISPLAY_ID);
+    sp<FakeWindowHandle> bottom =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom", DISPLAY_ID);
+    mDispatcher->onWindowInfosChanged(
+            {{*top->getInfo(), *middle->getInfo(), *bottom->getInfo()}, {}, 0, 0});
+
+    // First pointer down on top
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    top->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer to the middle window
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(top->getToken(), middle->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    top->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    middle->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down, should go to the middle window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .build());
+    middle->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Transfer to the bottom window
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(middle->getToken(), bottom->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    middle->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottom->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    bottom->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Third pointer down, should go to the bottom window
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    // Generally, the expectation is that the bottom receives POINTER_2_DOWN.
+    // However, in the current implementation, touch goes to the top window instead.
+    // bottom->consumeMotionEvent(WithMotionAction(POINTER_2_DOWN));
+    bottom->consumeMotionEvent(WithMotionAction(ACTION_MOVE));
+    top->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    top->assertNoEvents();
+    middle->assertNoEvents();
+    bottom->assertNoEvents();
+}
+
+/**
+ * A finger touches down on the top window, and the gesture is transferred to the bottom window. A
+ * new finger touches down on a third, nearby window, starting a split touch. A third finger
+ * touches down on the top window, and is transferred to the bottom window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferWithEntireGesture_SplitTouch) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top window", DISPLAY_ID);
+    topWindow->setFrame(Rect(0, 0, 100, 100));
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom window", DISPLAY_ID);
+    bottomWindow->setFrame(Rect(0, 0, 100, 100));
+    sp<FakeWindowHandle> nearbyWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Nearby window", DISPLAY_ID);
+    nearbyWindow->setFrame(Rect(200, 0, 300, 100));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo(), *nearbyWindow->getInfo()},
+             {},
+             0,
+             0});
+
+    // First pointer down on topWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer to bottomWindow
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down on nearbyWindow (split touch)
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(250).y(50))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_MOVE));
+    nearbyWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Third pointer down on topWindow, should be transferred to bottomWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(250).y(50))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+    nearbyWindow->consumeMotionEvent(WithMotionAction(ACTION_MOVE));
+}
+
+/**
+ * Two windows are overlapping. A finger touches down on the top window. A second finger touches
+ * down on the visible part of the bottom window, starting a split touch. The gesture from the top
+ * window is transferred to the bottom window. A third finger touches down on the top window, and is
+ * transferred to the bottom window.
+ */
+TEST_F(InputDispatcherTest, TouchTransferWithEntireGesture_OverlappingWindows) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> topWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Top window", DISPLAY_ID);
+    topWindow->setFrame(Rect(0, 0, 100, 100));
+    sp<FakeWindowHandle> bottomWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom window", DISPLAY_ID);
+    bottomWindow->setFrame(Rect(0, 0, 200, 200));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
+
+    // First pointer down on topWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Second pointer down on the visible part of bottomWindow (split touch)
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(150).y(150))
+                                      .build());
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_MOVE));
+    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Transfer gesture from top to bottom
+    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
+                                                  /*isDragDrop=*/false,
+                                                  /*transferEntireGesture=*/true));
+    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
+    // The bottom window now owns both pointers. It receives a synthesized POINTER_DOWN
+    // for the first pointer.
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_1_DOWN));
+
+    // Third pointer down on topWindow, should be transferred to bottomWindow
+    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_2_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(150).y(150))
+                                      .pointer(PointerBuilder(2, ToolType::FINGER).x(70).y(70))
+                                      .build());
+    bottomWindow->consumeMotionEvent(WithMotionAction(POINTER_2_DOWN));
 }
 
 /**
@@ -9355,7 +9731,6 @@ TEST_F(InputDispatcherKeyRepeatTest, FocusedWindow_CorrectRepeatCountWhenInjectK
 }
 
 TEST_F(InputDispatcherKeyRepeatTest, FocusedWindow_NoRepeatWhenKeyRepeatDisabled) {
-    SCOPED_FLAG_OVERRIDE(keyboard_repeat_keys, true);
     constexpr std::chrono::milliseconds KEY_NO_REPEAT_ASSERTION_TIMEOUT = 100ms;
     // In the other tests, we multiply the repeat timeout and delay by the hardware multiplier,
     // since delays in sending key UPs on slow systems were causing multiple repeat DOWNs to be sent

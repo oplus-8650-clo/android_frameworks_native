@@ -77,7 +77,7 @@ static
     static const std::regex kThreadPrefix("^\\s*thread \\d+:\\s+l\\s+(\\d)(\\d)");
     std::string contextStr = contextToString(context);
     status_t ret = scanBinderContext(pid, contextStr, *fileReader, [&](const std::string& line) {
-        if (base::StartsWith(line, "  node")) {
+        if (base::StartsWith(line, "  node ")) {
             std::vector<std::string> splitString = base::Tokenize(line, " ");
             bool pids = false;
             uint64_t ptr = 0;
@@ -106,7 +106,7 @@ static
                     }
                 }
             }
-        } else if (base::StartsWith(line, "  thread")) {
+        } else if (base::StartsWith(line, "  thread ")) {
             auto pos = line.find("l ");
             if (pos != std::string::npos) {
                 // "1" is waiting in binder driver

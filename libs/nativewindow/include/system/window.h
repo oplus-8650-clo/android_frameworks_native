@@ -1219,6 +1219,9 @@ struct ANativeWindowFrameTimelineInfo {
 
     // The amount of fixup added to the vsync time by the app to correct for jitter.
     int64_t vsyncResyncedJitterNanos;
+
+    // The amount of time spent in dequeueBuffer waiting for an available buffer.
+    int64_t dequeueBufferDurationNanos;
 };
 
 static inline int native_window_set_frame_timeline_info(

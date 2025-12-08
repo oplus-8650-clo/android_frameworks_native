@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <attestation/HmacKeyManager.h>
+#include <com_android_input_flags.h>
 #include <gtest/gtest.h>
 #include <input/InputConsumer.h>
 #include <input/InputTransport.h>
@@ -25,6 +26,8 @@
 using namespace std::chrono_literals;
 
 namespace android {
+
+namespace input_flags = com::android::input::flags;
 
 namespace {
 
@@ -174,10 +177,10 @@ void TouchResamplingTest::consumeInputEventEntries(const std::vector<InputEventE
     uint32_t consumeSeq;
     InputEvent* event;
 
-    InputConsumer::ConsumeResult consumeResult =
+    auto [result, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, frameTime.count(),
                                &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok());
+    ASSERT_TRUE(result.ok());
     MotionEvent* motionEvent = static_cast<MotionEvent*>(event);
 
     ASSERT_EQ(entries.size() - 1, motionEvent->getHistorySize());
@@ -826,17 +829,39 @@ TEST_F(TouchResamplingTest, TwoPointersAreResampledIndependently) {
     consumeInputEventEntries(expectedEntries, frameTime);
 
     // First pointer id=0 leaves the screen
-    entries = {
+    if (input_flags::fix_action_up_resampling()) {
+        // We resample the ACTION_UP event to use the coordinates of the previous move
+        // event's resampled coordinates. This fixes situations where the last ACTION_MOVE would use
+        // resampled coordinates, but the ACTION_UP used the non-resampled coordinates. This caused
+        // an unwanted 'jump back' in coordinates.
+        entries = {
             //      id  x    y
-            {80ms, {{0, 120, 120}, {1, 600, 600}}, actionPointer0Up},
-    };
+            {80ms, {{0, 135, 135, .isResampled = true},
+                    {1, 750, 750, .isResampled = true}}, actionPointer0Up},
+        };
+    } else {
+        entries = {
+            //      id  x    y
+            {80ms, {{0, 120, 120},
+                    {1, 600, 600}}, actionPointer0Up},
+        };
+    }
     publishInputEventEntries(entries);
     frameTime = 90ms;
-    expectedEntries = {
+    if (input_flags::fix_action_up_resampling()) {
+        expectedEntries = {
             //      id  x    y
-            {80ms, {{0, 120, 120}, {1, 600, 600}}, actionPointer0Up},
+            {80ms, {{0, 135, 135, .isResampled = true},
+                    {1, 750, 750, .isResampled = true}}, actionPointer0Up},
+        };
+    } else {
+        expectedEntries = {
+            //      id  x    y
+            {80ms, {{0, 120, 120},
+                    {1, 600, 600}}, actionPointer0Up},
             // no resampled event for ACTION_POINTER_UP
-    };
+        };
+    }
     consumeInputEventEntries(expectedEntries, frameTime);
 
     // Remaining pointer id=1 is still present, but doesn't move
