@@ -514,8 +514,8 @@ ClipPathOp* ClipPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath&
 }
 
 void ClipPathOp::draw(SkCanvas* c, const SkMatrix&) {
-    SkPath path;
-    path.readFromMemory(pathData.data.get(), pathData.size);
+    const SkPath path =
+        SkPath::ReadFromMemory(pathData.data.get(), pathData.size).value_or(SkPath());
     c->clipPath(path, op, aa);
 }
 
@@ -653,8 +653,8 @@ DrawPathOp* DrawPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath&
 }
 
 void DrawPathOp::draw(SkCanvas* c, const SkMatrix&) {
-    SkPath path;
-    path.readFromMemory(pathData.data.get(), pathData.size);
+    const SkPath path =
+        SkPath::ReadFromMemory(pathData.data.get(), pathData.size).value_or(SkPath());
     c->drawPath(path, fromShmemPaint(paint));
 }
 std::string DrawPathOp::toString() const {
@@ -855,7 +855,7 @@ std::string DrawImageRectOp::toString() const {
     return "DrawImageRectOp";
 }
 
-sk_sp<SkData> serializeTypeFace(SkTypeface* tf, void* ctx) {
+SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
     thread_local static std::vector<char> sTmpTypefaceStorage;
 
     SkString familyName;

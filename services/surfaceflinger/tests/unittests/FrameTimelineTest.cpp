@@ -4465,4 +4465,47 @@ TEST_F(FrameTimelineTest, negativeContentPriorityIsNonAnimating) {
     EXPECT_EQ(jankData[1].presentDelayNs, 30);
 }
 
+TEST_F(FrameTimelineTest, presentFenceSignaled_reportsNoJankOnLongDequeueBuffer) {
+    SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, true);
+    Fps refreshRate = RR_11;
+    addFirstFrame(refreshRate, /*expectedStartTime*/ 10, /*expectedEndTime*/ 20,
+                  /*sfExpectedStartTime*/ 52, /*sfExpectedEndTime*/ 60,
+                  /*sfExpectedPresentTime*/ 60);
+
+    EXPECT_CALL(*mTimeStats,
+                incrementJankyFrames(TimeStats::JankyFramesInfo{refreshRate, std::nullopt, sUidOne,
+                                                                sLayerNameOne, sGameMode,
+                                                                JankType::PredictionError, -4, 0,
+                                                                25}));
+    auto presentFence1 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    int64_t surfaceFrameToken1 = mTokenManager->generateTokenForPredictions({10, 20, 60});
+    int64_t sfToken1 = mTokenManager->generateTokenForPredictions({82, 90, 90});
+    FrameTimelineInfo ftInfo;
+    ftInfo.vsyncId = surfaceFrameToken1;
+    ftInfo.inputEventId = sInputEventId;
+    ftInfo.dequeueBufferDurationNanos = 30;
+
+    auto surfaceFrame1 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+    surfaceFrame1->setAcquireFenceTime(45);
+    mFrameTimeline->setSfWakeUp(sfToken1, 52, refreshRate, refreshRate);
+
+    surfaceFrame1->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame1);
+    presentFence1->signalForTest(90);
+    mFrameTimeline->setSfPresent(86, presentFence1);
+
+    EXPECT_EQ(surfaceFrame1->getJankType(), JankType::PredictionError);
+
+    auto jankData = getLayerOneJankData();
+    EXPECT_EQ(jankData.size(), 2u);
+    EXPECT_EQ(jankData[0].jankTypeExperimental, JankType::None);
+    EXPECT_EQ(jankData[0].presentDelayNs, 0);
+    EXPECT_EQ(jankData[1].jankTypeExperimental, JankType::PredictionError);
+    EXPECT_EQ(jankData[1].presentDelayNs, 30);
+}
+
 } // namespace android::scheduler

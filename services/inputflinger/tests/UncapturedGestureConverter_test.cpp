@@ -30,11 +30,11 @@
 #include "FakeInputReaderPolicy.h"
 #include "InstrumentedInputReader.h"
 #include "NotifyArgs.h"
-#include "ScopedFlagOverride.h"
 #include "TestConstants.h"
 #include "TestEventMatchers.h"
 #include "TestInputListener.h"
 #include "include/gestures.h"
+#include "input/ScopedFlagOverride.h"
 #include "ui/Rotation.h"
 
 namespace android {

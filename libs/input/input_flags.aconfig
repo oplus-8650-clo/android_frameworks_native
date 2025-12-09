@@ -163,13 +163,6 @@ flag {
 }
 
 flag {
-  name: "keyboard_repeat_keys"
-  namespace: "input"
-  description: "Allow user to enable key repeats or configure timeout before key repeat and key repeat delay rates."
-  bug: "336585002"
-}
-
-flag {
   name: "set_input_device_kernel_wake"
   namespace: "input"
   description: "Set input device's power/wakeup sysfs node"

@@ -2717,6 +2717,35 @@ TEST_F(SurfaceTest, UnlimitedSlots_BatchOperations) {
     EXPECT_EQ(OK, surface->queueBuffers(queuedBuffers, &outputs));
     EXPECT_EQ(128u, outputs.size());
 }
+
+TEST_F(SurfaceTest, UnlimitedSlots_SetMaxDequeuedBufferCount_EdgeCase) {
+    auto [consumer, surface] = BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    // We carefully configure the BufferQueue so that it's bigger than the old max of 64, but the
+    // max dequeued count is smaller than it. Previously, this would lead to us not extending the BQ
+    // before setting the max.
+    const int kDequeableBufferCount = 60;
+    const int kAcquireableBufferCount = 10;
+    ASSERT_EQ(OK, consumer->setMaxAcquiredBufferCount(kAcquireableBufferCount));
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(kDequeableBufferCount));
+
+    // Do a single round of operations so that the BQ will actually check max dequeued:
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    BufferItem item;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+
+    // Verify that we can actually dequeue all kDequeableBufferCount at once:
+    for (int i = 0; i < kDequeableBufferCount; i++) {
+        ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence)) << "Failed to dequeue buffer #" << i;
+    }
+}
 #endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 
 TEST_F(SurfaceTest, isBufferOwned) {

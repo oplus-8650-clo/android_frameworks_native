@@ -22,12 +22,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include <thread>
 #include <vector>
 
 #include <binder/Functional.h>
 #include <binder/Parcel.h>
 #include <binder/RpcServer.h>
+#include <binder/RpcThreads.h>
 #include <binder/RpcTransportRaw.h>
 #include <log/log.h>
 
