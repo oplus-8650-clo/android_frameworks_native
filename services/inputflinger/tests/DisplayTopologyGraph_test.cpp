@@ -18,12 +18,11 @@
 #include <com_android_input_flags.h>
 #include <gtest/gtest.h>
 #include <input/DisplayTopologyGraph.h>
+#include <input/ScopedFlagOverride.h>
 
 #include <string>
 #include <string_view>
 #include <tuple>
-
-#include "ScopedFlagOverride.h"
 
 namespace android {
 

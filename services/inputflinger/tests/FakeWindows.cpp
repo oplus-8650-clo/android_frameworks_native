@@ -45,13 +45,13 @@ std::pair<std::optional<uint32_t>, std::unique_ptr<InputEvent>> FakeInputReceive
     status_t status = WOULD_BLOCK;
     while (status == WOULD_BLOCK) {
         InputEvent* rawEventPtr = nullptr;
-        InputConsumer::ConsumeResult consumeResult =
+        auto [result, unfinishedInputMessages] =
                 mConsumer.consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq,
                                   &rawEventPtr);
-        if (consumeResult.ok()) {
+        if (result.ok()) {
             status = OK;
         } else {
-            status = consumeResult.error().code();
+            status = result.error().code();
         }
 
         event = std::unique_ptr<InputEvent>(rawEventPtr);

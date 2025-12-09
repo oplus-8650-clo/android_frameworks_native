@@ -361,6 +361,12 @@ nsecs_t calculateDisplayPresentJitter(nsecs_t presentDelay, Fps refreshRate) {
 }
 
 bool delayMatchVsyncCadence(nsecs_t presentDelay, Fps refreshRate, nsecs_t presentThreshold) {
+    // For very high present delays, vsync cadence doesn't matter much. Just mark it as on cadence
+    // to avoid prediction errors.
+    if (presentDelay > impl::FrameTimeline::kThresholdFpsForAnimation.getPeriodNsecs()) {
+        return true;
+    }
+
     const nsecs_t deltaToVsync = calculateDisplayPresentJitter(presentDelay, refreshRate);
     return deltaToVsync < presentThreshold ||
             deltaToVsync >= refreshRate.getPeriodNsecs() - presentThreshold;
@@ -383,6 +389,7 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
       : mToken(frameTimelineInfo.vsyncId),
         mInputEventId(frameTimelineInfo.inputEventId),
         mVsyncResyncedJitter(frameTimelineInfo.vsyncResyncedJitterNanos),
+        mDequeueBufferDuration(frameTimelineInfo.dequeueBufferDurationNanos),
         mOwnerPid(ownerPid),
         mOwnerUid(ownerUid),
         mLayerName(std::move(layerName)),
@@ -825,7 +832,8 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         *outDeadlineDelta = deadlineDelta;
     }
 
-    if (deadlineDelta > mJankClassificationThresholds.deadlineThreshold) {
+    // Subtract the time spent in dequeueBuffer to avoid counting it in the app budget
+    if (deadlineDelta - mDequeueBufferDuration > mJankClassificationThresholds.deadlineThreshold) {
         mFrameReadyMetadata.experimental() = FrameReadyMetadata::LateFinish;
     } else {
         mFrameReadyMetadata.experimental() = FrameReadyMetadata::OnTimeFinish;
@@ -1552,7 +1560,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
         // Frames presented on time are not janky, but might be buffer stuffed.
         if (std::abs(presentDelay) <= presentThreshold) {
             mJankType.experimental() = JankType::None;
-        } else {
+        } else if (presentDelay > mRefreshRate.getPeriodNsecs() - presentThreshold) {
             mJankType.experimental() = JankType::SurfaceFlingerStuffing;
         }
     } else if (mFramePresentMetadata.experimental() == FramePresentMetadata::EarlyPresent) {

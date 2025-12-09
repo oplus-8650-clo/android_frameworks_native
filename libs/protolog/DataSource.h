@@ -47,42 +47,33 @@ class LruCache {
 public:
     LruCache(size_t maxSize) : mMaxSize(maxSize) {}
 
-    template <typename Q = K, typename J = V>
-    std::optional<J> get(const Q& key) {
-        auto it = mMap.find(key);
-        if (it == mMap.end()) {
-            return std::nullopt;
-        }
-        mList.splice(mList.begin(), mList, it->second);
-        return it->second->second;
-    }
-
-    template <typename Q = K, typename J = V>
-    void put(const Q& key, J value) {
+    template <typename Q, typename J>
+    std::pair<V, bool> getOrEmplace(Q&& key, J&& newValue) {
         auto it = mMap.find(key);
         if (it != mMap.end()) {
-            it->second->second = value;
             mList.splice(mList.begin(), mList, it->second);
-            return;
+            return {it->second->second, false};
         }
 
         if (mMap.size() >= mMaxSize) {
-            // Map is full, remove the least recently used element.
+            // Map is full, reuse the least recently used node.
             auto lruNodeIt = std::prev(mList.end());
             auto node = mMap.extract(lruNodeIt->first);
 
-            lruNodeIt->first = key;
-            lruNodeIt->second = value;
+            lruNodeIt->first = std::forward<Q>(key);
+            lruNodeIt->second = std::forward<J>(newValue);
             mList.splice(mList.begin(), mList, lruNodeIt);
 
-            node.key() = key;
+            node.key() = lruNodeIt->first;
             node.mapped() = mList.begin();
             mMap.insert(std::move(node));
         } else {
-            // Map not full. Default case.
-            mList.emplace_front(key, value);
-            mMap.emplace(key, mList.begin());
+            // Map not full, create a new node.
+            mList.emplace_front(std::forward<Q>(key), std::forward<J>(newValue));
+            mMap.emplace_hint(it, mList.front().first, mList.begin());
         }
+
+        return {mList.front().second, true};
     }
 
 private:

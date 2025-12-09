@@ -386,7 +386,6 @@ bool Flattener::mergeWithCachedSets(const std::vector<const LayerState*>& layers
             currentLayerIter->updateAge(now);
             merged.emplace_back(*currentLayerIter);
             ++incomingLayerIter;
-          priorBlurLayer = currentLayerIter->getBlurLayer();
         }
         ++currentLayerIter;
     }

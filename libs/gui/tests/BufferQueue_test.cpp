@@ -1658,6 +1658,59 @@ TEST_F(BufferQueueTest, PassesThroughPictureProfileHandle) {
     }
 }
 
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_EXTENDEDALLOCATE)
+TEST_F(BufferQueueTest, AttachBuffer_WithAdditionalOptions_DoesNotReallocate) {
+    if (!GraphicBufferAllocator::get().supportsAdditionalOptions()) {
+        GTEST_SKIP() << "Allocator does not support additional options";
+    }
+
+    createBufferQueue();
+    sp<MockConsumer> mc(new MockConsumer);
+    ASSERT_EQ(OK, mConsumer->consumerConnect(mc, false));
+    IGraphicBufferProducer::QueueBufferOutput output;
+    ASSERT_EQ(OK,
+              mProducer->connect(new StubProducerListener, NATIVE_WINDOW_API_CPU, false, &output));
+
+    // Set additional options, which will increment the generation ID.
+    std::vector<gui::AdditionalOptions> options;
+    options.push_back({.name = "android.hardware.graphics.common.Dataspace",
+                       .value = ADATASPACE_SRGB});
+    ASSERT_EQ(OK, mProducer->setAdditionalOptions(options));
+
+    // Create a buffer externally.
+    sp<GraphicBuffer> buffer = sp<GraphicBuffer>::make(1, 1, PIXEL_FORMAT_RGBA_8888,
+                                                       GRALLOC_USAGE_SW_WRITE_OFTEN, "test");
+    ASSERT_NE(nullptr, buffer.get());
+
+    // Attach the buffer. The change under test will set the slot's
+    // additionalOptionsGenerationId.
+    int slot;
+    ASSERT_EQ(OK, mProducer->attachBuffer(&slot, buffer));
+
+    // Queue, acquire, and release the buffer to make it available for dequeue.
+    IGraphicBufferProducer::QueueBufferInput input(
+        0, false, HAL_DATASPACE_UNKNOWN, Rect(0, 0, 1, 1), NATIVE_WINDOW_SCALING_MODE_FREEZE,
+        0, Fence::NO_FENCE);
+    ASSERT_EQ(OK, mProducer->queueBuffer(slot, input, &output));
+
+    BufferItem item;
+    ASSERT_EQ(OK, mConsumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(OK, mConsumer->releaseBuffer(item.mSlot, item.mFrameNumber, Fence::NO_FENCE));
+
+    // Dequeue the buffer again. Without the fix, this would return
+    // BUFFER_NEEDS_REALLOCATION because the generation IDs would mismatch.
+    sp<Fence> fence;
+    int dequeuedSlot;
+    status_t result = mProducer->dequeueBuffer(
+        &dequeuedSlot, &fence, 1, 1, PIXEL_FORMAT_RGBA_8888,
+        GRALLOC_USAGE_SW_WRITE_OFTEN, nullptr, nullptr);
+
+    // We expect OK because the buffer should not need reallocation.
+    ASSERT_EQ(OK, result);
+    ASSERT_EQ(slot, dequeuedSlot);
+}
+#endif
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 struct MockUnlimitedSlotConsumer : public MockConsumer {
     virtual void onSlotCountChanged(int size) override { mSize = size; }

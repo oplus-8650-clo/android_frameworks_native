@@ -330,6 +330,7 @@ private:
     const int64_t mToken;
     const int32_t mInputEventId;
     const nsecs_t mVsyncResyncedJitter;
+    const nsecs_t mDequeueBufferDuration;
     const pid_t mOwnerPid;
     const uid_t mOwnerUid;
     const std::string mLayerName;

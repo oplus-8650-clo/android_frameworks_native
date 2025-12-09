@@ -577,6 +577,13 @@ void LegacySurfaceTexture::initialize() {
     memcpy(mCurrentTransformMatrix, mtxIdentity.asArray(), sizeof(mCurrentTransformMatrix));
 
     mConsumer->setConsumerUsageBits(DEFAULT_USAGE_FLAGS);
+
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
+    if (status_t err = mConsumer->allowUnlimitedSlots(false); err != NO_ERROR) {
+        SFT_LOGE("ConsumerBase: error marking as not allowed to have unlimited slots: %s (%d)",
+                 strerror(-err), err);
+    }
+#endif
 }
 
 void LegacySurfaceTexture::onFirstRef() {

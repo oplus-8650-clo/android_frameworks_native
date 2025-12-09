@@ -23,11 +23,13 @@
 
 #include <log/log.h>
 #include <list>
+#include <optional>
 #include <thread>
 #include "InputMapperTest.h"
 #include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestEventMatchers.h"
+#include "include/gestures.h"
 
 #define TAG "TouchpadInputMapper_test"
 
@@ -40,6 +42,7 @@ using testing::IsEmpty;
 using testing::Return;
 using testing::VariantWith;
 constexpr auto ACTION_DOWN = AMOTION_EVENT_ACTION_DOWN;
+constexpr auto ACTION_MOVE = AMOTION_EVENT_ACTION_MOVE;
 constexpr auto ACTION_UP = AMOTION_EVENT_ACTION_UP;
 constexpr auto BUTTON_PRESS = AMOTION_EVENT_ACTION_BUTTON_PRESS;
 constexpr auto BUTTON_RELEASE = AMOTION_EVENT_ACTION_BUTTON_RELEASE;
@@ -128,9 +131,7 @@ protected:
     void assertAccelCurvePropEquals(const std::string& propName,
                                     const std::vector<AccelerationCurveSegment>& expectedSegments) {
         SCOPED_TRACE(testing::Message() << "Gesture property \"" << propName << "\"");
-        auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
-
-        const auto prop = touchpadMapper->getGesturePropertyForTesting(propName);
+        const auto prop = getGestureProperty(propName);
         ASSERT_TRUE(prop.has_value());
 
         std::vector<double> actualValues = prop.value().getRealValues();
@@ -156,11 +157,8 @@ protected:
     }
 
     void assertRelativeModeCurvesInUse() {
-        auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
-
         // The pointer curve should be flat (i.e. a single segment with infinite maximum speed).
-        const auto pointerCurveProp =
-                touchpadMapper->getGesturePropertyForTesting("Pointer Accel Curve");
+        const auto pointerCurveProp = getGestureProperty("Pointer Accel Curve");
         ASSERT_TRUE(pointerCurveProp.has_value());
 
         std::vector<double> pointerCurveValues = pointerCurveProp.value().getRealValues();
@@ -173,8 +171,7 @@ protected:
         ASSERT_NEAR(pointerCurveValues[3], 0, EPSILON);
 
         // The scroll curve should also be flat.
-        const auto scrollCurveProp =
-                touchpadMapper->getGesturePropertyForTesting("Scroll Accel Curve");
+        const auto scrollCurveProp = getGestureProperty("Scroll Accel Curve");
         ASSERT_TRUE(scrollCurveProp.has_value());
 
         std::vector<double> scrollCurveValues = scrollCurveProp.value().getRealValues();
@@ -188,6 +185,47 @@ protected:
         ASSERT_GT(scrollCurveGain, 0);
         ASSERT_LT(scrollCurveGain, pointerCurveGain);
         ASSERT_NEAR(scrollCurveValues[3], 0, EPSILON);
+    }
+
+    std::optional<GesturesProp> getGestureProperty(const std::string& propName) {
+        return static_cast<TouchpadInputMapper*>(mMapper.get())
+                ->getGesturePropertyForTesting(propName);
+    }
+
+    void sleepAfterTouchLift() const {
+        // After a touch lift, the Gestures library will ignore further input for a short period of
+        // time. This is related to the "Change Timeout" gesture property, but simply reducing that
+        // value doesn't allow us to reduce this sleep time, so there's something else going on too
+        // which prevents us from shortening this delay.
+        std::this_thread::sleep_for(std::chrono::milliseconds(205));
+    }
+
+    std::list<NotifyArgs> oneFingerSwipe() {
+        int32_t moveX = 500;
+        std::list<NotifyArgs> args;
+        args += process(EV_ABS, ABS_MT_SLOT, 0);
+        args += process(EV_ABS, ABS_MT_TRACKING_ID, 3);
+        args += process(EV_KEY, BTN_TOUCH, 1);
+        args += process(EV_KEY, BTN_TOOL_FINGER, 1);
+        setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_FINGER});
+        args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
+        args += process(EV_ABS, ABS_MT_POSITION_Y, 500);
+        args += process(EV_ABS, ABS_MT_PRESSURE, 25);
+        args += process(EV_SYN, SYN_REPORT, 0);
+        for (int32_t i = 0; i < 3; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            moveX += 100;
+
+            args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
+            args += process(EV_SYN, SYN_REPORT, 0);
+        }
+        args += process(EV_ABS, ABS_MT_PRESSURE, 0);
+        args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+        args += process(EV_KEY, BTN_TOUCH, 0);
+        args += process(EV_KEY, BTN_TOOL_FINGER, 0);
+        setScanCodeState(KeyState::UP, {BTN_TOUCH, BTN_TOOL_FINGER});
+        args += process(EV_SYN, SYN_REPORT, 0);
+        return args;
     }
 };
 
@@ -313,40 +351,91 @@ TEST_F(TouchpadInputMapperTest, ScrollThenResetThenHoverMoveIsConsistent) {
                         AllOf(WithMotionAction(ACTION_UP),
                               WithMotionClassification(MotionClassification::TWO_FINGER_SWIPE)))));
 
-    // This sleep must be longer than the "Change Timeout" gesture property, to prevent
-    // ImmediateInterpreter from suppressing the following finger motions.
-    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    sleepAfterTouchLift();
 
     // Reset the mapper.
     resetMapper(systemTime(SYSTEM_TIME_MONOTONIC));
 
-    // Move a finger on the touchpad.
-    args.clear();
-    int32_t moveX = 500;
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 3);
+    // Move a finger on the touchpad. Again, we don't care about the detailed events, but check a
+    // cursor movement was detected.
+    ASSERT_THAT(oneFingerSwipe(),
+                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE))));
+}
+
+TEST_F(TouchpadInputMapperTest, EnterRelativeCaptureDuringClickIsConsistent) {
+    // By default, the Gestures library waits for a period of time after a button goes down before
+    // it reports a button change gesture (to give extra fingers time to arrive in case of a
+    // multi-finger click). This makes the click event arrive as the result of a timer callback,
+    // which is hard and fragile to test using our current infrastructure, so we disable this wait.
+    getGestureProperty("Button Evaluation Timeout")->setRealValues({0.f});
+
+    mFakePolicy->setDefaultPointerDisplayId(DISPLAY_ID);
+    DisplayViewport viewport =
+            createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
+                           /*isActive=*/true, "local:0", NO_PORT, ViewportType::INTERNAL);
+    mFakePolicy->addDisplayViewport(viewport);
+    std::list<NotifyArgs> args;
+
+    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                              InputReaderConfiguration::Change::DISPLAY_INFO);
+    ASSERT_THAT(args, testing::IsEmpty());
+
+    // Press the touchpad's button.
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
     args += process(EV_KEY, BTN_TOUCH, 1);
     args += process(EV_KEY, BTN_TOOL_FINGER, 1);
     setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_FINGER});
-    args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 500);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 25);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 50);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 50);
+    args += process(EV_ABS, ABS_MT_PRESSURE, 1);
     args += process(EV_SYN, SYN_REPORT, 0);
-    for (int32_t i = 0; i < 3; i++) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        moveX += 100;
 
-        args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
-        args += process(EV_SYN, SYN_REPORT, 0);
-    }
-    // Again, we don't care about the detailed events, but check a cursor movement was detected.
-    ASSERT_THAT(args, Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE))));
+    // Without this sleep, the test fails.
+    // TODO(b/284133337): Figure out whether this can be removed
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    args += process(EV_KEY, BTN_LEFT, 1);
+    setScanCodeState(KeyState::DOWN, {BTN_LEFT});
+    args += process(EV_SYN, SYN_REPORT, 0);
+    ASSERT_THAT(args, Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_DOWN))));
+    ASSERT_THAT(args, Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(BUTTON_PRESS))));
+    // Capture the touchpad.
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
+    args.clear();
+    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                              InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    // Release the button.
+    args += process(EV_KEY, BTN_LEFT, 0);
+    setScanCodeState(KeyState::UP, {BTN_LEFT});
+    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    args += process(EV_KEY, BTN_TOUCH, 0);
+    args += process(EV_KEY, BTN_TOOL_FINGER, 0);
+    setScanCodeState(KeyState::UP, {BTN_TOUCH, BTN_TOOL_FINGER});
+    args += process(EV_SYN, SYN_REPORT, 0);
+
+    sleepAfterTouchLift();
+
+    // Move a finger on the touchpad.
+    ASSERT_THAT(oneFingerSwipe(),
+                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_MOVE))));
+
+    // Release touchpad capture.
+    args.clear();
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    sleepAfterTouchLift();
+
+    // Move a finger on the touchpad.
+    ASSERT_THAT(oneFingerSwipe(),
+                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE))));
 }
 
 TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
-    auto* touchpadMapper = static_cast<TouchpadInputMapper*>(mMapper.get());
-    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
-                        ->getBoolValues(),
+    ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(true));
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
@@ -354,16 +443,14 @@ TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
     args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
                              InputReaderConfiguration::Change::POINTER_CAPTURE);
 
-    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
-                        ->getBoolValues(),
+    ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(false));
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
     args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
                              InputReaderConfiguration::Change::POINTER_CAPTURE);
 
-    ASSERT_THAT(touchpadMapper->getGesturePropertyForTesting("Three Finger Swipe Enable")
-                        ->getBoolValues(),
+    ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(true));
 }
 

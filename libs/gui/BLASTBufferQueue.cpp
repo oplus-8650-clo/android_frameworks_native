@@ -746,6 +746,14 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
     if (applyTransaction) {
         // All transactions on our apply token are one-way. See comment on mAppliedLastTransaction
         status_t status = t->setApplyToken(mApplyToken).apply(false, true);
+        if (status != OK) {
+            BQA_LOGE("Transaction Failure Details: Status: %d (%s), Pending Transactions Merged: "
+                     "%zu, Transaction ID: %" PRIu64 ", Frame Number: %" PRIu64
+                     ", Buffer Size: %dx%d",
+                     status, statusToString(status).c_str(), mPendingTransactions.size(),
+                     t->getId(), bufferItem.mFrameNumber, bufferItem.mGraphicBuffer->getWidth(),
+                     bufferItem.mGraphicBuffer->getHeight());
+        }
         LOG_ALWAYS_FATAL_IF(status != OK,
                             "[%s] acquireNextBufferLocked failed to apply transaction. status=%d",
                             mName.c_str(), status);

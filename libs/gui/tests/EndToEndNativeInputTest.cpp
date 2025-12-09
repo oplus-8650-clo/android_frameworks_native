@@ -332,9 +332,9 @@ private:
 
         InputEvent* ev;
         uint32_t seqId;
-        InputConsumer::ConsumeResult consumeResult =
+        auto [result, unfinishedInputMessages] =
                 mInputConsumer->consume(&mInputEventFactory, true, -1, &seqId, &ev);
-        if (!consumeResult.ok()) {
+        if (!result.ok()) {
             return nullptr;
         }
         status_t status = mInputConsumer->sendFinishedSignal(seqId, true);

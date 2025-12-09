@@ -14,23 +14,37 @@
  * limitations under the License.
  */
 
+#include <TestEventMatchers.h>
+#include <android-base/result-gmock.h>
+#include <android-base/result.h>
 #include <attestation/HmacKeyManager.h>
+#include <com_android_input_flags.h>
+#include <flag_macros.h>
 #include <gtest/gtest.h>
 #include <input/Input.h>
 #include <input/InputConsumer.h>
 #include <input/InputTransport.h>
+#include <input/ScopedFlagOverride.h>
 
 using android::base::Result;
+using android::base::testing::Ok;
 
 namespace android {
 
+namespace input_flags = com::android::input::flags;
+
 namespace {
 
+const auto ACTION_UP_RESAMPLING_FIX = ACONFIG_FLAG(input_flags, fix_action_up_resampling);
+
+static constexpr std::chrono::duration RESAMPLE_LATENCY = 5ms;
 static constexpr float EPSILON = MotionEvent::ROUNDING_PRECISION;
 static constexpr int32_t POINTER_1_DOWN =
         AMOTION_EVENT_ACTION_POINTER_DOWN | (1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 static constexpr int32_t POINTER_2_DOWN =
         AMOTION_EVENT_ACTION_POINTER_DOWN | (2 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
+static constexpr int32_t POINTER_1_UP =
+        AMOTION_EVENT_ACTION_POINTER_UP | (1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 
 struct Pointer {
     int32_t id;
@@ -245,6 +259,9 @@ protected:
     void publishAndConsumeTouchModeEvent();
     void publishAndConsumeMotionEvent(int32_t action, nsecs_t downTime,
                                       const std::vector<Pointer>& pointers);
+    void publishConsumeAndVerifyMotion(const PublishMotionArgs& args, nsecs_t consumeTime,
+                                       MotionEvent** outEvent);
+    void publishConsumeAndVerifyMotion(const PublishMotionArgs& args, nsecs_t consumeTime);
 
 private:
     // The sequence number to use when publishing the next event
@@ -286,7 +303,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeKeyEvent() {
     waitUntilInputAvailable(*mConsumer);
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
     EXPECT_FALSE(mConsumer->probablyHasInput())
@@ -365,7 +382,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeBatchedMotionMove(nsecs_t d
     // Consume leaving a batch behind.
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory,
                                /*consumeBatches=*/false, -1, &consumeSeq, &event);
     ASSERT_FALSE(consumeResult.ok());
@@ -386,7 +403,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeMotionEvent(
 
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
     ASSERT_TRUE(event != nullptr)
@@ -412,7 +429,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeFocusEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
@@ -454,7 +471,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeCaptureEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
@@ -497,7 +514,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeDragEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
@@ -540,7 +557,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeTouchModeEvent() {
 
     uint32_t consumeSeq;
     InputEvent* event;
-    InputConsumer::ConsumeResult consumeResult =
+    auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
     ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
 
@@ -566,6 +583,35 @@ void InputPublisherAndConsumerTest::publishAndConsumeTouchModeEvent() {
             << "receiveConsumerResponse should have set handled to consumer's reply";
     ASSERT_GE(finish.consumeTime, publishTime)
             << "finished signal's consume time should be greater than publish time";
+}
+
+void InputPublisherAndConsumerTest::publishConsumeAndVerifyMotion(const PublishMotionArgs& args,
+                                                                  nsecs_t consumeTime,
+                                                                  MotionEvent** outEvent) {
+    publishMotionEvent(*mPublisher, args);
+
+    uint32_t consumeSeq;
+    InputEvent* event;
+    auto [consumeResult, unfinishedInputMessages] =
+            mConsumer->consume(&mEventFactory, true, consumeTime, &consumeSeq, &event);
+    ASSERT_THAT(consumeResult, Ok()) << "consume should return OK for seq " << args.seq;
+    EXPECT_EQ(args.seq, consumeSeq);
+    ASSERT_TRUE(event != nullptr);
+    ASSERT_THAT(InputEventType::MOTION, event->getType());
+    MotionEvent* motionEvent = static_cast<MotionEvent*>(event);
+    EXPECT_THAT(*motionEvent, WithMotionAction(args.action));
+    EXPECT_EQ(args.pointerCount, motionEvent->getPointerCount());
+
+    mConsumer->sendFinishedSignal(consumeSeq, true);
+    mPublisher->receiveConsumerResponse();
+
+    *outEvent = motionEvent;
+}
+
+void InputPublisherAndConsumerTest::publishConsumeAndVerifyMotion(const PublishMotionArgs& args,
+                                                                  nsecs_t consumeTime) {
+    MotionEvent* tempEvent = nullptr;
+    publishConsumeAndVerifyMotion(args, consumeTime, &tempEvent);
 }
 
 TEST_F(InputPublisherAndConsumerTest, SendTimeline) {
@@ -701,6 +747,157 @@ TEST_F(InputPublisherAndConsumerTest, PublishMultipleEvents_EndToEnd) {
                                   Pointer{.id = 2, .x = 200, .y = 300}});
     ASSERT_NO_FATAL_FAILURE(publishAndConsumeKeyEvent());
     ASSERT_NO_FATAL_FAILURE(publishAndConsumeTouchModeEvent());
+}
+
+TEST_F(InputPublisherAndConsumerTest, PublishMotionEvent_ActionUpGetsResampled) {
+    SCOPED_FLAG_OVERRIDE(fix_action_up_resampling, true);
+    const nsecs_t downTime = systemTime(SYSTEM_TIME_MONOTONIC);
+    const nsecs_t eventTimeStep = 3 * 1000000; // 3 ms
+    uint32_t seq = 1;
+
+    // Publish and consume DOWN
+    publishConsumeAndVerifyMotion(PublishMotionArgs(AMOTION_EVENT_ACTION_DOWN, downTime,
+                                                    {Pointer{.id = 0, .x = 20, .y = 30}}, seq++,
+                                                    /*eventTime=*/downTime),
+                                  /*consumeTime=*/-1);
+
+    // Publish MOVE events
+    const nsecs_t moveEventTime1 = downTime + eventTimeStep;
+    publishMotionEvent(*mPublisher,
+                       PublishMotionArgs(AMOTION_EVENT_ACTION_MOVE, moveEventTime1,
+                                         {Pointer{.id = 0, .x = 40, .y = 60}}, seq++,
+                                         /*eventTime=*/moveEventTime1));
+
+    const nsecs_t moveEventTime2 = downTime + 2 * eventTimeStep;
+    publishMotionEvent(*mPublisher,
+                       PublishMotionArgs(AMOTION_EVENT_ACTION_MOVE, moveEventTime2,
+                                         {Pointer{.id = 0, .x = 60, .y = 90}}, seq++,
+                                         /*eventTime=*/moveEventTime2));
+    const nsecs_t moveEventTime3 = downTime + 3 * eventTimeStep;
+    PublishMotionArgs lastMoveArgs(AMOTION_EVENT_ACTION_MOVE, moveEventTime3,
+                                   {Pointer{.id = 0, .x = 80, .y = 120}}, seq++,
+                                   /*eventTime=*/moveEventTime3);
+    publishMotionEvent(*mPublisher, lastMoveArgs);
+
+    // Consume batch ensuring time is resampled by offsetting by resampling latency + a constant
+    const nsecs_t frameTime =
+            downTime + 3 * eventTimeStep + std::chrono::nanoseconds(RESAMPLE_LATENCY).count() + 10;
+    InputEvent* event;
+    uint32_t consumeSeq;
+    auto [consumeResult, unfinishedInputMessages] =
+            mConsumer->consume(&mEventFactory, true, frameTime, &consumeSeq, &event);
+    ASSERT_THAT(consumeResult, Ok());
+    EXPECT_EQ(lastMoveArgs.seq, consumeSeq);
+    const MotionEvent& moveEvent = static_cast<const MotionEvent&>(*event);
+    EXPECT_THAT(moveEvent, WithMotionAction(AMOTION_EVENT_ACTION_MOVE));
+    mConsumer->sendFinishedSignal(consumeSeq, true);
+    mPublisher->receiveConsumerResponse();
+
+    // Verify MOVE event is resampled
+    const size_t moveEventHistorySize = moveEvent.getHistorySize();
+    const PointerCoords* moveCoords =
+            moveEvent.getHistoricalRawPointerCoords(/*pointerIndex=*/0, moveEventHistorySize);
+    ASSERT_TRUE(moveCoords && moveCoords->isResampled);
+    float moveResampledX = moveEvent.getHistoricalX(/*pointerIndex=*/0, moveEventHistorySize);
+    float moveResampledY = moveEvent.getHistoricalY(/*pointerIndex=*/0, moveEventHistorySize);
+
+    // Publish and consume UP
+    nsecs_t upEventTime = frameTime;
+    MotionEvent* upEvent;
+    publishConsumeAndVerifyMotion(PublishMotionArgs(AMOTION_EVENT_ACTION_UP,
+                                                    /*downTime=*/upEventTime,
+                                                    {Pointer{.id = 0, .x = 80, .y = 120}}, seq++,
+                                                    /*eventTime=*/upEventTime),
+                                  /*consumeTime=*/upEventTime, &upEvent);
+
+    // Assert UP is resampled and matches last MOVE
+    EXPECT_TRUE(upEvent->getSamplePointerCoords()[0].isResampled);
+    EXPECT_NEAR(moveResampledX, upEvent->getX(0), EPSILON);
+    EXPECT_NEAR(moveResampledY, upEvent->getY(0), EPSILON);
+}
+
+TEST_F(InputPublisherAndConsumerTest, PublishMotionEvent_ActionPointerUpGetsResampled) {
+    SCOPED_FLAG_OVERRIDE(fix_action_up_resampling, true);
+    const nsecs_t downTime = systemTime(SYSTEM_TIME_MONOTONIC);
+    const nsecs_t eventTimeStep = 3 * 1000000; // 3 ms
+    uint32_t seq = 1;
+
+    // Initial DOWN for first pointer
+    publishConsumeAndVerifyMotion(PublishMotionArgs(AMOTION_EVENT_ACTION_DOWN,
+                                                    /*downTime=*/downTime,
+                                                    {Pointer{.id = 0, .x = 10, .y = 15}}, seq++,
+                                                    /*eventTime=*/downTime),
+                                  /*consumeTime=*/-1);
+
+    // POINTER_DOWN for second pointer
+    publishConsumeAndVerifyMotion(PublishMotionArgs(POINTER_1_DOWN, /*downTime=*/downTime,
+                                                    {Pointer{.id = 0, .x = 10, .y = 15},
+                                                     Pointer{.id = 1, .x = 20, .y = 30}},
+                                                    seq++, /*eventTime=*/downTime),
+                                  /*consumeTime=*/-1);
+
+    const nsecs_t moveEventTime1 = downTime + eventTimeStep;
+    // Publish MOVE events for the second pointer
+    publishMotionEvent(*mPublisher,
+                       PublishMotionArgs(AMOTION_EVENT_ACTION_MOVE, /*downTime=*/moveEventTime1,
+                                         {Pointer{.id = 0, .x = 10, .y = 15},
+                                          Pointer{.id = 1, .x = 40, .y = 60}},
+                                         seq++, /*eventTime=*/moveEventTime1));
+    const nsecs_t moveEventTime2 = downTime + 2 * eventTimeStep;
+    publishMotionEvent(*mPublisher,
+                       PublishMotionArgs(AMOTION_EVENT_ACTION_MOVE, /*downTime=*/moveEventTime2,
+                                         {Pointer{.id = 0, .x = 10, .y = 15},
+                                          Pointer{.id = 1, .x = 60, .y = 90}},
+                                         seq++, /*eventTime=*/moveEventTime2));
+    const nsecs_t moveEventTime3 = downTime + 3 * eventTimeStep;
+    PublishMotionArgs lastMoveArgs(AMOTION_EVENT_ACTION_MOVE, /*downTime=*/moveEventTime3,
+                                   {Pointer{.id = 0, .x = 10, .y = 15},
+                                    Pointer{.id = 1, .x = 80, .y = 120}},
+                                   seq++, /*eventTime=*/moveEventTime3);
+    publishMotionEvent(*mPublisher, lastMoveArgs);
+
+    // Consume batch ensuring time is resampled by offsetting by resampling latency + a constant
+    nsecs_t frameTime =
+            downTime + 3 * eventTimeStep + std::chrono::nanoseconds(RESAMPLE_LATENCY).count() + 10;
+    InputEvent* event;
+    uint32_t consumeSeq;
+    auto [consumeResult, unfinishedInputMessages] =
+            mConsumer->consume(&mEventFactory, true, frameTime, &consumeSeq, &event);
+    ASSERT_THAT(consumeResult, Ok());
+    EXPECT_EQ(lastMoveArgs.seq, consumeSeq);
+    const MotionEvent& moveEvent = static_cast<const MotionEvent&>(*event);
+    EXPECT_THAT(moveEvent, WithMotionAction(AMOTION_EVENT_ACTION_MOVE));
+    mConsumer->sendFinishedSignal(consumeSeq, true);
+    mPublisher->receiveConsumerResponse();
+
+    // Verify MOVE event resampling for the second pointer (index 1)
+    const size_t moveEventHistorySize = moveEvent.getHistorySize();
+    const PointerCoords* moveCoords =
+            moveEvent.getHistoricalRawPointerCoords(/*pointerIndex=*/1, moveEventHistorySize);
+    ASSERT_TRUE(moveCoords && moveCoords->isResampled);
+    float moveResampledX = moveEvent.getHistoricalX(/*pointerIndex=*/1, moveEventHistorySize);
+    float moveResampledY = moveEvent.getHistoricalY(/*pointerIndex=*/1, moveEventHistorySize);
+
+    // POINTER_UP for the second pointer
+    nsecs_t upEventTime = frameTime;
+    MotionEvent* upEvent;
+    publishConsumeAndVerifyMotion(PublishMotionArgs(POINTER_1_UP, /*downTime=*/upEventTime,
+                                                    {Pointer{.id = 0, .x = 10, .y = 15},
+                                                     Pointer{.id = 1, .x = 80, .y = 120}},
+                                                    seq++, /*eventTime=*/upEventTime),
+                                  /*consumeTime=*/upEventTime, &upEvent);
+
+    // Assert POINTER_UP is resampled and matches last MOVE for pointer 1
+    EXPECT_TRUE(upEvent->getSamplePointerCoords()[1].isResampled);
+    EXPECT_NEAR(moveResampledX, upEvent->getX(1), EPSILON);
+    EXPECT_NEAR(moveResampledY, upEvent->getY(1), EPSILON);
+
+    // Final UP for the first pointer
+    publishConsumeAndVerifyMotion(PublishMotionArgs(AMOTION_EVENT_ACTION_UP,
+                                                    /*downTime=*/upEventTime + eventTimeStep,
+                                                    {Pointer{.id = 0, .x = 10, .y = 15}}, seq++,
+                                                    /*eventTime=*/upEventTime + eventTimeStep),
+                                  /*consumeTime=*/-1);
 }
 
 } // namespace android

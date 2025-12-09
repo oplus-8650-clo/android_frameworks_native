@@ -4489,7 +4489,7 @@ void InputDispatcher::notifyKey(const NotifyKeyArgs& args) {
     { // acquire lock
         mLock.lock();
 
-        if (input_flags::keyboard_repeat_keys() && !mConfig.keyRepeatEnabled) {
+        if (!mConfig.keyRepeatEnabled) {
             policyFlags |= POLICY_FLAG_DISABLE_KEY_REPEAT;
         }
 
@@ -5753,12 +5753,15 @@ void InputDispatcher::setMinTimeBetweenUserActivityPokes(std::chrono::millisecon
  * display. The display-specified events won't be affected.
  */
 void InputDispatcher::setFocusedDisplay(ui::LogicalDisplayId displayId) {
-    LOG_IF(INFO, DEBUG_FOCUS) << "setFocusedDisplay displayId=" << displayId.toString();
     { // acquire lock
         std::scoped_lock _l(mLock);
         ScopedSyntheticEventTracer traceContext(mTracer);
 
         if (mFocusedDisplayId != displayId) {
+            std::string message = std::string("Focusing display ") + displayId.toString();
+            android_log_event_list(LOGTAG_INPUT_FOCUS) << message << LOG_ID_EVENTS;
+            PROTOLOG_I("INPUT_FOCUS", "%s", message.c_str());
+
             sp<IBinder> oldFocusedWindowToken =
                     mFocusResolver.getFocusedWindowToken(mFocusedDisplayId);
             if (oldFocusedWindowToken != nullptr) {

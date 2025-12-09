@@ -31,6 +31,7 @@
 #include <input/AccelerationCurve.h>
 #include <input/DisplayViewport.h>
 #include <input/InputEventLabels.h>
+#include <input/ScopedFlagOverride.h>
 #include <linux/input-event-codes.h>
 #include <linux/input.h>
 #include <utils/Timers.h>
@@ -39,7 +40,6 @@
 #include "InputReaderBase.h"
 #include "InterfaceMocks.h"
 #include "NotifyArgs.h"
-#include "ScopedFlagOverride.h"
 #include "TestEventMatchers.h"
 #include "ui/Rotation.h"
 

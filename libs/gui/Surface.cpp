@@ -2256,6 +2256,7 @@ int Surface::dispatchSetFrameTimelineInfo(va_list args) {
     ftlInfo.skippedFrameVsyncId = nativeWindowFtlInfo.skippedFrameVsyncId;
     ftlInfo.skippedFrameStartTimeNanos = nativeWindowFtlInfo.skippedFrameStartTimeNanos;
     ftlInfo.vsyncResyncedJitterNanos = nativeWindowFtlInfo.vsyncResyncedJitterNanos;
+    ftlInfo.dequeueBufferDurationNanos = nativeWindowFtlInfo.dequeueBufferDurationNanos;
 
     return setFrameTimelineInfo(nativeWindowFtlInfo.frameNumber, ftlInfo);
 #endif
@@ -2609,8 +2610,8 @@ int Surface::setMaxDequeuedBufferCount(int maxDequeuedBuffers) {
         return err;
     }
 
-    if (maxDequeuedBuffers > (int)mSlots.size()) {
-        int newSlotCount = minUndequeuedBuffers + maxDequeuedBuffers;
+    int newSlotCount = minUndequeuedBuffers + maxDequeuedBuffers;
+    if (newSlotCount > (int)mSlots.size()) {
         err = mGraphicBufferProducer->extendSlotCount(newSlotCount);
         if (err != OK) {
             SURF_LOGE("IGraphicBufferProducer::extendSlotCount(%d) returned %s", newSlotCount,
