@@ -1,7 +1,9 @@
 service aisealhostservice /system/bin/aisealhostservice
     class core
     user system
-    group system virtualmachine
+    group system
+    # AiSeal hosts multiple performance sensitive services like AppSearch or AI
+    # inference, so we want to run it on all cores.
     task_profiles MaxPerformance
     disabled
 

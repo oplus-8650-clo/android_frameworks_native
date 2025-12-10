@@ -69,14 +69,15 @@ where
     result
 }
 
-pub fn connect_with_cid_port_context(
+/// Connects to the vsock port of the given CID with a given SELinux context.
+pub(crate) fn connect_with_cid_port_context(
     cid: u32,
     port: u32,
     context: &str,
 ) -> Result<ParcelFileDescriptor> {
     validate_vsock_port(port)?;
-    let context_cstr =
-        CString::new(context).context("Failed to convert context to CString: {context}")?;
+    let context_cstr = CString::new(context)
+        .with_context(|| format!("Failed to convert context to CString: {context}"))?;
     with_sock_context(&context_cstr, || -> Result<ParcelFileDescriptor> {
         let stream = VsockStream::connect_with_cid_port(cid, port).context("Failed to connect")?;
         Ok(vsock_stream_to_pfd(stream))
