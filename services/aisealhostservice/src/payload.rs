@@ -30,15 +30,21 @@ use std::{
 };
 use zip::ZipArchive;
 
-pub struct VmPayload {
-    pub config_apk: ParcelFileDescriptor,
-    pub config_idsig: ParcelFileDescriptor,
-    pub tenant_apks: Vec<ParcelFileDescriptor>,
-    pub tenant_idsigs: Vec<ParcelFileDescriptor>,
+/// Holds file descriptors for all APKs and idsig files required to boot a VM.
+pub(crate) struct VmPayload {
+    /// File descriptor of the main config APK.
+    pub(crate) config_apk: ParcelFileDescriptor,
+    /// File descriptor of the idsig of the main config APK.
+    pub(crate) config_idsig: ParcelFileDescriptor,
+    /// File descriptors of tenant APKs.
+    pub(crate) tenant_apks: Vec<ParcelFileDescriptor>,
+    /// File descriptors of idsigs of tenant APKs.
+    pub(crate) tenant_idsigs: Vec<ParcelFileDescriptor>,
 }
 
 impl VmPayload {
-    pub fn load(
+    /// Loads all payload APKs and their idsigs.
+    pub(crate) fn load(
         pm: &PackageManager,
         vm: &dyn IVirtualizationService,
         vm_dir: &str,
@@ -94,9 +100,9 @@ impl VmPayload {
                         &aiseal_config.abis,
                     ),
                 }?;
-                let tenant_apk = fs::File::open(&tenant_apk).context(format!(
-                    "Failed to open tenant APK: {tenant_apk_name}:{tenant_apk}"
-                ))?;
+                let tenant_apk = fs::File::open(&tenant_apk).with_context(|| {
+                    format!("Failed to open tenant APK: {tenant_apk_name}:{tenant_apk}")
+                })?;
                 let tenant_apk = ParcelFileDescriptor::new(tenant_apk);
                 let tenant_idsig =
                     prepare_idsig(vm, &tenant_apk, &format!("{vm_dir}/tenant_idsig_{index}"))?;
@@ -108,7 +114,7 @@ impl VmPayload {
         let config_apk_path = &aiseal_config.payload_config_package_path;
         let config_apk = ParcelFileDescriptor::new(
             fs::File::open(config_apk_path)
-                .context(format!("Failed to open VM config APK: {config_apk_path}"))?,
+                .with_context(|| format!("Failed to open VM config APK: {config_apk_path}"))?,
         );
         let config_idsig = prepare_idsig(vm, &config_apk, &format!("{vm_dir}/config_idsig"))?;
         Ok(VmPayload { config_apk, config_idsig, tenant_apks, tenant_idsigs })
@@ -133,9 +139,9 @@ fn find_payload_apk(
                 for apk_path in &split_apk_paths {
                     if let Some(apk_path) = apk_path.as_ref() {
                         let file = File::open(apk_path)
-                            .context(format!("Failed to open APK path: {apk_path}"))?;
+                            .with_context(|| format!("Failed to open APK path: {apk_path}"))?;
                         let zip = ZipArchive::new(BufReader::new(file))
-                            .context(format!("Failed to scan split APK: {apk_path}"))?;
+                            .with_context(|| format!("Failed to scan split APK: {apk_path}"))?;
 
                         if library_paths
                             .iter()
@@ -166,15 +172,15 @@ fn prepare_idsig(
         .read(true)
         .write(true)
         .open(idsig_path)
-        .context(format!("Failed to create idsig file: {idsig_path}"))?;
+        .with_context(|| format!("Failed to create idsig file: {idsig_path}"))?;
     let idsig = ParcelFileDescriptor::new(idsig);
     service
         .createOrUpdateIdsigFile(apk_fd, &idsig)
-        .context(format!("Failed to update idsig file: {idsig_path}"))?;
+        .with_context(|| format!("Failed to update idsig file: {idsig_path}"))?;
 
     // Open idsig as read-only
-    let idsig =
-        fs::File::open(idsig_path).context(format!("Failed to open idsig file: {idsig_path}"))?;
+    let idsig = fs::File::open(idsig_path)
+        .with_context(|| format!("Failed to open idsig file: {idsig_path}"))?;
     let idsig = ParcelFileDescriptor::new(idsig);
     Ok(idsig)
 }
