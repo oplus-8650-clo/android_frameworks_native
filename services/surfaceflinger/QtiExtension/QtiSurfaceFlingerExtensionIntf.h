@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
@@ -157,7 +157,7 @@ public:
                                  uint32_t curLayerStackId, uint32_t drawLayerStackId) = 0;
     virtual uint32_t qtiGetLayerClass(std::string mName) = 0;
     virtual void qtiSetVisibleLayerInfo(DisplayId displayId,
-                                 const char* name, int32_t sequence) = 0;
+                                 const char* name, int32_t sequence, Rect displayFrame) = 0;
     virtual bool qtiIsSmomoOptimalRefreshActive() = 0;
 
     /*

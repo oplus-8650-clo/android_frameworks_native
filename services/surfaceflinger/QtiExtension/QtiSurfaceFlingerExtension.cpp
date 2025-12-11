@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // #define LOG_NDEBUG 0
@@ -1695,10 +1695,12 @@ bool QtiSurfaceFlingerExtension::qtiIsFrameEarly(uint32_t layerStackId, int sequ
 }
 
 void QtiSurfaceFlingerExtension::qtiSetVisibleLayerInfo(DisplayId displayId, const char* name,
-                                                        int32_t sequence) {
+                                                        int32_t sequence, Rect displayFrame) {
     auto& visibleLayerInfo = mQtiVisibleLayerInfoMap[displayId];
     visibleLayerInfo.layerName.push_back(name);
     visibleLayerInfo.layerSequence.push_back(sequence);
+    visibleLayerInfo.layerDispFrame[name] = std::make_pair(displayFrame.getWidth(),
+                                                        displayFrame.getHeight());
 }
 
 void QtiSurfaceFlingerExtension::qtiUpdateLayerState(int numLayers) {
@@ -1709,13 +1711,17 @@ void QtiSurfaceFlingerExtension::qtiUpdateLayerState(int numLayers) {
     for (const auto& [token, displayDevice] : mQtiFlinger->mDisplays) {
         auto& VisibleLayerInfo = mQtiVisibleLayerInfoMap[displayDevice->getId()];
 
+#ifdef CONCURRENCY_DETECTION_CONFIG
         if (mSplitLayerExt && mQtiLayerExt) {
             if (VisibleLayerInfo.layerName.size() != 0) {
-                mQtiLayerExt->UpdateLayerState(VisibleLayerInfo.layerName, numLayers);
+                mQtiLayerExt->UpdateLayerState(VisibleLayerInfo.layerDispFrame);
             }
         }
+#endif
+
         VisibleLayerInfo.layerName.clear();
         VisibleLayerInfo.layerSequence.clear();
+        VisibleLayerInfo.layerDispFrame.clear();
     }
 }
 
