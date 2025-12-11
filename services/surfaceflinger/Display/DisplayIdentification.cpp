@@ -239,7 +239,7 @@ std::optional<Edid> parseEdid(const DisplayIdentificationData& edid) {
     uint8_t edidStructureVersion = 0;
     uint8_t edidStructureRevision = 0;
     bool isDigital = false;
-    if (FlagManager::getInstance().parse_edid_version_and_input_type()) {
+    if (FlagManager::getInstance().parse_edid_version_and_input_type_v2()) {
         constexpr uint8_t kEdidStructureVersionOffset = 18;
         if (edid.size() < kEdidStructureVersionOffset + sizeof(uint16_t)) {
             ALOGE("Invalid EDID: EDID structure version is truncated.");

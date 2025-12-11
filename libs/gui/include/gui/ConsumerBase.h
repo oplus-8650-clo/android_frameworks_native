@@ -96,7 +96,7 @@ public:
     // See IGraphicBufferConsumer::detachBuffer
     status_t detachBuffer(const sp<GraphicBuffer>& buffer);
 
-    status_t addReleaseFence(const sp<GraphicBuffer> buffer, const sp<Fence>& fence);
+    status_t addReleaseFence(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence);
 
     // See IGraphicBufferConsumer::setDefaultBufferSize
     status_t setDefaultBufferSize(uint32_t width, uint32_t height);
@@ -242,24 +242,24 @@ protected:
     // it is overridden the derived class's implementation must call
     // ConsumerBase::releaseBufferLocked.
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer);
+    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer&> graphicBuffer);
 #else
-    virtual status_t releaseBufferLocked(int slot,
-            const sp<GraphicBuffer> graphicBuffer,
-            EGLDisplay display = EGL_NO_DISPLAY, EGLSyncKHR eglFence = EGL_NO_SYNC_KHR);
+    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                         EGLDisplay display = EGL_NO_DISPLAY,
+                                         EGLSyncKHR eglFence = EGL_NO_SYNC_KHR);
 #endif
     // returns true iff the slot still has the graphicBuffer in it.
-    bool stillTracking(int slot, const sp<GraphicBuffer> graphicBuffer);
+    bool stillTracking(int slot, const sp<GraphicBuffer>& graphicBuffer);
 
     // addReleaseFence* adds the sync points associated with a fence to the set
     // of sync points that must be reached before the buffer in the given slot
     // may be used after the slot has been released.  This should be called by
     // derived classes each time some asynchronous work is kicked off that
     // references the buffer.
-    status_t addReleaseFence(int slot,
-            const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence);
-    status_t addReleaseFenceLocked(int slot,
-            const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence);
+    status_t addReleaseFence(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                             const sp<Fence>& fence);
+    status_t addReleaseFenceLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                   const sp<Fence>& fence);
 
     // Slot contains the information and object references that
     // ConsumerBase maintains about a BufferQueue buffer slot.

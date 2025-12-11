@@ -116,8 +116,8 @@ public:
     SurfaceStats(const sp<IBinder>& sc, std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence,
                  const sp<Fence>& prevReleaseFence, std::optional<uint32_t> hint,
                  uint32_t currentMaxAcquiredBuffersCount,
-                 std::optional<gui::CornerRadii> cornerRadii,
-                 FrameEventHistoryStats frameEventStats,
+                 const std::optional<gui::CornerRadii>& cornerRadii,
+                 const FrameEventHistoryStats& frameEventStats,
                  ReleaseCallbackId previousReleaseCallbackId)
           : surfaceControl(sc),
             acquireTimeOrFence(std::move(acquireTimeOrFence)),
@@ -126,7 +126,7 @@ public:
             currentMaxAcquiredBufferCount(currentMaxAcquiredBuffersCount),
             cornerRadii(cornerRadii),
             eventStats(frameEventStats),
-            previousReleaseCallbackId(previousReleaseCallbackId) {}
+            previousReleaseCallbackId(std::move(previousReleaseCallbackId)) {}
 
     sp<IBinder> surfaceControl;
     std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence = -1;

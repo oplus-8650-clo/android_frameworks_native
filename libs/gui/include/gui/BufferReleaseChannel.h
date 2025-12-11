@@ -103,7 +103,7 @@ public:
         uint32_t maxAcquiredBufferCount = 0;
 
         Message() = default;
-        Message(ReleaseCallbackId releaseCallbackId, sp<Fence> releaseFence,
+        Message(const ReleaseCallbackId& releaseCallbackId, sp<Fence> releaseFence,
                 uint32_t maxAcquiredBufferCount)
               : releaseCallbackId{releaseCallbackId},
                 releaseFence{std::move(releaseFence)},

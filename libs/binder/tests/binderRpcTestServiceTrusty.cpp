@@ -97,6 +97,8 @@ int main(void) {
                     // getClientPort returns a unique value per connection
                     service->port = ++gConnectionCounter;
                     service->server = server;
+                    sp<MyBinderRpcTestTrusty> extension = sp<MyBinderRpcTestTrusty>::make();
+                    service->setExtension(extension);
                     return service;
                 });
 

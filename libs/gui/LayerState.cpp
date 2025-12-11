@@ -174,7 +174,7 @@ status_t layer_state_t::write(Parcel& output) const
     SAFE_PARCEL(output.writeBool, colorSpaceAgnostic);
     SAFE_PARCEL(output.writeVectorSize, listeners);
 
-    for (auto listener : listeners) {
+    for (const auto& listener : listeners) {
         SAFE_PARCEL(output.writeStrongBinder, listener.transactionCompletedListener);
         SAFE_PARCEL(output.writeParcelableVector, listener.callbackIds);
     }

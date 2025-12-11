@@ -403,7 +403,7 @@ status_t ConsumerBase::detachBuffer(const sp<GraphicBuffer>& buffer) {
     return detachBufferLocked(slotIndex);
 }
 
-status_t ConsumerBase::addReleaseFence(const sp<GraphicBuffer> buffer, const sp<Fence>& fence) {
+status_t ConsumerBase::addReleaseFence(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence) {
     CB_LOGV("addReleaseFence");
     Mutex::Autolock lock(mMutex);
 
@@ -622,14 +622,14 @@ status_t ConsumerBase::acquireBufferLocked(BufferItem *item,
     return OK;
 }
 
-status_t ConsumerBase::addReleaseFence(int slot,
-        const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence) {
+status_t ConsumerBase::addReleaseFence(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                       const sp<Fence>& fence) {
     Mutex::Autolock lock(mMutex);
     return addReleaseFenceLocked(slot, graphicBuffer, fence);
 }
 
-status_t ConsumerBase::addReleaseFenceLocked(int slot,
-        const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence) {
+status_t ConsumerBase::addReleaseFenceLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                             const sp<Fence>& fence) {
     CB_LOGV("addReleaseFenceLocked: slot=%d", slot);
 
     // If consumer no longer tracks this graphicBuffer, we can safely
@@ -690,11 +690,10 @@ status_t ConsumerBase::addReleaseFenceLocked(int slot,
 }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer) {
+status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer) {
 #else
-status_t ConsumerBase::releaseBufferLocked(
-        int slot, const sp<GraphicBuffer> graphicBuffer,
-        EGLDisplay display, EGLSyncKHR eglFence) {
+status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                           EGLDisplay display, EGLSyncKHR eglFence) {
 #endif
     if (mAbandoned) {
         CB_LOGE("releaseBufferLocked: ConsumerBase is abandoned!");
@@ -728,8 +727,7 @@ status_t ConsumerBase::releaseBufferLocked(
     return err;
 }
 
-bool ConsumerBase::stillTracking(int slot,
-        const sp<GraphicBuffer> graphicBuffer) {
+bool ConsumerBase::stillTracking(int slot, const sp<GraphicBuffer>& graphicBuffer) {
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     if (slot < 0 || slot >= (int)mSlots.size()) {
 #else
