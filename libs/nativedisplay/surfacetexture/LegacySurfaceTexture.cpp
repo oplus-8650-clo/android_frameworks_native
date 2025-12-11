@@ -177,9 +177,10 @@ status_t LegacySurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t pre
 }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t LegacySurfaceTexture::releaseBufferLocked(int buf, sp<GraphicBuffer> graphicBuffer) {
+status_t LegacySurfaceTexture::releaseBufferLocked(int buf,
+                                                   const sp<GraphicBuffer>& graphicBuffer) {
 #else
-status_t LegacySurfaceTexture::releaseBufferLocked(int buf, sp<GraphicBuffer> graphicBuffer,
+status_t LegacySurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
                                                    EGLDisplay display, EGLSyncKHR eglFence) {
 #endif
     // release the buffer if it hasn't already been discarded by the

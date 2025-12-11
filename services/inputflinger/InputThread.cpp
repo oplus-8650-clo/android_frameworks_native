@@ -36,19 +36,16 @@ bool applyInputEventProfile() {
 
 class JvmAttacher {
 public:
-    JvmAttacher(JNIEnv* env, const std::string& name) {
-        if (env == nullptr) {
-            LOG(INFO) << "env is nullptr for thread " << name;
+    JvmAttacher(JavaVM* vm, const std::string& name) : mVm(vm) {
+        if (mVm == nullptr) {
             return;
         }
-        env->GetJavaVM(&mVm);
-        LOG_IF(FATAL, mVm == nullptr) << "Could not get JavaVM from provided JNIEnv";
-
         JavaVMAttachArgs args{
                 .version = JNI_VERSION_1_6,
                 .name = name.c_str(),
                 .group = nullptr,
         };
+        JNIEnv* env;
         if (mVm->AttachCurrentThread(&env, &args) != JNI_OK) {
             LOG(FATAL) << "Cannot attach thread " << name << " to Java VM.";
         }
@@ -69,14 +66,22 @@ private:
 InputThread::InputThread(std::string name, std::function<void()> loop, std::function<void()> wake,
                          bool isInCriticalPath, JNIEnv* env)
       : mThreadWake(wake) {
-    std::thread loopThread{[this, name, isInCriticalPath, loop, env] {
+    JavaVM* vm;
+    if (env == nullptr) {
+        LOG(INFO) << "env is nullptr when creating thread " << name;
+        vm = nullptr;
+    } else {
+        env->GetJavaVM(&vm);
+        LOG_IF(FATAL, vm == nullptr) << "Could not get JavaVM from provided JNIEnv";
+    }
+    std::thread loopThread{[this, name, isInCriticalPath, loop, vm] {
         if (input_flags::enable_input_policy_profile() && isInCriticalPath) {
             if (!applyInputEventProfile()) {
                 LOG(ERROR) << "Couldn't apply input policy profile for " << name;
             }
         }
 
-        JvmAttacher jvmAttacher(env, name);
+        JvmAttacher jvmAttacher(vm, name);
 
         while (!mStopThread) {
             loop();

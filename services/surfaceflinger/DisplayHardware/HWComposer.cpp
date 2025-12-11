@@ -1228,38 +1228,9 @@ HWComposer::getLutFileDescriptorMapper() {
 
 void HWComposer::dumpOverlayProperties(std::string& result) const {
     // dump overlay properties
+    mOverlayProperties.toString();
     result.append("OverlayProperties:\n");
-    base::StringAppendF(&result, "supportMixedColorSpaces: %d\n",
-                        mOverlayProperties.supportMixedColorSpaces);
-    base::StringAppendF(&result, "SupportedBufferCombinations(%zu entries)\n",
-                        mOverlayProperties.combinations.size());
-    for (const auto& combination : mOverlayProperties.combinations) {
-        result.append("    pixelFormats=\n");
-        for (const auto& pixelFormat : combination.pixelFormats) {
-            base::StringAppendF(&result, "        %s (%d)\n",
-                                decodePixelFormat(static_cast<PixelFormat>(pixelFormat)).c_str(),
-                                static_cast<uint32_t>(pixelFormat));
-        }
-        result.append("    standards=\n");
-        for (const auto& standard : combination.standards) {
-            base::StringAppendF(&result, "        %s (%d)\n",
-                                decodeStandardOnly(static_cast<uint32_t>(standard)).c_str(),
-                                static_cast<uint32_t>(standard));
-        }
-        result.append("    transfers=\n");
-        for (const auto& transfer : combination.transfers) {
-            base::StringAppendF(&result, "        %s (%d)\n",
-                                decodeTransferOnly(static_cast<uint32_t>(transfer)).c_str(),
-                                static_cast<uint32_t>(transfer));
-        }
-        result.append("    ranges=\n");
-        for (const auto& range : combination.ranges) {
-            base::StringAppendF(&result, "        %s (%d)\n",
-                                decodeRangeOnly(static_cast<uint32_t>(range)).c_str(),
-                                static_cast<uint32_t>(range));
-        }
-        result.append("\n");
-    }
+    base::StringAppendF(&result, "%s\n", mOverlayProperties.toString().c_str());
 }
 
 void HWComposer::dump(std::string& result) const {

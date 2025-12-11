@@ -424,7 +424,6 @@ void Scheduler::run() {
 
 void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
                               TimePoint expectedVsyncTime) {
-    SFTRACE_CALL();
     const auto debugPresentDelay = mDebugPresentDelay.load();
     mDebugPresentDelay.store(std::nullopt);
 

@@ -175,9 +175,9 @@ status_t SurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t presentWh
 }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t SurfaceTexture::releaseBufferLocked(int buf, sp<GraphicBuffer> graphicBuffer) {
+status_t SurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer) {
 #else
-status_t SurfaceTexture::releaseBufferLocked(int buf, sp<GraphicBuffer> graphicBuffer,
+status_t SurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
                                              EGLDisplay display, EGLSyncKHR eglFence) {
 #endif
     // release the buffer if it hasn't already been discarded by the

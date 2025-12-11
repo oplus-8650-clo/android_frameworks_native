@@ -22,6 +22,7 @@ use android_hardware_serialservice::aidl::android::hardware::serialservice::{
     SerialPortInfo::SerialPortInfo,
 };
 use android_hardware_serialservice::binder;
+use anyhow;
 use async_trait::async_trait;
 use binder::{
     DeathRecipient, ExceptionCode, ParcelFileDescriptor, Result, SpIBinder, Status, Strong,
@@ -31,9 +32,10 @@ use futures::StreamExt;
 use nix::libc;
 use rustutils::android::users::{AID_ROOT, AID_SYSTEM};
 use std::collections::{BTreeMap, HashMap};
+use std::ffi::CStr;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -85,6 +87,26 @@ impl SerialManager {
         )
         .await;
         instance
+    }
+
+    fn get_pts_name(fd: RawFd) -> anyhow::Result<String> {
+        // SAFETY: We follow https://man7.org/linux/man-pages/man4/pts.4.html
+        unsafe {
+            if libc::grantpt(fd) < 0 {
+                return Err(anyhow::anyhow!("grantpt failed, errno={}", *libc::__errno()));
+            }
+            if libc::unlockpt(fd) < 0 {
+                return Err(anyhow::anyhow!("unlockpt failed, errno={}", *libc::__errno()));
+            }
+
+            let name_ptr = libc::ptsname(fd);
+            if name_ptr.is_null() {
+                return Err(anyhow::anyhow!("ptsname failed, errno={}", *libc::__errno()));
+            }
+
+            let name = CStr::from_ptr(name_ptr);
+            Ok(name.to_string_lossy().into_owned())
+        }
     }
 }
 
@@ -188,12 +210,16 @@ impl ISerialManagerAsyncServer for SerialManager {
                         Some(format!("ioctl() failed, errno={}", e as i32)),
                     ));
                 }
+                if port_name == "ptmx" {
+                    // For CTS
+                    log::debug!("PTS name: {:?}", SerialManager::get_pts_name(file.as_raw_fd()));
+                }
                 Ok(ParcelFileDescriptor::new(file))
             }
             Err(e) => {
                 return Err(Status::new_exception_str(
                     ExceptionCode::SERVICE_SPECIFIC,
-                    Some(format!("open() failed, errno={}", e.raw_os_error().unwrap_or(0))),
+                    Some(format!("open() failed: {}", e)),
                 ));
             }
         }

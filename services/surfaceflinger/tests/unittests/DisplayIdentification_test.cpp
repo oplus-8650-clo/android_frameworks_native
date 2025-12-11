@@ -671,7 +671,7 @@ TEST(DisplayIdentificationTest, deviceProductInfo) {
 // the flag is removed.
 TEST(DisplayIdentificationTest, deviceProductInfoWithEdidStructureMetadataAndVideoInputType) {
     SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::
-                              parse_edid_version_and_input_type,
+                              parse_edid_version_and_input_type_v2,
                       true);
 
     {

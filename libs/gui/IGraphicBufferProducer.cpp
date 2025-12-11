@@ -460,8 +460,7 @@ public:
         return result;
     }
 
-    virtual status_t query(const std::vector<int32_t> inputs,
-                           std::vector<QueryOutput>* outputs) {
+    virtual status_t query(const std::vector<int32_t>& inputs, std::vector<QueryOutput>* outputs) {
         Parcel data, reply;
         data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
         data.writeInt32Vector(inputs);
@@ -945,8 +944,7 @@ public:
         return mBase->query(what, value);
     }
 
-    status_t query(const std::vector<int32_t> inputs,
-                   std::vector<QueryOutput>* outputs) override {
+    status_t query(const std::vector<int32_t>& inputs, std::vector<QueryOutput>* outputs) override {
         return mBase->query(inputs, outputs);
     }
 
