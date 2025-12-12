@@ -879,8 +879,7 @@ public:
     // This method behaves like a sequence of query() calls.
     // The return value of the batched method will only be about the
     // transaction. For a local call, the return value will always be NO_ERROR.
-    virtual status_t query(const std::vector<int32_t> inputs,
-                           std::vector<QueryOutput>* outputs);
+    virtual status_t query(const std::vector<int32_t>& inputs, std::vector<QueryOutput>* outputs);
 
 #ifndef NO_BINDER
     // Static method exports any IGraphicBufferProducer object to a parcel. It

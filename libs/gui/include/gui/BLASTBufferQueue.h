@@ -83,9 +83,9 @@ protected:
 private:
     BLASTBufferItemConsumer(const sp<IGraphicBufferProducer>& producer,
                             const sp<IGraphicBufferConsumer>& consumer, uint64_t consumerUsage,
-                            int bufferCount, bool controlledByApp, wp<BLASTBufferQueue> bbq)
+                            int bufferCount, bool controlledByApp, const wp<BLASTBufferQueue>& bbq)
           : BufferItemConsumer(producer, consumer, consumerUsage, bufferCount, controlledByApp),
-            mBLASTBufferQueue(std::move(bbq)),
+            mBLASTBufferQueue(bbq),
             mCurrentlyConnected(false),
             mPreviouslyConnected(false) {}
 

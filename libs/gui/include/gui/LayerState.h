@@ -366,8 +366,8 @@ struct layer_state_t {
     void updateSurfaceDamageRegion(const Region& surfaceDamageRegion);
     const Region& getSurfaceDamageRegion() const { return mNotDefCmpState.surfaceDamageRegion; }
     // Do not update state flags.  Used to set up test state.
-    void setSurfaceDamageRegion(Region&& surfaceDamageRegion) {
-        mNotDefCmpState.surfaceDamageRegion = std::move(surfaceDamageRegion);
+    void setSurfaceDamageRegion(const Region& surfaceDamageRegion) {
+        mNotDefCmpState.surfaceDamageRegion = surfaceDamageRegion;
     }
     void updateRelativeLayer(const sp<SurfaceControl>& relativeTo, int32_t z);
     void updateParentLayer(const sp<SurfaceControl>& newParent);

@@ -44,11 +44,10 @@ public:
 
     DisplayLuts(base::unique_fd lutfd, std::vector<int32_t> lutoffsets,
                 std::vector<int32_t> lutdimensions, std::vector<int32_t> lutsizes,
-                std::vector<int32_t> lutsamplingKeys) {
-        fd = std::move(lutfd);
-        offsets = lutoffsets;
+                std::vector<int32_t> lutsamplingKeys)
+          : offsets(std::move(lutoffsets)), fd(std::move(lutfd)) {
         lutProperties.reserve(offsets.size());
-        for (size_t i = 0; i < lutoffsets.size(); i++) {
+        for (size_t i = 0; i < offsets.size(); i++) {
             Entry entry{lutdimensions[i], lutsizes[i], lutsamplingKeys[i]};
             lutProperties.emplace_back(entry);
         }
@@ -126,7 +125,7 @@ static inline void PrintTo(const std::vector<float>& buffer, size_t offset, int3
     *os << "}";
 }
 
-static inline void PrintTo(const std::shared_ptr<DisplayLuts> luts, ::std::ostream* os) {
+static inline void PrintTo(const std::shared_ptr<DisplayLuts>& luts, ::std::ostream* os) {
     *os << "gui::DisplayLuts {";
     auto& fd = luts->getLutFileDescriptor();
     *os << "\n    .pfd = " << fd.get();

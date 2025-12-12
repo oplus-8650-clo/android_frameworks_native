@@ -2251,6 +2251,16 @@ TEST_P(BinderRpc, MinThreadsPerBinderSaturation) {
     saturateThreadPool(kMinThreadsPerBinder, proc.rootIface);
 }
 
+TEST_P(BinderRpc, Extensions) {
+    auto proc = createRpcTestSocketServerProcess({});
+
+    sp<IBinder> retrieved;
+    EXPECT_EQ(OK, proc.rootBinder->getExtension(&retrieved));
+    ASSERT_NE(retrieved, nullptr);
+    EXPECT_NE(proc.rootBinder, retrieved);
+    EXPECT_EQ(IBinderRpcTest::descriptor, retrieved->getInterfaceDescriptor());
+}
+
 class BinderRpcServerOnly : public ::testing::TestWithParam<std::tuple<RpcSecurity, uint32_t>> {
 public:
     static std::string PrintTestParam(const ::testing::TestParamInfo<ParamType>& info) {

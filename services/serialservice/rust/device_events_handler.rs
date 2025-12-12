@@ -64,11 +64,12 @@ impl DeviceEventsHandler {
             log::error!("unexpected device type {:?}", device_event.device_type);
             return;
         };
-        let Some(name) = devnode_path.file_name() else {
-            log::error!("no device name in {}", devnode_path.display());
+        if !devnode_path.starts_with("/dev/") {
+            log::error!("device name doesn't start with /dev/ in {}", devnode_path.display());
             return;
         };
-        let name = name.to_str().expect("Device paths should not have non-UTF-8 characters");
+        // Remove "/dev/" from the path, e.g. "/dev/ttyACM0" -> "ttyACM0"
+        let name = &devnode_path.to_str().unwrap()[5..];
         match device_event.event_type {
             EventType::Add => {
                 let Ok(driver_type) = ({

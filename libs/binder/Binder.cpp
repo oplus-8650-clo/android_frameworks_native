@@ -145,6 +145,7 @@ status_t IBinder::getExtension(sp<IBinder>* out) {
     LOG_ALWAYS_FATAL_IF(proxy == nullptr);
 
     Parcel data;
+    data.markForBinder(sp<IBinder>::fromExisting(this));
     Parcel reply;
     status_t status = transact(EXTENSION_TRANSACTION, data, &reply);
     if (status != OK) return status;

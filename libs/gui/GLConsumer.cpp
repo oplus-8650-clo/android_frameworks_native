@@ -443,7 +443,7 @@ void GLConsumer::onSlotCountChanged(int slotCount) {
 #endif
 
 #if !COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t GLConsumer::releaseBufferLocked(int buf, sp<GraphicBuffer> graphicBuffer,
+status_t GLConsumer::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
                                          EGLDisplay display, EGLSyncKHR eglFence) {
     // release the buffer if it hasn't already been discarded by the
     // BufferQueue. This can happen, for example, when the producer of this
@@ -1039,11 +1039,10 @@ void GLConsumer::dumpLocked(String8& result, const char* prefix) const
     ConsumerBase::dumpLocked(result, prefix);
 }
 
-GLConsumer::EglImage::EglImage(sp<GraphicBuffer> graphicBuffer) :
-    mGraphicBuffer(graphicBuffer),
-    mEglImage(EGL_NO_IMAGE_KHR),
-    mEglDisplay(EGL_NO_DISPLAY) {
-}
+GLConsumer::EglImage::EglImage(sp<GraphicBuffer> graphicBuffer)
+      : mGraphicBuffer(std::move(graphicBuffer)),
+        mEglImage(EGL_NO_IMAGE_KHR),
+        mEglDisplay(EGL_NO_DISPLAY) {}
 
 GLConsumer::EglImage::~EglImage() {
     if (mEglImage != EGL_NO_IMAGE_KHR) {
