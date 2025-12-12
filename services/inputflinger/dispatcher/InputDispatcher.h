@@ -751,6 +751,42 @@ private:
     void logOutboundMotionDetails(const char* prefix, const MotionEntry& entry);
 
     /**
+     * Consolidated state for a "no focused window" ANR.
+     */
+    struct NoFocusedWindowAnrState {
+        /** The timestamp in nanoseconds at which we started waiting for a focused window before
+         * declaring an ANR.
+         */
+        nsecs_t eventTime;
+
+        /** The timestamp in nanoseconds at which the ANR is raised. */
+        nsecs_t timeoutEndTime;
+
+        /**
+         * The focused application at the time when no focused window was present.
+         * Used to raise an ANR when we have no focused window.
+         */
+        std::shared_ptr<InputApplicationHandle> applicationHandle;
+
+        /** Id of the event. */
+        int32_t eventId;
+
+        /** The configured ANR timeout threshold in milliseconds after which ANR is raised. */
+        std::chrono::milliseconds timeoutDuration;
+
+        explicit NoFocusedWindowAnrState(nsecs_t eventTime, nsecs_t timeoutEndTime,
+                                         std::shared_ptr<InputApplicationHandle> applicationHandle,
+                                         int32_t eventId, std::chrono::milliseconds timeoutDuration)
+              : eventTime(eventTime),
+                timeoutEndTime(timeoutEndTime),
+                applicationHandle(std::move(applicationHandle)),
+                eventId(eventId),
+                timeoutDuration(timeoutDuration) {}
+    };
+
+    std::optional<NoFocusedWindowAnrState> mNoFocusedWindowAnrState GUARDED_BY(mLock);
+
+    /**
      * This field is set if there is no focused window, and we have an event that requires
      * a focused window to be dispatched (for example, a KeyEvent).
      * When this happens, we will wait until *mNoFocusedWindowTimeoutTime before
@@ -773,11 +809,6 @@ private:
             REQUIRES(mLock);
 
     /**
-     * The focused application at the time when no focused window was present.
-     * Used to raise an ANR when we have no focused window.
-     */
-    std::shared_ptr<InputApplicationHandle> mAwaitedFocusedApplication GUARDED_BY(mLock);
-    /**
      * The displayId that the focused application is associated with.
      */
     ui::LogicalDisplayId mAwaitedApplicationDisplayId GUARDED_BY(mLock);
@@ -785,8 +816,14 @@ private:
 
     /**
      * Tell policy about a window or a monitor that just became unresponsive. Starts ANR.
+     *
+     * Note: For window unresponsive ANR, the timeoutDuration is the actual elapsed time waited
+     * before ANR is raised. This is different from No focused window ANR where it is the configured
+     * timeout threshold.
      */
-    void processConnectionUnresponsiveLocked(const Connection& connection, std::string reason)
+    void processConnectionUnresponsiveLocked(const Connection& connection, std::string reason,
+                                             int32_t eventId, nsecs_t eventTime,
+                                             std::chrono::milliseconds timeoutDuration)
             REQUIRES(mLock);
     /**
      * Tell policy about a window or a monitor that just became responsive.
@@ -794,7 +831,9 @@ private:
     void processConnectionResponsiveLocked(const Connection& connection) REQUIRES(mLock);
 
     void sendWindowUnresponsiveCommandLocked(const sp<IBinder>& connectionToken,
-                                             std::optional<gui::Pid> pid, std::string reason)
+                                             std::optional<gui::Pid> pid, std::string reason,
+                                             int32_t eventId, nsecs_t eventTime,
+                                             std::chrono::milliseconds timeoutDuration)
             REQUIRES(mLock);
     void sendWindowResponsiveCommandLocked(const sp<IBinder>& connectionToken,
                                            std::optional<gui::Pid> pid) REQUIRES(mLock);
@@ -902,7 +941,11 @@ private:
 
     // Dump state.
     void dumpDispatchStateLocked(std::string& dump) const REQUIRES(mLock);
-    void logDispatchStateLocked() const REQUIRES(mLock);
+    // Logs the dispatcher state to logcat.
+    // A delay may be added to avoid overwhelming the logcat buffer. This delay should be zero
+    // unless we are crashing after the log to prevent the system monitor from incorrectly
+    // detecting a deadlock while this thread sleeps.
+    void logDispatchStateLocked(std::chrono::milliseconds delay = 1ms) const REQUIRES(mLock);
     std::string dumpPointerCaptureStateLocked() const REQUIRES(mLock);
 
     status_t removeInputChannelLocked(const std::shared_ptr<Connection>& connection, bool notify)

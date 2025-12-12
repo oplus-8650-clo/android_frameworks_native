@@ -61,6 +61,7 @@ mod ffi {
             name: String,
             verify_buttons: bool,
             verify_down_time: bool,
+            verify_captured_events: bool,
         ) -> Box<InputVerifier>;
         #[allow(clippy::too_many_arguments)]
         fn process_movement(
@@ -129,12 +130,14 @@ fn create_input_verifier(
     name: String,
     verify_buttons: bool,
     verify_down_time: bool,
+    verify_captured_events: bool,
 ) -> Box<InputVerifier> {
     Box::new(InputVerifier::new(
         &name,
         ffi::shouldLog("InputVerifierLogEvents"),
         verify_buttons,
         verify_down_time,
+        verify_captured_events,
     ))
 }
 
@@ -284,6 +287,7 @@ mod tests {
             "Test".to_string(),
             /*verify_buttons*/ true,
             /*verify_down_times*/ true,
+            /*verify_captured_events*/ true,
         );
         assert!(process_movement(
             &mut verifier,
@@ -306,6 +310,7 @@ mod tests {
             "Test".to_string(),
             /*verify_buttons*/ true,
             /*verify_down_times*/ true,
+            /*verify_captured_events*/ true,
         );
         assert!(process_movement(
             &mut verifier,

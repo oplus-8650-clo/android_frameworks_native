@@ -36,6 +36,13 @@ flag {
 }
 
 flag {
+  name: "enable_captured_verification"
+  namespace: "input"
+  description: "Enable input event verification on event streams from captured touchpads and mice"
+  bug: "411389468"
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"
