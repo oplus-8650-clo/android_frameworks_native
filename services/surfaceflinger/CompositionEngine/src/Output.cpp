@@ -68,11 +68,11 @@
 
 #include "TracedOrdinal.h"
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-03-06: nan: SF: Squash commit of SF Extensions.
 #include "../QtiExtension/QtiOutputExtension.h"
 using android::compositionengineextension::QtiOutputExtension;
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_END: 2023-03-06: nan: SF: Squash commit of SF Extensions.
 using aidl::android::hardware::graphics::composer3::Composition;
 
 namespace android::compositionengine {
@@ -1021,11 +1021,11 @@ void Output::writeCompositionState(const compositionengine::CompositionRefreshAr
                     z, includeGeometry, overrideZ, isPeekingThrough,
                     layer->requiresClientComposition());
         }
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-03-06: nan: SF: Squash commit of SF Extensions.
 
         QtiOutputExtension::qtiWriteLayerFlagToHWC(layer->getHwcLayer(), this);
         // QTI_END
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_END: 2023-03-06: nan: SF: Squash commit of SF Extensions.
     }
     editState().outputLayerHash = outputLayerHash;
 // QTI_BEGIN: 2023-06-15: Display: sf: extensions: Reduce instructions in SmoMo & LayerExt update
@@ -1163,9 +1163,9 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
         bestDataSpace = hdrDataSpace;
     }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-03-06: nan: SF: Squash commit of SF Extensions.
     if (QtiOutputExtension::qtiHasSecureDisplay(this)) {
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_END: 2023-03-06: nan: SF: Squash commit of SF Extensions.
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
         bestDataSpace = ui::Dataspace::V0_SRGB;
         isHdr = false;
@@ -1487,9 +1487,9 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     OutputCompositionState& outputCompositionState = editState();
     // Check if the client composition requests were rendered into the provided graphic buffer. If
     // so, we can reuse the buffer and avoid client composition.
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-03-06: nan: SF: Squash commit of SF Extensions.
     if (mClientCompositionRequestCache
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_END: 2023-03-06: nan: SF: Squash commit of SF Extensions.
 // QTI_BEGIN: 2023-05-24: Display: CompositionEngine: Avoid disabling SF Client Composition Caching
         && (!QtiOutputExtension::qtiUseSpecFence() || mLayerRequestingBackgroundBlur != nullptr)
 // QTI_END: 2023-05-24: Display: CompositionEngine: Avoid disabling SF Client Composition Caching
