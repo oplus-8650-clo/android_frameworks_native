@@ -4456,7 +4456,7 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
 
     creationArgs.requestedRefreshRate = state.requestedRefreshRate;
 
-// QTI_BEGIN: 2025-06-29: nan: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
+// QTI_BEGIN: 2025-06-29: Display: sf: Add FBT WCG blending space support for WFD am: d8cd658cc9 am: d8cd658cc9
     if (state.isVirtual()) {
         const auto qtiHalId = compositionDisplay->getDisplayIdVariant().and_then(
                 asHalDisplayId<DisplayIdVariant>);
