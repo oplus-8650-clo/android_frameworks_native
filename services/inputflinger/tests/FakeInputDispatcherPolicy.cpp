@@ -350,9 +350,9 @@ std::optional<T> FakeInputDispatcherPolicy::getItemFromStorageLockedInterruptibl
     return std::make_optional(item);
 }
 
-void FakeInputDispatcherPolicy::notifyWindowUnresponsive(const sp<IBinder>& connectionToken,
-                                                         std::optional<gui::Pid> pid,
-                                                         const std::string&) {
+void FakeInputDispatcherPolicy::notifyWindowUnresponsive(
+        const sp<IBinder>& connectionToken, std::optional<gui::Pid> pid, const std::string&,
+        int32_t eventId, nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) {
     std::scoped_lock lock(mLock);
     mAnrWindows.push({connectionToken, pid});
     mNotifyAnr.notify_all();
@@ -366,7 +366,8 @@ void FakeInputDispatcherPolicy::notifyWindowResponsive(const sp<IBinder>& connec
 }
 
 void FakeInputDispatcherPolicy::notifyNoFocusedWindowAnr(
-        const std::shared_ptr<InputApplicationHandle>& applicationHandle) {
+        const std::shared_ptr<InputApplicationHandle>& applicationHandle, int32_t eventId,
+        nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) {
     std::scoped_lock lock(mLock);
     mAnrApplications.push(applicationHandle);
     mNotifyAnr.notify_all();

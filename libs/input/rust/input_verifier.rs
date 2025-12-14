@@ -203,6 +203,7 @@ pub struct InputVerifier {
     should_log: bool,
     verify_buttons: bool,
     verify_down_time: bool,
+    verify_captured_events: bool,
     touching_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
     hovering_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
     button_verifier_by_device: HashMap<DeviceId, ButtonVerifier>,
@@ -211,7 +212,13 @@ pub struct InputVerifier {
 
 impl InputVerifier {
     /// Create a new InputVerifier.
-    pub fn new(name: &str, should_log: bool, verify_buttons: bool, verify_down_time: bool) -> Self {
+    pub fn new(
+        name: &str,
+        should_log: bool,
+        verify_buttons: bool,
+        verify_down_time: bool,
+        verify_captured_events: bool,
+    ) -> Self {
         logger::init(
             logger::Config::default()
                 .with_tag_on_device("InputVerifier")
@@ -222,6 +229,7 @@ impl InputVerifier {
             should_log,
             verify_buttons,
             verify_down_time,
+            verify_captured_events,
             touching_pointer_ids_by_device: HashMap::new(),
             hovering_pointer_ids_by_device: HashMap::new(),
             button_verifier_by_device: HashMap::new(),
@@ -232,8 +240,10 @@ impl InputVerifier {
     /// Process a pointer movement event from an InputDevice.
     /// If the event is not valid, we return an error string that describes the issue.
     pub fn process_movement(&mut self, event: NotifyMotionArgs<'_>) -> Result<(), String> {
-        if !event.source.is_from_class(SourceClass::Pointer) {
-            // Skip non-pointer sources like MOUSE_RELATIVE for now
+        if !(event.source.is_from_class(SourceClass::Pointer)
+            || (self.verify_captured_events && event.source.is_from_class(SourceClass::Position)))
+        {
+            // Skip non-pointer and non-position sources like MOUSE_RELATIVE for now.
             return Ok(());
         }
         if self.should_log {
@@ -495,7 +505,7 @@ mod tests {
     fn make_test_verifier() -> InputVerifier {
         InputVerifier::new(
             "Test", /*should_log*/ false, /*verify_buttons*/ true,
-            /*verify_down_times*/ true,
+            /*verify_down_times*/ true, /*verify_captured_events*/ true,
         )
     }
 
@@ -511,6 +521,21 @@ mod tests {
             .process_movement(NotifyMotionArgs {
                 action: MotionAction::Down,
                 pointer_properties: &pointer_properties,
+                ..BASE_EVENT
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn down_with_two_pointers_from_absolute_captured_touchpad() {
+        let mut verifier = make_test_verifier();
+        let pointer_properties =
+            Vec::from([RustPointerProperties { id: 0 }, RustPointerProperties { id: 1 }]);
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                action: MotionAction::Down,
+                pointer_properties: &pointer_properties,
+                source: Source::Touchpad,
                 ..BASE_EVENT
             })
             .is_err());
