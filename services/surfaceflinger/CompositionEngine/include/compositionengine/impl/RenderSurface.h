@@ -77,10 +77,12 @@ public:
     std::shared_ptr<renderengine::ExternalTexture>& mutableTextureForTest();
     base::unique_fd& mutableBufferReadyForTest();
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf*
     qtiGetDisplaySurfaceExtension() {
         return mQtiDSExtnIntf;
     }
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 // QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 
     std::shared_ptr<android::compositionengineextension::QtiRenderSurfaceExtension>
@@ -107,7 +109,9 @@ private:
 // QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
     friend class android::compositionengineextension::QtiRenderSurfaceExtension;
 // QTI_END: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 // QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
     std::shared_ptr<android::compositionengineextension::QtiRenderSurfaceExtension> mQtiRSExtnIntf =
             nullptr;
