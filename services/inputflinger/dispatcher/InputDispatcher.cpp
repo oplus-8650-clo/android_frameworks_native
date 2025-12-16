@@ -34,6 +34,7 @@
 #include <input/InputFlags.h>
 #include <input/PrintTools.h>
 #include <input/TraceTools.h>
+#include <jni.h>
 #include <openssl/mem.h>
 #include <private/android_filesystem_config.h>
 #include <unistd.h>
@@ -879,13 +880,13 @@ std::string dumpWindowForTouchOcclusion(const WindowInfo& info, bool isTouchedWi
 
 // --- InputDispatcher ---
 
-InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env)
-      : InputDispatcher(policy, input_trace::impl::createInputTracingBackendIfEnabled(env), env) {}
+InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JavaVM* vm)
+      : InputDispatcher(policy, input_trace::impl::createInputTracingBackendIfEnabled(vm), vm) {}
 
 InputDispatcher::InputDispatcher(
         InputDispatcherPolicyInterface& policy,
-        std::shared_ptr<input_trace::InputTracingBackendInterface> traceBackend, JNIEnv* env)
-      : mJniEnv(env),
+        std::shared_ptr<input_trace::InputTracingBackendInterface> traceBackend, JavaVM* vm)
+      : mVm(vm),
         mPolicy(policy),
 
         mLooper(sp<Looper>::make(false)),
@@ -948,7 +949,7 @@ status_t InputDispatcher::start() {
     protolog::Initialize();
     mThread = std::make_unique<InputThread>(
             "InputDispatcher", [this]() { dispatchOnce(); }, [this]() { mLooper->wake(); },
-            /*isInCriticalPath=*/true, mJniEnv);
+            /*isInCriticalPath=*/true, mVm);
     return OK;
 }
 

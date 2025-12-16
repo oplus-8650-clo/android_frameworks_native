@@ -20,8 +20,8 @@
 
 #include <android-base/logging.h>
 #include <com_android_input_flags.h>
+#include <jni.h>
 #include <processgroup/processgroup.h>
-#include "jni.h"
 
 namespace android {
 
@@ -64,16 +64,8 @@ private:
 } // namespace
 
 InputThread::InputThread(std::string name, std::function<void()> loop, std::function<void()> wake,
-                         bool isInCriticalPath, JNIEnv* env)
+                         bool isInCriticalPath, JavaVM* vm)
       : mThreadWake(wake) {
-    JavaVM* vm;
-    if (env == nullptr) {
-        LOG(INFO) << "env is nullptr when creating thread " << name;
-        vm = nullptr;
-    } else {
-        env->GetJavaVM(&vm);
-        LOG_IF(FATAL, vm == nullptr) << "Could not get JavaVM from provided JNIEnv";
-    }
     std::thread loopThread{[this, name, isInCriticalPath, loop, vm] {
         if (input_flags::enable_input_policy_profile() && isInCriticalPath) {
             if (!applyInputEventProfile()) {

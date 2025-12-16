@@ -159,15 +159,17 @@ PointerCaptureRequest FakeInputDispatcherPolicy::assertSetPointerCaptureCalled(
 
     if (!mPointerCaptureChangedCondition.wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
                                                   [this, mode, window]() REQUIRES(mLock) {
+                                                      // Guard against spurious wakeups.
+                                                      if (!mPointerCaptureRequest) {
+                                                          return false;
+                                                      }
                                                       if (mode != PointerCaptureMode::UNCAPTURED) {
                                                           return mPointerCaptureRequest->mode ==
                                                                   mode &&
                                                                   mPointerCaptureRequest->window ==
                                                                   window->getToken();
-                                                      } else {
-                                                          return mPointerCaptureRequest->mode ==
-                                                                  mode;
                                                       }
+                                                      return mPointerCaptureRequest->mode == mode;
                                                   })) {
         ADD_FAILURE() << "Timed out waiting for setPointerCapture({" << window->getName() << ", "
                       << ftl::enum_string(mode) << "}) to be called.";

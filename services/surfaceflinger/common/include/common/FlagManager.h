@@ -55,6 +55,7 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
     bool anchor_list() const;
+    bool bugfix_resize_virtual_display_surfaces() const;
     bool configure_work_duration() const;
     bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
@@ -80,7 +81,7 @@ public:
     bool use_experimental_jank_classification() const;
 
     /// Trunk stable readonly flags ///
-    /// IMPORTANT - please keep alphabetized to reduce merge conflicts
+    /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     bool cache_when_source_crop_layer_only_moved() const;
     bool connected_display_hdr_v2() const;
     bool correct_dpi_with_display_size() const;
@@ -90,7 +91,6 @@ public:
     bool follower_arbitrary_refresh_rate_selection() const;
     bool follower_display_backpressure() const;
     bool force_slower_follower_gpu_composition() const;
-    bool fp16_client_target() const;
     bool frame_rate_category_mrr() const;
     bool graphite_renderengine() const;
     bool hdcp_level_hal() const;

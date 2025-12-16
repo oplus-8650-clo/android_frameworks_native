@@ -41,7 +41,6 @@ filegroup {
         "FocusResolver.cpp",
         "InjectionState.cpp",
         "InputDispatcher.cpp",
-        "InputDispatcherFactory.cpp",
         "InputEventTimeline.cpp",
         "InputState.cpp",
         "InputTarget.cpp",

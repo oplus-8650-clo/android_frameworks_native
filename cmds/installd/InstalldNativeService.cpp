@@ -1897,10 +1897,55 @@ binder::Status InstalldNativeService::destroyCeSnapshotsNotSpecified(
     return ok();
 }
 
+static binder::Status copyAppDataForPackage(const char* from_uuid, const char* to_uuid,
+                                            userid_t userId, const char* package_name) {
+    {
+        auto from = create_data_user_de_package_path(from_uuid, userId, package_name);
+        auto to = create_data_user_de_path(to_uuid, userId);
+        int rc = copy_directory_recursive(from.c_str(), to.c_str());
+        if (rc != 0) {
+            return error(rc, "Failed copying DE data from " + from + " to " + to);
+        }
+    }
+
+    {
+        auto from = create_data_user_ce_package_path(from_uuid, userId, package_name);
+        auto to = create_data_user_ce_path(to_uuid, userId);
+        int rc = copy_directory_recursive(from.c_str(), to.c_str());
+        if (rc != 0) {
+            return error(rc, "Failed copying CE data from " + from + " to " + to);
+        }
+    }
+
+    return ok();
+}
+
+static int rollbackAppCeDataForPackage(const char* to_uuid, userid_t userId,
+                                       const char* package_name) {
+    auto to_ce = create_data_user_ce_package_path(to_uuid, userId, package_name);
+    int res = delete_dir_contents(to_ce.c_str(), 1, nullptr);
+    if (res != 0) {
+        LOG(WARNING) << "Failed to rollback " << to_ce;
+    }
+    return res;
+}
+
+static int rollbackAppDeDataForPackage(const char* to_uuid, userid_t userId,
+                                       const char* package_name) {
+    auto to_de = create_data_user_de_package_path(to_uuid, userId, package_name);
+    int res = delete_dir_contents(to_de.c_str(), 1, nullptr);
+    if (res != 0) {
+        LOG(WARNING) << "Failed to rollback " << to_de;
+    }
+    return res;
+}
+
 binder::Status InstalldNativeService::moveCompleteApp(const std::optional<std::string>& fromUuid,
-        const std::optional<std::string>& toUuid, const std::string& packageName,
-        int32_t appId, const std::string& seInfo,
-        int32_t targetSdkVersion, const std::string& fromCodePath) {
+                                                      const std::optional<std::string>& toUuid,
+                                                      const std::string& packageName, int32_t appId,
+                                                      int32_t pccId, const std::string& seInfo,
+                                                      int32_t targetSdkVersion,
+                                                      const std::string& fromCodePath) {
     ENFORCE_UID(AID_SYSTEM);
     CHECK_ARGUMENT_UUID(fromUuid);
     CHECK_ARGUMENT_UUID(toUuid);
@@ -1943,31 +1988,22 @@ binder::Status InstalldNativeService::moveCompleteApp(const std::optional<std::s
             continue;
         }
 
-        // TODO(b/459419210): Pass the correct pccId
         if (!createAppDataLocked(toUuid, packageName, userId, FLAG_STORAGE_CE | FLAG_STORAGE_DE,
                                  appId, /* previousAppId */ -1, seInfo, targetSdkVersion, nullptr,
-                                 nullptr, /* pccId */ -1, /* previousPccId */ 0)
+                                 nullptr, pccId, /* previousPccId */ 0)
                      .isOk()) {
             res = error("Failed to create package target");
             goto fail;
         }
-        {
-            auto from = create_data_user_de_package_path(from_uuid, userId, package_name);
-            auto to = create_data_user_de_path(to_uuid, userId);
-
-            int rc = copy_directory_recursive(from.c_str(), to.c_str());
-            if (rc != 0) {
-                res = error(rc, "Failed copying " + from + " to " + to);
-                goto fail;
-            }
+        res = copyAppDataForPackage(from_uuid, to_uuid, userId, package_name);
+        if (!res.isOk()) {
+            goto fail;
         }
-        {
-            auto from = create_data_user_ce_package_path(from_uuid, userId, package_name);
-            auto to = create_data_user_ce_path(to_uuid, userId);
 
-            int rc = copy_directory_recursive(from.c_str(), to.c_str());
-            if (rc != 0) {
-                res = error(rc, "Failed copying " + from + " to " + to);
+        if (pccId > 0) {
+            const std::string pccPackageName = std::string(package_name) + kPccDataSuffix;
+            res = copyAppDataForPackage(from_uuid, to_uuid, userId, pccPackageName.c_str());
+            if (!res.isOk()) {
                 goto fail;
             }
         }
@@ -2024,17 +2060,12 @@ fail:
     }
     for (auto userId : users) {
         LOCK_USER();
-        {
-            auto to = create_data_user_de_package_path(to_uuid, userId, package_name);
-            if (delete_dir_contents(to.c_str(), 1, nullptr) != 0) {
-                LOG(WARNING) << "Failed to rollback " << to;
-            }
-        }
-        {
-            auto to = create_data_user_ce_package_path(to_uuid, userId, package_name);
-            if (delete_dir_contents(to.c_str(), 1, nullptr) != 0) {
-                LOG(WARNING) << "Failed to rollback " << to;
-            }
+        rollbackAppCeDataForPackage(to_uuid, userId, package_name);
+        rollbackAppDeDataForPackage(to_uuid, userId, package_name);
+        if (pccId > 0) {
+            const std::string pccPackageName = std::string(package_name) + kPccDataSuffix;
+            rollbackAppCeDataForPackage(to_uuid, userId, pccPackageName.c_str());
+            rollbackAppDeDataForPackage(to_uuid, userId, pccPackageName.c_str());
         }
     }
     for (auto userId : users) {
