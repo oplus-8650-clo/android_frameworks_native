@@ -367,6 +367,137 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
                         VariantWith<NotifyMotionArgs>(WithMotionAction(AMOTION_EVENT_ACTION_UP))));
 }
 
+/**
+ * Check what happens when two pointers are hovering (BTN_TOUCH is not pressed).
+ */
+TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithoutBtnTouch) {
+    std::list<NotifyArgs> args;
+
+    // Set up two pointers hovering (BTN_TOUCH is not pressed)
+    args += processSlot(0);
+    args += processId(0);
+    args += processPosition(100, 100);
+
+    args += processSlot(1);
+    args += processId(1);
+    args += processPosition(200, 200);
+
+    args += processSync();
+
+    // In general, Android does not support two pointers hovering. No events should be produced,
+    // since both pointers are being added in the same frame here.
+    ASSERT_THAT(args, IsEmpty());
+
+    // Now lift pointer 0. Pointer 1 remains.
+    args += processSlot(0);
+    args += processId(-1);
+    args += processSync();
+
+    // We expect HOVER_MOVE with 1 pointer (pointer 1)
+    // Since we previously dropped 2 pointers, this looks like we are transitioning from 0 to 1
+    // hovering pointer.
+    assertNotifyArgs(args,
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                   WithPointerCount(1), WithPointerId(0, 1))),
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                   WithPointerCount(1), WithPointerId(0, 1))));
+}
+
+/**
+ * Check what happens when two pointers are hovering (pressure is 0).
+ */
+TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithPressure) {
+    // Reconfigure the device to support pressure
+    setupAxis(ABS_MT_PRESSURE, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/0);
+    mMapper = createInputMapper<MultiTouchInputMapper>(*mDeviceContext,
+                                                       mFakePolicy->getReaderConfiguration());
+
+    std::list<NotifyArgs> args;
+
+    // Press BTN_TOUCH, but pressure is 0. This should cause the pointers to hover.
+    args += processKey(BTN_TOUCH, 1);
+
+    // Pointer 0: Hovering (pressure 0)
+    args += processSlot(0);
+    args += processId(0);
+    args += processPosition(100, 100);
+    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
+
+    // Pointer 1: Hovering (pressure 0)
+    args += processSlot(1);
+    args += processId(1);
+    args += processPosition(200, 200);
+    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
+
+    args += processSync();
+
+    // In general, Android does not support two pointers hovering. No events should be produced,
+    // since both pointers are being added in the same frame here.
+    ASSERT_THAT(args, IsEmpty());
+}
+
+/**
+ * Start with one hovering pointer, and then add a second one. Ensure that the second hovering
+ * pointer is not reported, because Android does not support multiple hovering pointers.
+ */
+TEST_F(MultiTouchInputMapperUnitTest, OneToTwoPointersHovering) {
+    std::list<NotifyArgs> args;
+
+    // Start with 1 pointer hovering (P0)
+    args += processSlot(0);
+    args += processId(0);
+    args += processPosition(100, 100);
+    args += processSync();
+
+    // Expect HOVER_ENTER {0}
+    assertNotifyArgs(args,
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                   WithPointerCount(1), WithPointerId(0, 0))),
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                   WithPointerCount(1), WithPointerId(0, 0))));
+    args.clear();
+
+    // Add second pointer hovering (P1). Now have P0, P1.
+    args += processSlot(1);
+    args += processId(1);
+    args += processPosition(200, 200);
+    args += processSync();
+
+    // Expect HOVER_EXIT {0} because multi-pointer hover is suppressed.
+    // The mapper detects >1 pointers, clears them, so cooked state becomes empty.
+    // Transition from {0} to {} triggers HOVER_EXIT {0}.
+    assertNotifyArgs(args,
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
+                                   WithPointerCount(1), WithPointerId(0, 0))));
+    args.clear();
+
+    // Move pointers (P0, P1).
+    args += processSlot(0);
+    args += processPosition(110, 110);
+    args += processSync();
+    // Still suppressed.
+    ASSERT_THAT(args, IsEmpty());
+
+    // Lift P0. P1 remains.
+    args += processSlot(0);
+    args += processId(-1);
+    args += processSync();
+
+    // Transition from {} to {1}. Expect HOVER_ENTER {1}.
+    assertNotifyArgs(args,
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                   WithPointerCount(1), WithPointerId(0, 1))),
+                     VariantWith<NotifyMotionArgs>(
+                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                   WithPointerCount(1), WithPointerId(0, 1))));
+}
+
 class ExternalMultiTouchInputMapperTest : public MultiTouchInputMapperUnitTest {
 protected:
     void SetUp() override { MultiTouchInputMapperUnitTest::SetUp(/*bus=*/0, /*isExternal=*/true); }

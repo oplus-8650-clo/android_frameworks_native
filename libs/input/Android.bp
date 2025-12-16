@@ -47,6 +47,13 @@ aconfig_declarations {
     srcs: ["input_flags.aconfig"],
 }
 
+rust_aconfig_library {
+    name: "libinput_flags_rust",
+    crate_name: "input_flags",
+    aconfig_declarations: "com.android.input.flags-aconfig",
+    host_supported: true,
+}
+
 cc_aconfig_library {
     name: "com.android.input.flags-aconfig-cc",
     aconfig_declarations: "com.android.input.flags-aconfig",

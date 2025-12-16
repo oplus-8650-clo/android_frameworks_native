@@ -25,7 +25,7 @@ flag {
 
 flag {
   name: "present_mode_fifo_latest_ready_ext"
-  namespace: "core_graphics"
+  namespace: "gpu"
   description: "Enable the VK_EXT_present_mode_fifo_latest_ready vulkan extension"
   bug: "378669647"
 }

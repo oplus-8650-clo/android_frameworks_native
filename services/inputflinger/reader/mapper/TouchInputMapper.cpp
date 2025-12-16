@@ -2036,6 +2036,11 @@ void TouchInputMapper::cookPointerData() {
     mCurrentCookedState.cookedPointerData.pointerCount = currentPointerCount;
     mCurrentCookedState.cookedPointerData.hoveringIdBits =
             mCurrentRawState.rawPointerData.hoveringIdBits;
+    if (mCurrentCookedState.cookedPointerData.hoveringIdBits.count() > 1) {
+        // Android does not support multiple hovering pointers.
+        LOG(DEBUG) << "Multi-pointer hover detected. Suppressing hover events.";
+        mCurrentCookedState.cookedPointerData.hoveringIdBits.clear();
+    }
     mCurrentCookedState.cookedPointerData.touchingIdBits =
             mCurrentRawState.rawPointerData.touchingIdBits;
     mCurrentCookedState.cookedPointerData.canceledIdBits =

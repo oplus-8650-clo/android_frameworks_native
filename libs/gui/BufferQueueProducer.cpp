@@ -1168,6 +1168,9 @@ status_t BufferQueueProducer::queueBuffer(int slot,
             // and simply queue this buffer
             mCore->mQueue.push_back(item);
             frameAvailableListener = mCore->mConsumerListener;
+            BQ_LOGV("queueBuffer: buffer added to end of queue since queue was empty "
+                    "slot=%d",
+                    slot);
         } else {
             // When the queue is not empty, we need to look at the last buffer
             // in the queue to see if we need to replace it
@@ -1205,9 +1208,15 @@ status_t BufferQueueProducer::queueBuffer(int slot,
                 // Overwrite the droppable buffer with the incoming one
                 mCore->mQueue.editItemAt(mCore->mQueue.size() - 1) = item;
                 frameReplacedListener = mCore->mConsumerListener;
+                BQ_LOGV("queueBuffer: buffer replaced in queue since last was droppable "
+                        "slot=%d",
+                        slot);
             } else {
                 mCore->mQueue.push_back(item);
                 frameAvailableListener = mCore->mConsumerListener;
+                BQ_LOGV("queueBuffer: buffer added to end of queue since last was not droppable "
+                        "slot=%d",
+                        slot);
             }
         }
 
