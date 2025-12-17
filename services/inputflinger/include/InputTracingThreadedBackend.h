@@ -20,6 +20,7 @@
 #include "InputTracingBackendInterface.h"
 
 #include <android-base/thread_annotations.h>
+#include <jni.h>
 #include <memory>
 #include <mutex>
 #include <variant>
@@ -36,7 +37,7 @@ namespace android::input_trace::impl {
 template <typename Backend>
 class ThreadedBackend : public InputTracingBackendInterface {
 public:
-    ThreadedBackend(Backend&& innerBackend, JNIEnv* env);
+    ThreadedBackend(Backend&& innerBackend, JavaVM* vm);
     ~ThreadedBackend() override;
 
     void traceKeyEvent(const TracedKeyEvent&, const TracedEventMetadata&) override;
@@ -75,6 +76,6 @@ private:
 };
 
 /** If tracing should be enabled, creates and returns a ThreadedBackend. */
-std::shared_ptr<InputTracingBackendInterface> createInputTracingBackendIfEnabled(JNIEnv* env);
+std::shared_ptr<InputTracingBackendInterface> createInputTracingBackendIfEnabled(JavaVM* vm);
 
 } // namespace android::input_trace::impl

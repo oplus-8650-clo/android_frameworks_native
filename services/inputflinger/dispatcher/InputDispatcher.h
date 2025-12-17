@@ -44,6 +44,7 @@
 #include <gui/WindowInfosUpdate.h>
 #include <input/Input.h>
 #include <input/InputTransport.h>
+#include <jni.h>
 #include <limits.h>
 #include <powermanager/PowerManager.h>
 #include <stddef.h>
@@ -90,9 +91,9 @@ public:
 
     explicit InputDispatcher(InputDispatcherPolicyInterface&,
                              std::shared_ptr<input_trace::InputTracingBackendInterface>,
-                             JNIEnv* env);
+                             JavaVM* vm);
     // Creates a dispatcher without tracing. Used in some tests.
-    explicit InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env);
+    explicit InputDispatcher(InputDispatcherPolicyInterface& policy, JavaVM* vm);
     ~InputDispatcher() override;
 
     void dump(std::string& dump) const override;
@@ -177,7 +178,7 @@ private:
         NO_POINTER_CAPTURE,
     };
 
-    JNIEnv* mJniEnv;
+    JavaVM* mVm;
     std::unique_ptr<InputThread> mThread;
 
     InputDispatcherPolicyInterface& mPolicy;

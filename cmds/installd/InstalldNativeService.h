@@ -129,9 +129,10 @@ public:
             int32_t userId, int32_t appId, int64_t cacheQuota);
 
     binder::Status moveCompleteApp(const std::optional<std::string>& fromUuid,
-            const std::optional<std::string>& toUuid, const std::string& packageName,
-            int32_t appId, const std::string& seInfo,
-            int32_t targetSdkVersion, const std::string& fromCodePath);
+                                   const std::optional<std::string>& toUuid,
+                                   const std::string& packageName, int32_t appId, int32_t pccId,
+                                   const std::string& seInfo, int32_t targetSdkVersion,
+                                   const std::string& fromCodePath);
 
     binder::Status dexopt(const std::string& apkPath, int32_t uid, const std::string& packageName,
                           const std::string& instructionSet, int32_t dexoptNeeded,

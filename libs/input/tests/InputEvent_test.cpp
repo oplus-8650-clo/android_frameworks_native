@@ -588,7 +588,29 @@ TEST_F(MotionEventTest, CopyFrom_DoNotKeepHistory) {
 
     ASSERT_EQ(event.getEventTime(), copy.getEventTime());
 
-    ASSERT_EQ(event.getX(0), copy.getX(0));
+    // Check that the raw pointer coords are the same as the last sample from the original event.
+    // This confirms that only the last sample was copied.
+    ASSERT_EQ(*event.getRawPointerCoords(0), *copy.getRawPointerCoords(0));
+    ASSERT_EQ(*event.getRawPointerCoords(1), *copy.getRawPointerCoords(1));
+}
+
+TEST_F(MotionEventTest, CopyFrom_DoNotKeepHistory_EventHasNoHistory) {
+    // Create an event with no history.
+    MotionEvent event;
+    event.initialize(mId, 2, AINPUT_SOURCE_TOUCHSCREEN, DISPLAY_ID, HMAC,
+                     AMOTION_EVENT_ACTION_MOVE, 0, MotionFlag::WINDOW_IS_OBSCURED,
+                     AMOTION_EVENT_EDGE_FLAG_TOP, AMETA_ALT_ON, AMOTION_EVENT_BUTTON_PRIMARY,
+                     MotionClassification::NONE, mTransform, 2.0f, 2.1f,
+                     AMOTION_EVENT_INVALID_CURSOR_POSITION, AMOTION_EVENT_INVALID_CURSOR_POSITION,
+                     mRawTransform, ARBITRARY_DOWN_TIME, ARBITRARY_EVENT_TIME, 2,
+                     mPointerProperties, mSamples[0].pointerCoords);
+    ASSERT_EQ(0U, event.getHistorySize());
+
+    MotionEvent copy;
+    copy.copyFrom(&event, /*keepHistory=*/false);
+
+    // The copied event should be identical to the original, since there was no history to discard.
+    ASSERT_EQ(event, copy);
 }
 
 TEST_F(MotionEventTest, CheckEventIdWithHistoryIsIncremented) {

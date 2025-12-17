@@ -1353,10 +1353,11 @@ static Dumpstate::RunStatus RunDumpsysTextByPriority(const std::string& title, i
              dumpsys.writeDumpHeader(STDOUT_FILENO, service, priority);
              dumpsys.writeDumpFooter(STDOUT_FILENO, service, std::chrono::milliseconds(1));
         } else {
-             status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP | Dumpsys::TYPE_PID |
-                                                       Dumpsys::TYPE_CLIENTS | Dumpsys::TYPE_THREAD,
-                                                       service, args);
-             if (status == OK) {
+            status_t status =
+                dumpsys.startDumpThread(Dumpsys::TYPE_DUMP | Dumpsys::TYPE_PID |
+                                            Dumpsys::TYPE_CLIENTS | Dumpsys::TYPE_THREAD,
+                                        service, args, Dumpsys::ServiceBehavior::DUMP_IF_STARTED);
+            if (status == OK) {
                 dumpsys.writeDumpHeader(STDOUT_FILENO, service, priority);
                 std::chrono::duration<double> elapsed_seconds;
                 if (priority == IServiceManager::DUMP_FLAG_PRIORITY_HIGH &&
@@ -1438,7 +1439,8 @@ static Dumpstate::RunStatus RunDumpsysProto(const std::string& title, int priori
             path.append("_HIGH");
         }
         path.append(kProtoExt);
-        status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP, service, args);
+        status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP, service, args,
+                                                  Dumpsys::ServiceBehavior::DUMP_IF_STARTED);
         if (status == OK) {
             status = ds.AddZipEntryFromFd(path, dumpsys.getDumpFd(), service_timeout);
             bool dumpTerminated = (status == OK);

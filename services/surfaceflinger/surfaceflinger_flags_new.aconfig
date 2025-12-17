@@ -36,6 +36,16 @@ flag {
 } # arr_surfacecontrol_setframerate_api
 
 flag {
+  name: "bugfix_resize_virtual_display_surfaces"
+  namespace: "core_graphics"
+  description: "Surfaces should be resized when virtual display size is set"
+  bug: "391237198"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # bugfix_resize_virtual_display_surfaces
+
+flag {
   name: "configure_work_duration"
   namespace: "window_surfaces"
   description: "Enable the work duration configuration via DisplayModeSpecs."

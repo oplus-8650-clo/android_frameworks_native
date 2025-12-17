@@ -58,14 +58,6 @@ flag {
   is_fixed_read_only: true
 }
 
-flag {
-  name: "fp16_client_target"
-  namespace: "core_graphics"
-  description: "Controls whether we render to fp16 client targets"
-  bug: "236745178"
-  is_fixed_read_only: true
-}
-
 # This file is locked and should not be changed. Use surfaceflinger_flags_new.aconfig
 
 flag {

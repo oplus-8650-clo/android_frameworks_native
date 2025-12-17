@@ -3220,7 +3220,6 @@ TEST_F(OutputFinishFrameTest, queuesBufferIfComposeSurfacesReturnsAFence) {
 }
 
 TEST_F(OutputFinishFrameTest, queuesBufferWithHdrSdrRatio) {
-    SET_FLAG_FOR_TEST(flags::fp16_client_target, true);
     mOutput.mState.isEnabled = true;
 
     InSequence seq;
@@ -4482,7 +4481,6 @@ TEST_F(OutputComposeSurfacesTest_UsesExpectedDisplaySettings,
 
 TEST_F(OutputComposeSurfacesTest_UsesExpectedDisplaySettings,
        usesExpectedDisplaySettingsWithFp16Buffer) {
-    SET_FLAG_FOR_TEST(flags::fp16_client_target, true);
     verify().ifMixedCompositionIs(false)
             .andIfUsesHdr(true)
             .withDisplayBrightnessNits(kDisplayLuminance)

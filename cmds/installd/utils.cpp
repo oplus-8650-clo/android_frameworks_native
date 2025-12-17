@@ -160,6 +160,9 @@ std::string create_data_path(const char* volume_uuid) {
     } else if (!strcmp(volume_uuid, "TEST")) {
         CHECK(property_get_bool("ro.debuggable", false));
         return "/data/local/tmp";
+    } else if (!strcmp(volume_uuid, "TEST_2")) {
+        CHECK(property_get_bool("ro.debuggable", false));
+        return "/data/local/tmp/test_2";
     } else {
         CHECK(is_valid_filename(volume_uuid));
         return StringPrintf("/mnt/expand/%s", volume_uuid);

@@ -15,6 +15,7 @@
 // libinput is partially built for the host (used by build time keymap validation tool)
 
 package {
+    default_team: "trendy_team_input_framework",
     // See: http://go/android-license-faq
     // A large-scale-change added 'default_applicable_licenses' to import
     // all of the 'license_kinds' from "frameworks_native_license"
@@ -44,6 +45,13 @@ aconfig_declarations {
     package: "com.android.input.flags",
     container: "system",
     srcs: ["input_flags.aconfig"],
+}
+
+rust_aconfig_library {
+    name: "libinput_flags_rust",
+    crate_name: "input_flags",
+    aconfig_declarations: "com.android.input.flags-aconfig",
+    host_supported: true,
 }
 
 cc_aconfig_library {

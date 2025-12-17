@@ -240,10 +240,11 @@ impl InputVerifier {
     /// Process a pointer movement event from an InputDevice.
     /// If the event is not valid, we return an error string that describes the issue.
     pub fn process_movement(&mut self, event: NotifyMotionArgs<'_>) -> Result<(), String> {
-        if !(event.source.is_from_class(SourceClass::Pointer)
-            || (self.verify_captured_events && event.source.is_from_class(SourceClass::Position)))
-        {
-            // Skip non-pointer and non-position sources like MOUSE_RELATIVE for now.
+        let is_captured_source = self.verify_captured_events
+            && (event.source.is_from_class(SourceClass::Position)
+                || event.source == Source::MouseRelative);
+        if !(event.source.is_from_class(SourceClass::Pointer) || is_captured_source) {
+            // Skip unsupported source types.
             return Ok(());
         }
         if self.should_log {
@@ -318,6 +319,10 @@ impl InputVerifier {
                 it.insert(pointer_id);
             }
             MotionAction::Move => {
+                if event.source == Source::MouseRelative {
+                    // MOUSE_RELATIVE motion always uses move actions, even with no buttons pressed.
+                    return Ok(());
+                }
                 if !self.ensure_touching_pointers_match(event.device_id, event.pointer_properties) {
                     return Err(format!(
                         "{}: ACTION_MOVE touching pointers don't match",
@@ -762,10 +767,10 @@ mod tests {
             .is_err());
     }
 
-    // Send a MOVE without a preceding DOWN event. This is OK because it's from source
-    // MOUSE_RELATIVE, which is used during pointer capture. The verifier should allow such event.
+    // Relative mice (from source MOUSE_RELATIVE, used for pointer capture) send MOVEs for all
+    // movements, even without preceding DOWN events. The verifier should allow such events.
     #[test]
-    fn relative_mouse_move() {
+    fn relative_mouse_move_and_drag() {
         let mut verifier = make_test_verifier();
         assert!(verifier
             .process_movement(NotifyMotionArgs {
@@ -775,6 +780,86 @@ mod tests {
                 ..BASE_EVENT
             })
             .is_ok());
+
+        // Press a button...
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Down,
+                button_state: MotionButton::Primary,
+                ..BASE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
+                button_state: MotionButton::Primary,
+                ..BASE_EVENT
+            })
+            .is_ok());
+
+        // ...and MOVEs should still be valid.
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Move,
+                button_state: MotionButton::Primary,
+                ..BASE_EVENT
+            })
+            .is_ok());
+
+        // Release the button...
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::ButtonRelease { action_button: MotionButton::Primary },
+                ..BASE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Up,
+                ..BASE_EVENT
+            })
+            .is_ok());
+
+        // ...and MOVEs should still be valid.
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Move,
+                ..BASE_EVENT
+            })
+            .is_ok());
+    }
+
+    #[test]
+    fn relative_mouse_double_down() {
+        let mut verifier = make_test_verifier();
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Down,
+                ..BASE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                device_id: DeviceId(2),
+                source: Source::MouseRelative,
+                action: MotionAction::Down,
+                ..BASE_EVENT
+            })
+            .is_err());
     }
 
     // Send a MOVE event with incorrect number of pointers (one of the pointers is missing).

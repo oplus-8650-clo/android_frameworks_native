@@ -1947,10 +1947,6 @@ float Output::getHdrSdrRatio(const std::shared_ptr<renderengine::ExternalTexture
         return 1.0f;
     }
 
-    if (!FlagManager::getInstance().fp16_client_target()) {
-        return 1.0f;
-    }
-
     if (getState().displayBrightnessNits < 0.0f || getState().sdrWhitePointNits <= 0.0f ||
         buffer->getPixelFormat() != PIXEL_FORMAT_RGBA_FP16 ||
         (static_cast<int32_t>(getState().dataspace) &

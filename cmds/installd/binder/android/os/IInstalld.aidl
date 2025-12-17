@@ -54,7 +54,7 @@ interface IInstalld {
     void setAppQuota(@nullable @utf8InCpp String uuid, int userId, int appId, long cacheQuota);
 
     void moveCompleteApp(@nullable @utf8InCpp String fromUuid, @nullable @utf8InCpp String toUuid,
-            @utf8InCpp String packageName, int appId,
+            @utf8InCpp String packageName, int appId, int pccId,
             @utf8InCpp String seInfo, int targetSdkVersion, @utf8InCpp String fromCodePath);
 
     // Returns false if it is cancelled. Returns true if it is completed or have other errors.

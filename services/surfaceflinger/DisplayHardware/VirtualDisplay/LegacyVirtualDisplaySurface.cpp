@@ -428,6 +428,15 @@ status_t LegacyVirtualDisplaySurface::dequeueBuffer(int* pslot, sp<Fence>* fence
                                                     uint32_t h, PixelFormat format, uint64_t usage,
                                                     uint64_t* outBufferAge,
                                                     FrameEventHistoryDelta* outTimestamps) {
+    // IGraphicBufferProducer specifies that when given a width/height of 0, we should use the
+    // consumer's default setting. However, the fake surface provided VDS is its own consumer, so
+    // in response to resizeBuffers() calls, we'll consider that to be updating the consumer side
+    // and therefore reset the values here when we need to.
+    if (FlagManager::getInstance().bugfix_resize_virtual_display_surfaces()) {
+        w = w == 0 ? mSinkBufferWidth : w;
+        h = h == 0 ? mSinkBufferHeight : h;
+    }
+
     if (isBackedByGpu()) {
         return mSource[SOURCE_SINK]->dequeueBuffer(pslot, fence, w, h, format, usage, outBufferAge,
                                                    outTimestamps);
