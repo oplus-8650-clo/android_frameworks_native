@@ -77,15 +77,21 @@ void ABinderProcess_joinThreadPool(void);
 /**
  * Disables (or enables) background scheduling.
  *
- * By default, binder threads execute at a lower priority. However, this can cause
- * priority inversion, so it is recommended to be disabled in high priority
- * or in system processes.
+ * By default, binder threads execute at a lower priority. This is called
+ * background scheduling in Android. This was done originally in Android
+ * as a generic way to give additional priority to the foreground app.
+ * However, like ABinderProcess_setMinSchedulerPolicy, this also sometimes
+ * causes scheduling inversion in system processes when they get stuck at this
+ * lower priority, so it's best to disable this in high-throughput or
+ * latency-sensitive processes in the direct path of input, especially if their
+ * priorities are managed separately anyway.
  *
- * See also AIBinder_setMinSchedulerPolicy, which overrides this setting.
+ * See also AIBinder_setMinSchedulerPolicy which overrides the priority on a
+ * per-binder call basis.
  *
  * \param disable whether to disable background scheduling
  */
-void ABinderProcess_disableBackgroundScheduling(bool disable);
+void ABinderProcess_disableBackgroundScheduling(bool disable) __INTRODUCED_IN(37);
 
 /**
  * This gives you an fd to wait on. Whenever data is available on the fd,

@@ -5950,7 +5950,7 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
     // If there are frame rate changes, and SF is scheduled to wake up far away in the future due
     // to low rendering rate, we wake up SF immediately to process the frame rate change as this
     // might be a request to boost.
-    if (hasFrameRateChanges && FlagManager::getInstance().anchor_list()) {
+    if (hasFrameRateChanges) {
         const auto scheduledFrameResultOpt = mScheduler->getScheduledFrameResult();
         if (scheduledFrameResultOpt.has_value()) {
             const auto timeToWake = scheduledFrameResultOpt->callbackTime - TimePoint::now();

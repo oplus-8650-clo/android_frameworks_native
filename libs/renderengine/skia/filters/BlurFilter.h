@@ -63,7 +63,7 @@ public:
     float getMaxCrossFadeRadius() const;
 
     virtual void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) {}
-    virtual bool isBufferPreallocated() const { return true; }
+    virtual bool isBufferPreallocated(ui::Size displaySize) const { return true; }
 
 private:
     // To avoid downscaling artifacts, we interpolate the blurred fbo with the full composited

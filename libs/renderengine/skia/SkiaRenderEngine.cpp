@@ -879,12 +879,13 @@ void SkiaRenderEngine::drawLayersInternal(
             }
         }
         if (FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
-            !mBlurFilter->isBufferPreallocated() && !display.physicalDisplay.isEmpty() &&
-            supportsProtectedContent()) {
-            const bool inProtected = mInProtectedContext;
-            useProtectedContext(true);
+            mInProtectedContext && !display.physicalDisplay.isEmpty() &&
+            !mBlurFilter->isBufferPreallocated(display.physicalDisplay.getSize())) {
+            ALOGE("Allocating protected blur surfaces during draw! Preallocation failed, or "
+                  "destination size (%dx%d) doesn't match last active display size change",
+                  display.physicalDisplay.getSize().width,
+                  display.physicalDisplay.getSize().height);
             mBlurFilter->preallocateBuffer(getActiveContext(), display.physicalDisplay.getSize());
-            useProtectedContext(inProtected);
         }
     }
 
@@ -1508,38 +1509,44 @@ void SkiaRenderEngine::drawShadow(SkCanvas* canvas,
 }
 
 void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {
-    if (FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
-        supportsProtectedContent()) {
-        const bool inProtected = mInProtectedContext;
-        useProtectedContext(true);
-        mBlurFilter->preallocateBuffer(getActiveContext(), size);
-        useProtectedContext(inProtected);
-    }
-
     // This cache multiplier was selected based on review of cache sizes relative
     // to the screen resolution. Looking at the worst case memory needed by blur (~1.5x),
     // shadows (~1x), and general data structures (e.g. vertex buffers) we selected this as a
     // conservative default based on that analysis.
-    const float SURFACE_SIZE_MULTIPLIER = 3.5f * bytesPerPixel(mDefaultPixelFormat);
-    const int maxResourceBytes = size.width * size.height * SURFACE_SIZE_MULTIPLIER;
+    const float surfaceSizeCacheMultiplier = 3.5f * bytesPerPixel(mDefaultPixelFormat);
+    const int skiaCacheLimit = size.width * size.height * surfaceSizeCacheMultiplier;
     if (FlagManager::getInstance().re_powered_off_displays_inform_cache_budgets()) {
-        LOG_ALWAYS_FATAL_IF(maxResourceBytes <= 0,
-                            "Invalid maxResourceBytes (size: %dx%d, bytesPerPixel(%d): %" PRIu32
-                            ")",
+        LOG_ALWAYS_FATAL_IF(skiaCacheLimit <= 0,
+                            "Invalid skiaCacheLimit (size: %dx%d, bytesPerPixel(%d): %" PRIu32 ")",
                             size.getWidth(), size.getHeight(),
                             static_cast<int>(mDefaultPixelFormat),
                             bytesPerPixel(mDefaultPixelFormat));
     }
 
-    // start by resizing the current context
-    getActiveContext()->setResourceCacheLimit(maxResourceBytes);
+    // Start by resizing the current context's cache
+    getActiveContext()->setResourceCacheLimit(skiaCacheLimit);
 
-    // if it is possible to switch contexts then we will resize the other context
+    const bool shouldPreallocateProtectedBlurBuffers =
+            FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
+            supportsProtectedContent() && mBlurFilter != nullptr &&
+            !mBlurFilter->isBufferPreallocated(size);
+    // Maybe preallocate blur buffers for the protected context
+    if (mInProtectedContext && shouldPreallocateProtectedBlurBuffers) {
+        mBlurFilter->preallocateBuffer(getActiveContext(), size);
+    }
+
+    // If it is possible to switch contexts then we will repeat the same operations there
     const bool originalProtectedState = mInProtectedContext;
     useProtectedContext(!mInProtectedContext);
     if (mInProtectedContext != originalProtectedState) {
-        getActiveContext()->setResourceCacheLimit(maxResourceBytes);
-        // reset back to the initial context that was active when this method was called
+        getActiveContext()->setResourceCacheLimit(skiaCacheLimit);
+
+        // Second opportunity to preallocate blur buffers for the protected context
+        if (mInProtectedContext && shouldPreallocateProtectedBlurBuffers) {
+            mBlurFilter->preallocateBuffer(getActiveContext(), size);
+        }
+
+        // Reset back to the initial context that was active when this method was called
         useProtectedContext(originalProtectedState);
     }
 }

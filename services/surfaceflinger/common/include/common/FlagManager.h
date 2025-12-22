@@ -54,7 +54,6 @@ public:
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
-    bool anchor_list() const;
     bool bugfix_resize_virtual_display_surfaces() const;
     bool configure_work_duration() const;
     bool connected_displays_cursor() const;

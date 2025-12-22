@@ -864,6 +864,12 @@ TEST(NdkBinder, SetInheritRtNonLocal) {
     AIBinder_decStrong(binder);
 }
 
+TEST(NdkBinder, DisableBackgroundScheduling) {
+    // does not abort, functional testing in binderLibTest
+    ABinderProcess_disableBackgroundScheduling(true);
+    ABinderProcess_disableBackgroundScheduling(false);
+}
+
 TEST(NdkBinder, AddNullService) {
     EXPECT_EQ(EX_ILLEGAL_ARGUMENT, AServiceManager_addService(nullptr, "any-service-name"));
 }
