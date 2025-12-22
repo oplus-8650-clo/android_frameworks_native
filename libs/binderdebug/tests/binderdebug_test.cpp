@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 #include <semaphore.h>
 #include <thread>
+#include <algorithm>
 
 #include <android/binderdebug/test/BnControl.h>
 #include <android/binderdebug/test/IControl.h>
@@ -65,6 +66,26 @@ TEST(BinderDebugTests, BinderThreads) {
     EXPECT_TRUE(pidInfo.threadUsage <= pidInfo.threadCount);
     // The second looper thread can sometimes take longer to spawn.
     EXPECT_GE(pidInfo.threadCount, 1);
+}
+
+TEST(BinderDebugTests, ServiceManagerBinderIsVisible) {
+    sp<IBinder> binder = defaultServiceManager()->checkService(String16("activity"));
+    ASSERT_NE(binder, nullptr);
+    pid_t pid;
+    status_t status = binder->getDebugPid(&pid);
+    ASSERT_EQ(status, OK);
+    BinderPidInfo pidInfo;
+    status = getBinderPidInfo(BinderDebugContext::BINDER, pid, &pidInfo);
+    ASSERT_EQ(status, OK);
+    EXPECT_GT(pidInfo.threadCount, 0);
+    EXPECT_GE(pidInfo.threadUsage, 0);
+
+    bool found = std::any_of(pidInfo.refPids.begin(), pidInfo.refPids.end(),
+                             [&](const auto& pair) {
+                                 const auto& pids = pair.second;
+                                 return std::find(pids.begin(), pids.end(), getpid()) != pids.end();
+                             });
+    EXPECT_TRUE(found);
 }
 
 class MockFileReader : public FileReader {

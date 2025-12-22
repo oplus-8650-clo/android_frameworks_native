@@ -19,9 +19,9 @@
 #include <stdlib.h>                           // for getprogname
 #include <unistd.h>                           // for getuid()
 
+#include "../BuildFlags.h"
+#include "../OS.h"
 #include "BinderObserverConfig.h"
-#include "BuildFlags.h"
-#include "OS.h"
 
 namespace android {
 #ifdef BINDER_OBSERVER_DROIDFOOD_CONFIG

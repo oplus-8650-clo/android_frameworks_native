@@ -16,6 +16,8 @@
 
 #include "GraphiteVkRenderEngine.h"
 
+#include "ShaderCache.h"
+
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/graphite/BackendSemaphore.h>
 #include <include/gpu/graphite/Context.h>
@@ -31,12 +33,14 @@
 #include <memory>
 #include <vector>
 
+#include <common/FlagManager.h>
 #include <common/Panopticon.h>
 #include "compat/GraphitePipelineManager.h"
 
 namespace android::renderengine::skia {
 
 using base::StringAppendF;
+using uirenderer::skiapipeline::ShaderCache;
 
 std::unique_ptr<GraphiteVkRenderEngine> GraphiteVkRenderEngine::create(
         const RenderEngineCreationArgs& args) {
@@ -109,7 +113,13 @@ static void unref_semaphore(void* semaphore, skgpu::CallbackResult result) {
 
 std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
         VulkanInterface& vulkanInterface) {
+    auto driverVersion = vulkanInterface.driverVersion();
+    graphite::PersistentPipelineStorage* persistentStorage =
+            graphitePersistentPipelineStorage(&driverVersion, sizeof(driverVersion),
+                                              vulkanInterface.isProtected());
+
     return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(),
+                                               persistentStorage,
                                                SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
                                                       mRuntimeEffectManager.mKnownEffects.size()),
                                                vulkanInterface.isProtected()
@@ -189,7 +199,73 @@ base::unique_fd GraphiteVkRenderEngine::flushAndSubmit(SkiaGpuContext* context, 
     if (destroySemaphoreInfo) {
         destroySemaphoreInfo->unref();
     }
+    ShaderCache::get(SkiaBackend::Graphite).onGraphiteVkFrameFlushed(context->graphiteContext());
     return drawFenceFd;
+}
+
+class GraphitePipelineDiskStorage : public skgpu::graphite::PersistentPipelineStorage {
+public:
+    GraphitePipelineDiskStorage(bool isProtected) : mIsProtected(isProtected) {}
+
+    sk_sp<SkData> load() override {
+        ++mNumLoads;
+
+        uint32_t key = mIsProtected ? kGraphiteKeyProtected : kGraphiteKeyUnprotected;
+        sk_sp<SkData> keyData = SkData::MakeWithoutCopy(&key, sizeof(uint32_t));
+
+        sk_sp<SkData> result = ShaderCache::get(RenderEngine::SkiaBackend::Graphite).load(*keyData);
+        if (result) {
+            mLastLoadSize = result->size();
+        }
+        return result;
+    }
+    void store(const SkData& data) override {
+        ++mNumStores;
+        mLastStoreSize = data.size();
+
+        uint32_t key = mIsProtected ? kGraphiteKeyProtected : kGraphiteKeyUnprotected;
+        sk_sp<SkData> keyData = SkData::MakeWithoutCopy(&key, sizeof(uint32_t));
+
+        ShaderCache::get(RenderEngine::SkiaBackend::Graphite)
+                .graphiteStore(*keyData, data, mIsProtected);
+    }
+    void report(std::string& result) const {
+        base::StringAppendF(&result,
+                            "GraphitePipelineDiskStorage: %s numLoads %d lastLoad %zu numStores %d "
+                            "lastStore %zu\n",
+                            mIsProtected ? "Protected" : "Unprotected", mNumLoads, mLastLoadSize,
+                            mNumStores, mLastStoreSize);
+    }
+
+private:
+    static constexpr uint32_t kGraphiteKeyProtected = 123456789;
+    static constexpr uint32_t kGraphiteKeyUnprotected = 987654321;
+
+    const bool mIsProtected;
+
+    int mNumLoads = 0;
+    size_t mLastLoadSize = 0;
+    int mNumStores = 0;
+    size_t mLastStoreSize = 0;
+};
+
+skgpu::graphite::PersistentPipelineStorage*
+GraphiteVkRenderEngine::graphitePersistentPipelineStorage(const void* identity, ssize_t size,
+                                                          bool isProtected) {
+    if (FlagManager::getInstance().shader_disk_cache()) {
+        if (!mInitializedGraphiteDiskCache) {
+            ShaderCache::get(RenderEngine::SkiaBackend::Graphite)
+                    .initShaderDiskCache(identity, size);
+            mProtectedPersistentPipelineStorage =
+                    std::make_unique<GraphitePipelineDiskStorage>(true);
+            mUnprotectedPersistentPipelineStorage =
+                    std::make_unique<GraphitePipelineDiskStorage>(false);
+            mInitializedGraphiteDiskCache = true;
+        }
+    }
+
+    return isProtected ? mProtectedPersistentPipelineStorage.get()
+                       : mUnprotectedPersistentPipelineStorage.get();
 }
 
 void GraphiteVkRenderEngine::appendBackendSpecificInfoToDump(std::string& result) {
@@ -197,6 +273,15 @@ void GraphiteVkRenderEngine::appendBackendSpecificInfoToDump(std::string& result
     SkiaVkRenderEngine::appendBackendSpecificInfoToDump(result);
     mPipelineCallbackHandler.report("Unprotected", result);
     mProtectedPipelineCallbackHandler.report("Protected", result);
+
+    if (mUnprotectedPersistentPipelineStorage) {
+        static_cast<GraphitePipelineDiskStorage*>(mUnprotectedPersistentPipelineStorage.get())
+                ->report(result);
+    }
+    if (mProtectedPersistentPipelineStorage) {
+        static_cast<GraphitePipelineDiskStorage*>(mProtectedPersistentPipelineStorage.get())
+                ->report(result);
+    }
 }
 
 } // namespace android::renderengine::skia

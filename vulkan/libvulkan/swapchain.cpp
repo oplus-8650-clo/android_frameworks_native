@@ -535,6 +535,10 @@ PixelFormat GetNativePixelFormat(VkFormat format) {
         case VK_FORMAT_R8G8B8A8_SRGB:
             native_format = PixelFormat::RGBA_8888;
             break;
+        case VK_FORMAT_R8G8B8_UNORM:
+        case VK_FORMAT_R8G8B8_SRGB:
+            native_format = PixelFormat::RGB_888;
+            break;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:
             native_format = PixelFormat::RGB_565;
             break;
@@ -555,6 +559,30 @@ PixelFormat GetNativePixelFormat(VkFormat format) {
             break;
     }
     return native_format;
+}
+
+VkFormat GetNonSrgbFormat(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_R8G8B8A8_SRGB:
+            return VK_FORMAT_R8G8B8A8_UNORM;
+
+        case VK_FORMAT_R8G8B8_SRGB:
+            return VK_FORMAT_R8G8B8_UNORM;
+
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        case VK_FORMAT_R8G8B8_UNORM:
+        case VK_FORMAT_R5G6B5_UNORM_PACK16:
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+        case VK_FORMAT_R8_UNORM:
+        case VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16:
+            // This is a no-op
+            return format;
+
+        default:
+            ALOGV("unsupported swapchain format %d", format);
+            return VK_FORMAT_UNDEFINED;
+    }
 }
 
 DataSpace GetNativeDataspace(VkColorSpaceKHR colorspace, VkFormat format) {
@@ -602,6 +630,33 @@ DataSpace GetNativeDataspace(VkColorSpaceKHR colorspace, VkFormat format) {
             // it's unsupported
             return DataSpace::UNKNOWN;
     }
+}
+
+bool SupportsSurfaceFormat(const InstanceDriverTable& driver,
+                           VkPhysicalDevice pdev,
+                           VkFormat format) {
+    // These are all the flags that ANGLE would use for a framebuffer
+    // (see WindowSurfaceVk::createSwapChain)
+    VkPhysicalDeviceImageFormatInfo2 formatInfo = {};
+    formatInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+    formatInfo.pNext = nullptr;
+    formatInfo.format = format;
+    formatInfo.type = VK_IMAGE_TYPE_2D;
+    formatInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    formatInfo.usage =
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    formatInfo.flags = 0;
+
+    VkImageFormatProperties2 properties = {};
+    properties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+    properties.pNext = nullptr;
+
+    VkResult result = driver.GetPhysicalDeviceImageFormatProperties2(
+        pdev, &formatInfo, &properties);
+
+    return result == VK_SUCCESS;
 }
 
 }  // anonymous namespace
@@ -759,29 +814,32 @@ VkResult GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pdev,
     desc.usage = consumer_usage | AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
                  AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER;
 
-    // We must support R8G8B8A8
-    std::vector<VkSurfaceFormatKHR> all_formats = {
-        {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
-        {VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
-    };
-
     VkFormat format = VK_FORMAT_UNDEFINED;
-    if (colorspace_ext) {
-        for (VkColorSpaceKHR colorSpace :
-             colorSpaceSupportedByVkEXTSwapchainColorspace) {
-            format = VK_FORMAT_R8G8B8A8_UNORM;
-            if (GetNativeDataspace(colorSpace, format) != DataSpace::UNKNOWN) {
-                all_formats.emplace_back(
-                    VkSurfaceFormatKHR{format, colorSpace});
-            }
+    std::vector<VkSurfaceFormatKHR> all_formats = {};
 
-            format = VK_FORMAT_R8G8B8A8_SRGB;
-            if (GetNativeDataspace(colorSpace, format) != DataSpace::UNKNOWN) {
-                all_formats.emplace_back(
-                    VkSurfaceFormatKHR{format, colorSpace});
+    // Lambda helper adds format and color space if extension is supported
+    auto add_color_spaces = [&](VkFormat format, const auto& colorSpaces) {
+        if (colorspace_ext) {
+            for (VkColorSpaceKHR colorSpace : colorSpaces) {
+                if (GetNativeDataspace(colorSpace, format) !=
+                    DataSpace::UNKNOWN) {
+                    all_formats.emplace_back(
+                        VkSurfaceFormatKHR{format, colorSpace});
+                }
             }
         }
-    }
+    };
+
+    // We must support R8G8B8A8
+    format = VK_FORMAT_R8G8B8A8_UNORM;
+    all_formats.emplace_back(
+        VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
+    add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
+
+    format = VK_FORMAT_R8G8B8A8_SRGB;
+    all_formats.emplace_back(
+        VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
+    add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
 
     // NOTE: Any new formats that are added must be coordinated across different
     // Android users.  This includes the ANGLE team (a layered implementation of
@@ -792,16 +850,7 @@ VkResult GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pdev,
     if (AHardwareBuffer_isSupported(&desc)) {
         all_formats.emplace_back(
             VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
-        if (colorspace_ext) {
-            for (VkColorSpaceKHR colorSpace :
-                 colorSpaceSupportedByVkEXTSwapchainColorspace) {
-                if (GetNativeDataspace(colorSpace, format) !=
-                    DataSpace::UNKNOWN) {
-                    all_formats.emplace_back(
-                        VkSurfaceFormatKHR{format, colorSpace});
-                }
-            }
-        }
+        add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
     }
 
     format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -809,26 +858,10 @@ VkResult GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pdev,
     if (AHardwareBuffer_isSupported(&desc)) {
         all_formats.emplace_back(
             VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
-        if (colorspace_ext) {
-            for (VkColorSpaceKHR colorSpace :
-                 colorSpaceSupportedByVkEXTSwapchainColorspace) {
-                if (GetNativeDataspace(colorSpace, format) !=
-                    DataSpace::UNKNOWN) {
-                    all_formats.emplace_back(
-                        VkSurfaceFormatKHR{format, colorSpace});
-                }
-            }
-
-            for (
-                VkColorSpaceKHR colorSpace :
-                colorSpaceSupportedByVkEXTSwapchainColorspaceOnFP16SurfaceOnly) {
-                if (GetNativeDataspace(colorSpace, format) !=
-                    DataSpace::UNKNOWN) {
-                    all_formats.emplace_back(
-                        VkSurfaceFormatKHR{format, colorSpace});
-                }
-            }
-        }
+        add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
+        add_color_spaces(
+            format,
+            colorSpaceSupportedByVkEXTSwapchainColorspaceOnFP16SurfaceOnly);
     }
 
     format = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
@@ -836,16 +869,7 @@ VkResult GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pdev,
     if (AHardwareBuffer_isSupported(&desc)) {
         all_formats.emplace_back(
             VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
-        if (colorspace_ext) {
-            for (VkColorSpaceKHR colorSpace :
-                 colorSpaceSupportedByVkEXTSwapchainColorspace) {
-                if (GetNativeDataspace(colorSpace, format) !=
-                    DataSpace::UNKNOWN) {
-                    all_formats.emplace_back(
-                        VkSurfaceFormatKHR{format, colorSpace});
-                }
-            }
-        }
+        add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
     }
 
     format = VK_FORMAT_R8_UNORM;
@@ -877,14 +901,26 @@ VkResult GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pdev,
     if (AHardwareBuffer_isSupported(&desc) && rgba10x6_formats_ext) {
         all_formats.emplace_back(
             VkSurfaceFormatKHR{format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
-        if (colorspace_ext) {
-            for (VkColorSpaceKHR colorSpace :
-                 colorSpaceSupportedByVkEXTSwapchainColorspace) {
-                if (GetNativeDataspace(colorSpace, format) !=
-                    DataSpace::UNKNOWN) {
-                    all_formats.emplace_back(
-                        VkSurfaceFormatKHR{format, colorSpace});
-                }
+        add_color_spaces(format, colorSpaceSupportedByVkEXTSwapchainColorspace);
+    }
+
+    if (flags::swapchain_r8g8b8_format()) {
+        // R8G8B8 is not supported everywhere, check for UNORM and SRGB.
+        desc.format = AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
+        if (AHardwareBuffer_isSupported(&desc)) {
+            format = VK_FORMAT_R8G8B8_UNORM;
+            if (SupportsSurfaceFormat(driver, pdev, format)) {
+                all_formats.emplace_back(VkSurfaceFormatKHR{
+                    format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
+                add_color_spaces(format,
+                                 colorSpaceSupportedByVkEXTSwapchainColorspace);
+            }
+            format = VK_FORMAT_R8G8B8_SRGB;
+            if (SupportsSurfaceFormat(driver, pdev, format)) {
+                all_formats.emplace_back(VkSurfaceFormatKHR{
+                    format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
+                add_color_spaces(format,
+                                 colorSpaceSupportedByVkEXTSwapchainColorspace);
             }
         }
     }
@@ -1482,10 +1518,7 @@ static VkResult getProducerUsageGPDIFP2(
 
     // AHB does not have an sRGB format so we can't pass it to GPDIFP
     // We need to convert the format to unorm if it is srgb
-    VkFormat format = create_info->imageFormat;
-    if (format == VK_FORMAT_R8G8B8A8_SRGB) {
-        format = VK_FORMAT_R8G8B8A8_UNORM;
-    }
+    VkFormat format = GetNonSrgbFormat(create_info->imageFormat);
 
     VkPhysicalDeviceImageFormatInfo2 image_format_info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,

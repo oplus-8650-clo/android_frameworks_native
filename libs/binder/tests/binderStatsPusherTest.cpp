@@ -21,12 +21,11 @@
 #include <gtest/gtest.h>
 #include <utils/SystemClock.h>
 
-#include <../BinderStatsPusher.h>
-#include <../BinderStatsUtils.h>
 #include <../JvmUtils.h>
-#include "fakeservicemanager/FakeServiceManager.h"
-
+#include <../observer/BinderStatsPusher.h>
+#include <../observer/BinderStatsUtils.h>
 #include <jni.h>
+#include "fakeservicemanager/FakeServiceManager.h"
 
 using android::FakeServiceManager;
 using namespace android;
@@ -34,10 +33,13 @@ using namespace testing;
 using os::binder::BinderCallsStats;
 using os::binder::BinderSpamStats;
 
-// --- Mocks ---
 constexpr int64_t kSpamAggregationWindowSec = 5;
 constexpr int64_t kLatencyAggregationWindowSec = 5; // Same as spam for now
-// Mock for IBinderStatsConsumerService
+
+// --- Mocks ---
+/**
+ * Mock for IBinderStatsConsumerService to intercept calls for reporting stats.
+ */
 class MockBinderStatsConsumerService : public os::binder::BnBinderStatsConsumerService {
 public:
     MOCK_METHOD(binder::Status, reportSpamStats, (const std::vector<BinderSpamStats>&), (override));
@@ -46,13 +48,19 @@ public:
     MOCK_METHOD(BBinder*, localBinder, (), (override));
 };
 
-// Mock for IServiceManager to control service lookup
+/**
+ * Mock for IServiceManager to control service lookup.
+ */
 class MockServiceManager : public FakeServiceManager {
 public:
     MOCK_METHOD(sp<IBinder>, checkService, (const String16& name), (const, override));
 };
 
 // --- Test Fixture ---
+
+/**
+ * Initializes the default service manager with a mock implementation once per test run.
+ */
 void initServiceManagerOnce() {
     static std::once_flag gSmOnce;
     std::call_once(gSmOnce, [] {
@@ -61,22 +69,24 @@ void initServiceManagerOnce() {
         setDefaultServiceManager(mockServiceManager);
     });
 }
-
-// Helper function to create a BinderSpamStats for spam comparison
+/**
+ * Helper function to create a BinderSpamStats for spam comparison.
+ */
 BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count125, int count250,
                                         int peakCount) {
     auto stats = BinderSpamStats();
     stats.clientUid = datum.senderUid;
     stats.interfaceDescriptor = datum.interfaceDescriptor;
     stats.aidlMethod = datum.aidlMethodName;
-
     stats.secondsWithAtLeast125Calls = count125;
     stats.secondsWithAtLeast250Calls = count250;
     stats.peakCallCountPerSecond = peakCount;
     return stats;
 }
 
-// Helper function to create a BinderCallsStats for latency comparison
+/**
+ * Helper function to create a BinderCallsStats for latency comparison.
+ */
 BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t callCount,
                                             int64_t durationSumMicros,
                                             int32_t secondsWithAtLeast10Calls,
@@ -92,7 +102,9 @@ BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t
     return stats;
 }
 
-// Helper function to create a BinderCallsStats for latency comparison
+/**
+ * Helper function to create a BinderCallsStats for latency comparison, including CPU data.
+ */
 BinderCallsStats createExpectedLatencyStatsWithCpu(const BinderCallData& datum, int64_t callCount,
                                                    int64_t durationSumMicros,
                                                    int32_t secondsWithAtLeast10Calls,
@@ -112,7 +124,6 @@ BinderCallsStats createExpectedLatencyStatsWithCpu(const BinderCallData& datum, 
     stats.cpuTimeSumSquaredMicros = cpuTimeSumSquaredMicros;
     return stats;
 }
-
 MATCHER_P(SpamStatsEq, expectedStats, "") {
     return arg.clientUid == expectedStats.clientUid &&
             arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
@@ -145,6 +156,18 @@ MATCHER_P(CallStatsWithCpuEq, expectedStats, "") {
             arg.cpuTimeSumSquaredMicros == expectedStats.cpuTimeSumSquaredMicros;
 }
 
+class BinderStatsPusherHelper {
+public:
+    static void doPush(BinderStatsPusher& pusher, std::vector<BinderCallData> data,
+                       const int64_t nowSec) {
+        auto addCallDataFn = pusher.getAddCallDataToBufferLockedFunction();
+        for (auto& datum : data) {
+            addCallDataFn(std::move(datum));
+        }
+        pusher.pushLocked(nowSec);
+    }
+};
+
 class BinderStatsPusherTest : public Test {
 protected:
     sp<StrictMock<MockBinderStatsConsumerService>> mockStatsService;
@@ -168,7 +191,9 @@ protected:
 
 // --- Test Cases ---
 
-// Unit Test
+/**
+ * Unit Test
+ */
 TEST_F(BinderStatsPusherTest, GetBinderStatsService) {
     EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .Times(1)
@@ -197,7 +222,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamNoSpamBelowThreshold) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
@@ -223,7 +248,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeNanos / 1000'000'000);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
@@ -246,7 +271,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamDelayedSpam) {
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
-    pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
+
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeNanos / 1000'000'000);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
@@ -282,7 +308,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
-    pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
+
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeNanos / 1000'000'000);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
@@ -309,7 +336,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
@@ -352,7 +379,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall) {
@@ -376,7 +403,8 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // For the first push
-    pusher.pushLocked(callData1, callTimeSec1);
+
+    BinderStatsPusherHelper::doPush(pusher, callData1, callTimeSec1);
 
     // Second push: advance time so the previous data is now outside the aggregation window
     std::vector<BinderCallData> callData2; // Can be empty or contain new data
@@ -388,7 +416,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1); // For the second push
 
-    pusher.pushLocked(callData2, call2_time_sec);
+    BinderStatsPusherHelper::doPush(pusher, callData2, call2_time_sec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
@@ -435,7 +463,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, SkipPushForLocalBinderWithoutJvm) {
@@ -464,7 +492,7 @@ TEST_F(BinderStatsPusherTest, SkipPushForLocalBinderWithoutJvm) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
@@ -494,7 +522,8 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
 
-    pusher.pushLocked(spamCallData1, timeSec1);
+    BinderStatsPusherHelper::doPush(pusher, spamCallData1, timeSec1);
+
     Mock::VerifyAndClearExpectations(mockServiceManager.get());
     Mock::VerifyAndClearExpectations(mockStatsService.get());
 
@@ -511,7 +540,7 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
 
-    pusher.pushLocked(spamCallData2, timeSec2);
+    pusher.pushLocked(timeSec2);
 }
 
 TEST_F(BinderStatsPusherTest, sizeOfStruct) {
@@ -544,7 +573,7 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyNoLatencyBelowThreshold) {
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
@@ -568,13 +597,14 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
         totalDurationMicros += durationMicros;
     }
 
-    auto expectedStats = createExpectedLatencyStats(data[0], 15, totalDurationMicros, 1, 0);
-    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
+    auto expectedStats =
+            createExpectedLatencyStatsWithCpu(data[0], 15, totalDurationMicros, 1, 0, 0, 0, 0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyDelayedLatency) {
@@ -597,7 +627,8 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyDelayedLatency) {
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
-    pusher.pushLocked(data, currentTimeNanos / 1000'000'000);
+
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeNanos / 1000'000'000);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCall) {
@@ -623,19 +654,20 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
-    pusher.pushLocked(callData1, callTimeSec1);
 
+    BinderStatsPusherHelper::doPush(pusher, callData1, callTimeSec1);
     // Second push: advance time so the previous data is now outside the aggregation window
     std::vector<BinderCallData> callData2;                                    // Can be empty
     int64_t call2_time_sec = callTimeSec1 + kLatencyAggregationWindowSec + 1; // 10 + 5 + 1 = 16s
 
-    auto expectedStats = createExpectedLatencyStats(callData1[0], 15, totalDurationMicros1, 1, 0);
-    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
+    auto expectedStats = createExpectedLatencyStatsWithCpu(callData1[0], 15, totalDurationMicros1,
+                                                           1, 0, 0, 0, 0);
+    EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(callData2, call2_time_sec);
+    BinderStatsPusherHelper::doPush(pusher, callData2, call2_time_sec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyWithCpu) {
@@ -673,7 +705,7 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyWithCpu) {
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }
 
 TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
@@ -722,5 +754,5 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
 
-    pusher.pushLocked(data, currentTimeSec);
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }

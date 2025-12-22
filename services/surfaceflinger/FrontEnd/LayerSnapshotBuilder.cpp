@@ -1025,12 +1025,20 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
+    bool hasSmpte2094_50 = false;
+    // For now we don't check LUT support so guard by a debug sysprop
+    if (FlagManager::getInstance().force_agtm_without_luts() && snapshot.buffer) {
+        std::optional<std::vector<uint8_t>> smpte2094_50;
+        status_t err = snapshot.buffer->getSmpte2094_50(&smpte2094_50);
+        hasSmpte2094_50 = err == OK && smpte2094_50;
+    }
+
     // computed snapshot properties
     snapshot.forceClientComposition = snapshot.shadowSettings.length > 0 ||
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
             snapshot.borderSettings.strokeWidth > 0 ||
             !snapshot.boxShadowSettings.boxShadows.empty() ||
-            snapshot.renderCommandBufferConsumer != nullptr;
+            snapshot.renderCommandBufferConsumer != nullptr || hasSmpte2094_50;
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
     snapshot.isOpaque = snapshot.contentOpaque &&

@@ -16,6 +16,16 @@ flag {
 }
 
 flag {
+  name: "swapchain_r8g8b8_format"
+  namespace: "gpu"
+  description: "Whether the Vulkan loader can support R8G8B8 format"
+  bug: "467785059"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
   name: "swapchain_mutable_format_ext"
   namespace: "core_graphics"
   description: "Enable the VK_KHR_swapchain_mutable_format vulkan extension"

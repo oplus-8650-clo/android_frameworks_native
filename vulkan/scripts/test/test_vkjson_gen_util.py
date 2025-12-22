@@ -924,15 +924,15 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
 
         mock_vk = self.mock_vk_patcher.start()
         mock_vk.VULKAN_VERSIONS_AND_STRUCTS_MAPPING = {
-            "VK_VERSION_1_0": [
+            "1_0": [
                 {"VkPhysicalDeviceLineFeatures": ""}
             ],
-            "VK_VERSION_1_1": [
+            "1_1": [
                 {
                     "VkPhysicalDeviceSubgroupProperties": "VK_STRUCT_SUBGROUP"
                 }
             ],
-            "VK_VERSION_1_2": [
+            "1_2": [
                 {
                     "VkPhysicalDeviceMultiviewProperties": "VK_STRUCT_MULTIVIEW",
                     "VkPhysicalDeviceIDProperties": "VK_STRUCT_DEVICE_ID"
@@ -952,7 +952,7 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
             'visitor->Visit("subgroupProperties", &device->subgroup_properties) &&'
         )
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_1")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_1")
         self.assertCodeFileWrite(expected_lines)
 
     def test_handles_multiple_matching_structs(self):
@@ -963,13 +963,13 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
             """
         )
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_2")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_2")
         self.assertCodeFileWrite(expected_lines)
 
     def test_handles_empty_struct_type(self):
         expected_lines = 'visitor->Visit("lineFeatures", &device->line_features) &&'
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_0")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_0")
         self.assertCodeFileWrite(expected_lines)
 
     def test_handles_struct_var_with_single_word(self):
@@ -977,7 +977,7 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
         self.mock_get_struct_name.return_value = "memory"
         expected_lines = 'visitor->Visit("memory", &device->memory) &&'
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_1")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_1")
         self.assertCodeFileWrite(expected_lines)
 
     def test_handles_struct_var_contains_number(self):
@@ -987,7 +987,7 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
         # Considered acceptable
         expected_lines = 'visitor->Visit("image_2dViewOf_3dFeaturesExt", &device->image_2d_view_of_3d_features_ext) &&'
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_1")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_1")
         self.assertCodeFileWrite(expected_lines)
 
     def test_handles_struct_var_starts_with_underscore(self):
@@ -995,7 +995,7 @@ class TestEmitStructVisitsByVkVersion(helper.BaseMockCodeFileTest):
         self.mock_get_struct_name.return_value = "_3d_features_ext"
         expected_lines = 'visitor->Visit("_3dFeaturesExt", &device->_3d_features_ext) &&'
 
-        src.emit_struct_visits_by_vk_version(self.mock_file, "VK_VERSION_1_1")
+        src.emit_struct_visits_by_vk_version(self.mock_file, "1_1")
         self.assertCodeFileWrite(expected_lines)
 
 

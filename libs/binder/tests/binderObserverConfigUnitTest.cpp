@@ -22,8 +22,8 @@
 #include <locale>
 #include <map>
 
-#include "../BinderObserverConfig.h"
 #include "../BuildFlags.h"
+#include "../observer/BinderObserverConfig.h"
 
 namespace android {
 

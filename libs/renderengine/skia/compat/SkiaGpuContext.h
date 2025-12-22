@@ -22,6 +22,7 @@
 #include <include/gpu/ganesh/GrDirectContext.h>
 #include <include/gpu/ganesh/gl/GrGLInterface.h>
 #include <include/gpu/graphite/Context.h>
+#include <include/gpu/graphite/PersistentPipelineStorage.h>
 #include <include/gpu/vk/VulkanBackendContext.h>
 
 #include "SkiaBackendTexture.h"
@@ -64,6 +65,7 @@ public:
      */
     static std::unique_ptr<SkiaGpuContext> MakeVulkan_Graphite(
             const skgpu::VulkanBackendContext& vulkanBackendContext,
+            skgpu::graphite::PersistentPipelineStorage* persistentPipelineStorage,
             SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
             PipelineCallbackHandler* callbackHandler);
 

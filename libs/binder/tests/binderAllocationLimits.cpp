@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <../BinderStatsPusher.h>
-#include <../BinderStatsUtils.h>
+#include <../observer/BinderStatsPusher.h>
+#include <../observer/BinderStatsUtils.h>
 #include <android-base/logging.h>
 #include <android/os/IServiceManager.h>
 #include <binder/Binder.h>
@@ -442,16 +442,18 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     auto service = pusher.getBinderStatsServiceLocked(currentTimeNanos / 1000'000'000);
     EXPECT_NE(service, nullptr);
     size_t mallocs = 0, totalBytes = 0;
-    {
+    auto addFn = pusher.getAddCallDataToBufferLockedFunction();
+    auto runAggregateWithOnMalloc = [&]() {
         const auto on_malloc = OnMalloc([&](size_t bytes) {
             mallocs++;
             totalBytes += bytes;
         });
-        pusher.aggregateStatsLocked(data, service, currentTimeNanos / 1000'000'000);
-    }
-    EXPECT_EQ(mallocs, 12u);
-    EXPECT_EQ(totalBytes, 1200u);
-
+        for (auto& datum : data) {
+            addFn(std::move(datum));
+        }
+        pusher.aggregateStatsLocked(currentTimeNanos / 1000'000'000);
+    };
+    runAggregateWithOnMalloc();
     currentTimeNanos = 18'100'000'000;
 
     for (int i = 0; i < 150; ++i) {     // More than kMinSpamCount (125)
@@ -468,15 +470,9 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     }
     mallocs = 0;
     totalBytes = 0;
-    {
-        const auto on_malloc = OnMalloc([&](size_t bytes) {
-            mallocs++;
-            totalBytes += bytes;
-        });
-        pusher.aggregateStatsLocked(data, service, currentTimeNanos / 1000'000'000);
-    }
-    EXPECT_EQ(mallocs, 967u);
-    EXPECT_EQ(totalBytes, 148294u);
+    runAggregateWithOnMalloc();
+    EXPECT_EQ(mallocs, 971u);
+    EXPECT_EQ(totalBytes, 148548u);
 }
 
 int main(int argc, char** argv) {

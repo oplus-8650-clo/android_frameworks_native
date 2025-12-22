@@ -842,7 +842,7 @@ def generate_vk_format_init_code(vk_version_api: str = None):
     if not vk_version_api:
         # Process all extensions
         for key, format_ranges in VK_FORMAT_RANGE_MAPPING.items():
-            if key.startswith("VK_VERSION_"):
+            if re.match(".*VERSION_[0-9]_[0-9]", key):
                 continue
             for start_format, end_format in format_ranges:
                 format_code = [f'if (HasExtension("{key}", device.extensions)) {{']

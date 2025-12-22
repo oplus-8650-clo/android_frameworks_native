@@ -505,6 +505,7 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
         color.rgb = requested.getColor().rgb;
     }
 
+    bool hasSmpte2094_50 = false;
     if (forceUpdate || requested.what & layer_state_t::eBufferChanged) {
         acquireFence =
                 (requested.externalTexture &&
@@ -517,6 +518,18 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
         hasProtectedContent = requested.externalTexture &&
                 requested.externalTexture->getUsage() & GRALLOC_USAGE_PROTECTED;
         geomUsesSourceCrop = hasBufferOrSidebandStream();
+
+        if (buffer) {
+            auto& mapper = GraphicBufferMapper::get();
+            std::optional<std::vector<uint8_t>> smpte2094_50;
+            status_t err = OK;
+            {
+                SFTRACE_NAME("getSmpte2094_50");
+                err = mapper.getSmpte2094_50(buffer->handle, &smpte2094_50);
+            }
+
+            hasSmpte2094_50 = err == OK && smpte2094_50;
+        }
     }
 
     if (forceUpdate ||
@@ -556,7 +569,7 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
                  layer_state_t::eEdgeExtensionChanged | layer_state_t::eBorderSettingsChanged)) {
         forceClientComposition = shadowSettings.length > 0 || stretchEffect.hasEffect() ||
                 edgeExtensionEffect.hasEffect() || borderSettings.strokeWidth > 0 ||
-                !boxShadowSettings.boxShadows.empty();
+                !boxShadowSettings.boxShadows.empty() || hasSmpte2094_50;
     }
 
     if (forceUpdate ||

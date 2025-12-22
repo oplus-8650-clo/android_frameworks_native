@@ -305,7 +305,7 @@ SkiaRenderEngine::Contexts SkiaGLRenderEngine::createContexts() {
     auto glesVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     auto size = glesVersion ? strlen(glesVersion) : -1;
 
-    auto& cache = persistentCache(glesVersion, size);
+    GrContextOptions::PersistentCache& cache = ganeshPersistentCache(glesVersion, size);
 
     SkiaRenderEngine::Contexts contexts;
     contexts.first = SkiaGpuContext::MakeGL_Ganesh(glInterface, cache);

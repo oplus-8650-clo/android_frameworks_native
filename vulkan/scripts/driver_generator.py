@@ -336,7 +336,7 @@ def _get_proc_hook_enum(cmd):
   """
   assert cmd in gencom.version_dict
   for version in gencom.version_code_list:
-    if gencom.version_dict[cmd] == 'VK_VERSION_' + version:
+    if gencom.version_dict[cmd].endswith("_" + version):
       return 'ProcHook::EXTENSION_CORE_' + version
 
 
@@ -350,7 +350,7 @@ def _need_proc_hook_stub(cmd):
     if cmd in gencom.extension_dict:
       if not gencom.is_extension_internal(gencom.extension_dict[cmd]):
         return True
-    elif gencom.version_dict[cmd] != 'VK_VERSION_1_0':
+    elif not gencom.version_dict[cmd].endswith("_1_0"):
       return True
   return False
 
@@ -460,7 +460,7 @@ def _define_device_proc_hook(cmd, f):
   f.write(gencom.indent(2) + 'ProcHook::DEVICE,\n')
 
   if (cmd in gencom.extension_dict or
-      gencom.version_dict[cmd] != 'VK_VERSION_1_0'):
+      not gencom.version_dict[cmd].endswith("_1_0")):
     ext_name = ''
     ext_hook = ''
     if cmd in gencom.extension_dict:

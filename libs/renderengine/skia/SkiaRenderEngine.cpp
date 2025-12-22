@@ -60,6 +60,7 @@
 #include <include/gpu/ganesh/GrTypes.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
 #include <pthread.h>
+#include <src/codec/SkHdrAgtmPriv.h>
 #include <src/core/SkTraceEventCommon.h>
 #include <sync/sync.h>
 #include <ui/BlurRegion.h>
@@ -311,7 +312,7 @@ void SkiaRenderEngine::SkSLCacheMonitor::store(const SkData& key, const SkData& 
 
 int SkiaRenderEngine::reportShadersCompiled() {
     if (FlagManager::getInstance().shader_disk_cache()) {
-        return ShaderCache::get().totalShadersCompiled();
+        return ShaderCache::get(this->backend()).totalShadersCompiled();
     } else {
         return mSkSLCacheMonitor.totalShadersCompiled();
     }
@@ -450,13 +451,13 @@ static bool needsToneMapping(ui::Dataspace sourceDataspace, ui::Dataspace destin
             sourceTransfer != destTransfer;
 }
 
-GrContextOptions::PersistentCache& SkiaRenderEngine::persistentCache(const void* identity,
-                                                                     ssize_t size) {
+GrContextOptions::PersistentCache& SkiaRenderEngine::ganeshPersistentCache(const void* identity,
+                                                                           ssize_t size) {
     if (FlagManager::getInstance().shader_disk_cache()) {
-        auto& cache = ShaderCache::get();
-        if (!mInitializedDiskCache) {
+        auto& cache = ShaderCache::get(renderengine::RenderEngine::SkiaBackend::Ganesh);
+        if (!mInitializedGaneshDiskCache) {
             cache.initShaderDiskCache(identity, size);
-            mInitializedDiskCache = true;
+            mInitializedGaneshDiskCache = true;
         }
         return cache;
     } else {
@@ -603,9 +604,25 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
         }
     }
 
-    if (graphicBuffer && parameters.layer.luts) {
-        shader = mLutShader.lutShader(shader, parameters.layer.luts,
-                                      parameters.layer.sourceDataspace);
+    if (graphicBuffer) {
+        if (parameters.layer.luts) {
+            shader = mLutShader.lutShader(shader, parameters.layer.luts,
+                                          parameters.layer.sourceDataspace);
+        } else {
+            std::optional<std::vector<uint8_t>> smpte2094_50;
+            status_t err = graphicBuffer->getSmpte2094_50(&smpte2094_50);
+
+            if (err == OK && smpte2094_50) {
+                auto smpte2094_50Data =
+                        SkData::MakeWithoutCopy(smpte2094_50->data(), smpte2094_50->size());
+                auto agtm = skhdr::Agtm::Make(smpte2094_50Data.get());
+                if (agtm) {
+                    SFTRACE_NAME("AGTM");
+                    shader = shader->makeWithColorFilter(
+                            agtm->makeColorFilter(std::log2(parameters.display.targetHdrSdrRatio)));
+                }
+            }
+        }
     }
 
     if (parameters.requiresLinearEffect) {
@@ -781,7 +798,7 @@ private:
 
 void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
     // If the fence is already signaled, we can skip waiting on it.
-    if (FlagManager::getInstance().re_check_fence() && fenceFd.get() >= 0) {
+    if (fenceFd.get() >= 0) {
         if (sync_wait(fenceFd.get(), 0) >= 0) {
             return;
         }
@@ -1561,7 +1578,7 @@ void SkiaRenderEngine::dump(std::string& result) {
     StringAppendF(&result, "RenderEngine is in protected context: %d\n", mInProtectedContext);
     int shadersCachedSinceLastCall = 0;
     if (FlagManager::getInstance().shader_disk_cache()) {
-        shadersCachedSinceLastCall = ShaderCache::get().shadersCachedSinceLastCall();
+        shadersCachedSinceLastCall = ShaderCache::get(this->backend()).shadersCachedSinceLastCall();
     } else {
         shadersCachedSinceLastCall = mSkSLCacheMonitor.shadersCachedSinceLastCall();
     }
