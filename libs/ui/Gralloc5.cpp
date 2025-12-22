@@ -620,8 +620,8 @@ status_t Gralloc5Mapper::lock(buffer_handle_t bufferHandle, uint64_t usage, cons
         return BAD_VALUE;
     }
 
-    // TODO(b/262279301): Change the return type of ::unlock to unique_fd instead of int so that
-    //  ignoring the return value "just works" instead
+    // Change the return type of ::unlock to unique_fd instead of int so that
+    // ignoring the return value "just works" instead (see b/262279301)
     auto unlock = [this](buffer_handle_t bufferHandle) {
         int fence = this->unlock(bufferHandle);
         if (fence != -1) {

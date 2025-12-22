@@ -900,6 +900,103 @@ bool AIBinder_Weak_lt(const AIBinder_Weak* lhs, const AIBinder_Weak* rhs) __INTR
  */
 binder_status_t AIBinder_setMinRpcThreads(AIBinder* binder, uint16_t min) __INTRODUCED_IN(37);
 
+/**
+ * Represents a handle on a frozen state change notification.
+ *
+ * See AIBinder_addFrozenStateChangeCallback/AIBinder_removeFrozenStateChangeCallback.
+ */
+struct AIBinder_FrozenStateChangeCallback;
+typedef struct AIBinder_FrozenStateChangeCallback AIBinder_FrozenStateChangeCallback;
+
+/**
+ * This function is executed when the frozen state of the binder changes.
+ *
+ * Available since API level 37.
+ *
+ * \param cookie the cookie passed to AIBinder_addFrozenStateChangeCallback.
+ * \param frozen true if the process is frozen, false otherwise.
+ */
+typedef void (*AIBinder_FrozenStateChangeCallback_onStateChanged)(void* cookie, bool frozen);
+
+/**
+ * This function is intended for cleaning up the data in the provided cookie, and it is executed
+ * when the FrozenStateChangeCallback is unlinked.
+ *
+ * This method is called once for each binder that is unlinked. Hence, if the same cookie is passed
+ * to multiple binders, then the caller is responsible for reference counting the cookie.
+ *
+ * See also AIBinder_addFrozenStateChangeCallback/AIBinder_removeFrozenStateChangeCallback.
+ *
+ * WARNING: Make sure the lifetime of this cookie is long enough. If it is dynamically
+ * allocated, it should be deleted with AIBinder_FrozenStateChangeCallback_setOnUnlinked.
+ *
+ * Available since API level 37.
+ *
+ * \param cookie the cookie passed to AIBinder_addFrozenStateChangeCallback.
+ */
+typedef void (*AIBinder_FrozenStateChangeCallback_onBinderUnlinked)(void* cookie);
+
+/**
+ * Creates a new frozen state change callback. This can be attached to multiple different binder
+ * objects.
+ *
+ * Available since API level 37.
+ *
+ * \param onStateChanged the callback to call when the frozen state changes.
+ * \param onUnlinked the callback to call when the binder is unlinked.
+ *
+ * \return the newly constructed object (or null if onStateChanged is null).
+ */
+__attribute__((warn_unused_result)) AIBinder_FrozenStateChangeCallback*
+AIBinder_FrozenStateChangeCallback_new(
+        AIBinder_FrozenStateChangeCallback_onStateChanged onStateChanged,
+        AIBinder_FrozenStateChangeCallback_onBinderUnlinked onUnlinked) __INTRODUCED_IN(37);
+
+/**
+ * Deletes a frozen state change callback.
+ *
+ * Available since API level 37.
+ *
+ * \param callback the callback to delete (previously created with
+ * AIBinder_FrozenStateChangeCallback_new).
+ */
+void AIBinder_FrozenStateChangeCallback_delete(AIBinder_FrozenStateChangeCallback* callback)
+        __INTRODUCED_IN(37);
+
+/**
+ * Registers for notifications that the associated binder's frozen state has changed.
+ * The same callback may be associated with multiple different binders.
+ *
+ * If binder is local, this will return STATUS_INVALID_OPERATION.
+ *
+ * Available since API level 37.
+ *
+ * \param binder the binder object you want to receive frozen state change notifications from.
+ * \param callback the callback that will receive notifications when/if the binder's frozen state
+ * changes.
+ * \param cookie the value that will be passed to the callback on state change.
+ *
+ * \return STATUS_OK on success.
+ */
+binder_status_t AIBinder_addFrozenStateChangeCallback(AIBinder* binder,
+                                                      AIBinder_FrozenStateChangeCallback* callback,
+                                                      void* cookie) __INTRODUCED_IN(37);
+
+/**
+ * Stops registration for the associated binder's frozen state change.
+ *
+ * Available since API level 37.
+ *
+ * \param binder the binder object to remove a previously added callback from.
+ * \param callback the callback to remove.
+ * \param cookie the cookie used to add the callback.
+ *
+ * \return STATUS_OK on success. STATUS_NAME_NOT_FOUND if the binder cannot be found to be removed.
+ */
+binder_status_t AIBinder_removeFrozenStateChangeCallback(
+        AIBinder* binder, AIBinder_FrozenStateChangeCallback* callback, void* cookie)
+        __INTRODUCED_IN(37);
+
 __END_DECLS
 
 /** @} */

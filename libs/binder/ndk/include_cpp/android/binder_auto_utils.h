@@ -354,6 +354,44 @@ class ScopedAIBinder_DeathRecipient
     ScopedAIBinder_DeathRecipient& operator=(ScopedAIBinder_DeathRecipient&&) = default;
 };
 
+namespace impl {
+static void AIBinder_FrozenStateChangeCallback_delete_plumbing(
+        AIBinder_FrozenStateChangeCallback* callback) {
+    (void)callback;  // Suppress unused parameter warning if method body below is stripped.
+#ifdef __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
+    if (__builtin_available(android 37, *)) {
+#endif  // __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
+
+#if defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+        AIBinder_FrozenStateChangeCallback_delete(callback);
+#endif  // __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ || __ANDROID_API__ >= 37
+
+#ifdef __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
+    }
+#endif  // __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
+}
+}  // namespace impl
+
+/**
+ * Convenience wrapper. See AIBinder_FrozenStateChangeCallback.
+ */
+class ScopedAIBinder_FrozenStateChangeCallback
+    : public impl::ScopedAResource<AIBinder_FrozenStateChangeCallback*,
+                                   impl::AIBinder_FrozenStateChangeCallback_delete_plumbing,
+                                   nullptr> {
+   public:
+    /**
+     * Takes ownership of a.
+     */
+    explicit ScopedAIBinder_FrozenStateChangeCallback(AIBinder_FrozenStateChangeCallback* a =
+                                                              nullptr)
+        : ScopedAResource(a) {}
+    ~ScopedAIBinder_FrozenStateChangeCallback() {}
+    ScopedAIBinder_FrozenStateChangeCallback(ScopedAIBinder_FrozenStateChangeCallback&&) = default;
+    ScopedAIBinder_FrozenStateChangeCallback& operator=(
+            ScopedAIBinder_FrozenStateChangeCallback&&) = default;
+};
+
 /**
  * Convenience wrapper. See AIBinder_Weak.
  */
