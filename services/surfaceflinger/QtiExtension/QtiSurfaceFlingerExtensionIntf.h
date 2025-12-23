@@ -63,7 +63,7 @@ public:
     virtual void qtiUpdateDisplayExtension(uint32_t displayId, uint32_t configId,
                                            bool connected) = 0;
     virtual void qtiUpdateDisplaysList(sp<DisplayDevice> display, bool addDisplay) = 0;
-    virtual void qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId, 
+    virtual void qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId,
                                                   const HWComposer::HotplugEvent hotplugEvent,
                                                   PhysicalDisplayId id) = 0;
     virtual void qtiUpdateOnComposerHalHotplug(hal::HWDisplayId hwcDisplayId,
@@ -165,8 +165,8 @@ public:
      */
     virtual void qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod);
     virtual void qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                nsecs_t desiredPresentTime);
-    virtual void qtiDolphinTrackBufferDecrement(const char *name, int count);
+                                                uint32_t flags, nsecs_t desiredPresentTime);
+    virtual void qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height);
     virtual void qtiDolphinTrackVsyncSignal();
     virtual void qtiDolphinUnblockPendingBuffer();
     virtual bool qtiDolphinIsTargetFpsActive() = 0;
