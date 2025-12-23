@@ -174,27 +174,6 @@ protected:
                     }
                 });
     }
-
-    [[nodiscard]] std::list<NotifyArgs> processPosition(int32_t x, int32_t y) {
-        std::list<NotifyArgs> args;
-        args += process(EV_ABS, ABS_MT_POSITION_X, x);
-        args += process(EV_ABS, ABS_MT_POSITION_Y, y);
-        return args;
-    }
-
-    [[nodiscard]] std::list<NotifyArgs> processId(int32_t id) {
-        return process(EV_ABS, ABS_MT_TRACKING_ID, id);
-    }
-
-    [[nodiscard]] std::list<NotifyArgs> processKey(int32_t code, int32_t value) {
-        return process(EV_KEY, code, value);
-    }
-
-    [[nodiscard]] std::list<NotifyArgs> processSlot(int32_t slot) {
-        return process(EV_ABS, ABS_MT_SLOT, slot);
-    }
-
-    [[nodiscard]] std::list<NotifyArgs> processSync() { return process(EV_SYN, SYN_REPORT, 0); }
 };
 
 /**
@@ -225,10 +204,11 @@ TEST_F(MultiTouchInputMapperUnitTest, ChangeAssociatedDisplayIdWhenTouchIsActive
                                  InputReaderConfiguration::Change::DISPLAY_INFO);
 
     int32_t x1 = 100, y1 = 125;
-    args += processKey(BTN_TOUCH, 1);
-    args += processPosition(x1, y1);
-    args += processId(1);
-    args += processSync();
+    args += process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                         AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID)))));
@@ -247,20 +227,22 @@ TEST_F(MultiTouchInputMapperUnitTest, ChangeAssociatedDisplayIdWhenTouchIsActive
     // Move.
     x1 += 10;
     y1 += 15;
-    args = processPosition(x1, y1);
-    args += processSync();
+    args = process(EV_ABS, ABS_MT_POSITION_X, x1);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    args += process(EV_SYN, SYN_REPORT, 0);
     // Up
-    args += processKey(BTN_TOUCH, 0);
-    args += processId(-1);
-    args += processSync();
+    args += process(EV_KEY, BTN_TOUCH, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     ASSERT_THAT(args, IsEmpty());
 
     // New touch is delivered with the new display id.
-    args += processId(2);
-    args += processKey(BTN_TOUCH, 1);
-    args += processPosition(x1 + 20, y1 + 40);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    args += process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x1 + 20);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1 + 40);
+    args += process(EV_SYN, SYN_REPORT, 0);
     assertNotifyArgs(args,
                      VariantWith<NotifyMotionArgs>(AllOf(WithMotionAction(ACTION_DOWN),
                                                          WithDisplayId(SECOND_DISPLAY_ID))));
@@ -275,15 +257,17 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
     // Two fingers down at once.
     constexpr int32_t FIRST_TRACKING_ID = 1, SECOND_TRACKING_ID = 2;
     int32_t x1 = 100, y1 = 125, x2 = 200, y2 = 225;
-    args += processKey(BTN_TOUCH, 1);
-    args += processPosition(x1, y1);
-    args += processId(FIRST_TRACKING_ID);
-    args += processSlot(1);
-    args += processPosition(x2, y2);
-    args += processId(SECOND_TRACKING_ID);
+    args += process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, FIRST_TRACKING_ID);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, SECOND_TRACKING_ID);
     ASSERT_THAT(args, IsEmpty());
 
-    args += processSync();
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
@@ -295,13 +279,15 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
     y1 += 15;
     x2 += 5;
     y2 -= 10;
-    args = processSlot(0);
-    args += processPosition(x1, y1);
-    args += processSlot(1);
-    args += processPosition(x2, y2);
+    args = process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
     ASSERT_THAT(args, IsEmpty());
 
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                         WithMotionAction(AMOTION_EVENT_ACTION_MOVE))));
@@ -322,7 +308,7 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
                         WithMotionAction(AMOTION_EVENT_ACTION_CANCEL))));
 
     // SYN_REPORT should restart the gesture again
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
@@ -335,33 +321,35 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
     y1 += 15;
     x2 += 5;
     y2 -= 10;
-    args = processSlot(0);
-    args += processPosition(x1, y1);
-    args += processSlot(1);
-    args += processPosition(x2, y2);
+    args = process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
     ASSERT_THAT(args, IsEmpty());
 
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                         WithMotionAction(AMOTION_EVENT_ACTION_MOVE))));
 
     // First finger up.
-    args = processSlot(0);
-    args += processId(-1);
+    args = process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
     ASSERT_THAT(args, IsEmpty());
 
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_POINTER_0_UP))));
 
     // Second finger up.
-    args = processKey(BTN_TOUCH, 0);
-    args += processSlot(1);
-    args += processId(-1);
+    args = process(EV_KEY, BTN_TOUCH, 0);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
     ASSERT_THAT(args, IsEmpty());
 
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(
                         VariantWith<NotifyMotionArgs>(WithMotionAction(AMOTION_EVENT_ACTION_UP))));
@@ -374,24 +362,26 @@ TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithoutBtnTouch) {
     std::list<NotifyArgs> args;
 
     // Set up two pointers hovering (BTN_TOUCH is not pressed)
-    args += processSlot(0);
-    args += processId(0);
-    args += processPosition(100, 100);
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
 
-    args += processSlot(1);
-    args += processId(1);
-    args += processPosition(200, 200);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
 
-    args += processSync();
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // In general, Android does not support two pointers hovering. No events should be produced,
     // since both pointers are being added in the same frame here.
     ASSERT_THAT(args, IsEmpty());
 
     // Now lift pointer 0. Pointer 1 remains.
-    args += processSlot(0);
-    args += processId(-1);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // We expect HOVER_MOVE with 1 pointer (pointer 1)
     // Since we previously dropped 2 pointers, this looks like we are transitioning from 0 to 1
@@ -417,21 +407,23 @@ TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithPressure) {
     std::list<NotifyArgs> args;
 
     // Press BTN_TOUCH, but pressure is 0. This should cause the pointers to hover.
-    args += processKey(BTN_TOUCH, 1);
+    args += process(EV_KEY, BTN_TOUCH, 1);
 
     // Pointer 0: Hovering (pressure 0)
-    args += processSlot(0);
-    args += processId(0);
-    args += processPosition(100, 100);
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
     args += process(EV_ABS, ABS_MT_PRESSURE, 0);
 
     // Pointer 1: Hovering (pressure 0)
-    args += processSlot(1);
-    args += processId(1);
-    args += processPosition(200, 200);
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
     args += process(EV_ABS, ABS_MT_PRESSURE, 0);
 
-    args += processSync();
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // In general, Android does not support two pointers hovering. No events should be produced,
     // since both pointers are being added in the same frame here.
@@ -446,10 +438,11 @@ TEST_F(MultiTouchInputMapperUnitTest, OneToTwoPointersHovering) {
     std::list<NotifyArgs> args;
 
     // Start with 1 pointer hovering (P0)
-    args += processSlot(0);
-    args += processId(0);
-    args += processPosition(100, 100);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // Expect HOVER_ENTER {0}
     assertNotifyArgs(args,
@@ -462,10 +455,11 @@ TEST_F(MultiTouchInputMapperUnitTest, OneToTwoPointersHovering) {
     args.clear();
 
     // Add second pointer hovering (P1). Now have P0, P1.
-    args += processSlot(1);
-    args += processId(1);
-    args += processPosition(200, 200);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_SLOT, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // Expect HOVER_EXIT {0} because multi-pointer hover is suppressed.
     // The mapper detects >1 pointers, clears them, so cooked state becomes empty.
@@ -477,16 +471,17 @@ TEST_F(MultiTouchInputMapperUnitTest, OneToTwoPointersHovering) {
     args.clear();
 
     // Move pointers (P0, P1).
-    args += processSlot(0);
-    args += processPosition(110, 110);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 110);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 110);
+    args += process(EV_SYN, SYN_REPORT, 0);
     // Still suppressed.
     ASSERT_THAT(args, IsEmpty());
 
     // Lift P0. P1 remains.
-    args += processSlot(0);
-    args += processId(-1);
-    args += processSync();
+    args += process(EV_ABS, ABS_MT_SLOT, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // Transition from {} to {1}. Expect HOVER_ENTER {1}.
     assertNotifyArgs(args,
@@ -511,10 +506,11 @@ TEST_F(ExternalMultiTouchInputMapperTest, Viewports_Fallback) {
 
     // Expect the event to be sent to the internal viewport,
     // because an external viewport is not present.
-    args += processKey(BTN_TOUCH, 1);
-    args += processId(1);
-    args += processPosition(100, 200);
-    args += processSync();
+    args += process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     assertNotifyArgs(args,
                      VariantWith<NotifyMotionArgs>(
@@ -536,15 +532,16 @@ TEST_F(ExternalMultiTouchInputMapperTest, Viewports_Fallback) {
                              AllOf(WithMotionAction(ACTION_CANCEL), WithDisplayId(DISPLAY_ID))),
                      VariantWith<NotifyDeviceResetArgs>(WithDeviceId(DEVICE_ID)));
     // Lift up the old pointer.
-    args = processKey(BTN_TOUCH, 0);
-    args += processId(-1);
-    args += processSync();
+    args = process(EV_KEY, BTN_TOUCH, 0);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    args += process(EV_SYN, SYN_REPORT, 0);
 
     // Send new pointer
-    args += processKey(BTN_TOUCH, 1);
-    args += processId(2);
-    args += processPosition(111, 211);
-    args += processSync();
+    args += process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 111);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 211);
+    args += process(EV_SYN, SYN_REPORT, 0);
     assertNotifyArgs(args,
                      VariantWith<NotifyMotionArgs>(AllOf(WithMotionAction(ACTION_DOWN),
                                                          WithDisplayId(SECOND_DISPLAY_ID))));
@@ -568,13 +565,14 @@ TEST_F(MultiTouchInputMapperPointerModeUnitTest, MouseToolOnlyDownWhenMouseButto
     std::list<NotifyArgs> args;
 
     // Set the tool type to mouse.
-    args += processKey(BTN_TOOL_MOUSE, 1);
+    args += process(EV_KEY, BTN_TOOL_MOUSE, 1);
 
-    args += processPosition(100, 100);
-    args += processId(1);
+    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
+    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
     ASSERT_THAT(args, IsEmpty());
 
-    args = processSync();
+    args = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
@@ -584,15 +582,15 @@ TEST_F(MultiTouchInputMapperPointerModeUnitTest, MouseToolOnlyDownWhenMouseButto
                                           WithToolType(ToolType::MOUSE)))));
 
     // Setting BTN_TOUCH does not make a mouse pointer go down.
-    args = processKey(BTN_TOUCH, 1);
-    args += processSync();
+    args = process(EV_KEY, BTN_TOUCH, 1);
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                         WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE))));
 
     // The mouse button is pressed, so the mouse goes down.
-    args = processKey(BTN_MOUSE, 1);
-    args += processSync();
+    args = process(EV_KEY, BTN_MOUSE, 1);
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
@@ -608,8 +606,8 @@ TEST_F(MultiTouchInputMapperPointerModeUnitTest, MouseToolOnlyDownWhenMouseButto
                                           WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY)))));
 
     // The mouse button is released, so the mouse starts hovering.
-    args = processKey(BTN_MOUSE, 0);
-    args += processSync();
+    args = process(EV_KEY, BTN_MOUSE, 0);
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
@@ -627,8 +625,8 @@ TEST_F(MultiTouchInputMapperPointerModeUnitTest, MouseToolOnlyDownWhenMouseButto
 
     // Change the tool type so that it is no longer a mouse.
     // The default tool type is finger, and the finger is already down.
-    args = processKey(BTN_TOOL_MOUSE, 0);
-    args += processSync();
+    args = process(EV_KEY, BTN_TOOL_MOUSE, 0);
+    args += process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),

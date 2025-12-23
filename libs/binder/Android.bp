@@ -233,9 +233,9 @@ filegroup {
 filegroup {
     name: "libbinder_observer_sources",
     srcs: [
-        "BinderObserver.cpp",
-        "BinderObserverConfig.cpp",
-        "BinderStatsPusher.cpp",
+        "observer/BinderObserver.cpp",
+        "observer/BinderObserverConfig.cpp",
+        "observer/BinderStatsPusher.cpp",
     ],
     visibility: [
         ":__subpackages__",

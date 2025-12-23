@@ -224,8 +224,13 @@ LIBBINDER_NDK36 { # introduced=36
 
 LIBBINDER_NDK37 { # introduced=37
   global:
+    ABinderProcess_disableBackgroundScheduling; # systemapi llndk
     AServiceManager_checkServiceAccess; # systemapi llndk
     AIBinder_setMinRpcThreads; # systemapi
+    AIBinder_FrozenStateChangeCallback_new;
+    AIBinder_FrozenStateChangeCallback_delete;
+    AIBinder_addFrozenStateChangeCallback;
+    AIBinder_removeFrozenStateChangeCallback;
 };
 
 LIBBINDER_NDK_PLATFORM {
@@ -235,7 +240,6 @@ LIBBINDER_NDK_PLATFORM {
         AIBinder_fromPlatformBinder*;
         AIBinder_toPlatformBinder*;
         AParcel_viewPlatformParcel*;
-        ABinderProcess_disableBackgroundScheduling;
     };
   local:
     *;

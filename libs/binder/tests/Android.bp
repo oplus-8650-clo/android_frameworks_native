@@ -166,6 +166,7 @@ cc_test {
         "binderRecordedTransactionTest.cpp",
         "binderPersistableBundleTest.cpp",
         "binderStatsSpscQueueTest.cpp",
+        "BinderCallsAggregationUnitTest.cpp",
     ],
     shared_libs: [
         "libbinder",

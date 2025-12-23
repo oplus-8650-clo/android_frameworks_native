@@ -37,9 +37,9 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include "BinderObserver.h"
 #include "Utils.h"
 #include "binder_module.h"
+#include "observer/BinderObserver.h"
 
 #if (defined(__ANDROID__) || defined(__Fuchsia__)) && !defined(BINDER_WITH_KERNEL_IPC)
 #error Android and Fuchsia are expected to have BINDER_WITH_KERNEL_IPC

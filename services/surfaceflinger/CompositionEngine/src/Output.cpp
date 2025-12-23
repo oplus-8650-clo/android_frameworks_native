@@ -1606,6 +1606,11 @@ renderengine::DisplaySettings Output::generateClientCompositionDisplaySettings(
     clientCompositionDisplay.colorTransform = outputState.colorTransformMatrix;
     clientCompositionDisplay.deviceHandlesColorTransform =
             outputState.usesDeviceComposition || getSkipColorTransform();
+
+    if (getState().displayBrightnessNits > 0.0f && getState().sdrWhitePointNits > 0.0f) {
+        clientCompositionDisplay.targetHdrSdrRatio =
+                getState().displayBrightnessNits / getState().sdrWhitePointNits;
+    }
     return clientCompositionDisplay;
 }
 
@@ -1674,13 +1679,32 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                                              BlurRegionsOnly
                                    : LayerFE::ClientCompositionTargetSettings::BlurSetting::
                                              Enabled);
+
+                std::shared_ptr<gui::DisplayLuts> luts;
+
+                if (layerFEState->luts) {
+                    luts = layerFEState->luts;
+                } else {
+                    bool hasSmpte2094_50 = false;
+
+                    if (FlagManager::getInstance().force_agtm_without_luts() &&
+                        layerFEState->buffer) {
+                        std::optional<std::vector<uint8_t>> smpte2094_50;
+                        status_t err = layerFEState->buffer->getSmpte2094_50(&smpte2094_50);
+                        hasSmpte2094_50 = err == OK && smpte2094_50;
+                    }
+
+                    if (!hasSmpte2094_50 && layer->getState().hwc) {
+                        luts = layer->getState().hwc->luts;
+                    }
+                }
                 compositionengine::LayerFE::ClientCompositionTargetSettings
                         targetSettings{.clip = clip,
                                        .needsFiltering = layer->needsFiltering() ||
                                                outputState.needsFiltering,
                                        .isSecure = outputState.isSecure,
-                                       .isProtected = outputState.isProtected &&
-                                               supportsProtectedContent,
+                                       .isProtected =
+                                               outputState.isProtected && supportsProtectedContent,
                                        .viewport = outputState.layerStackSpace.getContent(),
                                        .dataspace = outputDataspace,
                                        .realContentIsVisible = realContentIsVisible,
@@ -1688,8 +1712,7 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                                        .blurSetting = blurSetting,
                                        .whitePointNits = layerState.whitePointNits,
                                        .treat170mAsSrgb = outputState.treat170mAsSrgb,
-                                       .luts = layer->getState().hwc ? layer->getState().hwc->luts
-                                                                     : nullptr};
+                                       .luts = luts};
                 if (auto clientCompositionSettings =
                             layerFE.prepareClientComposition(targetSettings)) {
                     clientCompositionLayers.push_back(std::move(*clientCompositionSettings));

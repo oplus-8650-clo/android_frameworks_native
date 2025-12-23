@@ -28,9 +28,9 @@
 #include <utils/SystemClock.h>
 #include <algorithm>
 #include <charconv>
+#include "../BuildFlags.h"
+#include "../JvmUtils.h"
 #include "BinderStatsUtils.h"
-#include "BuildFlags.h"
-#include "JvmUtils.h"
 
 namespace android {
 [[clang::no_destroy]] static const StaticString16 kBinderStatsServiceName(u"binder_stats_consumer");
@@ -58,36 +58,30 @@ sp<os::binder::IBinderStatsConsumerService> BinderStatsPusher::getBinderStatsSer
     return service;
 }
 
-__attribute__((no_sanitize("signed-integer-overflow"))) void
-BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
-                                        const sp<os::binder::IBinderStatsConsumerService>& service,
-                                        const int64_t nowSec) {
-    for (const auto& datum : data) {
-        int64_t startTimeSec = datum.startTimeNanos / 1000'000'000;
-        // Check if the buffer period has passed.
-        auto [it, inserted] = mStatsBuffer[datum].try_emplace(startTimeSec, AidlTargetMetrics());
-        it->second.totalCalls++;
-        if (datum.hasLatencyData()) {
-            it->second.callsWithLatency++;
-            uint64_t durationMicros = (datum.endTimeNanos - datum.startTimeNanos) / 1000;
-            it->second.durationSumMicros += durationMicros;
-            // Limiting duration to 120'000'000 (2 minutes) to prevent overflow in 64-bit integer
-            // sum squared.
-            durationMicros = std::min<uint64_t>(durationMicros, 120'000'000);
-            if (kBinderObserverV2Enabled) {
-                it->second.callDurationSumSquaredMicros += durationMicros * durationMicros;
-            }
+void BinderStatsPusher::appendCallStatsToReportLocked(const BinderCallData& chunk,
+                                                      const CallAggregation& agg) {
+    if (agg.callsWithLatency > 0 || agg.cpuTimeCount > 0) {
+        mCallStats.emplace_back(os::binder::BinderCallsStats());
+        auto& callsStats = mCallStats.back();
+        callsStats.clientUid = static_cast<int32_t>(chunk.senderUid);
+        callsStats.interfaceDescriptor = chunk.interfaceDescriptor;
+        callsStats.aidlMethod = chunk.aidlMethodName;
+        callsStats.callCount = static_cast<int32_t>(agg.callsWithLatency);
+        callsStats.durationSumMicros = agg.durationSumMicros;
+        if (kBinderObserverV2Enabled) {
+            callsStats.callDurationSumSquaredMicros = agg.callDurationSumSquaredMicros;
         }
-        if (datum.cpuTimeNanos > 0) {
-            it->second.cpuTimeCount++;
-            int64_t cpuTimeMicros = datum.cpuTimeNanos / 1000;
-            it->second.cpuTimeSumMicros += cpuTimeMicros;
-            // Limiting duration to 120'000'000 (2 minutes) to prevent overflow in 64-bit integer
-            // sum squared.
-            cpuTimeMicros = std::min<int64_t>(cpuTimeMicros, 120'000'000);
-            it->second.cpuTimeSumSquaredMicros += cpuTimeMicros * cpuTimeMicros;
-        }
+        callsStats.secondsWithAtLeast10Calls = agg.secondsWithAtLeast10Calls;
+        callsStats.secondsWithAtLeast50Calls = agg.secondsWithAtLeast50Calls;
+        callsStats.cpuTimeCount = static_cast<int32_t>(agg.cpuTimeCount);
+        callsStats.cpuTimeSumMicros = agg.cpuTimeSumMicros;
+        callsStats.cpuTimeSumSquaredMicros = agg.cpuTimeSumSquaredMicros;
     }
+}
+
+__attribute__((no_sanitize("signed-integer-overflow"))) void
+BinderStatsPusher::aggregateStatsLocked(const int64_t nowSec) {
+    auto service = getBinderStatsServiceLocked(nowSec);
     if (!service) return;
     // Ensure that if this is a local binder and this thread isn't attached
     // to the VM then skip pushing. This is required since StatsBootstrap is
@@ -109,22 +103,15 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             IPCThreadState::self()->restoreCallingIdentity(callingIdentity);
         }
     });
+    auto& callsBuffer = mCallsAggregation.getBufferLocked();
 
-    for (auto outerIt = mStatsBuffer.begin(); outerIt != mStatsBuffer.end();
+    for (auto outerIt = callsBuffer.begin(); outerIt != callsBuffer.end();
          /* no increment */) {
         int32_t secondsWithAtLeast125Calls = 0;
         int32_t secondsWithAtLeast250Calls = 0;
         uint32_t peakCallCountPerSecond = 0;
 
-        uint64_t callsWithLatency = 0;
-        uint64_t durationSumMicros = 0;
-        uint64_t callDurationSumSquaredMicros = 0;
-        uint32_t secondsWithAtLeast10Calls = 0;
-        uint32_t secondsWithAtLeast50Calls = 0;
-
-        int32_t cpuTimeCount = 0;
-        int64_t cpuTimeSumMicros = 0;
-        int64_t cpuTimeSumSquaredMicros = 0;
+        CallAggregation agg;
 
         for (auto innerIt = outerIt->second.begin(); innerIt != outerIt->second.end();
              /* no increment */) {
@@ -140,20 +127,21 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
                     peakCallCountPerSecond = std::max(peakCallCountPerSecond, totalCalls);
                 }
                 if (innerIt->second.callsWithLatency > 0) {
-                    callsWithLatency += innerIt->second.callsWithLatency;
-                    durationSumMicros += innerIt->second.durationSumMicros;
-                    callDurationSumSquaredMicros += innerIt->second.callDurationSumSquaredMicros;
+                    agg.callsWithLatency += innerIt->second.callsWithLatency;
+                    agg.durationSumMicros += innerIt->second.durationSumMicros;
+                    agg.callDurationSumSquaredMicros +=
+                            innerIt->second.callDurationSumSquaredMicros;
                     if (innerIt->second.callsWithLatency >= kLatencyCountFirstWatermark) {
-                        secondsWithAtLeast10Calls++;
+                        agg.secondsWithAtLeast10Calls++;
                         if (innerIt->second.callsWithLatency >= kLatencyCountSecondWatermark) {
-                            secondsWithAtLeast50Calls++;
+                            agg.secondsWithAtLeast50Calls++;
                         }
                     }
                 }
                 if (innerIt->second.cpuTimeCount > 0) {
-                    cpuTimeCount += innerIt->second.cpuTimeCount;
-                    cpuTimeSumMicros += innerIt->second.cpuTimeSumMicros;
-                    cpuTimeSumSquaredMicros += innerIt->second.cpuTimeSumSquaredMicros;
+                    agg.cpuTimeCount += innerIt->second.cpuTimeCount;
+                    agg.cpuTimeSumMicros += innerIt->second.cpuTimeSumMicros;
+                    agg.cpuTimeSumSquaredMicros += innerIt->second.cpuTimeSumSquaredMicros;
                 }
                 // Erase the datum from the buffer so we don't aggregate it again
                 innerIt = outerIt->second.erase(innerIt);
@@ -165,24 +153,8 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
             service->reportCallStats(mCallStats);
             mCallStats.clear();
         }
-        if (callsWithLatency > 0) {
-            auto datum = outerIt->first;
-            mCallStats.emplace_back(os::binder::BinderCallsStats());
-            auto& callsStats = mCallStats.back();
-            callsStats.clientUid = static_cast<int32_t>(datum.senderUid);
-            callsStats.interfaceDescriptor = datum.interfaceDescriptor;
-            callsStats.aidlMethod = datum.aidlMethodName;
-            callsStats.callCount = static_cast<int64_t>(callsWithLatency);
-            callsStats.durationSumMicros = static_cast<int64_t>(durationSumMicros);
-            callsStats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
-            callsStats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
-            if (kBinderObserverV2Enabled) {
-                callsStats.callDurationSumSquaredMicros = callDurationSumSquaredMicros;
-            }
-            callsStats.cpuTimeCount = cpuTimeCount;
-            callsStats.cpuTimeSumMicros = cpuTimeSumMicros;
-            callsStats.cpuTimeSumSquaredMicros = cpuTimeSumSquaredMicros;
-        }
+        appendCallStatsToReportLocked(outerIt->first, agg);
+        agg.reset();
 
         if (mSpamStats.size() >= kMaxStatsCount) {
             service->reportSpamStats(mSpamStats);
@@ -201,7 +173,7 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
         }
 
         if (outerIt->second.empty()) {
-            outerIt = mStatsBuffer.erase(outerIt);
+            outerIt = callsBuffer.erase(outerIt);
         } else {
             ++outerIt;
         }
@@ -216,9 +188,16 @@ BinderStatsPusher::aggregateStatsLocked(const std::vector<BinderCallData>& data,
     }
 }
 
-void BinderStatsPusher::pushLocked(const std::vector<BinderCallData>& data, const int64_t nowSec) {
-    auto service = getBinderStatsServiceLocked(nowSec);
-    aggregateStatsLocked(data, service, nowSec);
+void BinderStatsPusher::AddCallDataFunctor::operator()(BinderCallData&& b) const {
+    mPusher->mCallsAggregation.addCallStatsLocked(std::move(b));
+}
+
+void BinderStatsPusher::pushLocked(const int64_t nowSec) {
+    aggregateStatsLocked(nowSec);
+}
+
+BinderStatsPusher::AddCallDataFunctor BinderStatsPusher::getAddCallDataToBufferLockedFunction() {
+    return AddCallDataFunctor(this);
 }
 
 } // namespace android

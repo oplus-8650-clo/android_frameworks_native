@@ -40,6 +40,7 @@ namespace android {
 class BinderStatsSpscQueue {
 public:
     static constexpr size_t kQueueSize = 128;
+
 private:
     static_assert((kQueueSize & (kQueueSize - 1)) == 0, "Size must be a power of 2");
     static constexpr size_t CAPACITY = kQueueSize;
@@ -59,8 +60,8 @@ public:
      * @return true if the item was successfully pushed
      * @return false if the queue was full
      */
-    __attribute__((no_sanitize("unsigned-integer-overflow")))
-    bool push(const BinderCallData& item) {
+    __attribute__((no_sanitize("unsigned-integer-overflow"))) bool push(
+            const BinderCallData& item) {
         const uint64_t head = mHead.load(std::memory_order_acquire);
         const uint64_t tail = mTail.load(std::memory_order_relaxed);
 
@@ -80,8 +81,7 @@ public:
      * consumer should start consuming.
      * @return approximate size of queue
      */
-    __attribute__((no_sanitize("unsigned-integer-overflow")))
-    size_t length() {
+    __attribute__((no_sanitize("unsigned-integer-overflow"))) size_t length() {
         const uint64_t head = mHead.load(std::memory_order_acquire);
         const uint64_t tail = mTail.load(std::memory_order_acquire);
         return tail - head;
@@ -91,8 +91,8 @@ public:
      * @brief Pops an item from the queue if available
      * @return std::optional<BinderCallData> The popped item
      */
-    __attribute__((no_sanitize("unsigned-integer-overflow")))
-    std::optional<BinderCallData> tryPop() {
+    __attribute__((no_sanitize("unsigned-integer-overflow"))) std::optional<BinderCallData>
+    tryPop() {
         const uint64_t tail = mTail.load(std::memory_order_acquire);
         const uint64_t head = mHead.load(std::memory_order_relaxed);
 
@@ -118,8 +118,8 @@ public:
      *
      * This is a thread safe operation
      */
-    std::vector<BinderCallData> consumeData() {
-        std::vector<BinderCallData> data;
+    template <typename Fn>
+    void consumeData(Fn consumerFn) {
         std::vector<std::shared_ptr<BinderStatsSpscQueue>> queuesCopy;
         std::vector<std::shared_ptr<BinderStatsSpscQueue>> deregisteredQueuesCopy;
         {
@@ -127,22 +127,19 @@ public:
             queuesCopy = mQueues;
             deregisteredQueuesCopy.swap(mDeregisteredQueues);
         }
-        // reserving some amount to reduce number of allocations.
-        data.reserve(BinderStatsSpscQueue::kQueueSize);
         for (auto& queue : queuesCopy) {
             LOG_ALWAYS_FATAL_IF(queue == nullptr, "queue pointer null");
             while (auto item = queue->tryPop()) {
-                data.emplace_back(std::move(*item));
+                consumerFn(std::move(*item));
             }
         }
         for (auto& queue : deregisteredQueuesCopy) {
             LOG_ALWAYS_FATAL_IF(queue == nullptr, "queue pointer null");
             while (auto item = queue->tryPop()) {
-                data.emplace_back(std::move(*item));
+                consumerFn(std::move(*item));
             }
             queue.reset();
         }
-        return data;
     }
 
     /**

@@ -40,11 +40,22 @@ protected:
 private:
     GraphiteVkRenderEngine(const RenderEngineCreationArgs& args) : SkiaVkRenderEngine(args) {}
 
+    SkiaBackend backend() const override { return SkiaBackend::Graphite; }
+
+    skgpu::graphite::PersistentPipelineStorage* graphitePersistentPipelineStorage(
+            const void* identity, ssize_t size, bool isProtected);
+
     std::thread mPrecompilePipelinesTask;
     std::vector<graphite::BackendSemaphore> mStagedWaitSemaphores;
 
     PipelineCallbackHandler mPipelineCallbackHandler;
     PipelineCallbackHandler mProtectedPipelineCallbackHandler;
+
+    std::unique_ptr<skgpu::graphite::PersistentPipelineStorage> mProtectedPersistentPipelineStorage;
+    std::unique_ptr<skgpu::graphite::PersistentPipelineStorage>
+            mUnprotectedPersistentPipelineStorage;
+
+    bool mInitializedGraphiteDiskCache = false;
 };
 
 } // namespace android::renderengine::skia

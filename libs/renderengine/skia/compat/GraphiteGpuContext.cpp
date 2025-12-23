@@ -40,6 +40,7 @@ namespace android::renderengine::skia {
 namespace {
 
 static skgpu::graphite::ContextOptions graphiteOptions(
+        skgpu::graphite::PersistentPipelineStorage* persistentPipelineStorage,
         SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
         PipelineCallbackHandler* callbackHandler) {
     skgpu::graphite::ContextOptions options;
@@ -48,7 +49,7 @@ static skgpu::graphite::ContextOptions graphiteOptions(
 
     options.fPipelineCallbackContext = callbackHandler;
     options.fPipelineCachingCallback = PipelineCallbackHandler::Callback;
-
+    options.fPersistentPipelineStorage = persistentPipelineStorage;
     return options;
 }
 
@@ -71,12 +72,14 @@ public:
 
 std::unique_ptr<SkiaGpuContext> SkiaGpuContext::MakeVulkan_Graphite(
         const skgpu::VulkanBackendContext& vulkanBackendContext,
+        skgpu::graphite::PersistentPipelineStorage* persistentPipelineStorage,
         SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
         PipelineCallbackHandler* callbackHandler) {
     return std::make_unique<GraphiteGpuContext>(
             skgpu::graphite::ContextFactory::
                     MakeVulkan(vulkanBackendContext,
-                               graphiteOptions(userDefinedKnownRuntimeEffects, callbackHandler)));
+                               graphiteOptions(persistentPipelineStorage,
+                                               userDefinedKnownRuntimeEffects, callbackHandler)));
 }
 
 GraphiteGpuContext::GraphiteGpuContext(std::unique_ptr<skgpu::graphite::Context> context)

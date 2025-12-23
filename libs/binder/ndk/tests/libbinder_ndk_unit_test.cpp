@@ -789,6 +789,54 @@ TEST(NdkBinder, LinkToDeath) {
     AIBinder_decStrong(binder);
 }
 
+void OnFrozenStateChanged(void* cookie, bool frozen) {
+    LOG(ERROR) << "FROZEN STATE CHANGED. COOKIE: " << cookie << " FROZEN: " << frozen;
+}
+void OnUnlinked(void* /*cookie*/) {
+    // No-op for testing.
+}
+
+TEST(NdkBinder, AddFrozenStateChangeCallback) {
+    LIBBINDER_IGNORE("-Wdeprecated-declarations")
+    AIBinder* binder = AServiceManager_getService(kExistingNonNdkService);
+    LIBBINDER_IGNORE_END()
+    ASSERT_NE(nullptr, binder);
+
+    AIBinder_FrozenStateChangeCallback* callback =
+            AIBinder_FrozenStateChangeCallback_new(OnFrozenStateChanged, OnUnlinked);
+    ASSERT_NE(nullptr, callback);
+
+    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback, nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback, nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback, nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback, nullptr));
+    EXPECT_EQ(STATUS_NAME_NOT_FOUND,
+              AIBinder_removeFrozenStateChangeCallback(binder, callback, nullptr));
+
+    AIBinder_FrozenStateChangeCallback_delete(callback);
+    AIBinder_decStrong(binder);
+}
+
+TEST(NdkBinder, ScopedFrozenStateChangeCallback) {
+    LIBBINDER_IGNORE("-Wdeprecated-declarations")
+    AIBinder* binder = AServiceManager_getService(kExistingNonNdkService);
+    LIBBINDER_IGNORE_END()
+    ASSERT_NE(nullptr, binder);
+
+    ndk::ScopedAIBinder_FrozenStateChangeCallback callback(
+            AIBinder_FrozenStateChangeCallback_new(OnFrozenStateChanged, OnUnlinked));
+    ASSERT_NE(nullptr, callback.get());
+
+    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback.get(), nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback.get(), nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback.get(), nullptr));
+    EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback.get(), nullptr));
+    EXPECT_EQ(STATUS_NAME_NOT_FOUND,
+              AIBinder_removeFrozenStateChangeCallback(binder, callback.get(), nullptr));
+
+    AIBinder_decStrong(binder);
+}
+
 TEST(NdkBinder, SetInheritRt) {
     // functional test in binderLibTest
     sp<IFoo> foo = sp<MyTestFoo>::make();
@@ -814,6 +862,12 @@ TEST(NdkBinder, SetInheritRtNonLocal) {
     EXPECT_DEATH(AIBinder_setInheritRt(binder, false), "");
 
     AIBinder_decStrong(binder);
+}
+
+TEST(NdkBinder, DisableBackgroundScheduling) {
+    // does not abort, functional testing in binderLibTest
+    ABinderProcess_disableBackgroundScheduling(true);
+    ABinderProcess_disableBackgroundScheduling(false);
 }
 
 TEST(NdkBinder, AddNullService) {

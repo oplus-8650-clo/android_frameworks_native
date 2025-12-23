@@ -693,6 +693,7 @@ VKAPI_ATTR PFN_vkVoidFunction GetDeviceProcAddr(VkDevice device, const char* pNa
         "vkEnumerateInstanceVersion",
         "vkEnumeratePhysicalDeviceGroups",
         "vkEnumeratePhysicalDeviceGroupsKHR",
+        "vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM",
         "vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR",
         "vkEnumeratePhysicalDevices",
         "vkGetDisplayModeProperties2KHR",

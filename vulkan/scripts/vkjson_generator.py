@@ -356,18 +356,18 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
       ret &=
       """)
      # TODO:- b/415707479 (Update generator to handle new Vulkan API versions automatically.)
-    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_4")
+    util.emit_struct_visits_by_vk_version(f, "1_4")
     f.write("""visitor->Visit("core14", &device->core14);
       FALLTHROUGH_INTENDED;
     case VK_API_VERSION_1_3:
       ret &= """)
-    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_3")
+    util.emit_struct_visits_by_vk_version(f, "1_3")
     f.write("""visitor->Visit("core13", &device->core13);
       FALLTHROUGH_INTENDED;
     case VK_API_VERSION_1_2:
       ret &=
             """)
-    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_2")
+    util.emit_struct_visits_by_vk_version(f, "1_2")
     f.write("""
       visitor->Visit("core11", &device->core11);
       ret &= visitor->Visit("core12", &device->core12);
@@ -375,7 +375,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
     case VK_API_VERSION_1_1:
       ret &=\n""")
 
-    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_1")
+    util.emit_struct_visits_by_vk_version(f, "1_1")
 
     f.write("""\
           visitor->Visit("externalFenceProperties",
@@ -386,7 +386,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
     case VK_API_VERSION_1_0:
       ret &=\n""")
 
-    util.emit_struct_visits_by_vk_version(f, "VK_VERSION_1_0")
+    util.emit_struct_visits_by_vk_version(f, "1_0")
 
     f.write("""\
              visitor->Visit("properties", &device->properties) &&
@@ -932,10 +932,10 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
     f.write(util.generate_vk_format_init_code())
     f.write("""\
     if (device.properties.apiVersion >= VK_API_VERSION_1_1) {\n""")
-    f.write(util.generate_vk_format_init_code("VK_VERSION_1_1"))
+    f.write(util.generate_vk_format_init_code("VK_BASE_VERSION_1_1"))
 
     # Vulkan version data for VK_VERSION_1_1
-    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["VK_VERSION_1_1"]
+    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["1_1"]
     f.write(util.generate_vk_version_structs_initialization(vk_version_data, "Properties") + "\n")
 
     f.write("""\
@@ -994,11 +994,11 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
   }
 
   if (device.properties.apiVersion >= VK_API_VERSION_1_2) {\n""")
-    f.write(util.generate_vk_format_init_code("VK_VERSION_1_2"))
+    f.write(util.generate_vk_format_init_code("VK_BASE_VERSION_1_2"))
     cc_code_properties_11, cc_code_features_11 = util.generate_vk_core_structs_init_code("Core11")
     cc_code_properties_12, cc_code_features_12 = util.generate_vk_core_structs_init_code("Core12")
     # Vulkan version data for VK_VERSION_1_2
-    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["VK_VERSION_1_2"]
+    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["1_2"]
 
     f.write(cc_code_properties_11)
     f.write(cc_code_properties_12)
@@ -1016,12 +1016,12 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
   }
 
   if (device.properties.apiVersion >= VK_API_VERSION_1_3) {\n""")
-    f.write(util.generate_vk_format_init_code("VK_VERSION_1_3"))
+    f.write(util.generate_vk_format_init_code("VK_BASE_VERSION_1_3"))
     cc_code_properties_13, cc_code_features_13 = util.generate_vk_core_structs_init_code("Core13")
     cc_code_properties_14, cc_code_features_14 = util.generate_vk_core_structs_init_code("Core14")
 
     # Vulkan version data for VK_VERSION_1_3
-    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["VK_VERSION_1_3"]
+    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["1_3"]
 
     f.write(util.generate_vk_version_structs_initialization(vk_version_data, "Properties") + "\n")
     f.write(cc_code_properties_13)
@@ -1035,10 +1035,10 @@ VkJsonDevice VkJsonGetDevice(VkPhysicalDevice physical_device) {
   }
 
   if (device.properties.apiVersion >= VK_API_VERSION_1_4) {\n""")
-    f.write(util.generate_vk_format_init_code("VK_VERSION_1_4"))
+    f.write(util.generate_vk_format_init_code("VK_BASE_VERSION_1_4"))
 
     # Vulkan version data for VK_VERSION_1_4
-    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["VK_VERSION_1_4"]
+    vk_version_data = VK.VULKAN_VERSIONS_AND_STRUCTS_MAPPING["1_4"]
     f.write(util.generate_vk_version_structs_initialization(vk_version_data, "Properties") + "\n")
     f.write(cc_code_properties_14)
     f.write(f"vkGetPhysicalDeviceProperties2(physical_device, &properties);\n\n")

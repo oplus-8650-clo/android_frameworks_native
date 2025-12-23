@@ -45,6 +45,7 @@ public:
     bool disable_sched_fifo_composer_callback() const;
     bool productionize_readback_screenshot() const;
     bool stable_edid_ids_for_external_displays_optin() const;
+    bool force_agtm_without_luts() const;
 
     /// Legacy server flags ///
     bool test_flag() const;
@@ -54,7 +55,6 @@ public:
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
-    bool anchor_list() const;
     bool bugfix_resize_virtual_display_surfaces() const;
     bool configure_work_duration() const;
     bool connected_displays_cursor() const;
@@ -71,7 +71,6 @@ public:
     bool mirror_uid_filtering() const;
     bool monitor_buffer_fences() const;
     bool offload_gpu_composition() const;
-    bool re_check_fence() const;
     bool re_powered_off_displays_inform_cache_budgets() const;
     bool readback_screenshot() const;
     bool refresh_rate_overlay_on_external_display() const;

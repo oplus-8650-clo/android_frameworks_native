@@ -58,7 +58,8 @@ static void unref_semaphore(void* semaphore) {
 std::unique_ptr<SkiaGpuContext> GaneshVkRenderEngine::createContext(
         VulkanInterface& vulkanInterface) {
     auto driverVersion = vulkanInterface.driverVersion();
-    auto& cache = persistentCache(&driverVersion, sizeof(driverVersion));
+    GrContextOptions::PersistentCache& cache =
+            ganeshPersistentCache(&driverVersion, sizeof(driverVersion));
     return SkiaGpuContext::MakeVulkan_Ganesh(vulkanInterface.createSkiaVulkanBackendContext(),
                                              cache);
 }
@@ -117,7 +118,7 @@ base::unique_fd GaneshVkRenderEngine::flushAndSubmit(SkiaGpuContext* context,
         flushInfo.fFinishedProc(destroySemaphoreInfo);
     }
     base::unique_fd res(drawFenceFd);
-    ShaderCache::get().onVkFrameFlushed(grContext.get());
+    ShaderCache::get(SkiaBackend::Ganesh).onGaneshVkFrameFlushed(grContext.get());
     return res;
 }
 

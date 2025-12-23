@@ -81,7 +81,7 @@ VKAPI_ATTR VkResult checkedBindImageMemory2(VkDevice device, uint32_t bindInfoCo
     if (GetData(device).hook_extensions[ProcHook::EXTENSION_CORE_1_1]) {
         return BindImageMemory2(device, bindInfoCount, pBindInfos);
     } else {
-        Logger(device).Err(device, "VK_VERSION_1_1 not enabled. vkBindImageMemory2 not executed.");
+        Logger(device).Err(device, "VK_BASE_VERSION_1_1 not enabled. vkBindImageMemory2 not executed.");
         return VK_SUCCESS;
     }
 }
@@ -161,7 +161,7 @@ VKAPI_ATTR void checkedGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2
     if (GetData(device).hook_extensions[ProcHook::EXTENSION_CORE_1_1]) {
         GetDeviceQueue2(device, pQueueInfo, pQueue);
     } else {
-        Logger(device).Err(device, "VK_VERSION_1_1 not enabled. vkGetDeviceQueue2 not executed.");
+        Logger(device).Err(device, "VK_BASE_VERSION_1_1 not enabled. vkGetDeviceQueue2 not executed.");
     }
 }
 

@@ -2970,9 +2970,9 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     panopticon::make(ids, panopticon::Source::CG_FrameSignal);
     auto commitTokens = panopticon::slice(panopticon::SliceType::CG_Sf_Commit);
 
-    const scheduler::FrameTarget& pacesetterFrameTarget = *frameTargets.get(pacesetterId)->get();
+    const scheduler::FrameTarget* pacesetterFrameTargetPtr = frameTargets.get(pacesetterId)->get();
 
-    const VsyncId vsyncId = pacesetterFrameTarget.vsyncId();
+    const VsyncId vsyncId = pacesetterFrameTargetPtr->vsyncId();
     SFTRACE_NAME(ftl::Concat(__func__, ' ', ftl::to_underlying(vsyncId)).c_str());
 
 // QTI_BEGIN: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
@@ -3050,7 +3050,7 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     //                                                     mCompositionCoverage.test(
     //                                                             CompositionCoverage::Gpu)};
 
-    if (pacesetterFrameTarget.didMissFrame()) {
+    if (pacesetterFrameTargetPtr->didMissFrame()) {
         mTimeStats->incrementMissedFrames();
     }
 
@@ -3091,11 +3091,11 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         }
     }
 
-    if (pacesetterFrameTarget.wouldBackpressureHwc()) {
-        if (mBackpressureGpuComposition || pacesetterFrameTarget.didMissHwcFrame()) {
+    if (pacesetterFrameTargetPtr->wouldBackpressureHwc()) {
+        if (mBackpressureGpuComposition || pacesetterFrameTargetPtr->didMissHwcFrame()) {
             mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
-                    pacesetterFrameTarget.expectedPresentTime());
-            const Duration slack = TimePoint::now() - pacesetterFrameTarget.frameBeginTime();
+                    pacesetterFrameTargetPtr->expectedPresentTime());
+            const Duration slack = TimePoint::now() - pacesetterFrameTargetPtr->frameBeginTime();
             scheduleCommit(FrameHint::kNone, slack);
             return false;
         }
@@ -3113,14 +3113,14 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // Save this once per commit + composite to ensure consistency.
     mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && hasDisplayWithPowerModeOn;
     if (mPowerHintSessionEnabled) {
-        mPowerAdvisor->setCommitStart(pacesetterFrameTarget.frameBeginTime());
-        mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTarget.expectedPresentTime());
+        mPowerAdvisor->setCommitStart(pacesetterFrameTargetPtr->frameBeginTime());
+        mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTargetPtr->expectedPresentTime());
 
         // Frame delay is how long we should have minus how long we actually have.
         const Duration idealSfWorkDuration =
                 mScheduler->vsyncModulator().getVsyncConfig().sfWorkDuration;
         const Duration frameDelay =
-                idealSfWorkDuration - pacesetterFrameTarget.expectedFrameDuration();
+                idealSfWorkDuration - pacesetterFrameTargetPtr->expectedFrameDuration();
 
         mPowerAdvisor->setFrameDelay(frameDelay);
         mPowerAdvisor->setTotalFrameTargetWorkDuration(idealSfWorkDuration);
@@ -3154,15 +3154,19 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                 FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->getPowerMode()
                     == hal::PowerMode::ON;
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
-                                    pacesetterFrameTarget.frameBeginTime().ns(),
+                                    pacesetterFrameTargetPtr->frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
                                     mScheduler->getPacesetterRefreshRate(), pacesetterPoweredOn);
 
         const bool flushTransactions = clearTransactionFlags(eTransactionFlushNeeded);
         bool transactionsAreEmpty = false;
-        mustComposite |= updateLayerSnapshots(vsyncId, pacesetterFrameTarget.frameBeginTime().ns(),
-                                              pacesetterFrameTarget.expectedPresentTime().ns(),
-                                              flushTransactions, transactionsAreEmpty);
+        mustComposite |=
+                updateLayerSnapshots(vsyncId, pacesetterFrameTargetPtr->frameBeginTime().ns(),
+                                     pacesetterFrameTargetPtr->expectedPresentTime().ns(),
+                                     flushTransactions, transactionsAreEmpty);
+
+        // A display transaction for hotplug reconnect may have just destroyed the original.
+        pacesetterFrameTargetPtr = mScheduler->pacesetterFrameTarget();
 
         // Tell VsyncTracker that we are going to present this frame before scheduling
         // setTransactionFlags which will schedule another SF frame. This was if the tracker
@@ -3170,8 +3174,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         if (mustComposite) {
             mScheduler->getVsyncSchedule()
                     ->getTracker()
-                    .onFrameBegin(pacesetterFrameTarget.expectedPresentTime(),
-                                  pacesetterFrameTarget.lastSignaledFrameTime());
+                    .onFrameBegin(pacesetterFrameTargetPtr->expectedPresentTime(),
+                                  pacesetterFrameTargetPtr->lastSignaledFrameTime());
         }
         if (transactionFlushNeeded()) {
             setTransactionFlags(eTransactionFlushNeeded);
@@ -3202,14 +3206,19 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                                                 updateAttachedChoreographer);
 
         initiateDisplayModeChanges();
+
+        // A resolution change without refresh required may have just destroyed the original.
+        if (!FlagManager::getInstance().synced_resolution_switch()) {
+            pacesetterFrameTargetPtr = mScheduler->pacesetterFrameTarget();
+        }
     }
 
     updateCursorAsync();
     if (!mustComposite) {
-        updateInputFlinger(vsyncId, pacesetterFrameTarget.frameBeginTime());
+        updateInputFlinger(vsyncId, pacesetterFrameTargetPtr->frameBeginTime());
     }
     doActiveLayersTracingIfNeeded(false, mVisibleRegionsDirty,
-                                  pacesetterFrameTarget.frameBeginTime(), vsyncId);
+                                  pacesetterFrameTargetPtr->frameBeginTime(), vsyncId);
 
     mLastCommittedVsyncId = vsyncId;
 
@@ -5476,7 +5485,8 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyTimelin
     const auto& transaction = *flushState.transaction;
 
     const TimePoint desiredPresentTime = TimePoint::fromNs(transaction.desiredPresentTime);
-    const TimePoint expectedPresentTime = mScheduler->expectedPresentTimeForPacesetter();
+    const TimePoint expectedPresentTime =
+            mScheduler->pacesetterFrameTarget()->expectedPresentTime();
 
     using TransactionReadiness = TransactionHandler::TransactionReadiness;
 
@@ -5950,7 +5960,7 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
     // If there are frame rate changes, and SF is scheduled to wake up far away in the future due
     // to low rendering rate, we wake up SF immediately to process the frame rate change as this
     // might be a request to boost.
-    if (hasFrameRateChanges && FlagManager::getInstance().anchor_list()) {
+    if (hasFrameRateChanges) {
         const auto scheduledFrameResultOpt = mScheduler->getScheduledFrameResult();
         if (scheduledFrameResultOpt.has_value()) {
             const auto timeToWake = scheduledFrameResultOpt->callbackTime - TimePoint::now();
@@ -6811,7 +6821,7 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
                 ALOGW("Attempt to set power mode %d for virtual display", mode);
             }
         } else {
-            ftl::FakeGuard guard(mStateLock);
+            Mutex::Autolock lock(mStateLock);
             if (FlagManager::getInstance().set_power_mode_async() &&
                 display->getCompositionDisplay()->supportsOffloadPresent()) {
                 ALOGD("Setting power mode %d asynchronously for a physical display with token %p",
