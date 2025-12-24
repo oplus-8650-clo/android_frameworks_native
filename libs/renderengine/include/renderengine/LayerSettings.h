@@ -173,6 +173,10 @@ struct LayerSettings {
 
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+
+/* QTI_BEGIN */
+    bool lutSourceIsHwc = false;
+/* QTI_END */
 };
 
 // Keep in sync with custom comparison function in
