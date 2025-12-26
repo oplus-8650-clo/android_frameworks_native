@@ -27,6 +27,7 @@
 #include <gui/LayerState.h>
 #include <gui/ScreenCaptureResults.h>
 #include <gui/TransactionState.h>
+#include <sys/types.h>
 #include <ui/DisplayId.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <ui/ScreenPartStatus.h>
@@ -365,17 +366,19 @@ public:
                               float requestedRefreshRate = 0.0f) {
         static const std::string kTestId =
                 "virtual:libsurfaceflinger_unittest:TestableSurfaceFlinger";
+        uid_t ownerUid = static_cast<uid_t>(gui::Uid::INVALID);
         return mFlinger
                 ->createVirtualDisplay(displayName, isSecure,
                                        gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower,
-                                       kTestId, requestedRefreshRate);
+                                       kTestId, ownerUid, requestedRefreshRate);
     }
 
     auto createVirtualDisplay(const std::string& displayName, bool isSecure,
                               gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy,
                               const std::string& uniqueId, float requestedRefreshRate = 0.0f) {
+        uid_t ownerUid = static_cast<uid_t>(gui::Uid::INVALID);
         return mFlinger->createVirtualDisplay(displayName, isSecure, optimizationPolicy, uniqueId,
-                                              requestedRefreshRate);
+                                              ownerUid, requestedRefreshRate);
     }
 
     auto acquireVirtualDisplay(ui::Size resolution, ui::PixelFormat format,

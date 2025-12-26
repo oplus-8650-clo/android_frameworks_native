@@ -238,27 +238,16 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
         return *desiredPacesetterId;
     }
 
-    // The first display should be the new pacesetter if none of the displays are powered on, and
-    // there wasn't a pacesetter to begin with.
-    const auto& defaultNewPacesetter =
-            pacesetterDisplayLocked()
-                    .or_else([this] {
-                        ftl::FakeGuard lock(mDisplayLock);
-                        ftl::FakeGuard guard(kMainThreadContext);
-                        return std::optional<ConstDisplayRef>(mDisplays.begin()->second);
-                    })
-                    .value()
-                    .get();
-    PhysicalDisplayId newPacesetterId = defaultNewPacesetter.displayId;
-
-    ui::DisplayConnectionType newPacesetterConnectionType = defaultNewPacesetter.connectionType;
+    // The first display should be the new pacesetter if none of the displays are powered on.
+    const auto& [firstDisplayId, firstDisplay] = *mDisplays.begin();
+    PhysicalDisplayId newPacesetterId = firstDisplayId;
+    ui::DisplayConnectionType newPacesetterConnectionType = firstDisplay.connectionType;
     // Only assigning the actual refresh rate if the first display is powered on ensures that any
     // other powered-on display will take over the new pacesetter designation regardless of its
     // refresh rate.
     Fps newPacesetterVsyncRate = Fps::fromValue(0);
-    if (defaultNewPacesetter.powerMode == hal::PowerMode::ON) {
-        newPacesetterVsyncRate =
-                defaultNewPacesetter.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+    if (firstDisplay.powerMode == hal::PowerMode::ON) {
+        newPacesetterVsyncRate = firstDisplay.selectorPtr->getActiveMode().modePtr->getVsyncRate();
     }
 
     // Attempt to set the fastest powered-on display as the pacesetter.

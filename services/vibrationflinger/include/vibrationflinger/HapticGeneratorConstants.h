@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2021 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may not use a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-package android.content.pm;
+#pragma once
 
-import android.content.pm.ApexStagedEvent;
+#include <chrono>
 
-/**
- * This is a non-blocking notification when set of staged apex has changed
- *
- * @hide
- */
-oneway interface IStagedApexObserver {
-  void onApexStaged(in ApexStagedEvent event);
-}
+namespace android::vibrator {
+
+// Default timeout for blocking operations on Fast Message Queues
+static constexpr auto kFmqTimeout = std::chrono::seconds(1);
+
+// Total timeout for the blocking readStream operation
+static constexpr auto kReadPcmTimeout = std::chrono::seconds(2);
+
+} // namespace android::vibrator

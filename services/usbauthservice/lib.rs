@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The `usbauthservice_core` crate provides the core logic for the USB authorization service.
+
 /// Defines the structure and logic for USB authorization rules.
 pub mod rules;
 

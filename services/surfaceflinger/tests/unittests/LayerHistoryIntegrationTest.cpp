@@ -669,7 +669,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerExplicitGte_nonVrr) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_arr) {
-    SET_FLAG_FOR_TEST(flags::arr_setframerate_gte_enum, true);
     mSelector->setActiveMode(kVrrModeId, HI_FPS);
 
     auto layer = createLegacyAndFrontedEndLayer(1);
@@ -700,8 +699,6 @@ TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_arr) {
 }
 
 TEST_F(LayerHistoryIntegrationTest, oneLayerGteNoVote_mrr) {
-    SET_FLAG_FOR_TEST(flags::arr_setframerate_gte_enum, true);
-
     auto layer = createLegacyAndFrontedEndLayer(1);
     showLayer(1);
     setFrameRate(1, (0_Hz).getValue(), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_AT_LEAST,
@@ -1870,7 +1867,6 @@ protected:
 };
 
 TEST_F(SmallAreaDetectionTest, SmallDirtyLayer) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();
@@ -1888,7 +1884,6 @@ TEST_F(SmallAreaDetectionTest, SmallDirtyLayer) {
 }
 
 TEST_F(SmallAreaDetectionTest, NotSmallDirtyLayer) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();
@@ -1906,7 +1901,6 @@ TEST_F(SmallAreaDetectionTest, NotSmallDirtyLayer) {
 }
 
 TEST_F(SmallAreaDetectionTest, smallDirtyLayerWithMatrix) {
-    SET_FLAG_FOR_TEST(flags::enable_small_area_detection, true);
     auto layer = createLegacyAndFrontedEndLayer(1);
 
     nsecs_t time = systemTime();

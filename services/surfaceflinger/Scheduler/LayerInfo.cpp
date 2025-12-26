@@ -584,8 +584,7 @@ LayerInfo::FrameRateSelectionStrategy LayerInfo::convertFrameRateSelectionStrate
 
 bool LayerInfo::FrameRate::isNoVote() const {
     // A desired frame rate greater than or equal to 0 is treated as NoVote.
-    bool isNoVoteGte = FlagManager::getInstance().arr_setframerate_gte_enum() &&
-            vote.type == FrameRateCompatibility::Gte && !vote.rate.isValid();
+    bool isNoVoteGte = vote.type == FrameRateCompatibility::Gte && !vote.rate.isValid();
     return vote.type == FrameRateCompatibility::NoVote || isNoVoteGte;
 }
 

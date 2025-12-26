@@ -17,6 +17,7 @@
 #include <android/log.h>
 #include <driver.h>
 #include <gmock/gmock.h>
+#include <graphicsenv/GraphicsEnv.h>
 #include <gtest/gtest.h>
 #include <media/NdkImageReader.h>
 #include <system/window.h>
@@ -47,7 +48,16 @@ class AImageReaderVulkanSwapchainTest : public ::testing::Test {
     uint32_t mPresentQueueFamily = UINT32_MAX;
     VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
 
-    void SetUp() override {}
+    void SetUp() override {
+        // We need this to run before any other vulkan tests. Otherwise the
+        // layers are already marked as loaded
+        auto app_namespace =
+            android::GraphicsEnv::getInstance().getAppNamespace();
+        android::GraphicsEnv::getInstance().setLayerPaths(
+            app_namespace,
+            "/data/local/tmp/libvulkan_test/x86_64/:/data/local/tmp/"
+            "libvulkan_test/arm64/");
+    }
 
     void TearDown() override {}
 
@@ -915,6 +925,59 @@ TEST_F(AImageReaderVulkanSwapchainTest, SharedPresentTimingZeroedTest) {
     EXPECT_EQ(timing.presentMargin, 0U);
 
     cleanUpSwapchainForTest();
+}
+
+TEST_F(AImageReaderVulkanSwapchainTest, LoadInstanceLayerAndDeviceLayer) {
+    // Verify our layer works as both a device and instance layer
+    // building the swapchain will fail if the layer is not loaded
+
+    std::vector<const char*> instanceLayers = {
+        "VK_LAYER_libVulkanTestLayer",
+    };
+    std::vector<const char*> deviceLayers = {
+        "VK_LAYER_libVulkanTestLayer",
+    };
+    buildSwapchianForTest(deviceLayers, instanceLayers);
+    ASSERT_NE(mVkInstance, (VkInstance)VK_NULL_HANDLE);
+    ASSERT_NE(mPhysicalDev, (VkPhysicalDevice)VK_NULL_HANDLE);
+    ASSERT_NE(mDevice, (VkDevice)VK_NULL_HANDLE);
+    ASSERT_NE(mSurface, (VkSurfaceKHR)VK_NULL_HANDLE);
+    ASSERT_NE(mSwapchain, (VkSwapchainKHR)VK_NULL_HANDLE);
+    cleanUpSwapchainForTest();
+}
+
+TEST_F(AImageReaderVulkanSwapchainTest,
+       FailToLoadInstanceLayerAndDeviceLayerWithBadName) {
+    // Verify .so files without "libVkLayer_" prefix are not loaded
+    // building the swapchain will fail if the layer is not loaded
+
+    std::vector<const char*> instanceLayers = {
+        "VK_LAYER_libVulkanTestLayer_without_libVkLayer_prefix",
+    };
+
+    const char* extensions[] = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+    };
+
+    VkApplicationInfo appInfo{};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "AImageReader Vulkan Swapchain Test";
+    appInfo.applicationVersion = 1;
+    appInfo.pEngineName = "TestEngine";
+    appInfo.engineVersion = 1;
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo instInfo{};
+    instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instInfo.pApplicationInfo = &appInfo;
+    instInfo.enabledExtensionCount = sizeof(extensions) / sizeof(extensions[0]);
+    instInfo.ppEnabledExtensionNames = extensions;
+    instInfo.enabledLayerCount = instanceLayers.size();
+    instInfo.ppEnabledLayerNames = instanceLayers.data();
+    VkResult res = vkCreateInstance(&instInfo, nullptr, &mVkInstance);
+
+    EXPECT_EQ(res, VK_ERROR_LAYER_NOT_PRESENT);
 }
 
 }  // namespace libvulkantest

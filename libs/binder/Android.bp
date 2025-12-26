@@ -375,7 +375,31 @@ cc_defaults {
         "--header-filter=^.*frameworks/native/libs/binder/.*.h$",
     ],
     tidy_checks: [
+        "-bugprone-branch-clone", // b/155034972
+        "-bugprone-forwarding-reference-overload",
+        "-bugprone-nondeterministic-pointer-iteration-order",
+        "-bugprone-sizeof-expression",
+        "-bugprone-switch-missing-default-case",
+        "-bugprone-unused-local-non-trivial-variable",
+        "-cert-arr39-c",
+        "-cert-dcl16-c",
+        "-cert-dcl59-cpp",
+        "-clang-analyzer-cplusplus.NewDeleteLeaks",
+        "-clang-analyzer-deadcode.DeadStores",
+        "-clang-analyzer-nullability.NullablePassedToNonnull",
+        "-clang-analyzer-security.cert.env.InvalidPtr",
+        "-clang-analyzer-unix.BlockInCriticalSection",
+        "-clang-analyzer-unix.StdCLibraryFunctions",
+        "-google-build-namespaces",
+        "-misc-header-include-cycle",
+        "-misc-include-cleaner",
+        "-misc-unused-using-decls",
+        "-misc-use-internal-linkage",
+        "-performance-enum-size",
         "-performance-no-int-to-ptr",
+        "-performance-unnecessary-copy-initialization",
+        "-performance-unnecessary-value-param",
+        "-portability-template-virtual-member-function",
     ],
     tidy_checks_as_errors: [
         // Explicitly list the checks that should not occur in this module.
@@ -958,35 +982,6 @@ filegroup {
     ],
     path: "aidl",
     visibility: [":__subpackages__"],
-}
-
-aidl_interface {
-    name: "packagemanager_aidl",
-    unstable: true,
-    local_include_dir: "aidl",
-    host_supported: true,
-    srcs: [
-        "aidl/android/content/pm/ApexStagedEvent.aidl",
-        "aidl/android/content/pm/IPackageManagerNative.aidl",
-        "aidl/android/content/pm/IStagedApexObserver.aidl",
-        "aidl/android/content/pm/PackageInfoNative.aidl",
-        "aidl/android/content/pm/SignatureNative.aidl",
-        "aidl/android/content/pm/SigningInfoNative.aidl",
-        "aidl/android/content/pm/StagedApexInfo.aidl",
-    ],
-    backend: {
-        rust: {
-            apex_available: [
-                "//apex_available:platform",
-                "com.android.virt",
-            ],
-            enabled: true,
-            gen_mockall: true,
-            additional_rustlibs: [
-                "libmockall",
-            ],
-        },
-    },
 }
 
 aidl_interface {

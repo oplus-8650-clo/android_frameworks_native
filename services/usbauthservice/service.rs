@@ -14,6 +14,7 @@
 
 //! This module implements the IUsbAuthManager AIDL interface.
 
+use crate::manager::UsbDeviceAuthManager;
 use android_hardware_usb_auth::aidl::android::hardware::usb::IUsbAuthManager::{
     BnUsbAuthManager, IUsbAuthManager,
 };
@@ -23,18 +24,17 @@ use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSys
 use binder::{Interface, SpIBinder, Status};
 use log::debug;
 use std::sync::{Arc, Mutex};
-use usbauthservice_manager::UsbDeviceManager;
 
 /// Implementation of the `IUsbAuthManager` binder service.
 pub struct UsbAuthServiceImpl {
-    device_manager: Arc<Mutex<UsbDeviceManager>>,
+    device_manager: Arc<Mutex<UsbDeviceAuthManager>>,
 }
 
 impl Interface for UsbAuthServiceImpl {}
 
 impl UsbAuthServiceImpl {
     /// Creates a new binder service.
-    pub fn new_binder(device_manager: Arc<Mutex<UsbDeviceManager>>) -> Option<SpIBinder> {
+    pub fn new_binder(device_manager: Arc<Mutex<UsbDeviceAuthManager>>) -> Option<SpIBinder> {
         let service = UsbAuthServiceImpl { device_manager };
         Some(BnUsbAuthManager::new_binder(service, binder::BinderFeatures::default()).as_binder())
     }
@@ -95,12 +95,12 @@ impl IUsbAuthManager for UsbAuthServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::device_info::UsbDeviceInfoWithState;
     use std::collections::HashMap;
     use std::default::Default;
     use std::fs;
     use tempfile::tempdir;
     use ueventd::mock_sysfs::{MockSysfs, SysfsFile};
-    use usbauthservice_device_info::UsbDeviceInfoWithState;
 
     fn create_test_device(syspath: &str) -> UsbAuthDeviceInfo {
         UsbAuthDeviceInfo {
@@ -159,12 +159,12 @@ mod tests {
     }
 
     // A test helper to create the service.
-    fn create_test_service() -> (UsbAuthServiceImpl, Arc<Mutex<UsbDeviceManager>>) {
+    fn create_test_service() -> (UsbAuthServiceImpl, Arc<Mutex<UsbDeviceAuthManager>>) {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
         (service, device_manager)
@@ -190,7 +190,7 @@ mod tests {
         fs::write(&policy_file, "ask when LoggedIn").unwrap();
 
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
 

@@ -449,7 +449,7 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
         pusher.aggregateStatsLocked(data, service, currentTimeNanos);
     }
     EXPECT_EQ(mallocs, 12u);
-    EXPECT_EQ(totalBytes, 1096u);
+    EXPECT_EQ(totalBytes, 1120u);
 
     currentTimeNanos = 18'100'000'000;
 
@@ -475,7 +475,7 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
         pusher.aggregateStatsLocked(data, service, currentTimeNanos);
     }
     EXPECT_EQ(mallocs, 967u);
-    EXPECT_EQ(totalBytes, 135252u);
+    EXPECT_EQ(totalBytes, 136214u);
 }
 
 int main(int argc, char** argv) {

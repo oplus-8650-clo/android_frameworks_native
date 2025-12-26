@@ -150,7 +150,7 @@ void FakeEventHub::addKeyCodeMapping(RawDeviceId deviceId, int32_t fromKeyCode, 
 }
 
 void FakeEventHub::setKeyRemapping(RawDeviceId deviceId,
-                                   const std::map<int32_t, int32_t>& keyRemapping) const {
+                                   const std::unordered_map<int32_t, int32_t>& keyRemapping) {
     Device* device = getDevice(deviceId);
     device->keyRemapping = keyRemapping;
 }

@@ -45,7 +45,7 @@ class LayerRef {
 
 void DiscoverLayers();
 
-uint32_t GetLayerCount();
+uint32_t GetEnumeratedLayerCount();
 const Layer& GetLayer(uint32_t index);
 const Layer* FindLayer(const char* name);
 

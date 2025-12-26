@@ -776,6 +776,50 @@ private:
     const float mRelY;
 };
 
+/// Axes matcher
+class WithAxesMatcher {
+public:
+    using is_gtest_matcher = void;
+    explicit WithAxesMatcher(size_t pointerIndex, std::map<int32_t, float> axes)
+          : mPointerIndex(pointerIndex), mAxes(std::move(axes)) {}
+
+    bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream* os) const {
+        if (mPointerIndex >= args.pointerCoords.size()) {
+            *os << "Pointer index " << mPointerIndex << " is out of bounds";
+            return false;
+        }
+
+        const PointerCoords& coords = args.pointerCoords[mPointerIndex];
+        for (const auto& [axis, expectedValue] : mAxes) {
+            const float actualValue = coords.getAxisValue(axis);
+            if (!internal::valuesMatch(expectedValue, actualValue)) {
+                *os << "expected axis " << MotionEvent::getLabel(axis) << " to be " << expectedValue
+                    << " but was " << actualValue;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void DescribeTo(std::ostream* os) const {
+        *os << "with axes "
+            << dumpMap(
+                       mAxes,
+                       [](const int32_t& axis) { return std::string(MotionEvent::getLabel(axis)); },
+                       constToString<float>);
+    }
+
+    void DescribeNegationTo(std::ostream* os) const { *os << "wrong axes values"; }
+
+private:
+    const size_t mPointerIndex;
+    const std::map<int32_t, float> mAxes;
+};
+
+inline WithAxesMatcher WithAxes(const std::map<int32_t, float>& axes) {
+    return WithAxesMatcher(0, axes);
+}
+
 inline WithRelativeMotionMatcher WithRelativeMotion(float relX, float relY) {
     return WithRelativeMotionMatcher(0, relX, relY);
 }

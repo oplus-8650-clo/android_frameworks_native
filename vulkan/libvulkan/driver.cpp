@@ -203,30 +203,26 @@ int LoadDriver(android_namespace_t* library_namespace,
     return 0;
 }
 
-int LoadDriverFromApex(const hwvulkan_module_t** module) {
-    ATRACE_CALL();
-
-    auto apex_name = android::base::GetProperty(RO_VULKAN_APEX_PROPERTY, "");
-    if (apex_name == "") {
-        return -ENOENT;
-    }
-    // Get linker namespace for Vulkan APEX
-    std::replace(apex_name.begin(), apex_name.end(), '.', '_');
-    auto ns = android_get_exported_namespace(apex_name.c_str());
-    if (!ns) {
-        return -ENOENT;
-    }
-    android::GraphicsEnv::getInstance().setDriverToLoad(
-        android::GpuStatsInfo::Driver::VULKAN);
-    return LoadDriver(ns, apex_name.c_str(), module);
-}
-
 int LoadBuiltinDriver(const hwvulkan_module_t** module) {
     ATRACE_CALL();
 
+    android_namespace_t* library_namespace = nullptr;
+    const char* ns_name = nullptr;
+
+    // Builtin driver is loaded from APEX when ro.vulkan.apex is set
+    auto apex_name = android::base::GetProperty(RO_VULKAN_APEX_PROPERTY, "");
+    if (apex_name != "") {
+        ALOGD("Loading builtin Vulkan driver from APEX: ro.vulkan.apex=%s",
+              apex_name.c_str());
+        // Get linker namespace for Vulkan APEX NAME
+        std::replace(apex_name.begin(), apex_name.end(), '.', '_');
+        library_namespace = android_get_exported_namespace(apex_name.c_str());
+        ns_name = apex_name.c_str();
+    }
+
     android::GraphicsEnv::getInstance().setDriverToLoad(
         android::GpuStatsInfo::Driver::VULKAN);
-    return LoadDriver(nullptr, nullptr, module);
+    return LoadDriver(library_namespace, ns_name, module);
 }
 
 int LoadUpdatedDriver(const hwvulkan_module_t** module) {
@@ -265,9 +261,6 @@ bool Hal::Open() {
     const hwvulkan_module_t* module = nullptr;
 
     result = LoadUpdatedDriver(&module);
-    if (result == -ENOENT) {
-        result = LoadDriverFromApex(&module);
-    }
     if (result == -ENOENT) {
         result = LoadBuiltinDriver(&module);
     }
@@ -697,6 +690,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::ANDROID_external_memory_android_hardware_buffer:
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::KHR_present_id:
             case ProcHook::KHR_external_fence_fd:
             case ProcHook::EXTENSION_CORE_1_0:
             case ProcHook::EXTENSION_CORE_1_1:
@@ -731,6 +725,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_incremental_present:
             case ProcHook::KHR_shared_presentable_image:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::KHR_present_id:
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
@@ -933,6 +928,12 @@ PFN_vkVoidFunction GetDeviceProcAddr(VkDevice device, const char* pName) {
                                                               : nullptr;
 }
 
+/* The loader's internal implementation of
+ * vkEnumerateInstanceExtensionProperties (see "api.cpp" for the loader's
+ * high-level "instance" implementation).  All instance extensions from all
+ * layers are returned to the application, in addition to the loader's instance
+ * extensions.
+ */
 VkResult EnumerateInstanceExtensionProperties(
     const char* pLayerName,
     uint32_t* pPropertyCount,
@@ -1149,6 +1150,9 @@ VkResult EnumerateDeviceExtensionProperties(
                 VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
                 VK_GOOGLE_DISPLAY_TIMING_SPEC_VERSION});
     }
+
+    loader_extensions.push_back(
+        {VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_KHR_PRESENT_ID_SPEC_VERSION});
 
     // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
     // support is provided by the driver
@@ -1716,6 +1720,13 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                         pFeats);
                 smf->swapchainMaintenance1 = true;
             } break;
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR: {
+                auto* features =
+                    reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(pFeats);
+                features->presentId = VK_TRUE;
+                break;
+            }
 
             default:
                 break;

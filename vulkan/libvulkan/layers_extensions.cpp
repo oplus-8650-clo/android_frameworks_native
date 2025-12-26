@@ -51,9 +51,18 @@
 namespace vulkan {
 namespace api {
 
+enum LayerType {
+    IMPLICIT,
+    EXPLICIT,
+    PLATFORM,
+    OEM,
+};
+
 struct Layer {
     VkLayerProperties properties;
     size_t library_idx;
+
+    LayerType type;
 
     // true if the layer intercepts vkCreateDevice and device commands
     bool is_global;
@@ -96,7 +105,8 @@ class LayerLibrary {
     void Close();
 
     bool EnumerateLayers(size_t library_idx,
-                         std::vector<Layer>& instance_layers) const;
+                         std::vector<Layer>& instance_layers,
+                         LayerType type) const;
 
     void* GetGPA(const Layer& layer, const std::string_view gpa_name) const;
 
@@ -189,7 +199,8 @@ void LayerLibrary::Close() {
 }
 
 bool LayerLibrary::EnumerateLayers(size_t library_idx,
-                                   std::vector<Layer>& instance_layers) const {
+                                   std::vector<Layer>& instance_layers,
+                                   LayerType type) const {
     PFN_vkEnumerateInstanceLayerProperties enumerate_instance_layers =
         GetTrampoline<PFN_vkEnumerateInstanceLayerProperties>(
             "vkEnumerateInstanceLayerProperties");
@@ -263,6 +274,7 @@ bool LayerLibrary::EnumerateLayers(size_t library_idx,
         layer.properties = props;
         layer.library_idx = library_idx;
         layer.is_global = false;
+        layer.type = type;
 
         uint32_t count = 0;
         result =
@@ -341,12 +353,15 @@ void* LayerLibrary::GetGPA(const Layer& layer, const std::string_view gpa_name) 
 std::vector<LayerLibrary> g_layer_libraries;
 std::vector<Layer> g_instance_layers;
 
-void AddLayerLibrary(const std::string& path, const std::string& filename) {
+void AddLayerLibrary(const std::string& path,
+                     const std::string& filename,
+                     LayerType type) {
     LayerLibrary library(path + "/" + filename, filename);
     if (!library.Open())
         return;
 
-    if (!library.EnumerateLayers(g_layer_libraries.size(), g_instance_layers)) {
+    if (!library.EnumerateLayers(g_layer_libraries.size(), g_instance_layers,
+                                 type)) {
         library.Close();
         return;
     }
@@ -426,7 +441,7 @@ void ForEachFileInPath(const std::string& path, Functor functor) {
     }
 }
 
-void DiscoverLayersInPathList(const std::string& pathstr) {
+void DiscoverLayersInPathList(const std::string& pathstr, LayerType type) {
     ATRACE_CALL();
 
     std::vector<std::string> paths = android::base::Split(pathstr, ":");
@@ -452,7 +467,7 @@ void DiscoverLayersInPathList(const std::string& pathstr) {
                 }
 
                 if (!duplicate)
-                    AddLayerLibrary(path, filename);
+                    AddLayerLibrary(path, filename, type);
             }
         });
     }
@@ -476,17 +491,65 @@ void* GetLayerGetProcAddr(const Layer& layer,
 
 }  // anonymous namespace
 
+/* This function is used to discover all of the implicit, explicit, platform,
+ * and OEM layers that should be used for the process (typically an application
+ * APK, but potentially a system process such as SurfaceFlinger).
+ *
+ * Android's security model restricts usage of implicit layers (a.k.a. "debug
+ * layers") to one of the following cases for the target app:
+ *
+ * - The target app is debuggable
+ * - The target app is run on a userdebug build of the operating system which
+ *   grants root access
+ * - The target app's manifest file includes the following meta-data element
+ *   (only applies to apps that target Android 11 (API level 30) or higher):
+ *   <meta-data android:name="com.android.graphics.injectLayers.enable"
+ *   android:value="true" />
+ *
+ * Implicit layers can be globally enabled until the next reboot, using the
+ * following command:
+ *
+ * - adb shell setprop debug.vulkan.layers <layer1:layer2:layerN>
+ *
+ * Implicit layers can be enabled for a single target application, using the
+ * "adb shell settings put global" command to configure the following settings
+ * (that persist across reboots):
+ *
+ * - enable_gpu_debug_layers 1
+ * - gpu_debug_app <package_name>
+ * - gpu_debug_layers <layer1:layer2:layerN>
+ * - gpu_debug_layer_app <package1:package2:packageN>
+ */
 void DiscoverLayers() {
     ATRACE_CALL();
 
+    // Look in the original Android "implicit" layer (a.k.a. "debug layer") path
+    // for implicit layers, configured by the following settings (as described
+    // above): enable_gpu_debug_layers, gpu_debug_app, gpu_debug_layers
     if (android::GraphicsEnv::getInstance().isDebuggable()) {
-        DiscoverLayersInPathList(kSystemDebugLayerLibraryDir);
+        DiscoverLayersInPathList(kSystemDebugLayerLibraryDir,
+                                 LayerType::IMPLICIT);
     }
+    // Look in the application's APK for "explicit" layers.  Also look for
+    // "implicit" layers living in another APK(s), configured by all of the
+    // per-app settings described above.  If configured, both APKs are returned
+    // by getLayerPaths().
+    //
+    // TODO (b/455899446): Split treatment of IMPLICIT and EXPLICIT layers,
+    // which are currently treated the same in the code below.
     if (!android::GraphicsEnv::getInstance().getLayerPaths().empty())
-        DiscoverLayersInPathList(android::GraphicsEnv::getInstance().getLayerPaths());
+        DiscoverLayersInPathList(
+            android::GraphicsEnv::getInstance().getLayerPaths(),
+            LayerType::EXPLICIT);
 }
 
-uint32_t GetLayerCount() {
+/* Return the number of IMPLICIT and EXPLICIT Layer's (not PLATFORM nor OEM
+ * Layer's), that should be returned by vkEnumerateInstanceLayerProperties().
+ *
+ * NOTE: This relies on all IMPLICIT and EXPLICIT Layer's being added to
+ * g_instance_layers before any PLATFORM or OEM Layer's.
+ */
+uint32_t GetEnumeratedLayerCount() {
     return static_cast<uint32_t>(g_instance_layers.size());
 }
 

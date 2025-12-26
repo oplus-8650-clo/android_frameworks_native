@@ -48,6 +48,13 @@ enum JankType {
     SurfaceFlingerStuffing = 0x100,
     // Frame was dropped, as a newer frame was ready and replaced this frame.
     Dropped = 0x200,
+    // Frame was not presented on time, but it is not causing a percivable jank as it is not
+    // part of an animation (e.g. a cursor blinking).
+    NonAnimating = 0x400,
+    // Frame vsync time was modified by the app.
+    AppResyncedJitter = 0x800,
+    // Display is not on (off or doze).
+    DisplayNotOn = 0x1000,
 };
 
 // Jank severity type tracked by SurfaceFlinger(SF) for Perfetto tracing and telemetry.

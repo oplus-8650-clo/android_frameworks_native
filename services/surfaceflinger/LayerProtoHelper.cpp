@@ -425,27 +425,35 @@ void LayerProtoHelper::writeSnapshotToProto(perfetto::protos::LayerProto* layerI
     layerInfo->set_dataspace(dataspaceDetails(static_cast<android_dataspace>(snapshot.dataspace)));
     layerInfo->set_curr_frame(requestedState.bufferData->frameNumber);
     layerInfo->set_requested_corner_radius(requestedState.cornerRadii.topLeft.x);
-    layerInfo->set_corner_radius(
-            (snapshot.roundedCorner.radii.topLeft.x + snapshot.roundedCorner.radii.topLeft.y) /
-            2.0);
+    layerInfo->set_corner_radius((snapshot.roundedCorner.sfDrawnRadii.topLeft.x +
+                                  snapshot.roundedCorner.sfDrawnRadii.topLeft.y) /
+                                 2.0);
     layerInfo->set_background_blur_radius(snapshot.backgroundBlurRadius);
-    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.radii.topLeft.x,
-                                              snapshot.roundedCorner.radii.topRight.x,
-                                              snapshot.roundedCorner.radii.bottomLeft.x,
-                                              snapshot.roundedCorner.radii.bottomRight.x,
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.sfDrawnRadii.topLeft.x,
+                                              snapshot.roundedCorner.sfDrawnRadii.topRight.x,
+                                              snapshot.roundedCorner.sfDrawnRadii.bottomLeft.x,
+                                              snapshot.roundedCorner.sfDrawnRadii.bottomRight.x,
                                               [&]() { return layerInfo->mutable_corner_radii(); });
     LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.requestedRadii.topLeft.x,
                                               snapshot.roundedCorner.requestedRadii.topRight.x,
                                               snapshot.roundedCorner.requestedRadii.bottomLeft.x,
                                               snapshot.roundedCorner.requestedRadii.bottomRight.x,
-                                              [&]() { return
-                                               layerInfo->mutable_requested_corner_radii(); });
+                                              [&]() {
+                                                  return layerInfo
+                                                          ->mutable_requested_corner_radii();
+                                              });
     LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.clientDrawnRadii.topLeft.x,
                                               snapshot.roundedCorner.clientDrawnRadii.topRight.x,
                                               snapshot.roundedCorner.clientDrawnRadii.bottomLeft.x,
                                               snapshot.roundedCorner.clientDrawnRadii.bottomRight.x,
                                               [&]() { return
                                                 layerInfo->mutable_client_drawn_corner_radii(); });
+    LayerProtoHelper::writeCornerRadiiToProto(snapshot.roundedCorner.effectiveRadii.topLeft.x,
+                                              snapshot.roundedCorner.effectiveRadii.topRight.x,
+                                              snapshot.roundedCorner.effectiveRadii.bottomLeft.x,
+                                              snapshot.roundedCorner.effectiveRadii.bottomRight.x,
+                                              [&]() { return
+                                                layerInfo->mutable_effective_radii(); });
     layerInfo->set_is_trusted_overlay(snapshot.trustedOverlay == gui::TrustedOverlay::ENABLED);
     // TODO(b/339701674) update protos
     LayerProtoHelper::writeToProtoDeprecated(transform, layerInfo->mutable_transform());

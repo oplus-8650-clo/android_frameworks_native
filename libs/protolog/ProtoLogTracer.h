@@ -29,6 +29,8 @@
 namespace android {
 namespace protolog {
 
+struct LogParam;
+
 class ProtoLogTracer {
 public:
     static ProtoLogTracer* Get();
@@ -37,6 +39,10 @@ public:
 
     void Log(perfetto::protos::ProtoLogLevel level, const char* group, const char* format,
              va_list args);
+    void Log(perfetto::protos::ProtoLogLevel level, const char* group, const char* format,
+             std::vector<LogParam>& params);
+    void Log(perfetto::protos::ProtoLogLevel level, const char* group, uint64_t messageHash,
+             std::vector<LogParam>& params);
 
     // Called by ProtoLogDataSource
     void onStart(uint32_t instanceIndex);
@@ -47,6 +53,18 @@ private:
     ~ProtoLogTracer() = default;
 
     std::atomic<int> mActiveSessions{0};
+};
+
+struct LogParam {
+    enum class Type { kInt, kDouble, kString, kBool, kInternedString };
+    Type type;
+    union {
+        int64_t int_val;
+        double double_val;
+        const char* string_val;
+        bool bool_val;
+        uint64_t interned_string_id;
+    };
 };
 
 } // namespace protolog

@@ -35,6 +35,13 @@ namespace protolog {
 void Initialize();
 
 /**
+ * Initializes the C++ ProtoLog data source and registers it with Perfetto.
+ * This must be called once before any logging can occur, typically at process
+ * startup.
+ */
+void Initialize(uint32_t backends);
+
+/**
  * This is exposed for testing purposes. And doesn't need to be used in real code.
  */
 void Destroy();
@@ -58,6 +65,7 @@ void Log(perfetto::protos::ProtoLogLevel level, const char* group, const char* f
 #else
 // Stub out ProtoLog for host builds
 inline void Initialize() {}
+inline void Initialize(uint32_t backends) {}
 inline void Destroy() {}
 
 #define PROTOLOG_D(...) (void)0

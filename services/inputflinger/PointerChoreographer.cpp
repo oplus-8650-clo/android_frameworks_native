@@ -620,6 +620,10 @@ void PointerChoreographer::dump(std::string& dump) {
     dump += "PointerChoreographer:\n";
     dump += StringPrintf(INDENT "Show Touches Enabled: %s\n",
                          mShowTouchesEnabled ? "true" : "false");
+    dump += INDENT "DisplaysWithShowTouchesForceEnabled: " +
+            dumpContainer(mDisplaysWithShowTouchesForceEnabled,
+                          [](const auto& displayId) { return displayId.toString(); });
+    dump += "\n";
     dump += StringPrintf(INDENT "Stylus PointerIcon Enabled: %s\n",
                          mStylusPointerIconEnabled ? "true" : "false");
     dump += StringPrintf(INDENT "Accessibility Pointer Motion Filter Enabled: %s\n",
@@ -662,13 +666,6 @@ const DisplayViewport* PointerChoreographer::findViewportByIdLocked(
 
 ui::LogicalDisplayId PointerChoreographer::getTargetMouseDisplayLocked(
         ui::LogicalDisplayId associatedDisplayId) const {
-    if (!InputFlags::connectedDisplaysCursorAndAssociatedDisplayCursorBugfixEnabled()) {
-        if (associatedDisplayId.isValid()) {
-            return associatedDisplayId;
-        }
-        return mCurrentMouseDisplayId.isValid() ? mCurrentMouseDisplayId
-                                                : ui::LogicalDisplayId::DEFAULT;
-    }
     // Associated display is not included in the topology, return this associated display.
     if (associatedDisplayId.isValid() &&
         mTopology.graph.find(associatedDisplayId) == mTopology.graph.end()) {

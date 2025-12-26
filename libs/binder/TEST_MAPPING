@@ -91,6 +91,9 @@
       "name": "rustBinderSerializationTest"
     },
     {
+      "name": "rustBinderNoStdSerializationTest"
+    },
+    {
       "name": "libbinder_ndk_bindgen_test"
     },
     {

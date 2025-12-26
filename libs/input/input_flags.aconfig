@@ -170,13 +170,6 @@ flag {
 }
 
 flag {
-  name: "rotary_input_telemetry"
-  namespace: "wear_frameworks"
-  description: "Enable telemetry for rotary input"
-  bug: "370353565"
-}
-
-flag {
   name: "set_input_device_kernel_wake"
   namespace: "input"
   description: "Set input device's power/wakeup sysfs node"
@@ -201,30 +194,10 @@ flag {
 }
 
 flag {
-  name: "connected_displays_associated_display_cursor_bugfix"
-  namespace: "lse_desktop_experience"
-  description: "Apply some rules to define associated display cursor behavior in connected displays"
-  bug: "396568321"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "scale_cursor_speed_with_dpi"
   namespace: "lse_desktop_experience"
   description: "Scale the cursor speed based on display density"
   bug: "367662715"
-}
-
-flag {
-  name: "use_cloned_screen_coordinates_as_raw"
-  namespace: "input"
-  description: "Use the cloned window's layer stack (screen) space as the raw coordinate space for input going to clones"
-  bug: "377846505"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
 }
 
 flag {
@@ -292,4 +265,11 @@ flag {
   metadata {
     purpose: PURPOSE_BUGFIX
   }
+}
+
+flag {
+  name: "enable_attention_service_apis"
+  namespace: "input"
+  description: "Enable AttentionService APIs"
+  bug: "438159795"
 }

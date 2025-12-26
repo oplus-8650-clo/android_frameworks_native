@@ -148,6 +148,7 @@
 #include "ClientCache.h"
 #include "Colorizer.h"
 #include "Display/DisplayIdentification.h"
+#include "Display/PhysicalDisplay.h"
 #include "DisplayDevice.h"
 #include "DisplayHardware/ComposerHal.h"
 #include "DisplayHardware/FramebufferSurface.h"
@@ -648,9 +649,8 @@ void SurfaceFlinger::run() {
 sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
         gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        float requestedRefreshRate) {
-    // TODO: b/340933138 -  set this to be the correct value.
-    uid_t ownerUid = static_cast<uid_t>(-1);
+        uid_t ownerUid, float requestedRefreshRate) {
+    (void)ownerUid;
 
     // SurfaceComposerAIDL checks for some permissions, but adding an additional check here.
     // This is to ensure that only root, system, and graphics can request to create a secure
@@ -954,17 +954,8 @@ renderengine::RenderEngine::BlurAlgorithm chooseBlurAlgorithm(bool supportsBlur)
         return renderengine::RenderEngine::BlurAlgorithm::Kawase;
     } else if (algorithm == "kawase2") {
         return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
-    } else if (algorithm == "kawase2_fix_aliasing") {
-        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
     } else {
-        if (FlagManager::getInstance().window_blur_kawase2()) {
-            if (FlagManager::getInstance().window_blur_kawase2_fix_aliasing()) {
-                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
-            } else {
-                return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilter;
-            }
-        }
-        return renderengine::RenderEngine::BlurAlgorithm::Kawase;
+        return renderengine::RenderEngine::BlurAlgorithm::KawaseDualFilterV2;
     }
 }
 
@@ -2669,9 +2660,9 @@ void SurfaceFlinger::updateLayerHistory(nsecs_t now) {
             continue;
         }
 
-        const bool updateSmallDirty = FlagManager::getInstance().enable_small_area_detection() &&
-                ((snapshot->clientChanges & layer_state_t::eSurfaceDamageRegionChanged) ||
-                 snapshot->changes.any(Changes::Geometry));
+        const bool updateSmallDirty =
+                (snapshot->clientChanges & layer_state_t::eSurfaceDamageRegionChanged) ||
+                snapshot->changes.any(Changes::Geometry);
 
         const bool hasChanges =
                 snapshot->changes.any(Changes::FrameRate | Changes::Buffer | Changes::Animation |
@@ -3141,10 +3132,13 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // Composite if transactions were committed, or if requested by HWC.
     bool mustComposite = mMustComposite.exchange(false);
     {
+        const bool pacesetterPoweredOn =
+                FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->getPowerMode()
+                    == hal::PowerMode::ON;
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
                                     pacesetterFrameTarget.frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
-                                    mScheduler->getPacesetterRefreshRate());
+                                    mScheduler->getPacesetterRefreshRate(), pacesetterPoweredOn);
 
         const bool flushTransactions = clearTransactionFlags(eTransactionFlushNeeded);
         bool transactionsAreEmpty = false;
@@ -3930,8 +3924,7 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
                                         : snapshot.desiredHdrSdrRatio;
 
                                 float desiredRatio = desiredHdrSdrRatio;
-                                if (FlagManager::getInstance().begone_bright_hlg() &&
-                                    desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                                if (desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
                                     desiredRatio = getIdealizedMaxHeadroom(snapshot.dataspace);
                                 }
 
@@ -4609,6 +4602,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
             displaySurface = frameBufferSurface;
             compositionSurface = frameBufferSurface->getSurface();
         }
+        compositionSurface->setProducerThrottlingEnabled(false);
     }
 
     LOG_FATAL_IF(!displaySurface);
@@ -5295,9 +5289,7 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
     const auto defaultContentDetectionValue = sysprop::enable_frame_rate_override(true);
     if (sysprop::use_content_detection_for_refresh_rate(defaultContentDetectionValue)) {
         features |= Feature::kContentDetection;
-        if (FlagManager::getInstance().enable_small_area_detection()) {
-            features |= Feature::kSmallDirtyContentDetection;
-        }
+        features |= Feature::kSmallDirtyContentDetection;
     }
     if (base::GetBoolProperty("debug.sf.show_predicted_vsync"s, false)) {
         features |= Feature::kTracePredictedVsync;
@@ -6351,7 +6343,8 @@ status_t SurfaceFlinger::createLayer(LayerCreationArgs& args, gui::CreateSurface
         return result;
     }
 
-    args.addToRoot = args.addToRoot && callingThreadHasUnscopedSurfaceFlingerAccess();
+    args.addToRoot = args.addToRoot && (args.flags & ISurfaceComposerClient::eNotAddToRoot) == 0 &&
+            callingThreadHasUnscopedSurfaceFlingerAccess();
     // We can safely promote the parent layer in binder thread because we have a strong reference
     // to the layer's handle inside this scope.
     sp<Layer> parent = LayerHandle::getLayer(args.parentHandle.promote());
@@ -6482,6 +6475,19 @@ void SurfaceFlinger::setPhysicalDisplayPowerMode(const sp<DisplayDevice>& displa
     future.get();
 }
 
+ftl::FinalizerStd SurfaceFlinger::makePowerModeAsyncFinalizer(PhysicalDisplayId displayId,
+                                                              hal::PowerMode mode) {
+    return ftl::Finalizer([this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
+        if (displayId == mFrontInternalDisplayId) {
+            mTimeStats->setPowerMode(mode);
+            mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
+        }
+
+        ALOGD("Finished setting power mode %d on physical display %s", mode,
+              to_string(displayId).c_str());
+    });
+}
+
 std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
 SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display,
                                                  hal::PowerMode mode) {
@@ -6527,15 +6533,6 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
 
     const auto activeMode = display->refreshRateSelector().getActiveMode().modePtr;
     using OptimizationPolicy = gui::ISurfaceComposer::OptimizationPolicy;
-    auto commonFinalizer = [this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
-        if (displayId == mFrontInternalDisplayId) {
-            mTimeStats->setPowerMode(mode);
-            mScheduler->setActiveDisplayPowerModeForRefreshRateStats(mode);
-        }
-
-        ALOGD("Finished setting power mode %d on physical display %s", mode,
-              to_string(displayId).c_str());
-    };
     if (display->isPrimary()) {
         mQtiSFExtnIntf->qtiFbScalingOnPowerChange(display);
     }
@@ -6560,11 +6557,21 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
                                      OptimizationPolicy::optimizeForPerformance);
         }
 
+        if (FlagManager::getInstance().set_power_mode_async()) {
+            // Revert to OFF until hardware op completes.
+            display->setPowerMode(currentMode);
+        }
         return {getHwComposer().setPowerMode(displayId, mode),
                 ftl::Finalizer([this, displayId, mode, shouldApplyOptimizationPolicy, activeMode,
-                                display, finalizer = std::move(commonFinalizer)]()
+                                display]()
                                        FTL_FAKE_GUARD(kMainThreadContext) {
-                                           const auto _ = ftl::Finalizer(std::move(finalizer));
+                                           const auto _ =
+                                                   makePowerModeAsyncFinalizer(displayId, mode);
+                                           if (FlagManager::getInstance()
+                                                       .set_power_mode_async()) {
+                                               // Hardware op completed, set to new mode for good.
+                                               display->setPowerMode(mode);
+                                           }
                                            if (mode != hal::PowerMode::DOZE_SUSPEND) {
                                                const bool enable =
                                                        mScheduler->getVsyncSchedule(displayId)
@@ -6617,36 +6624,33 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
         // VSYNC.
         requestHardwareVsync(displayId, false);
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer([this, finalizer = std::move(commonFinalizer)]()
-                                       FTL_FAKE_GUARD(kMainThreadContext) {
-                                           const auto _ = ftl::Finalizer(std::move(finalizer));
-                                           mVisibleRegionsDirty = true;
-                                           // from this point on, SF will stop drawing on this
-                                           // display
-                                       })};
+                ftl::Finalizer([this, displayId, mode]() FTL_FAKE_GUARD(kMainThreadContext) {
+                    const auto _ = makePowerModeAsyncFinalizer(displayId, mode);
+                    mVisibleRegionsDirty = true;
+                    // from this point on, SF will stop drawing on this
+                    // display
+                })};
 
     } else if (mode == hal::PowerMode::DOZE || mode == hal::PowerMode::ON) {
         // Update display while dozing
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(
-                        [this, currentMode, displayId, shouldApplyOptimizationPolicy, activeMode,
-                         finalizer =
-                                 std::move(commonFinalizer)]() FTL_FAKE_GUARD(kMainThreadContext) {
-                            const auto _ = ftl::Finalizer(std::move(finalizer));
-                            if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
-                                if (displayId == mFrontInternalDisplayId) {
-                                    ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
-                                    mVisibleRegionsDirty = true;
-                                    scheduleRepaint();
-                                    if (!shouldApplyOptimizationPolicy) {
-                                        mScheduler->enableSyntheticVsync(false);
-                                    }
-                                }
-                                constexpr bool kAllowToEnable = true;
-                                mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
-                                                                  activeMode.get());
+                ftl::Finalizer([this, currentMode, displayId, mode, shouldApplyOptimizationPolicy,
+                                activeMode]() FTL_FAKE_GUARD(kMainThreadContext) {
+                    const auto _ = makePowerModeAsyncFinalizer(displayId, mode);
+                    if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
+                        if (displayId == mFrontInternalDisplayId) {
+                            ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
+                            mVisibleRegionsDirty = true;
+                            scheduleRepaint();
+                            if (!shouldApplyOptimizationPolicy) {
+                                mScheduler->enableSyntheticVsync(false);
                             }
-                        })};
+                        }
+                        constexpr bool kAllowToEnable = true;
+                        mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
+                                                          activeMode.get());
+                    }
+                })};
     } else if (mode == hal::PowerMode::DOZE_SUSPEND) {
         // Leave display going to doze
         constexpr bool kDisallow = true;
@@ -6656,11 +6660,11 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
             mScheduler->enableSyntheticVsync();
         }
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(std::move(commonFinalizer))};
+                makePowerModeAsyncFinalizer(displayId, mode)};
     } else {
         ALOGE("Attempting to set unknown power mode: %d\n", mode);
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer(std::move(commonFinalizer))};
+                makePowerModeAsyncFinalizer(displayId, mode)};
     }
 
 }
@@ -6725,40 +6729,7 @@ void SurfaceFlinger::applyOptimizationPolicy(const char* whence) {
     }
 }
 
-// TODO b/339477240 - Remove.
 void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
-    auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) {
-        mSkipPowerOnForQuiescent = false;
-        const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayToken));
-        if (!display) {
-            Mutex::Autolock lock(mStateLock);
-            if (auto stateOpt = mCurrentState.displays.get(displayToken)) {
-                DisplayDeviceState& state = *stateOpt;
-                if (state.isVirtual()) {
-                    ALOGD("Setting power mode %d for a dormant virtual display with token %p", mode,
-                          displayToken.get());
-                    state.initialPowerMode = static_cast<hal::PowerMode>(mode);
-                    return;
-                }
-            }
-            ALOGE("Failed to set power mode %d for display token %p", mode, displayToken.get());
-        } else if (display->isVirtual()) {
-            if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-                ftl::FakeGuard guard(mStateLock);
-                setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
-            } else {
-                ALOGW("Attempt to set power mode %d for virtual display", mode);
-            }
-        } else {
-            ftl::FakeGuard guard(mStateLock);
-            setPhysicalDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
-        }
-    });
-
-    future.wait();
-}
-
-void SurfaceFlinger::setPowerModeAsync(const sp<IBinder>& displayToken, int mode) {
     auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext)
                                                -> std::pair<ftl::Future<status_t>,
                                                             ftl::FinalizerStd> {
@@ -6785,7 +6756,16 @@ void SurfaceFlinger::setPowerModeAsync(const sp<IBinder>& displayToken, int mode
             }
         } else {
             ftl::FakeGuard guard(mStateLock);
-            return setPhysicalDisplayPowerModeAsync(display, static_cast<hal::PowerMode>(mode));
+            if (FlagManager::getInstance().set_power_mode_async() &&
+                display->getCompositionDisplay()->supportsOffloadPresent()) {
+                ALOGD("Setting power mode %d asynchronously for a physical display with token %p",
+                      mode, displayToken.get());
+                return setPhysicalDisplayPowerModeAsync(display, static_cast<hal::PowerMode>(mode));
+            } else {
+                ALOGD("Setting power mode %d synchronously for a physical display with token %p",
+                      mode, displayToken.get());
+                setPhysicalDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
+            }
         }
         return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     });
@@ -7632,7 +7612,11 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             case 1014: {
                 Mutex::Autolock _l(mStateLock);
                 // daltonize
+                mDaltonizer.setUseUpdatedAlgorithm(
+                        FlagManager::getInstance().enable_color_correction_bugfix());
                 n = data.readInt32();
+                // frameworks/native/services/surfaceflinger/common/include/common/FlagManager.h
+                // to get which type of cc to use.
                 mDaltonizer.setLevel(data.readInt32());
                 switch (n % 10) {
                     case 1:
@@ -8589,6 +8573,20 @@ bool SurfaceFlinger::layersHasHdrLayer(
     });
 }
 
+bool SurfaceFlinger::loadReadbackAttributesAndCheckPixelFormat(
+        PhysicalDisplayId physicalDisplayId, ui::PixelFormat reqPixelFormat,
+        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes& outAttributes) {
+    auto status = getHwComposer().getReadbackBufferAttributes(physicalDisplayId, &outAttributes);
+    if (status != OK) {
+        return false;
+    }
+    if (static_cast<android_pixel_format>(reqPixelFormat) == PIXEL_FORMAT_UNKNOWN) {
+        return true;
+    }
+    return static_cast<android_pixel_format>(reqPixelFormat) ==
+            static_cast<android_pixel_format>(outAttributes.format);
+}
+
 // Getting layer snapshots and accessing display state should take place on
 // main thread. Accessing display requires mStateLock, and contention for
 // this lock is reduced when grabbed from the main thread, thus also reducing
@@ -8624,7 +8622,8 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                 bool capturingDisplay =
                         std::holds_alternative<DisplayId>(args.captureTypeVariant) ||
                         std::holds_alternative<sp<IBinder>>(args.captureTypeVariant);
-
+                const auto physicalDisplayId = asPhysicalDisplayId(*args.displayIdVariant);
+                aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes attributes;
                 bool canDpuReadback = FlagManager::getInstance().readback_screenshot() &&
                         // The device needs to explicitly opt-in, in addition to the trunk stable
                         // flag being flipped.
@@ -8637,7 +8636,9 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                         args.transform.getScaleX() == 1.0f && args.transform.getScaleY() == 1.0f &&
                         args.transform.tx() == 0.0f && args.transform.ty() == 0.0f &&
                         !hasProtectedOrDisallowedSecureLayers &&
-                        !hasHdrLayersButDoesNotPreserveColors;
+                        !hasHdrLayersButDoesNotPreserveColors && physicalDisplayId.has_value() &&
+                        loadReadbackAttributesAndCheckPixelFormat(*physicalDisplayId,
+                                                                  reqPixelFormat, attributes);
 
                 if (!canDpuReadback && args.requireDpuReadback) {
                     if (hasProtectedOrDisallowedSecureLayers) {
@@ -8647,45 +8648,34 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
                     }
                 }
                 if (canDpuReadback) {
-                    auto displayId = *args.displayIdVariant;
-                    if (std::holds_alternative<PhysicalDisplayId>(displayId)) {
-                        aidl::android::hardware::graphics::composer3::ReadbackBufferAttributes
-                                attributes;
-                        auto status =
-                                getHwComposer().getReadbackBufferAttributes(*asPhysicalDisplayId(
-                                                                                    displayId),
-                                                                            &attributes);
-                        if (status == OK) {
-                            if (static_cast<android_pixel_format>(reqPixelFormat) !=
-                                        PIXEL_FORMAT_UNKNOWN &&
-                                static_cast<android_pixel_format>(reqPixelFormat) !=
-                                        static_cast<android_pixel_format>(attributes.format) &&
-                                args.requireDpuReadback) {
-                                return base::unexpected<status_t>(INVALID_OPERATION);
-                            }
-                            const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
-                                    GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
-                                    GRALLOC_USAGE_SW_WRITE_OFTEN;
-                            const auto readbackBuffer =
-                                    getFactory()
-                                            .createGraphicBuffer(args.size.getWidth(),
+                    const auto& displayDevice =
+                            FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(*physicalDisplayId));
+
+                    // requiring DPU readback implies that the client is
+                    // OK with the physical orientation
+                    if (args.requireDpuReadback ||
+                        displayDevice->getPhysicalOrientation() == ui::Rotation::Rotation0) {
+                        const uint32_t usage = GRALLOC_USAGE_HW_COMPOSER |
+                                GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN |
+                                GRALLOC_USAGE_SW_WRITE_OFTEN;
+                        const auto readbackBuffer =
+                                getFactory().createGraphicBuffer(args.size.getWidth(),
                                                                  args.size.getHeight(),
                                                                  static_cast<android_pixel_format>(
                                                                          attributes.format),
                                                                  1 /* layerCount */, usage,
                                                                  "screenshot");
 
-                            if (const auto status = readbackBuffer->initCheck(); status != OK) {
-                                ALOGE("Failed to allocate readback buffer :(: %d", status);
-                                return base::unexpected<status_t>(INVALID_OPERATION);
-                            } else {
-                                mReadbackRequests.emplace_back(*asPhysicalDisplayId(displayId),
-                                                               readbackBuffer, args.captureListener,
-                                                               args.preserveDisplayColors,
-                                                               args.isSecure);
-                                scheduleComposite(FrameHint::kNone);
-                                return ScreenshotStrategy::Readback;
-                            }
+                        if (const auto status = readbackBuffer->initCheck(); status != OK) {
+                            ALOGE("Failed to allocate readback buffer :(: %d", status);
+                            return base::unexpected<status_t>(INVALID_OPERATION);
+                        } else {
+                            mReadbackRequests.emplace_back(*physicalDisplayId, readbackBuffer,
+                                                           args.captureListener,
+                                                           args.preserveDisplayColors,
+                                                           args.isSecure);
+                            scheduleComposite(FrameHint::kNone);
+                            return ScreenshotStrategy::Readback;
                         }
                     }
                 }
@@ -9375,6 +9365,7 @@ void SurfaceFlinger::onLayerDestroyed(Layer* layer) {
         mTransactionTracing->onLayerRemoved(layer->getSequence());
     }
     mScheduler->onLayerDestroyed(layer);
+    mFrameTimeline->onLayerDestroyed(layer->getSequence());
 }
 
 void SurfaceFlinger::onLayerUpdate() {
@@ -10069,13 +10060,13 @@ binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerCli
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
         gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        float requestedRefreshRate, sp<IBinder>* outDisplay) {
+        int32_t ownerUid, float requestedRefreshRate, sp<IBinder>* outDisplay) {
     status_t status = checkAccessPermission();
     if (status != OK) {
         return binderStatusFromStatusT(status);
     }
     *outDisplay = mFlinger->createVirtualDisplay(displayName, isSecure, optimizationPolicy,
-                                                 uniqueId, requestedRefreshRate);
+                                                 uniqueId, ownerUid, requestedRefreshRate);
     return binder::Status::ok();
 }
 
@@ -10135,8 +10126,8 @@ binder::Status SurfaceComposerAIDL::getDisplayStats(const sp<IBinder>& display,
     DisplayStatInfo statInfo;
     status_t status = mFlinger->getDisplayStats(display, &statInfo);
     if (status == NO_ERROR) {
-        outStatInfo->vsyncTime = static_cast<long>(statInfo.vsyncTime);
-        outStatInfo->vsyncPeriod = static_cast<long>(statInfo.vsyncPeriod);
+        outStatInfo->vsyncTime = statInfo.vsyncTime;
+        outStatInfo->vsyncPeriod = statInfo.vsyncPeriod;
     }
     return binderStatusFromStatusT(status);
 }
@@ -11205,8 +11196,7 @@ void SurfaceFlinger::updateHdrInfos(
                                 : snapshot->desiredHdrSdrRatio;
 
                         float desiredRatio = desiredHdrSdrRatio;
-                        if (FlagManager::getInstance().begone_bright_hlg() &&
-                            desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
+                        if (desiredHdrSdrRatio == std::numeric_limits<float>::infinity()) {
                             desiredRatio = getIdealizedMaxHeadroom(snapshot->dataspace);
                         }
 

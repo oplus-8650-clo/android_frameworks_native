@@ -166,6 +166,12 @@ public:
         return mFrameTimeline->mDisplayFrames[idx];
     }
 
+    static std::shared_ptr<SurfaceFrame> previousSurfaceFrame(
+            const std::shared_ptr<SurfaceFrame>& surfaceFrame) {
+        std::lock_guard<std::mutex> lock(surfaceFrame->mMutex);
+        return surfaceFrame->mPreviousSurfaceFrame.lock();
+    }
+
     static bool compareTimelineItems(const TimelineItem& a, const TimelineItem& b) {
         return a.startTime == b.startTime && a.endTime == b.endTime &&
                 a.presentTime == b.presentTime;
@@ -2927,4 +2933,60 @@ TEST_F(FrameTimelineTest, surfaceFrameRenderRateUsingAppFrameRate) {
 
     EXPECT_EQ(surfaceFrame->getRenderRate().getPeriodNsecs(), 30);
 }
+
+TEST_F(FrameTimelineTest, presviousSurfaceFrame) {
+    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
+
+    int64_t token1 = mTokenManager->generateTokenForPredictions({1, 1, 1});
+    FrameTimelineInfo ftInfo1;
+    ftInfo1.vsyncId = token1;
+    auto surfaceFrame1 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo1, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode);
+
+    int64_t token2 = mTokenManager->generateTokenForPredictions({2, 2, 2});
+    FrameTimelineInfo ftInfo2;
+    ftInfo2.vsyncId = token2;
+    auto surfaceFrame2 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo2, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode);
+
+    int64_t token3 = mTokenManager->generateTokenForPredictions({3, 3, 3});
+    FrameTimelineInfo ftInfo3;
+    ftInfo3.vsyncId = token3;
+    auto surfaceFrame3 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo3, sPidOne, sUidOne, sLayerIdTwo,
+                                                       sLayerNameTwo, sLayerNameTwo,
+                                                       /*isBuffer*/ true, sGameMode);
+
+    int64_t token4 = mTokenManager->generateTokenForPredictions({4, 4, 4});
+    FrameTimelineInfo ftInfo4;
+    ftInfo4.vsyncId = token4;
+    auto surfaceFrame4 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo4, sPidOne, sUidOne, sLayerIdTwo,
+                                                       sLayerNameTwo, sLayerNameTwo,
+                                                       /*isBuffer*/ true, sGameMode);
+
+    mFrameTimeline->setSfWakeUp(token1, 20, RR_30, RR_11);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame1);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame2);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame3);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame4);
+
+    auto prevSurfaceFrame1 = previousSurfaceFrame(surfaceFrame1);
+    auto prevSurfaceFrame2 = previousSurfaceFrame(surfaceFrame2);
+    auto prevSurfaceFrame3 = previousSurfaceFrame(surfaceFrame3);
+    auto prevSurfaceFrame4 = previousSurfaceFrame(surfaceFrame4);
+
+    ASSERT_EQ(prevSurfaceFrame1, nullptr);
+    ASSERT_NE(prevSurfaceFrame2, nullptr);
+    ASSERT_EQ(prevSurfaceFrame3, nullptr);
+    ASSERT_NE(prevSurfaceFrame4, nullptr);
+
+    ASSERT_EQ(prevSurfaceFrame2->getToken(), token1);
+    ASSERT_EQ(prevSurfaceFrame4->getToken(), token3);
+}
+
 } // namespace android::scheduler

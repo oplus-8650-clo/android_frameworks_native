@@ -24,3 +24,5 @@ per-file **Layer* = file:/services/surfaceflinger/OWNERS
 per-file **SurfaceControl.* = file:/services/surfaceflinger/OWNERS
 per-file **SurfaceComposerClient.* = file:/services/surfaceflinger/OWNERS
 per-file **Window* = file:/services/surfaceflinger/OWNERS
+
+per-file Android.bp = file:/services/surfaceflinger/OWNERS

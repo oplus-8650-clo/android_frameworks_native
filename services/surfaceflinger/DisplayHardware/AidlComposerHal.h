@@ -73,8 +73,9 @@ public:
     explicit AidlComposer(const std::string& serviceName);
     ~AidlComposer() override;
 
-    bool isSupported(OptionalFeature) const;
-    bool isVrrSupported() const;
+    bool isSupported(OptionalFeature) const override;
+    bool isVrrSupported() const override;
+    bool isDisplayCommandModesetSupported() const override;
 
     std::vector<aidl::android::hardware::graphics::composer3::Capability> getCapabilities()
             override;
@@ -274,6 +275,8 @@ public:
                             int acquireFence) override;
     Error getReadbackBufferFence(Display display, int* outReleaseFence) override;
 
+    Error setDisplayMode(Display display, Config modeId, bool seamless) override;
+
 private:
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     friend class android::surfaceflingerextension::QtiAidlComposerHalExtension;
@@ -331,8 +334,9 @@ private:
     ftl::SharedMutex mMutex;
 
     int32_t mComposerInterfaceVersion = 1;
-    bool mEnableLayerCommandBatchingFlag = false;
+    bool mLifecycleBatchCommandSupported = false;
     std::atomic<int64_t> mLayerID = 1;
+    std::vector<aidl::android::hardware::graphics::composer3::Capability> mCapabilities;
 
     // Buffer slots for layers are cleared by setting the slot buffer to this buffer.
     sp<GraphicBuffer> mClearSlotBuffer;

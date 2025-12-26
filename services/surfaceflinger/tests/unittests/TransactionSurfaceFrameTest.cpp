@@ -446,10 +446,10 @@ public:
         // Since we don't have access to DisplayFrame here, trigger an onPresent directly.
         // The odd indices are the bufferless frames.
         for (uint32_t i = 1; i < 10; i += 2) {
-            surfaceFrames[i]->onPresent(20, JankType::None, 90_Hz, 90_Hz,
+            surfaceFrames[i]->onPresent(20, JankType::None, JankType::None, 90_Hz, 90_Hz,
                                         /*displayDeadlineDelta*/ 0, /*displayPresentDelta*/ 0);
         }
-        presentedBufferSurfaceFrame->onPresent(20, JankType::None, 90_Hz, 90_Hz,
+        presentedBufferSurfaceFrame->onPresent(20, JankType::None, JankType::None, 90_Hz, 90_Hz,
                                                /*displayDeadlineDelta*/ 0,
                                                /*displayPresentDelta*/ 0);
 

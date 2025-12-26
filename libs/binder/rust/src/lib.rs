@@ -102,14 +102,16 @@ mod parcel;
 #[cfg(not(trusty))]
 mod persistable_bundle;
 mod proxy;
-#[cfg(not(any(trusty, android_ndk)))]
+#[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 mod service;
-#[cfg(not(any(trusty, android_ndk)))]
+#[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 mod state;
 #[cfg(not(any(android_vendor, android_ndk, android_vndk, trusty)))]
 mod system_only;
 #[macro_use]
 mod sync_utils;
+#[cfg(not(trusty))]
+mod write_to;
 
 use binder_ndk_sys as sys;
 
@@ -120,7 +122,7 @@ pub use parcel::{ParcelFileDescriptor, Parcelable, ParcelableHolder};
 #[cfg(not(trusty))]
 pub use persistable_bundle::{PersistableBundle, ValueType};
 pub use proxy::{DeathRecipient, SpIBinder, WpIBinder};
-#[cfg(not(any(trusty, android_ndk)))]
+#[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 pub use service::{
     add_service, check_interface, check_service, force_lazy_services_persist,
     get_declared_instances, is_declared, is_handling_transaction, register_lazy_service,
@@ -128,19 +130,22 @@ pub use service::{
 };
 // TODO(b/402766978) Once LLDNK symbols are supported in rust, this can be along with the rest
 // of the service symbols in vendor variants.
-#[cfg(not(any(trusty, android_ndk, android_vendor, android_vndk)))]
+#[cfg(all(feature = "kernel_ipc", not(any(android_ndk, android_vendor, android_vndk))))]
 pub use service::{
     check_service_access, CHECK_ACCESS_PERMISSION_ADD, CHECK_ACCESS_PERMISSION_FIND,
     CHECK_ACCESS_PERMISSION_LIST,
 };
 
-#[cfg(not(any(trusty, android_ndk)))]
+#[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 #[allow(deprecated)]
 pub use service::{get_interface, get_service};
-#[cfg(not(any(trusty, android_ndk)))]
+#[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 pub use state::{ProcessState, ThreadState};
 #[cfg(not(any(android_vendor, android_vndk, android_ndk, trusty)))]
 pub use system_only::{delegate_accessor, Accessor, AccessorProvider, ConnectionInfo};
+
+#[cfg(not(trusty))]
+pub use write_to::WriteTo;
 
 /// Binder result containing a [`Status`] on error.
 pub type Result<T> = std::result::Result<T, Status>;

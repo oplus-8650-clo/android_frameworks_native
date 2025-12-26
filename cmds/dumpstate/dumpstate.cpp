@@ -1900,12 +1900,16 @@ Dumpstate::RunStatus Dumpstate::dumpstate() {
     if (access(binder_transactions_path.c_str(), R_OK) != 0) {
         binder_transactions_path += "_hashed";
     }
+    std::string binder_state_path = binder_logs_dir + "/state";
+    if (access(binder_state_path.c_str(), R_OK) != 0) {
+        binder_state_path += "_hashed";
+    }
 
     DumpFile("BINDER FAILED TRANSACTION LOG", binder_logs_dir + "/failed_transaction_log");
     DumpFile("BINDER TRANSACTION LOG", binder_logs_dir + "/transaction_log");
     DumpFile("BINDER TRANSACTIONS", binder_transactions_path);
     DumpFile("BINDER STATS", binder_logs_dir + "/stats");
-    DumpFile("BINDER STATE", binder_logs_dir + "/state");
+    DumpFile("BINDER STATE", binder_state_path);
 
     ds.AddDir(SNAPSHOTCTL_LOG_DIR, false);
 

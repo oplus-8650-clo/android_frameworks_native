@@ -428,7 +428,7 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     (mSources & AINPUT_SOURCE_KEYBOARD) == AINPUT_SOURCE_KEYBOARD;
             const bool isFullKeyboard = isKeyboard && (mKeyboardType == KeyboardType::ALPHABETIC);
             const bool isPhysicalKeyboard = isKeyboard && !mIsVirtualDevice;
-            std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
+            std::unordered_map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
             if (isPhysicalKeyboard && isFullKeyboard) {
                 for (const auto& [fromKeyCode, toKeyCode] : readerConfig.keyRemapping) {
                     keyRemapping.insert_or_assign(fromKeyCode, toKeyCode);

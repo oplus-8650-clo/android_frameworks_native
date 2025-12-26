@@ -103,6 +103,9 @@ struct InputReaderConfiguration {
         // The virtual devices list is updated
         VIRTUAL_DEVICES = 1u << 16,
 
+        // The axis remapping has changed.
+        AXIS_REMAPPING = 1u << 17,
+
         // All devices must be reopened.
         MUST_REOPEN = 1u << 31,
     };
@@ -211,11 +214,18 @@ struct InputReaderConfiguration {
     bool stylusPointerIconEnabled;
 
     // Keycodes to be remapped.
-    std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
+    std::unordered_map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */> keyRemapping;
 
     // Keycodes to be remapped for device.
-    std::map<DeviceId, std::map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */>>
+    std::unordered_map<DeviceId,
+                       std::unordered_map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */>>
             keyRemappingPerDevice;
+
+    // Per-device axis remapping: Only applied for joystick devices
+    std::unordered_map<
+            int32_t,
+            std::unordered_map</* fromAndroidAxisId */ int32_t, /* toAndroidAxisId */ int32_t>>
+            axisRemappingPerDevice;
 
     // True if the external mouse should have its vertical scrolling reversed, so that rotating the
     // wheel downwards scrolls the content upwards.

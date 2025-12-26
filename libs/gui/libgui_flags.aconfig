@@ -139,3 +139,21 @@ flag {
   description: "BufferQueueProducer API to control CPU throttling."
   bug: "359252619"
 } # bq_producer_backpressure_control
+
+flag {
+  name: "consumer_present_modes"
+  namespace: "core_graphics"
+  description: "Support different present mode for Vulkan extensions. go/llvulkanp"
+  bug: "435624004"
+} # consumer_present_modes
+
+flag {
+  name: "surface_texture_updateteximage_stop_early"
+  namespace: "core_graphics"
+  description: "SurfaceTexture should not cycle buffers when disconnected and UpdateTexImage is called, and it should always return INVALID_OPERATION."
+  bug: "452084143"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+  is_fixed_read_only: true
+} # surface_texture_updateteximage_stop_early

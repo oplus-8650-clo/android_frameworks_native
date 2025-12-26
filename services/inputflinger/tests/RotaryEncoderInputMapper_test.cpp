@@ -198,26 +198,7 @@ TEST_F(RotaryEncoderInputMapperTest, HighResScrollIgnoresRegularScroll) {
                               WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(0.5f)))));
 }
 
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, RotaryInputTelemetryFlagOff_NoRotationLogging,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                       rotary_input_telemetry))) {
-    mPropertyMap.addProperty("device.res", "3");
-    mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration,
-                                                          mTelemetryLogCounter);
-    InputDeviceInfo info;
-    mMapper->populateDeviceInfo(info);
-
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 70);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
-
-    ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
-              mTelemetryLogCounts.end());
-}
-
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, ZeroResolution_NoRotationLogging,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                      rotary_input_telemetry))) {
+TEST_F(RotaryEncoderInputMapperTest, ZeroResolution_NoRotationLogging) {
     mPropertyMap.addProperty("device.res", "-3");
     mPropertyMap.addProperty("rotary_encoder.min_rotations_to_log", "2");
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration,
@@ -233,9 +214,7 @@ TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, ZeroResolution_NoRotationLogging
               mTelemetryLogCounts.end());
 }
 
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, NegativeMinLogRotation_NoRotationLogging,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                      rotary_input_telemetry))) {
+TEST_F(RotaryEncoderInputMapperTest, NegativeMinLogRotation_NoRotationLogging) {
     mPropertyMap.addProperty("device.res", "3");
     mPropertyMap.addProperty("rotary_encoder.min_rotations_to_log", "-2");
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration,
@@ -251,9 +230,7 @@ TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, NegativeMinLogRotation_NoRotatio
               mTelemetryLogCounts.end());
 }
 
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, ZeroMinLogRotation_NoRotationLogging,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                      rotary_input_telemetry))) {
+TEST_F(RotaryEncoderInputMapperTest, ZeroMinLogRotation_NoRotationLogging) {
     mPropertyMap.addProperty("device.res", "3");
     mPropertyMap.addProperty("rotary_encoder.min_rotations_to_log", "0");
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration,
@@ -269,9 +246,7 @@ TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, ZeroMinLogRotation_NoRotationLog
               mTelemetryLogCounts.end());
 }
 
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, NoMinLogRotation_NoRotationLogging,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                      rotary_input_telemetry))) {
+TEST_F(RotaryEncoderInputMapperTest, NoMinLogRotation_NoRotationLogging) {
     // 3 units per radian, 2 * M_PI * 3 = ~18.85 units per rotation.
     mPropertyMap.addProperty("device.res", "3");
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration,
@@ -287,9 +262,7 @@ TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, NoMinLogRotation_NoRotationLoggi
               mTelemetryLogCounts.end());
 }
 
-TEST_F_WITH_FLAGS(RotaryEncoderInputMapperTest, RotationLogging,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(com::android::input::flags,
-                                                      rotary_input_telemetry))) {
+TEST_F(RotaryEncoderInputMapperTest, RotationLogging) {
     // 3 units per radian, 2 * M_PI * 3 = ~18.85 units per rotation.
     // Multiples of `unitsPerRoation`, to easily follow the assertions below.
     // [18.85, 37.7, 56.55, 75.4, 94.25, 113.1, 131.95, 150.8]

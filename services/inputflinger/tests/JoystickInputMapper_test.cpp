@@ -53,8 +53,8 @@ protected:
         EXPECT_CALL(mMockEventHub, getAbsoluteAxisInfo(EVENTHUB_ID, testing::_))
                 .WillRepeatedly(Return(std::nullopt));
 
-        setupAxis(ABS_X, /*valid=*/true, /*min=*/-32767, /*max=*/32767, /*resolution=*/0);
-        setupAxis(ABS_Y, /*valid=*/true, /*min=*/-32767, /*max=*/32767, /*resolution=*/0);
+        setupAxis(ABS_X, /*valid=*/true, /*min=*/-127, /*max=*/127, /*resolution=*/0);
+        setupAxis(ABS_Y, /*valid=*/true, /*min=*/-127, /*max=*/127, /*resolution=*/0);
     }
 };
 
@@ -78,6 +78,50 @@ TEST_F(JoystickInputMapperTest, Configure_AssignsDisplayUniqueId) {
     ASSERT_THAT(out, IsEmpty());
     out = process(EV_SYN, SYN_REPORT, 0);
     ASSERT_THAT(out, ElementsAre(VariantWith<NotifyMotionArgs>(WithDisplayId(viewport.displayId))));
+}
+
+TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
+    // Two raw axes, ABS_X and ABS_Y, will be mapped to the same logical axis,
+    // AMOTION_EVENT_AXIS_X. We need to ensure that the most recent event is the one
+    // that gets reported.
+    AxisInfo axisInfo;
+    axisInfo.axis = AMOTION_EVENT_AXIS_X;
+    EXPECT_CALL(mMockEventHub, mapAxis(EVENTHUB_ID, ABS_X, testing::_))
+            .WillRepeatedly(testing::DoAll(testing::SetArgPointee<2>(axisInfo), Return(false)));
+    EXPECT_CALL(mMockEventHub, mapAxis(EVENTHUB_ID, ABS_Y, testing::_))
+            .WillRepeatedly(testing::DoAll(testing::SetArgPointee<2>(axisInfo), Return(false)));
+
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext,
+                                                     mFakePolicy->getReaderConfiguration());
+    nsecs_t eventTime = ARBITRARY_TIME;
+
+    // Send an event for ABS_X with a value of 0 (maps to 0).
+    process(eventTime, EV_ABS, ABS_X, 0);
+    // Send an event for ABS_Y at a later time with a value of 127 (maps to 1.0).
+    eventTime++;
+    process(eventTime, EV_ABS, ABS_Y, 127);
+
+    // Sync and verify: ABS_Y value should be taken
+    std::list<NotifyArgs> out = process(eventTime, EV_SYN, SYN_REPORT, 0);
+    ASSERT_THAT(out,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                       WithAxes({{AMOTION_EVENT_AXIS_X, 1.0f}})))));
+
+    // Reset and test reverse order of events
+    ASSERT_THAT(mMapper->reset(eventTime), IsEmpty());
+    // Send an event for ABS_Y with a value of 127 (maps to 1.0).
+    process(eventTime, EV_ABS, ABS_Y, 127);
+    // Send an event for ABS_X at a later time with a value of 0 (maps to 0).
+    eventTime++;
+    process(eventTime, EV_ABS, ABS_X, 0);
+
+    // Sync and verify: ABS_X value should be taken
+    out = process(eventTime, EV_SYN, SYN_REPORT, 0);
+    ASSERT_THAT(out,
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                       WithAxes({{AMOTION_EVENT_AXIS_X, 0}})))));
 }
 
 } // namespace android

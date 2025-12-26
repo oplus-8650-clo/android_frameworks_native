@@ -65,7 +65,7 @@ const SkString kEffectSource_LutEffect(R"(
                 linear = linear * gain;
             // CIE_Y
             } else if (key == 2) {
-                float y = dot(linear, luminanceCoefficients) / 3.0;
+                float y = dot(linear, luminanceCoefficients);
                 float index = y * float(size - 1);
                 float gain = lut.eval(vec2(index, 0.0) + 0.5).r;
                 linear = linear * gain;
@@ -272,7 +272,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
         mBuilder->uniform("luminanceCoefficients") =
                 SkV3{toXYZMatrix[0][1], toXYZMatrix[1][1], toXYZMatrix[2][1]};
     } else {
-        mBuilder->uniform("luminanceCoefficients") = SkV3{1.f, 1.f, 1.f};
+        mBuilder->uniform("luminanceCoefficients") = SkV3{1.f / 3.f, 1.f / 3.f, 1.f / 3.f};
     }
     mBuilder->uniform("size") = uSize;
     mBuilder->uniform("key") = uKey;

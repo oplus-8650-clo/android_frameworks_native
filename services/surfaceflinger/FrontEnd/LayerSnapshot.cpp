@@ -132,6 +132,7 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     clientChanges = 0;
     mirrorRootPath =
             LayerHierarchy::isMirror(path.variant) ? path : LayerHierarchy::TraversalPath::ROOT;
+    stopLayerId = state.stopLayerId;
     reachability = LayerSnapshot::Reachability::Unreachable;
     frameRateSelectionPriority = state.frameRateSelectionPriority;
     layerMetadata = state.metadata;
@@ -369,6 +370,11 @@ std::ostream& operator<<(std::ostream& out, const LayerSnapshot& obj) {
     if (obj.desiredHdrSdrRatio > 1.f) {
         out << " desiredHdrSdrRatio=" << obj.desiredHdrSdrRatio;
     }
+
+    if (obj.stopLayerId != UNASSIGNED_LAYER_ID) {
+        out << " stopLayerId=" << obj.stopLayerId;
+    }
+
     return out;
 }
 
@@ -560,7 +566,9 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
                  layer_state_t::eFlagsChanged | layer_state_t::eBufferChanged |
                  layer_state_t::eSidebandStreamChanged)) {
         contentOpaque = isContentOpaque();
-        isOpaque = contentOpaque && !roundedCorner.hasRoundedCorners() && color.a == 1.f;
+        isOpaque = contentOpaque &&
+                !(roundedCorner.hasSfDrawnRadius() || roundedCorner.hasClientDrawnRadius()) &&
+                color.a == 1.f;
         blendMode = getBlendMode(requested);
     }
 
@@ -598,8 +606,10 @@ char LayerSnapshot::classifyCompositionForDebug(
         code = 'l'; // Blur
     } else if (hasProtectedContent) {
         code = 'p'; // Protected content
-    } else if (roundedCorner.hasRoundedCorners()) {
-        code = 'r'; // Rounded corners
+    } else if (roundedCorner.hasSfDrawnRadius()) {
+        code = 'r'; // SF Drawn Rounded corners
+    } else if (roundedCorner.hasClientDrawnRadius()) {
+        code = 'o'; // Client Drawn Rounded corners
     } else if (drawShadows()) {
         code = 's'; // Shadow
     } else if (fillsColor()) {

@@ -62,7 +62,8 @@ int main(int argc, char** argv) {
     consumer->setBitmapArenaAllocator(std::move(loadedAllocator));
     */
 
-    resetRenderCommandBufferForReplay(consumer);
+    IPCResourceCache cache;
+    resetRenderCommandBufferForReplay(&cache, consumer);
 
     // Dump to text file
     // dumpRenderCommandBufferToText(consumer, "/sdcard/render_command_buffer.txt");
@@ -84,7 +85,8 @@ int main(int argc, char** argv) {
     canvas->clear(SK_ColorWHITE); // Example background
 
     // Replay the render commands
-    renderCommandBufferToCanvas(consumer, canvas); // Pass the canvas obtained from the surface
+    renderCommandBufferToCanvas(&cache, consumer,
+                                canvas); // Pass the canvas obtained from the surface
 
     // Now you can display the surface's image or save it to a file.
     // For example, to save to a PNG:

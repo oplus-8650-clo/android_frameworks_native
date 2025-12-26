@@ -407,8 +407,6 @@ private:
 protected:
     virtual int dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd);
     virtual int cancelBuffer(sp<GraphicBuffer>&& buffer, int fenceFd);
-    virtual int queueBuffer(sp<GraphicBuffer>&& buffer, int fenceFd,
-                            SurfaceQueueBufferOutput* surfaceOutput = nullptr);
     virtual int perform(int operation, va_list args);
     virtual int setSwapInterval(int interval);
 
@@ -551,7 +549,8 @@ protected:
 
     void getDequeueBufferInputLocked(IGraphicBufferProducer::DequeueBufferInput* dequeueInput);
 
-    void getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, int fenceFd, nsecs_t timestamp,
+    void getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
+                                   nsecs_t timestamp,
                                    IGraphicBufferProducer::QueueBufferInput* out);
 
     // For easing in adoption of gralloc4 metadata by vendor components, as well as for supporting
@@ -561,7 +560,7 @@ protected:
             const sp<GraphicBuffer>& buffer,
             const IGraphicBufferProducer::QueueBufferInput& queueBufferInput);
 
-    void onBufferQueuedLocked(int slot, sp<Fence> fence,
+    void onBufferQueuedLocked(int slot, const sp<Fence>& fence,
                               const IGraphicBufferProducer::QueueBufferOutput& output)
             REQUIRES(mMutex);
 

@@ -1007,7 +1007,7 @@ TEST_F(BinderLibTest, ReturnErrorIfKernelDoesNotSupportFreezeNotification) {
     EXPECT_THAT(addFrozenStateChangeCallback(binder, callback), StatusEq(INVALID_OPERATION));
 }
 
-TEST_F(BinderLibTest, FrozenStateChangeNotificatiion) {
+TEST_F(BinderLibTest, FrozenStateChangeNotification) {
     if (!checkFreezeAndNotificationSupport()) {
         GTEST_SKIP() << "Skipping test for kernels that do not support FREEZE_NOTIFICATION";
         return;

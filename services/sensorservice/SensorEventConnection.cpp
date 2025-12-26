@@ -38,13 +38,25 @@ constexpr int kTargetSdkUnknown = 0;
 }  // namespace
 
 SensorService::SensorEventConnection::SensorEventConnection(
-        const sp<SensorService>& service, uid_t uid, String8 packageName, bool isDataInjectionMode,
-        const String16& opPackageName, const String16& attributionTag)
-    : mService(service), mUid(uid), mWakeLockRefCount(0), mHasLooperCallbacks(false),
-      mDead(false), mDataInjectionMode(isDataInjectionMode), mEventCache(nullptr),
-      mCacheSize(0), mMaxCacheSize(0), mTimeOfLastEventDrop(0), mEventsDropped(0),
-      mPackageName(packageName), mOpPackageName(opPackageName), mAttributionTag(attributionTag),
-      mTargetSdk(kTargetSdkUnknown), mDestroyed(false) {
+        const sp<SensorService>& service, uid_t uid, pid_t pid, String8 packageName,
+        bool isDataInjectionMode, const String16& opPackageName, const String16& attributionTag)
+      : mService(service),
+        mUid(uid),
+        mPid(pid),
+        mWakeLockRefCount(0),
+        mHasLooperCallbacks(false),
+        mDead(false),
+        mDataInjectionMode(isDataInjectionMode),
+        mEventCache(nullptr),
+        mCacheSize(0),
+        mMaxCacheSize(0),
+        mTimeOfLastEventDrop(0),
+        mEventsDropped(0),
+        mPackageName(packageName),
+        mOpPackageName(opPackageName),
+        mAttributionTag(attributionTag),
+        mTargetSdk(kTargetSdkUnknown),
+        mDestroyed(false) {
     mUserId = multiuser_get_user_id(mUid);
     mChannel = new BitTube(mService->mSocketBufferSize);
 #if DEBUG_CONNECTIONS
@@ -440,8 +452,8 @@ status_t SensorService::SensorEventConnection::sendEvents(
 }
 
 bool SensorService::SensorEventConnection::hasSensorAccess() {
-    return mService->isUidActive(mUid)
-        && !mService->mSensorPrivacyPolicy->isSensorPrivacyEnabled();
+    return mService->isUidActive(mUid) && !mService->isPidFrozen(mPid) &&
+            !mService->mSensorPrivacyPolicy->isSensorPrivacyEnabled();
 }
 
 bool SensorService::SensorEventConnection::noteOpIfRequired(const sensors_event_t& event) {

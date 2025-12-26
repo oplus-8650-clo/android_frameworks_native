@@ -178,6 +178,7 @@ public:
     [[nodiscard]] virtual ftl::Future<hal::Error> setDisplayBrightness(
             float brightness, float brightnessNits,
             const Hwc2::Composer::DisplayBrightnessOptions& options) = 0;
+    [[nodiscard]] virtual hal::Error setDisplayMode(hal::HWConfigId modeId, bool seamless) = 0;
     [[nodiscard]] virtual hal::Error setActiveConfigWithConstraints(
             hal::HWConfigId configId, const hal::VsyncPeriodChangeConstraints& constraints,
             hal::VsyncPeriodChangeTimeline* outTimeline) = 0;
@@ -278,6 +279,7 @@ public:
     ftl::Future<hal::Error> setDisplayBrightness(
             float brightness, float brightnessNits,
             const Hwc2::Composer::DisplayBrightnessOptions& options) override;
+    hal::Error setDisplayMode(hal::HWConfigId modeId, bool seamless) override;
     hal::Error setActiveConfigWithConstraints(hal::HWConfigId configId,
                                               const hal::VsyncPeriodChangeConstraints& constraints,
                                               hal::VsyncPeriodChangeTimeline* outTimeline) override;

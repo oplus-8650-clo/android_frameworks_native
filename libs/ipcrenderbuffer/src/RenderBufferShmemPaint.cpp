@@ -23,8 +23,7 @@
 
 namespace android {
 ShmemPaint toShmemPaint(const SkPaint& paint) {
-    auto color = paint.getColor();
-    SkColor4f color4f = SkColor4f::FromColor(color);
+    SkColor4f color4f = paint.getColor4f();
 
     auto filter = paint.getColorFilter();
     if (filter != nullptr) {
@@ -36,12 +35,28 @@ ShmemPaint toShmemPaint(const SkPaint& paint) {
         blendMode = SkBlendMode::kSrcOver;
     }
 
-    return ShmemPaint{color4f, paint.getStyle(), *blendMode};
+    return ShmemPaint{
+            .color = color4f,
+            .style = paint.getStyle(),
+            .strokeWidth = paint.getStrokeWidth(),
+            .strokeMiter = paint.getStrokeMiter(),
+            .strokeCap = paint.getStrokeCap(),
+            .strokeJoin = paint.getStrokeJoin(),
+            .antiAlias = paint.isAntiAlias(),
+            .dither = paint.isDither(),
+            .blendMode = *blendMode,
+    };
 }
 
 SkPaint fromShmemPaint(const ShmemPaint& paint) {
     SkPaint p = SkPaint(paint.color);
     p.setStyle(paint.style);
+    p.setStrokeWidth(paint.strokeWidth);
+    p.setStrokeMiter(paint.strokeMiter);
+    p.setStrokeCap(paint.strokeCap);
+    p.setStrokeJoin(paint.strokeJoin);
+    p.setAntiAlias(paint.antiAlias);
+    p.setDither(paint.dither);
     p.setBlendMode(paint.blendMode);
     return p;
 }

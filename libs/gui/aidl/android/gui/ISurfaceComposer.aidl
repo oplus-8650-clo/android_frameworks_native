@@ -110,6 +110,9 @@ interface ISurfaceComposer {
      *     which will guarantee performance for all of the other displays.
      * uniqueId
      *     The unique ID for the display.
+     * ownerUid
+     *     The owner UID for the display. If the caller is trusted and a valid UID is passed in,
+     *     that value is used. In all other cases, this falls back to using the calling binder's UID.
      * requestedRefreshRate
      *     The refresh rate, frames per second, to request on the virtual display.
      *     This is just a request, the actual rate may be adjusted to align well
@@ -119,7 +122,7 @@ interface ISurfaceComposer {
      * requires ACCESS_SURFACE_FLINGER permission.
      */
     @nullable IBinder createVirtualDisplay(@utf8InCpp String displayName, boolean isSecure,
-            OptimizationPolicy optimizationPolicy, @utf8InCpp String uniqueId, float requestedRefreshRate);
+            OptimizationPolicy optimizationPolicy, @utf8InCpp String uniqueId, int /* uid_t */ ownerUid, float requestedRefreshRate);
 
     /**
      * Destroy a virtual display.

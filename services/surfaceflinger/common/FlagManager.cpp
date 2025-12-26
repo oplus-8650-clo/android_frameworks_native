@@ -122,15 +122,15 @@ void FlagManager::dump(std::string& result) const {
 
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
-    DUMP_ACONFIG_FLAG(add_first_vsync_to_tracker);
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(anchor_list);
     DUMP_ACONFIG_FLAG(connected_displays_cursor);
     DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
-    DUMP_ACONFIG_FLAG(filter_refresh_rates_within_config_group);
+    DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
     DUMP_ACONFIG_FLAG(frontend_caching_v0);
+    DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_desktop_rollout);
     DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
@@ -145,22 +145,19 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets);
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(resync_on_tx_separate_timer);
+    DUMP_ACONFIG_FLAG(set_power_mode_async);
     DUMP_ACONFIG_FLAG(supported_refresh_rate_update);
     DUMP_ACONFIG_FLAG(use_at_least_60_for_min_vote);
+    DUMP_ACONFIG_FLAG(use_experimental_jank_classification);
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
-    DUMP_ACONFIG_FLAG(arr_setframerate_gte_enum);
-    DUMP_ACONFIG_FLAG(begone_bright_hlg);
     DUMP_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved);
     DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
     DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_command_modeset);
-    DUMP_ACONFIG_FLAG(enable_layer_command_batching);
-    DUMP_ACONFIG_FLAG(enable_small_area_detection);
-    DUMP_ACONFIG_FLAG(flush_buffer_slots_to_uncache);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection);
     DUMP_ACONFIG_FLAG(follower_display_backpressure);
     DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition);
@@ -185,8 +182,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(vulkan_renderengine);
     DUMP_ACONFIG_FLAG(wb_framebuffersurface2);
     DUMP_ACONFIG_FLAG(wb_virtualdisplay2);
-    DUMP_ACONFIG_FLAG(window_blur_kawase2);
-    DUMP_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing);
+    DUMP_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers);
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
 
 #undef DUMP_ACONFIG_FLAG
@@ -259,8 +255,6 @@ FLAG_MANAGER_LEGACY_SERVER_FLAG(use_skia_tracing, PROPERTY_SKIA_ATRACE_ENABLED,
 
 /// Trunk stable readonly flags ///
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
-FLAG_MANAGER_ACONFIG_FLAG(arr_setframerate_gte_enum, "debug.sf.arr_setframerate_gte_enum")
-FLAG_MANAGER_ACONFIG_FLAG(begone_bright_hlg, "debug.sf.begone_bright_hlg");
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_hdr_v2");
@@ -268,9 +262,6 @@ FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_synthetic_vsync_for_performance, "");
 FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
-FLAG_MANAGER_ACONFIG_FLAG(enable_layer_command_batching, "debug.sf.enable_layer_command_batching")
-FLAG_MANAGER_ACONFIG_FLAG(enable_small_area_detection, "")
-FLAG_MANAGER_ACONFIG_FLAG(flush_buffer_slots_to_uncache, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
                           "debug.sf.follower_arbitrary_refresh_rate_selection");
 FLAG_MANAGER_ACONFIG_FLAG(follower_display_backpressure, "debug.sf.follower_display_backpressure");
@@ -298,19 +289,19 @@ FLAG_MANAGER_ACONFIG_FLAG(true_hdr_screenshots, "debug.sf.true_hdr_screenshots")
 FLAG_MANAGER_ACONFIG_FLAG(vulkan_renderengine, "debug.renderengine.vulkan")
 FLAG_MANAGER_ACONFIG_FLAG(wb_framebuffersurface2, "");
 FLAG_MANAGER_ACONFIG_FLAG(wb_virtualdisplay2, "");
-FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2, "");
-FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_fix_aliasing, "");
+FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 
 /// Trunk stable server (R/W) flags ///
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
-FLAG_MANAGER_ACONFIG_FLAG(add_first_vsync_to_tracker, "")
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(anchor_list, "")
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
-FLAG_MANAGER_ACONFIG_FLAG(filter_refresh_rates_within_config_group, "");
+FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_bugfix, "");
 FLAG_MANAGER_ACONFIG_FLAG(frontend_caching_v0, "");
+FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
+                          "debug.sf.get_display_known_vsync_sample_enabled");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
@@ -324,8 +315,10 @@ FLAG_MANAGER_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets, "");
 FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx_separate_timer, "");
+FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
 FLAG_MANAGER_ACONFIG_FLAG(supported_refresh_rate_update, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_at_least_60_for_min_vote, "");
+FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 

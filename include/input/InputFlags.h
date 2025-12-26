@@ -41,13 +41,6 @@ public:
     static bool connectedDisplaysCursorEnabled();
 
     /**
-     * Check if both connectedDisplaysCursor and associatedDisplayCursorBugfix is enabled.
-     * This setting can be overridden with the dev option similar to the
-     * connectedDisplaysCursorEnabled flag.
-     */
-    static bool connectedDisplaysCursorAndAssociatedDisplayCursorBugfixEnabled();
-
-    /**
      * Check if display density based cursor scaling is enabled.
      * This setting can be overridden with the dev option similar to the
      * connectedDisplaysCursorEnabled flag.
