@@ -690,6 +690,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::ANDROID_external_memory_android_hardware_buffer:
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
             case ProcHook::KHR_external_fence_fd:
@@ -726,6 +727,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_incremental_present:
             case ProcHook::KHR_shared_presentable_image:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
                 hook_extensions_.set(ext_bit);
@@ -1156,6 +1158,10 @@ VkResult EnumerateDeviceExtensionProperties(
         loader_extensions.push_back({
                 VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
                 VK_GOOGLE_DISPLAY_TIMING_SPEC_VERSION});
+        if (flags::present_timing_ext()) {
+            loader_extensions.push_back({VK_EXT_PRESENT_TIMING_EXTENSION_NAME,
+                                         VK_EXT_PRESENT_TIMING_SPEC_VERSION});
+        }
     }
 
     loader_extensions.push_back(
@@ -1744,10 +1750,24 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR: {
                 auto* features =
-                    reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(pFeats);
+                    reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(
+                        pFeats);
                 features->presentId = VK_TRUE;
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT: {
+                if (flags::present_timing_ext() &&
+                    android::base::GetBoolProperty(
+                        "service.sf.present_timestamp", false)) {
+                    VkPhysicalDevicePresentTimingFeaturesEXT* timingsFeatures =
+                        reinterpret_cast<
+                            VkPhysicalDevicePresentTimingFeaturesEXT*>(pFeats);
+                    timingsFeatures->presentTiming = true;
+                    timingsFeatures->presentAtAbsoluteTime = true;
+                    timingsFeatures->presentAtRelativeTime = false;
+                }
+            } break;
 
             default:
                 break;

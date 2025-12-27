@@ -116,8 +116,10 @@ impl Default for HardwareBufferDescription {
 
 /// The marshalled representation of a `HardwareBuffer`.
 pub struct AhbInfo {
-    fds: Vec<OwnedFd>,
-    data: Vec<u8>,
+    /// The file descriptors associated with the buffer.
+    pub fds: Vec<OwnedFd>,
+    /// The data associated with the buffer's description.
+    pub data: Vec<u8>,
 }
 
 /// Wrapper around an opaque C `AHardwareBuffer`.

@@ -419,10 +419,22 @@ static float toDegrees(uint32_t transform) {
 }
 
 static SkColorMatrix toSkColorMatrix(const android::mat4& matrix) {
-    return SkColorMatrix(matrix[0][0], matrix[1][0], matrix[2][0], matrix[3][0], 0, matrix[0][1],
-                         matrix[1][1], matrix[2][1], matrix[3][1], 0, matrix[0][2], matrix[1][2],
-                         matrix[2][2], matrix[3][2], 0, matrix[0][3], matrix[1][3], matrix[2][3],
-                         matrix[3][3], 0);
+    // color matrix is applied on unpremultiplied colors, so we can't attenuate the translation
+    // component by the alpha channel
+    // clang-format off
+
+    if (FlagManager::getInstance().color_transform_translation()) {
+        return SkColorMatrix(matrix[0][0], matrix[1][0], matrix[2][0], 0, matrix[3][0],
+                             matrix[0][1], matrix[1][1], matrix[2][1], 0, matrix[3][1],
+                             matrix[0][2], matrix[1][2], matrix[2][2], 0, matrix[3][2],
+                             matrix[0][3], matrix[1][3], matrix[2][3], 1, 0);
+    } else {
+        return SkColorMatrix(matrix[0][0], matrix[1][0], matrix[2][0], matrix[3][0], 0, matrix[0][1],
+                             matrix[1][1], matrix[2][1], matrix[3][1], 0, matrix[0][2], matrix[1][2],
+                             matrix[2][2], matrix[3][2], 0, matrix[0][3], matrix[1][3], matrix[2][3],
+                             matrix[3][3], 0);
+    }
+    // clang-format on
 }
 
 static bool needsToneMapping(ui::Dataspace sourceDataspace, ui::Dataspace destinationDataspace) {
@@ -845,10 +857,15 @@ void SkiaRenderEngine::drawLayersInternal(
         return;
     }
 
+    static const auto kDisplayColorTransformClamp =
+            FlagManager::getInstance().color_transform_translation() ? SkColorFilters::Clamp::kNo
+                                                                     : SkColorFilters::Clamp::kYes;
+
     // setup color filter if necessary
     sk_sp<SkColorFilter> displayColorTransform;
     if (display.colorTransform != mat4() && !display.deviceHandlesColorTransform) {
-        displayColorTransform = SkColorFilters::Matrix(toSkColorMatrix(display.colorTransform));
+        displayColorTransform = SkColorFilters::Matrix(toSkColorMatrix(display.colorTransform),
+                                                       kDisplayColorTransformClamp);
     }
     const bool ctModifiesAlpha =
             displayColorTransform && !displayColorTransform->isAlphaUnchanged();
@@ -1324,7 +1341,8 @@ void SkiaRenderEngine::drawLayersInternal(
                     // have to apply it ourselves.
                     colorMatrix.postConcat(toSkColorMatrix(display.colorTransform));
                 }
-                paint.setColorFilter(SkColorFilters::Matrix(colorMatrix));
+                paint.setColorFilter(
+                        SkColorFilters::Matrix(colorMatrix, kDisplayColorTransformClamp));
             }
         } else {
             SFTRACE_NAME("DrawColor");
@@ -1364,7 +1382,8 @@ void SkiaRenderEngine::drawLayersInternal(
                                          gammaCorrectedDimmingRatio, 1.f));
 
                 const auto colorFilter =
-                        SkColorFilters::Matrix(toSkColorMatrix(std::move(dimmingMatrix)));
+                        SkColorFilters::Matrix(toSkColorMatrix(std::move(dimmingMatrix)),
+                                               kDisplayColorTransformClamp);
                 paint.setColorFilter(displayColorTransform
                                              ? displayColorTransform->makeComposed(colorFilter)
                                              : colorFilter);

@@ -40,11 +40,6 @@ namespace android {
 
 namespace {
 
-// In addition to v1, v2 will also cancel ongoing move gestures while typing and add delay in
-// re-enabling the tap to click.
-const bool ENABLE_TOUCHPAD_PALM_REJECTION_V2 =
-        input_flags::enable_v2_touchpad_typing_palm_rejection();
-
 bool isGestureNoFocusChange(MotionClassification classification) {
     switch (classification) {
         case MotionClassification::TWO_FINGER_SWIPE:
@@ -187,31 +182,13 @@ std::list<NotifyArgs> UncapturedGestureConverter::handleMove(nsecs_t when, nsecs
                                                              const Gesture& gesture) {
     float deltaX = gesture.details.move.dx;
     float deltaY = gesture.details.move.dy;
-    if (ENABLE_TOUCHPAD_PALM_REJECTION_V2) {
-        bool wasHoverCancelled = mIsHoverCancelled;
-        // Gesture will be cancelled if it started before the user started typing and
-        // there is a active IME connection.
-        mIsHoverCancelled = gestureStartTime <= mReaderContext.getLastKeyDownTimestamp() &&
-                mReaderContext.getPolicy()->isInputMethodConnectionActive();
-
-        if (!wasHoverCancelled && mIsHoverCancelled) {
-            // This is the first event of the cancelled gesture, we won't return because we need to
-            // generate a HOVER_EXIT event
-            return exitHover(when, readTime);
-        } else if (mIsHoverCancelled) {
-            return {};
-        }
-    }
 
     rotateDelta(mOrientation, &deltaX, &deltaY);
 
-    // Update the cursor, and enable tap to click if the gesture is not cancelled
-    if (!mIsHoverCancelled) {
-        // handleFling calls hoverMove with zero delta on FLING_TAP_DOWN. Don't enable tap to click
-        // for this case as subsequent handleButtonsChange may choose to ignore this tap.
-        if (std::abs(deltaX) > 0 || std::abs(deltaY) > 0) {
-            enableTapToClick(when);
-        }
+    // handleFling calls hoverMove with zero delta on FLING_TAP_DOWN. Don't enable tap to click
+    // for this case as subsequent handleButtonsChange may choose to ignore this tap.
+    if (std::abs(deltaX) > 0 || std::abs(deltaY) > 0) {
+        enableTapToClick(when);
     }
 
     std::list<NotifyArgs> out;
@@ -254,14 +231,7 @@ std::list<NotifyArgs> UncapturedGestureConverter::handleButtonsChange(nsecs_t wh
     coords.setAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X, 0);
     coords.setAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y, 0);
 
-    // V2 palm rejection should override V1
-    if (ENABLE_TOUCHPAD_PALM_REJECTION_V2) {
-        enableTapToClick(when);
-        if (gesture.details.buttons.is_tap && when <= mWhenToEnableTapToClick) {
-            // return early to prevent this tap
-            return out;
-        }
-    } else if (mReaderContext.isPreventingTouchpadTaps()) {
+    if (mReaderContext.isPreventingTouchpadTaps()) {
         enableTapToClick(when);
         if (gesture.details.buttons.is_tap) {
             // return early to prevent this tap

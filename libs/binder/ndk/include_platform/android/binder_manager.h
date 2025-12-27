@@ -159,6 +159,21 @@ binder_status_t AServiceManager_registerLazyService(AIBinder* binder, const char
         __INTRODUCED_IN(31);
 
 /**
+ * Same as above AServiceManager_registerLazyService with the additional
+ * parameter for flags.
+ *
+ * \param binder object to register globally with the service manager.
+ * \param instance identifier of the service. This will be used to lookup the service.
+ * \param flags an AServiceManager_AddServiceFlag enum to denote how the service should be
+ *        registered.
+ *
+ * \return STATUS_OK on success.
+ */
+binder_status_t AServiceManager_registerLazyServiceWithFlags(
+        AIBinder* binder, const char* instance, const AServiceManager_AddServiceFlag flags)
+        __INTRODUCED_IN(37);
+
+/**
  * Gets a binder object with this specific instance name. Efficiently waits for the service.
  * If the service is not ever registered, it will wait indefinitely. Requires the threadpool
  * to be started in the service.

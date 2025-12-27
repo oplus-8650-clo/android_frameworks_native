@@ -17,6 +17,7 @@
 #include <chrono>
 #include <vector>
 
+#include <android-base/result-gmock.h>
 #include <attestation/HmacKeyManager.h>
 #include <com_android_input_flags.h>
 #include <gtest/gtest.h>
@@ -24,6 +25,8 @@
 #include <input/InputTransport.h>
 
 using namespace std::chrono_literals;
+
+using android::base::testing::Ok;
 
 namespace android {
 
@@ -152,7 +155,7 @@ void TouchResamplingTest::receiveResponseUntilSequence(uint32_t seq) {
     while (consumedEvents < 100) {
         android::base::Result<InputPublisher::ConsumerResponse> response =
                 mPublisher->receiveConsumerResponse();
-        ASSERT_TRUE(response.ok());
+        ASSERT_THAT(response, Ok());
         ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*response));
         const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*response);
         ASSERT_TRUE(finish.handled)
@@ -180,7 +183,7 @@ void TouchResamplingTest::consumeInputEventEntries(const std::vector<InputEventE
     auto [result, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, frameTime.count(),
                                &consumeSeq, &event);
-    ASSERT_TRUE(result.ok());
+    ASSERT_THAT(result, Ok());
     MotionEvent* motionEvent = static_cast<MotionEvent*>(event);
 
     ASSERT_EQ(entries.size() - 1, motionEvent->getHistorySize());

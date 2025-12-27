@@ -78,8 +78,13 @@ struct Layer {
 namespace {
 
 const char kSystemDebugLayerLibraryDir[] = "/data/local/debug/vulkan";
+#if defined(__LP64__)
 const char kSystemPlatformLayerLibraryDir[] = "/system/lib64/vulkan";
 const char kSystemOEMLayerLibraryDir[] = "/product/lib64/vulkan";
+#else
+const char kSystemPlatformLayerLibraryDir[] = "/system/lib/vulkan";
+const char kSystemOEMLayerLibraryDir[] = "/product/lib/vulkan";
+#endif
 
 class LayerLibrary {
    public:

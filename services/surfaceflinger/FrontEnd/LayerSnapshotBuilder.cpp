@@ -453,17 +453,13 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
         updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
-        if (FlagManager::getInstance().stop_layer()) {
-            applyStopLayers(args.root, childPath);
-        }
+        applyStopLayers(args.root, childPath);
     } else {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
             updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
-            if (FlagManager::getInstance().stop_layer()) {
-                applyStopLayers(*childHierarchy, childPath);
-            }
+            applyStopLayers(*childHierarchy, childPath);
         }
     }
 
