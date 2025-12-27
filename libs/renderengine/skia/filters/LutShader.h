@@ -33,21 +33,21 @@ class LutShader {
 public:
     LutShader(RuntimeEffectManager& effectManager);
     sk_sp<SkShader> lutShader(sk_sp<SkShader>& input, std::shared_ptr<gui::DisplayLuts> displayLuts,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                               ui::Dataspace srcDataspace
-/* QTI_BEGIN */
                               , bool lutSourceIsHwc
-/* QTI_END */
                              );
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
 private:
     sk_sp<SkShader> generateLutShader(sk_sp<SkShader> input, const std::vector<float>& buffers,
                                       const int32_t offset, const int32_t length,
                                       const int32_t dimension, const int32_t size,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                       const int32_t samplingKey, ui::Dataspace srcDataspace
-/* QTI_BEGIN */
                                       , bool lutSourceIsHwc
-/* QTI_END */
                                      );
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     sk_sp<SkRuntimeEffect> mEffect;
     std::unique_ptr<SkRuntimeShaderBuilder> mBuilder;
 };

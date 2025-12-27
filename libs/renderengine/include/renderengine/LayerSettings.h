@@ -173,10 +173,10 @@ struct LayerSettings {
 
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
-/* QTI_BEGIN */
     bool lutSourceIsHwc = false;
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 };
 
 // Keep in sync with custom comparison function in
