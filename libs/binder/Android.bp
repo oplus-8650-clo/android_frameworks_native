@@ -861,6 +861,21 @@ cc_library_static {
     ],
 }
 
+cc_library_static {
+    name: "libbinder_flake_prone",
+    defaults: [
+        "libbinder_common_defaults",
+        "libbinder_android_defaults",
+        "libbinder_kernel_defaults",
+    ],
+    cflags: [
+        "-DRPC_FLAKE_PRONE=1",
+    ],
+    visibility: [
+        ":__subpackages__",
+    ],
+}
+
 cc_defaults {
     name: "libbinder_tls_shared_deps",
     shared_libs: [
@@ -1042,6 +1057,7 @@ aidl_interface {
         "//frameworks/native/cmds/servicemanager/rpc_servicemanager",
         "//packages/modules/Virtualization:__subpackages__",
     ],
+    host_supported: true,
 }
 
 // TODO(b/184872979): remove once the Rust API is created.
@@ -1074,6 +1090,7 @@ cc_library {
         "//device/google/cuttlefish/shared/minidroid:__subpackages__",
         "//visibility:any_system_partition",
     ],
+    host_supported: true,
 }
 
 // libbinder historically contained additional interfaces that provided specific

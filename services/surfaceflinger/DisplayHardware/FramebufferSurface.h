@@ -61,7 +61,7 @@ public:
     virtual const sp<Fence>& getClientTargetAcquireFence() const override;
 
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
-    virtual surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() {
+    surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() {
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         return mQtiDSExtnIntf;

@@ -41,6 +41,13 @@ flag {
 }
 
 flag {
+  name: "present_timing_ext"
+  namespace: "gpu"
+  description: "Enable the VK_EXT_present_timing vulkan extension"
+  bug: "416754263"
+}
+
+flag {
   name: "vulkan_1_4_instance_api"
   namespace: "core_graphics"
   description: "Enable support for the Vulkan 1.4 instance API"

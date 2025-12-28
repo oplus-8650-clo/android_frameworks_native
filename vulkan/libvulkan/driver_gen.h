@@ -56,6 +56,7 @@ struct ProcHook {
         EXT_surface_maintenance1,
         KHR_present_id,
         KHR_present_id2,
+        EXT_present_timing,
         ANDROID_external_memory_android_hardware_buffer,
         KHR_bind_memory2,
         KHR_get_physical_device_properties2,

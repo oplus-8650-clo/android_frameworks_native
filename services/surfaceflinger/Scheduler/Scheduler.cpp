@@ -970,26 +970,18 @@ Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,
 
 void Scheduler::resync(ResyncCaller caller) {
     static constexpr int64_t kDefaultResyncOnChoreographerTimeout = ms2ns(750);
+    static const int64_t resyncOnTxTimeout =
+            sysprop::resync_on_tx_timeout(VSyncTracker::kPredictorThreshold.ns());
+    static const int64_t resyncOnChoreographerTimeout =
+            sysprop::resync_on_choreographer_timeout(kDefaultResyncOnChoreographerTimeout);
 
     const nsecs_t now = systemTime();
-    nsecs_t last, ignoreDelay;
-    if (FlagManager::getInstance().resync_on_tx_separate_timer()) {
-        static const int64_t resyncOnTxTimeout =
-                sysprop::resync_on_tx_timeout(VSyncTracker::kPredictorThreshold.ns());
-        static const int64_t resyncOnChoreographerTimeout =
-                sysprop::resync_on_choreographer_timeout(kDefaultResyncOnChoreographerTimeout);
-        last = (caller == ResyncCaller::Transaction) ? mLastResyncTimeOnTx.exchange(now)
-                                                     : mLastResyncTime.exchange(now);
-        ignoreDelay = (caller == ResyncCaller::Transaction) ? resyncOnTxTimeout
-                                                            : resyncOnChoreographerTimeout;
-        if (ignoreDelay == 0) return;
-    } else {
-        last = mLastResyncTime.exchange(now);
-        ignoreDelay = caller == ResyncCaller::Transaction ? VSyncTracker::kPredictorThreshold.ns()
-                                                          : kDefaultResyncOnChoreographerTimeout;
-    }
+    const nsecs_t last = (caller == ResyncCaller::Transaction) ? mLastResyncTimeOnTx.exchange(now)
+                                                    : mLastResyncTime.exchange(now);
+    const nsecs_t ignoreDelay = (caller == ResyncCaller::Transaction) ? resyncOnTxTimeout
+                                                        : resyncOnChoreographerTimeout;
 
-    if (now - last > ignoreDelay) {
+    if (ignoreDelay != 0 && now - last > ignoreDelay) {
         resyncAllToHardwareVsync(false /* allowToEnable */);
     }
 }

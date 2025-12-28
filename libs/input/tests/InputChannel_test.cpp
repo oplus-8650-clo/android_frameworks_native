@@ -21,6 +21,7 @@
 #include <errno.h>
 
 #include <android-base/logging.h>
+#include <android-base/result-gmock.h>
 #include <binder/Binder.h>
 #include <binder/Parcel.h>
 #include <gtest/gtest.h>
@@ -29,6 +30,9 @@
 #include <utils/StopWatch.h>
 #include <utils/StrongPointer.h>
 #include <utils/Timers.h>
+
+using android::base::testing::Ok;
+using testing::Not;
 
 namespace android {
 
@@ -110,7 +114,7 @@ TEST_F(InputChannelTest, OpenInputChannelPair_ReturnsAPairOfConnectedChannels) {
             << "server channel should be able to send message to client channel";
 
     android::base::Result<InputMessage> clientMsgResult = clientChannel->receiveMessage();
-    ASSERT_TRUE(clientMsgResult.ok())
+    ASSERT_THAT(clientMsgResult, Ok())
             << "client channel should be able to receive message from server channel";
     const InputMessage& clientMsg = *clientMsgResult;
     EXPECT_EQ(serverMsg.header.type, clientMsg.header.type)
@@ -127,7 +131,7 @@ TEST_F(InputChannelTest, OpenInputChannelPair_ReturnsAPairOfConnectedChannels) {
             << "client channel should be able to send message to server channel";
 
     android::base::Result<InputMessage> serverReplyResult = serverChannel->receiveMessage();
-    ASSERT_TRUE(serverReplyResult.ok())
+    ASSERT_THAT(serverReplyResult, Ok())
             << "server channel should be able to receive message from client channel";
     const InputMessage& serverReply = *serverReplyResult;
     EXPECT_EQ(clientReply.header.type, serverReply.header.type)
@@ -168,7 +172,7 @@ TEST_F(InputChannelTest, ProbablyHasInput) {
 
     // Receive (consume) the message.
     android::base::Result<InputMessage> clientMsgResult = receiverChannel->receiveMessage();
-    ASSERT_TRUE(clientMsgResult.ok())
+    ASSERT_THAT(clientMsgResult, Ok())
             << "client channel should be able to receive message from server channel";
     const InputMessage& clientMsg = *clientMsgResult;
     EXPECT_EQ(serverMsg.header.type, clientMsg.header.type)
@@ -253,7 +257,7 @@ TEST_F(InputChannelTest, SendAndReceive_MotionClassification) {
                 << "server channel should be able to send message to client channel";
 
         android::base::Result<InputMessage> clientMsgResult = clientChannel->receiveMessage();
-        ASSERT_TRUE(clientMsgResult.ok())
+        ASSERT_THAT(clientMsgResult, Ok())
                 << "client channel should be able to receive message from server channel";
         const InputMessage& clientMsg = *clientMsgResult;
         EXPECT_EQ(serverMsg.header.type, clientMsg.header.type);
@@ -331,7 +335,7 @@ TEST_F(InputChannelTest, ReceiveAfterCloseMultiThreaded) {
     // There should not be any more events from the client, since the client closed fd after the
     // first key.
     android::base::Result<InputMessage> noEvent = serverChannel->receiveMessage();
-    ASSERT_FALSE(noEvent.ok()) << "Got event " << *noEvent;
+    ASSERT_THAT(noEvent, Not(Ok())) << "Got event " << *noEvent;
 }
 
 /**
@@ -366,13 +370,13 @@ TEST_F(InputChannelTest, ReceiveAfterCloseSingleThreaded) {
 
     // Now try to read the finish message, even though client closed the fd
     android::base::Result<InputMessage> response = readMessage(*serverChannel);
-    ASSERT_FALSE(response.ok());
+    ASSERT_THAT(response, Not(Ok()));
     ASSERT_EQ(response.error().code(), DEAD_OBJECT);
 
     // We can still read the finish event (but in practice, the expectation is that the server will
     // not be doing this after getting DEAD_OBJECT).
     android::base::Result<InputMessage> finishEvent = serverChannel->receiveMessage();
-    ASSERT_TRUE(finishEvent.ok());
+    ASSERT_THAT(finishEvent, Ok());
     ASSERT_EQ(finishEvent->header.type, InputMessage::Type::FINISHED);
 }
 

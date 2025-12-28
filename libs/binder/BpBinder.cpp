@@ -614,13 +614,15 @@ status_t BpBinder::addFrozenStateChangeCallback(const wp<FrozenStateChangeCallba
     LOG_ALWAYS_FATAL_IF(isRpcBinder(),
                         "addFrozenStateChangeCallback() is not supported for RPC Binder.");
     LOG_ALWAYS_FATAL_IF(!kEnableKernelIpc, "Binder kernel driver disabled at build time");
-    LOG_ALWAYS_FATAL_IF(ProcessState::self()->getThreadPoolMaxTotalThreadCount() == 0,
-                        "addFrozenStateChangeCallback on %s but there are no threads "
-                        "(yet?) listening to incoming transactions. See "
-                        "ProcessState::startThreadPool "
-                        "and ProcessState::setThreadPoolMaxThreadCount. Generally you should "
-                        "setup the binder threadpool before other initialization steps.",
-                        String8(getInterfaceDescriptor()).c_str());
+    if (ProcessState::self()->getThreadPoolMaxTotalThreadCount() == 0) {
+        ALOGE("addFrozenStateChangeCallback on %s but there are no threads "
+              "(yet?) listening to incoming transactions. See "
+              "ProcessState::startThreadPool "
+              "and ProcessState::setThreadPoolMaxThreadCount. Generally you should "
+              "setup the binder threadpool before other initialization steps.",
+              String8(getInterfaceDescriptor()).c_str());
+        return INVALID_OPERATION;
+    }
     LOG_ALWAYS_FATAL_IF(callback == nullptr,
                         "addFrozenStateChangeCallback(): callback must be non-NULL");
 

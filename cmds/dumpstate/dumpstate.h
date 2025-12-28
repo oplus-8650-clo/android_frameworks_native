@@ -51,6 +51,7 @@ namespace dumpstate {
 class DumpstateTest;
 class ProgressTest;
 class ZippedBugReportStreamTest;
+class DumpsateSingletonTest;
 
 }  // namespace dumpstate
 }  // namespace os
@@ -189,8 +190,10 @@ struct DumpData {
 class Dumpstate {
     friend class android::os::dumpstate::DumpstateTest;
     friend class android::os::dumpstate::ZippedBugReportStreamTest;
+    friend class android::os::dumpstate::DumpsateSingletonTest;
 
   public:
+    enum InitializeStatus { INIT_OK, INIT_ERROR, LOCK_OCCUPIED };
     enum RunStatus { OK, HELP, INVALID_INPUT, ERROR, USER_CONSENT_DENIED, USER_CONSENT_TIMED_OUT };
 
     // The mode under which the bugreport should be run. Each mode encapsulates a few options.
@@ -222,7 +225,7 @@ class Dumpstate {
     static Dumpstate& GetInstance();
 
     /* Initialize dumpstate fields before starting bugreport generation */
-    void Initialize();
+    InitializeStatus Initialize();
 
     /*
      * Forks a command, waits for it to finish, and returns its status.
@@ -571,6 +574,9 @@ class Dumpstate {
     };
 
   private:
+    android::base::unique_fd global_bugreport_lock_;
+    InitializeStatus TryAcquireBugreportLock();
+
     RunStatus RunInternal(int32_t calling_uid, const std::string& calling_package);
     RunStatus RetrieveInternal(int32_t calling_uid, const std::string& calling_package,
                                 const bool keep_bugreport_on_retrieval,

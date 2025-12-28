@@ -719,7 +719,7 @@ def generate_list_resizing_logic(
 
     generated_code_blocks: List[str] = []
     dot_extension = f".{extension}" if extension else ""
-    for structure in structures:
+    for structure in sorted(structures):
         struct_category_mapping = VK.STRUCT_EXTENDS_MAPPING.get(structure)
         resolved_structure_name = get_class_name_from_alias(structure)
         is_valid_struct = struct_category_mapping and (
@@ -729,7 +729,7 @@ def generate_list_resizing_logic(
             dynamic_size_list_variables = VK.STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING[resolved_structure_name]
             struct_instance_name = get_struct_name(structure)
             code_block_list = [] # list of pair(if condition logic, resizing code)
-            for list_name in dynamic_size_list_variables:
+            for list_name in sorted(dynamic_size_list_variables):
                 if list_name in VK.LIST_TYPE_FIELD_AND_SIZE_MAPPING:
                     list_size_field_name = VK.LIST_TYPE_FIELD_AND_SIZE_MAPPING[list_name]
                     condition_expression = f"device{dot_extension}.{struct_instance_name}.{list_size_field_name}"

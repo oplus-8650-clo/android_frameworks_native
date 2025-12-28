@@ -59,6 +59,7 @@
 #include "../Utils.h"
 #include "../binder_module.h"
 #include "binderKernelRpcCommon.h"
+#include "gtest/gtest.h"
 
 using namespace android;
 using namespace android::binder::impl;
@@ -734,6 +735,27 @@ TEST_F(BinderLibTest, SetError) {
 
 TEST_F(BinderLibTest, GetId) {
     EXPECT_THAT(GetId(m_server), HasValue(0));
+}
+
+TEST_F(BinderLibTest, GetCallingUidWithSetuid) {
+    EXPECT_EXIT(
+            {
+                const uid_t originalUid = getuid();
+                if (IPCThreadState::self()->getCallingUid() != originalUid) {
+                    exit(1);
+                }
+
+                uid_t newUid = 1000;
+                if (seteuid(newUid) != 0) {
+                    exit(2);
+                }
+
+                if (IPCThreadState::self()->getCallingUid() == newUid) {
+                    exit(3);
+                }
+                exit(0);
+            },
+            testing::ExitedWithCode(0), "");
 }
 
 TEST_F(BinderLibTest, PtrSize) {

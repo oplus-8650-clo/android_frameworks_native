@@ -174,6 +174,42 @@ VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkRe
     }
 }
 
+VKAPI_ATTR VkResult checkedSetSwapchainPresentTimingQueueSizeEXT(VkDevice device, VkSwapchainKHR swapchain, uint32_t size) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return SetSwapchainPresentTimingQueueSizeEXT(device, swapchain, size);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkSetSwapchainPresentTimingQueueSizeEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetSwapchainTimingPropertiesEXT(VkDevice device, VkSwapchainKHR swapchain, VkSwapchainTimingPropertiesEXT* pSwapchainTimingProperties, uint64_t* pSwapchainTimingPropertiesCounter) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetSwapchainTimingPropertiesEXT(device, swapchain, pSwapchainTimingProperties, pSwapchainTimingPropertiesCounter);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetSwapchainTimingPropertiesEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetSwapchainTimeDomainPropertiesEXT(VkDevice device, VkSwapchainKHR swapchain, VkSwapchainTimeDomainPropertiesEXT* pSwapchainTimeDomainProperties, uint64_t* pTimeDomainsCounter) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetSwapchainTimeDomainPropertiesEXT(device, swapchain, pSwapchainTimeDomainProperties, pTimeDomainsCounter);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetSwapchainTimeDomainPropertiesEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetPastPresentationTimingEXT(VkDevice device, const VkPastPresentationTimingInfoEXT* pPastPresentationTimingInfo, VkPastPresentationTimingPropertiesEXT* pPastPresentationTimingProperties) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetPastPresentationTimingEXT(device, pPastPresentationTimingInfo, pPastPresentationTimingProperties);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetPastPresentationTimingEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
 // clang-format on
 
 const ProcHook g_proc_hooks[] = {
@@ -368,6 +404,13 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPastPresentationTimingEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPastPresentationTimingEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetPastPresentationTimingEXT),
+    },
+    {
         "vkGetPastPresentationTimingGOOGLE",
         ProcHook::DEVICE,
         ProcHook::GOOGLE_display_timing,
@@ -543,6 +586,20 @@ const ProcHook g_proc_hooks[] = {
         reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainStatusKHR),
     },
     {
+        "vkGetSwapchainTimeDomainPropertiesEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetSwapchainTimeDomainPropertiesEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainTimeDomainPropertiesEXT),
+    },
+    {
+        "vkGetSwapchainTimingPropertiesEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetSwapchainTimingPropertiesEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainTimingPropertiesEXT),
+    },
+    {
         "vkQueuePresentKHR",
         ProcHook::DEVICE,
         ProcHook::KHR_swapchain,
@@ -577,6 +634,13 @@ const ProcHook g_proc_hooks[] = {
         reinterpret_cast<PFN_vkVoidFunction>(SetHdrMetadataEXT),
         reinterpret_cast<PFN_vkVoidFunction>(checkedSetHdrMetadataEXT),
     },
+    {
+        "vkSetSwapchainPresentTimingQueueSizeEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(SetSwapchainPresentTimingQueueSizeEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedSetSwapchainPresentTimingQueueSizeEXT),
+    },
     // clang-format on
 };
 
@@ -610,6 +674,7 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_EXT_surface_maintenance1") == 0) return ProcHook::EXT_surface_maintenance1;
     if (strcmp(name, "VK_KHR_present_id") == 0) return ProcHook::KHR_present_id;
     if (strcmp(name, "VK_KHR_present_id2") == 0) return ProcHook::KHR_present_id2;
+    if (strcmp(name, "VK_EXT_present_timing") == 0) return ProcHook::EXT_present_timing;
     if (strcmp(name, "VK_ANDROID_external_memory_android_hardware_buffer") == 0) return ProcHook::ANDROID_external_memory_android_hardware_buffer;
     if (strcmp(name, "VK_KHR_bind_memory2") == 0) return ProcHook::KHR_bind_memory2;
     if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;

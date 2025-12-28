@@ -1019,11 +1019,13 @@ class ZippedBugReportStreamTest : public DumpstateBaseTest {
     }
     void TearDown() {
         CloseArchive(handle_);
+        ds_.global_bugreport_lock_.reset();
+        EXPECT_FALSE(ds_.global_bugreport_lock_.ok());
     }
 
     // Set bugreport mode and options before here.
     void GenerateBugreport() {
-        ds_.Initialize();
+        EXPECT_EQ(Dumpstate::InitializeStatus::INIT_OK, ds_.Initialize());
         EXPECT_EQ(Dumpstate::RunStatus::OK, ds_.Run(/*calling_uid=*/-1, /*calling_package=*/""));
     }
 
@@ -1145,6 +1147,35 @@ TEST_F(ZippedBugReportStreamTest, ScreenShotsAreIncludedInScreenShotZipFile) {
         VerifyEntry(handle_, p.filename().string(), &entry);
     }
     android::base::RemoveFileIfExists(screenshot_path);
+}
+
+class DumpsateSingletonTest : public Test {
+  public:
+    Dumpstate CreateInstance() {
+        return Dumpstate(VERSION_DEFAULT);
+    }
+};
+
+TEST_F(DumpsateSingletonTest, UponInitializedFurtherInstancesCannotInitializeAgain) {
+    Dumpstate first_instance = CreateInstance();
+    Dumpstate second_instance = CreateInstance();
+
+    EXPECT_EQ(Dumpstate::InitializeStatus::INIT_OK, first_instance.Initialize());
+    EXPECT_EQ(Dumpstate::InitializeStatus::LOCK_OCCUPIED, second_instance.Initialize());
+}
+
+TEST_F(DumpsateSingletonTest, FurtherInitializeSuccessAfterInitializedInstanceDropped) {
+    {
+        Dumpstate first_instance = CreateInstance();
+
+        EXPECT_EQ(Dumpstate::InitializeStatus::INIT_OK, first_instance.Initialize());
+    }
+
+    {
+        Dumpstate second_instance = CreateInstance();
+
+        EXPECT_EQ(Dumpstate::InitializeStatus::INIT_OK, second_instance.Initialize());
+    }
 }
 
 class ProgressTest : public DumpstateBaseTest {
