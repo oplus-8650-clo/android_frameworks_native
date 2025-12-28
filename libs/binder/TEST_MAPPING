@@ -124,6 +124,9 @@
     },
     {
       "name": "binderRpcTestNoLegacy"
+    },
+    {
+      "name": "binderRpcTest_flake_prone"
     }
   ],
   "hwasan-presubmit": [

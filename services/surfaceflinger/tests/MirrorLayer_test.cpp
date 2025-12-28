@@ -353,10 +353,6 @@ TEST_F(MirrorLayerTest, OffscreenMirrorScreenshot) {
 }
 
 TEST_F(MirrorLayerTest, MirrorLayerWithStopLayer) {
-    if (!FlagManager::getInstance().stop_layer()) {
-        GTEST_SKIP() << "skipping test - stop_layer feature flag disabled";
-    }
-
     sp<SurfaceControl> grandchild =
             createColorLayer("Grandchild layer", Color::BLUE, mChildLayer.get());
     Transaction()

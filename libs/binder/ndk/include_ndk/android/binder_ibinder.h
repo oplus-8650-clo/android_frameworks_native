@@ -967,7 +967,7 @@ void AIBinder_FrozenStateChangeCallback_delete(AIBinder_FrozenStateChangeCallbac
  * Registers for notifications that the associated binder's frozen state has changed.
  * The same callback may be associated with multiple different binders.
  *
- * If binder is local, this will return STATUS_INVALID_OPERATION.
+ * This requires a kernel binder threadpool to be started.
  *
  * Available since API level 37.
  *
@@ -976,7 +976,11 @@ void AIBinder_FrozenStateChangeCallback_delete(AIBinder_FrozenStateChangeCallbac
  * changes.
  * \param cookie the value that will be passed to the callback on state change.
  *
- * \return STATUS_OK on success.
+ * \return STATUS_OK on success
+ *         STATUS_INVALID_OPERATION if the binder is local or there are no
+ *         binder threads in the current process ready to handle the callback
+ *         notifications
+ *         STATUS_UNEXPECTED_NULL if binder or callback are null
  */
 binder_status_t AIBinder_addFrozenStateChangeCallback(AIBinder* binder,
                                                       AIBinder_FrozenStateChangeCallback* callback,

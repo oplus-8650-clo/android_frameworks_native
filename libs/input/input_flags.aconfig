@@ -64,13 +64,6 @@ flag {
 }
 
 flag {
-  name: "enable_v2_touchpad_typing_palm_rejection"
-  namespace: "input"
-  description: "In addition to touchpad palm rejection v1, v2 will also cancel ongoing move gestures while typing and add delay in re-enabling the tap to click."
-  bug: "301055381"
-}
-
-flag {
   name: "disable_reject_touch_on_stylus_hover"
   namespace: "input"
   description: "Disable touch rejection when the stylus hovers the screen"
@@ -235,16 +228,6 @@ flag {
   namespace: "input"
   description: "Log low-level events from evdev and the Gestures library in traces"
   bug: "394861376"
-}
-
-flag {
-  name: "use_separate_xy_dpi_scaling_for_mice"
-  namespace: "input"
-  description: "Use the xDpi and yDpi values to scale mouse moves"
-  bug: "432649760"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
 }
 
 flag {

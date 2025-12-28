@@ -39,6 +39,7 @@ _INTERCEPTED_EXTENSIONS = [
     'VK_EXT_surface_maintenance1',
     'VK_KHR_present_id',
     'VK_KHR_present_id2',
+    'VK_EXT_present_timing',
 ]
 
 # Extensions known to vulkan::driver level.

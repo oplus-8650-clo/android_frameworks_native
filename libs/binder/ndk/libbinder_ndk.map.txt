@@ -227,6 +227,7 @@ LIBBINDER_NDK37 { # introduced=37
     ABinderProcess_disableBackgroundScheduling; # systemapi llndk
     AServiceManager_checkServiceAccess; # systemapi llndk
     AIBinder_setMinRpcThreads; # systemapi
+    AServiceManager_registerLazyServiceWithFlags; # systemapi llndk
     AIBinder_FrozenStateChangeCallback_new;
     AIBinder_FrozenStateChangeCallback_delete;
     AIBinder_addFrozenStateChangeCallback;

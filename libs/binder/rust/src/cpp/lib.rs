@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#![no_std]
+
 //! Wrapper functions for NDK APIs with API level checks.
 
-use std::os::raw::c_char;
+use core::ffi::c_char;
 
 use binder_ndk_compat_bindgen::{
     Compat_AIBinder_Class_getFunctionName,

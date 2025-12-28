@@ -28,6 +28,7 @@
 
 using android::base::Result;
 using android::base::testing::Ok;
+using testing::Not;
 
 namespace android {
 
@@ -210,7 +211,7 @@ void sendAndVerifyFinishedSignal(InputConsumer& consumer, InputPublisher& publis
     status_t status = consumer.sendFinishedSignal(seq, false);
     ASSERT_EQ(OK, status) << "consumer sendFinishedSignal should return OK";
     Result<InputPublisher::ConsumerResponse> result = publisher.receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
     ASSERT_EQ(seq, finish.seq)
@@ -305,7 +306,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeKeyEvent() {
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
     EXPECT_FALSE(mConsumer->probablyHasInput())
             << "no events should be waiting after being consumed";
 
@@ -334,7 +335,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeKeyEvent() {
             << "consumer sendFinishedSignal should return OK";
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
     ASSERT_EQ(seq, finish.seq)
@@ -385,7 +386,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeBatchedMotionMove(nsecs_t d
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory,
                                /*consumeBatches=*/false, -1, &consumeSeq, &event);
-    ASSERT_FALSE(consumeResult.ok());
+    ASSERT_THAT(consumeResult, Not(Ok()));
     ASSERT_EQ(WOULD_BLOCK, consumeResult.error().code())
             << "consumer consume should return WOULD_BLOCK when a new batch is started";
     ASSERT_TRUE(mConsumer->hasPendingBatch()) << "consume should have created a batch";
@@ -405,7 +406,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeMotionEvent(
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
     ASSERT_TRUE(event != nullptr)
             << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::MOTION, event->getType())
@@ -431,7 +432,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeFocusEvent() {
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::FOCUS, event->getType())
@@ -446,7 +447,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeFocusEvent() {
     ASSERT_EQ(OK, status) << "consumer sendFinishedSignal should return OK";
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
 
@@ -473,7 +474,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeCaptureEvent() {
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::CAPTURE, event->getType())
@@ -488,7 +489,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeCaptureEvent() {
     ASSERT_EQ(OK, status) << "consumer sendFinishedSignal should return OK";
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
     ASSERT_EQ(seq, finish.seq)
@@ -516,7 +517,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeDragEvent() {
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::DRAG, event->getType())
@@ -533,7 +534,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeDragEvent() {
     ASSERT_EQ(OK, status) << "consumer sendFinishedSignal should return OK";
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
     ASSERT_EQ(seq, finish.seq)
@@ -559,7 +560,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeTouchModeEvent() {
     InputEvent* event;
     auto [consumeResult, unfinishedInputMessages] =
             mConsumer->consume(&mEventFactory, /*consumeBatches=*/true, -1, &consumeSeq, &event);
-    ASSERT_TRUE(consumeResult.ok()) << "consumer consume should return OK";
+    ASSERT_THAT(consumeResult, Ok()) << "consumer consume should return OK";
 
     ASSERT_TRUE(event != nullptr) << "consumer should have returned non-NULL event";
     ASSERT_EQ(InputEventType::TOUCH_MODE, event->getType())
@@ -574,7 +575,7 @@ void InputPublisherAndConsumerTest::publishAndConsumeTouchModeEvent() {
     ASSERT_EQ(OK, status) << "consumer sendFinishedSignal should return OK";
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Finished>(*result));
     const InputPublisher::Finished& finish = std::get<InputPublisher::Finished>(*result);
     ASSERT_EQ(seq, finish.seq)
@@ -623,7 +624,7 @@ TEST_F(InputPublisherAndConsumerTest, SendTimeline) {
     ASSERT_EQ(OK, status);
 
     Result<InputPublisher::ConsumerResponse> result = mPublisher->receiveConsumerResponse();
-    ASSERT_TRUE(result.ok()) << "receiveConsumerResponse should return OK";
+    ASSERT_THAT(result, Ok()) << "receiveConsumerResponse should return OK";
     ASSERT_TRUE(std::holds_alternative<InputPublisher::Timeline>(*result));
     const InputPublisher::Timeline& timeline = std::get<InputPublisher::Timeline>(*result);
     ASSERT_EQ(inputEventId, timeline.inputEventId);

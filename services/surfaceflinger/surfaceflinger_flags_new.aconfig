@@ -39,6 +39,16 @@ flag {
 } # bugfix_resize_virtual_display_surfaces
 
 flag {
+  name: "color_transform_translation"
+  namespace: "core_graphics"
+  description: "Fixes a bug that incorrectly applies a the translation component of global color transforms to source alpha"
+  bug: "432040449"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # color_transform_translation
+
+flag {
   name: "configure_work_duration"
   namespace: "window_surfaces"
   description: "Enable the work duration configuration via DisplayModeSpecs."
@@ -122,6 +132,13 @@ flag {
   description: "Guards use of the new display command modeset"
   bug: "373900661"
 } # display_command_modeset
+
+flag {
+  name: "fence_handling"
+  namespace: "window_surfaces"
+  description: "Unblock main thread with asynchronous fence handling"
+  bug: "428611036"
+} # fence_handling
 
 flag {
   name: "follower_arbitrary_refresh_rate_selection"
@@ -306,16 +323,6 @@ flag {
 } # readback_screenshot
 
 flag {
-  name: "resync_on_tx_separate_timer"
-  namespace: "core_graphics"
-  description: "Keep a seaprate resync timer for resync triggered by transactions"
-  bug: "439654802"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # resync_on_tx_separate_timer
-
-flag {
   name: "set_client_drawn_corner_radii"
   namespace: "window_surfaces"
   description: "Add support for API to set distinct radii for each corner"
@@ -360,14 +367,6 @@ flag {
   bug: "352320847"
   is_fixed_read_only: true
 } # stable_edid_ids
-
-flag {
-    name: "stop_layer"
-    namespace: "window_surfaces"
-    description: "Enables stop layers when building layer snapshots"
-    bug: "403312802"
-    is_fixed_read_only: true
-} # stop_layer
 
 flag {
   name: "synced_resolution_switch"
