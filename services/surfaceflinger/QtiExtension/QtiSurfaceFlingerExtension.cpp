@@ -107,8 +107,6 @@ void QtiSurfaceFlingerExtension::qtiInit(SurfaceFlinger* flinger) {
         }
     }
 
-    mQtiDolphinWrapper = new QtiDolphinWrapper();
-
     if (mQtiComposerExtnIntf) {
         if (mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kAdvanceSfOffset)) {
             int ret = mQtiComposerExtnIntf->CreatePhaseOffsetExtn(
@@ -225,6 +223,8 @@ QtiSurfaceFlingerExtensionIntf* QtiSurfaceFlingerExtension::qtiPostInit(
     }
 
 #endif
+
+    mQtiDolphinWrapper = new QtiDolphinWrapper(displayDevice->getWidth(), displayDevice->getHeight());
 
     return this;
 }
@@ -1798,16 +1798,16 @@ void QtiSurfaceFlingerExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {
 }
 
 void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferIncrement(const char *name,
-            bool isAutoTimestamp, nsecs_t desiredPresentTime) {
+            bool isAutoTimestamp, uint32_t flags, nsecs_t desiredPresentTime) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, isAutoTimestamp,
+        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, isAutoTimestamp, flags,
                                                            desiredPresentTime);
     }
 }
 
-void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int count) {
+void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int count, int width, int height) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, count);
+        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, count, width, height);
     }
 }
 

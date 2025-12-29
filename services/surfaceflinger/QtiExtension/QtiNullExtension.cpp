@@ -188,8 +188,8 @@ void QtiNullExtension::qtiTryDrawMethod(sp<DisplayDevice> display) {}
  */
 void QtiNullExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {}
 void QtiNullExtension::qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                      nsecs_t desiredPresentTime) {}
-void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int count) {}
+                                                      uint32_t flags, nsecs_t desiredPresentTime) {}
+void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height) {}
 void QtiNullExtension::qtiDolphinUnblockPendingBuffer() {}
 void QtiNullExtension::qtiDolphinTrackVsyncSignal() {}
 bool QtiNullExtension::qtiDolphinIsTargetFpsActive() {
