@@ -53,6 +53,7 @@ const SkString kEffectSource_LutEffect(R"(
 /* QTI_BEGIN */
         if (lutSourceIsHwc == 1) {
           linear = rgba.rgb;
+          linear = clamp(linear,float3(0.0),float3(1.0));
         }
 /* QTI_END */
         if (dimension == 1) {
