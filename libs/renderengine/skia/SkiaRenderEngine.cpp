@@ -619,11 +619,11 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
     if (graphicBuffer) {
         if (parameters.layer.luts) {
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           parameters.layer.sourceDataspace
-/* QTI_BEGIN */
                                           , parameters.layer.lutSourceIsHwc
-/* QTI_END */
                                          );
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         } else {
             std::optional<std::vector<uint8_t>> smpte2094_50;
             status_t err = graphicBuffer->getSmpte2094_50(&smpte2094_50);
@@ -1267,36 +1267,36 @@ void SkiaRenderEngine::drawLayersInternal(
 
             sk_sp<SkShader> shader;
 
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             bool useRawShader = layer.source.buffer.buffer && layer.luts && layer.lutSourceIsHwc;
-/* QTI_END */
 
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             if (layer.source.buffer.useTextureFiltering) {
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               if (useRawShader) {
                 shader = image->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp,
                                               SkSamplingOptions({SkFilterMode::kLinear,
                                                                  SkMipmapMode::kNone}),
                                               &matrix);
               } else {
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                 shader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
                                            SkSamplingOptions(
                                                    {SkFilterMode::kLinear, SkMipmapMode::kNone}),
                                            &matrix);
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               }
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             } else {
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               if (useRawShader) {
                 shader = image->makeRawShader(SkSamplingOptions(), matrix);
               } else {
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                 shader = image->makeShader(SkSamplingOptions(), matrix);
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               }
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             }
 
             if (useIsOpaqueWorkaround) {

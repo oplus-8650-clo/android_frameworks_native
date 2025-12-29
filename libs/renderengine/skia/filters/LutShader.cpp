@@ -39,9 +39,9 @@ const SkString kEffectSource_LutEffect(R"(
     uniform int size;
     uniform int key;
     uniform int dimension;
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     uniform int lutSourceIsHwc;
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     uniform vec3 luminanceCoefficients; // for CIE_Y
     // for hlg/pq transfer function, we need normalize it to [0.0, 1.0]
     // we use `normalizeScalar` to do so
@@ -50,12 +50,12 @@ const SkString kEffectSource_LutEffect(R"(
     vec4 main(vec2 xy) {
         float4 rgba = image.eval(xy);
         float3 linear = rgba.rgb * normalizeScalar;
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         if (lutSourceIsHwc == 1) {
           linear = rgba.rgb;
           linear = clamp(linear,float3(0.0),float3(1.0));
         }
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         if (dimension == 1) {
             // RGB
             if (key == 0) {
@@ -200,11 +200,11 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
                                              const int32_t offset, const int32_t length,
                                              const int32_t dimension, const int32_t size,
                                              const int32_t samplingKey,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                              ui::Dataspace srcDataspace
-/* QTI_BEGIN */
                                              , bool lutSourceIsHwc
-/* QTI_END */
                                             ) {
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     SFTRACE_NAME("lut shader");
     std::vector<half> buffer(length * 4); // 4 is for RGBA
     auto d = static_cast<LutProperties::Dimension>(dimension);
@@ -277,9 +277,9 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
     const int uSize = static_cast<int>(size); // the size per dimension
     const int uKey = static_cast<int>(samplingKey);
     const int uDimension = static_cast<int>(dimension);
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     const int ulutSourceIsHwc = lutSourceIsHwc ? 1 : 0;
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     const float uNormalizeScalar = static_cast<float>(normalizeScalar);
 
     if (static_cast<LutProperties::SamplingKey>(samplingKey) == LutProperties::SamplingKey::CIE_Y) {
@@ -293,9 +293,9 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
     mBuilder->uniform("size") = uSize;
     mBuilder->uniform("key") = uKey;
     mBuilder->uniform("dimension") = uDimension;
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     mBuilder->uniform("lutSourceIsHwc") = ulutSourceIsHwc;
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     mBuilder->uniform("normalizeScalar") = uNormalizeScalar;
 
     // de-gamma the image without changing the primaries
@@ -305,11 +305,11 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 
 sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      std::shared_ptr<gui::DisplayLuts> displayLuts,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                      ui::Dataspace srcDataspace
-/* QTI_BEGIN */
                                      , bool lutSourceIsHwc
-/* QTI_END */
                                     ) {
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     if (mBuilder == nullptr) {
         mBuilder = std::make_unique<SkRuntimeShaderBuilder>(mEffect);
     }
@@ -348,11 +348,11 @@ sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
             }
             input = generateLutShader(input, buffers, offsets[i], bufferSizePerLut,
                                       lutProperties[i].dimension, lutProperties[i].size,
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                       lutProperties[i].samplingKey, srcDataspace
-/* QTI_BEGIN */
                                       , lutSourceIsHwc
-/* QTI_END */
                                      );
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         }
     }
     return input;

@@ -190,9 +190,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     // Record the name of the layer for debugging further down the stack.
     layerSettings.name = mSnapshot->name;
     layerSettings.luts = mSnapshot->luts ? mSnapshot->luts : targetSettings.luts;
-/* QTI_BEGIN */
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     layerSettings.lutSourceIsHwc = mSnapshot->luts == nullptr;
-/* QTI_END */
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
     layerSettings.renderCommandBufferConsumer = mSnapshot->renderCommandBufferConsumer;
     layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
