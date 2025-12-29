@@ -2896,14 +2896,16 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         }
         it->second->latchBufferImpl(unused, latchTime, expectedPresentTimeNs, bgColorOnly);
         newDataLatched = true;
-// QTI_BEGIN: 2024-06-10: Performance: sf: correct dolphin hook due to improper keystone update
-        mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
-                *it->second->getPendingBufferCounter());
-// QTI_END: 2024-06-10: Performance: sf: correct dolphin hook due to improper keystone update
 
         frontend::LayerSnapshot* snapshot = mLayerSnapshotBuilder.getSnapshot(it->second->sequence);
         gui::GameMode gameMode = (snapshot) ? snapshot->gameMode : gui::GameMode::Unsupported;
         mLayersWithQueuedFrames.emplace(it->second, gameMode);
+
+        if (snapshot && snapshot->isVisible) {
+            Rect& bounds = snapshot->transformedBoundsWithoutTransparentRegion;
+            mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
+                    *it->second->getPendingBufferCounter(), bounds.getWidth(), bounds.getHeight());
+        }
     }
 
     updateLayerHistory(latchTime);
@@ -5872,13 +5874,11 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
             }
 
 // QTI_END: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
-            if (!(flags & eOneWay)) {
 // QTI_BEGIN: 2025-04-10: Performance: Add dolphin required hook back
-                mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
-// QTI_END: 2025-04-10: Performance: Add dolphin required hook back
-                    transactionState.mIsAutoTimestamp, transactionState.mDesiredPresentTime);
-// QTI_BEGIN: 2025-04-10: Performance: Add dolphin required hook back
-            }
+            mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
+                                                           transactionState.mIsAutoTimestamp,
+                                                           transactionState.mFlags,
+                                                           transactionState.mDesiredPresentTime);
 
 // QTI_END: 2025-04-10: Performance: Add dolphin required hook back
             mQtiSFExtnIntf->qtiUpdateSmomoLayerInfo(layer, transactionState.mDesiredPresentTime,
