@@ -53,7 +53,11 @@ const SkString kEffectSource_LutEffect(R"(
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         if (lutSourceIsHwc == 1) {
           linear = rgba.rgb;
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
+// QTI_BEGIN: 2025-12-24: Display: renderengine: Add clamp in Lutshader
           linear = clamp(linear,float3(0.0),float3(1.0));
+// QTI_END: 2025-12-24: Display: renderengine: Add clamp in Lutshader
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         }
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         if (dimension == 1) {
