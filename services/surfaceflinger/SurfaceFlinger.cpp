@@ -5874,13 +5874,11 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
             }
 
 // QTI_END: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
-// QTI_BEGIN: 2025-04-10: Performance: Add dolphin required hook back
             mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
                                                            transactionState.mIsAutoTimestamp,
                                                            transactionState.mFlags,
                                                            transactionState.mDesiredPresentTime);
 
-// QTI_END: 2025-04-10: Performance: Add dolphin required hook back
             mQtiSFExtnIntf->qtiUpdateSmomoLayerInfo(layer, transactionState.mDesiredPresentTime,
                                                     transactionState.mIsAutoTimestamp,
 // QTI_BEGIN: 2023-06-07: Display: sfext: Fix compilation error for FRC Frame Pacing Feature
