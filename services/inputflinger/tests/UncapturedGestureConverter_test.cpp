@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <tuple>
+#include <vector>
 
 #include <android-base/result-gmock.h>
 #include <android-base/result.h>
@@ -33,6 +34,7 @@
 #include "TestEventMatchers.h"
 #include "TestInputListener.h"
 #include "include/gestures.h"
+#include "input/ScopedFlagOverride.h"
 #include "ui/Rotation.h"
 
 namespace android {
@@ -1179,6 +1181,9 @@ TEST_F(UncapturedGestureConverterTest, ResetWithButtonPressed) {
                                           WithButtonState(0))),
                             VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                          WithButtonState(0))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
                                           WithButtonState(0)))));
     ASSERT_THAT(args,
                 Each(VariantWith<NotifyMotionArgs>(
@@ -1206,6 +1211,10 @@ TEST_F(UncapturedGestureConverterTest, ResetDuringScroll) {
                                                      MotionFlag::NO_FOCUS_CHANGE}))),
                             VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                          WithCoords(0, 0),
+                                          WithMotionClassification(MotionClassification::NONE))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
                                           WithCoords(0, 0),
                                           WithMotionClassification(MotionClassification::NONE)))));
     ASSERT_THAT(args,
@@ -1248,6 +1257,9 @@ TEST_F(UncapturedGestureConverterTest, ResetDuringThreeFingerSwipe) {
                                           WithPointerCount(1u))),
                             VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                          WithMotionClassification(MotionClassification::NONE))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
                                           WithMotionClassification(MotionClassification::NONE)))));
     ASSERT_THAT(args,
                 Each(VariantWith<NotifyMotionArgs>(
@@ -1279,6 +1291,10 @@ TEST_F(UncapturedGestureConverterTest, ResetDuringPinch) {
                                           WithPointerCount(1u))),
                             VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                          WithCoords(0, 0),
+                                          WithMotionClassification(MotionClassification::NONE))),
+                            VariantWith<NotifyMotionArgs>(
+                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
                                           WithCoords(0, 0),
                                           WithMotionClassification(MotionClassification::NONE)))));
     ASSERT_THAT(args,
@@ -1700,25 +1716,14 @@ TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, KeypressCancelsHoverMove,
                                     WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE))));
 }
 
-/**
- * Tests that the event stream output by the converter remains consistent when converting sequences
- * of Gestures interleaved with button presses in various ways. Takes tuples of three Gestures: one
- * that starts the gesture sequence, one that continues it (which may or may not be used in a
- * particular test case), and one that ends it.
- */
-class GestureConverterConsistencyTest
-      : public UncapturedGestureConverterTest,
-        public testing::WithParamInterface<std::tuple<Gesture, Gesture, Gesture>> {
+class UncapturedGestureConverterConsistencyTest : public UncapturedGestureConverterTest {
 protected:
-    GestureConverterConsistencyTest()
+    FIXTURE_FLAG_OVERRIDE(enable_button_state_verification, true);
+    UncapturedGestureConverterConsistencyTest()
           : UncapturedGestureConverterTest(),
-            mParamStartGesture(std::get<0>(GetParam())),
-            mParamContinueGesture(std::get<1>(GetParam())),
-            mParamEndGesture(std::get<2>(GetParam())),
             mDeviceContext(*mDevice, EVENTHUB_ID),
             mConverter(*mReader->getContext(), mDeviceContext, DEVICE_ID) {
         mConverter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
-        input_flags::enable_button_state_verification(true);
         mVerifier = std::make_unique<InputVerifier>("Test verifier");
     }
 
@@ -1729,33 +1734,68 @@ protected:
                                           arg.flags, arg.buttonState, arg.downTime);
     }
 
-    void verifyArgsFromGesture(const Gesture& gesture, size_t gestureIndex) {
-        std::list<NotifyArgs> args =
-                mConverter.handleGesture(ARBITRARY_TIME, READ_TIME, ARBITRARY_TIME, gesture);
+    void verifyArgs(const std::list<NotifyArgs>& args) {
         for (const NotifyArgs& notifyArg : args) {
             const NotifyMotionArgs& arg = std::get<NotifyMotionArgs>(notifyArg);
-            ASSERT_THAT(processMotionArgs(arg), Ok())
-                    << "when processing " << arg.dump() << "\nfrom gesture " << gestureIndex << ": "
-                    << gesture.String();
+            ASSERT_THAT(processMotionArgs(arg), Ok()) << "When processing " << arg.dump();
         }
     }
 
     void verifyArgsFromGestures(const std::vector<Gesture>& gestures) {
         for (size_t i = 0; i < gestures.size(); i++) {
-            ASSERT_NO_FATAL_FAILURE(verifyArgsFromGesture(gestures[i], i));
+            std::list<NotifyArgs> args = mConverter.handleGesture(ARBITRARY_TIME, READ_TIME,
+                                                                  ARBITRARY_TIME, gestures[i]);
+            ASSERT_NO_FATAL_FAILURE(verifyArgs(args))
+                    << "When processing gesture " << i << ": " << gestures[i].String();
         }
     }
-
-    Gesture mParamStartGesture;
-    Gesture mParamContinueGesture;
-    Gesture mParamEndGesture;
 
     InputDeviceContext mDeviceContext;
     UncapturedGestureConverter mConverter;
     std::unique_ptr<InputVerifier> mVerifier;
 };
 
-TEST_P(GestureConverterConsistencyTest, ButtonChangesDuringGesture) {
+// Regression test for b/458469793, where resetting the device didn't reset the hover state
+// correctly, leading to an extra HOVER_EXIT if the next gesture after the reset involved fake
+// fingers.
+TEST_F(UncapturedGestureConverterConsistencyTest, MoveResetScroll) {
+    verifyArgsFromGestures({Gesture(kGestureMove, GESTURE_TIME, GESTURE_TIME, 4, -2)});
+    verifyArgs(mConverter.reset(ARBITRARY_TIME));
+    mVerifier->resetDevice(DEVICE_ID);
+    verifyArgsFromGestures({Gesture(kGestureScroll, GESTURE_TIME, GESTURE_TIME, 0, -10)});
+}
+
+// Another regression test for b/458469793.
+TEST_F(UncapturedGestureConverterConsistencyTest, MoveResetPinch) {
+    verifyArgsFromGestures({Gesture(kGestureMove, GESTURE_TIME, GESTURE_TIME, 4, -2)});
+    verifyArgs(mConverter.reset(ARBITRARY_TIME));
+    mVerifier->resetDevice(DEVICE_ID);
+    verifyArgsFromGestures(
+            {Gesture(kGesturePinch, GESTURE_TIME, GESTURE_TIME, /*dz=*/1, GESTURES_ZOOM_START)});
+}
+
+/**
+ * Tests that the event stream output by the converter remains consistent when converting sequences
+ * of Gestures interleaved with button presses in various ways. Takes tuples of three Gestures: one
+ * that starts the gesture sequence, one that continues it (which may or may not be used in a
+ * particular test case), and one that ends it.
+ */
+class UncapturedGestureConverterButtonGestureConsistencyTest
+      : public UncapturedGestureConverterConsistencyTest,
+        public testing::WithParamInterface<std::tuple<Gesture, Gesture, Gesture>> {
+protected:
+    UncapturedGestureConverterButtonGestureConsistencyTest()
+          : UncapturedGestureConverterConsistencyTest(),
+            mParamStartGesture(std::get<0>(GetParam())),
+            mParamContinueGesture(std::get<1>(GetParam())),
+            mParamEndGesture(std::get<2>(GetParam())) {}
+
+    Gesture mParamStartGesture;
+    Gesture mParamContinueGesture;
+    Gesture mParamEndGesture;
+};
+
+TEST_P(UncapturedGestureConverterButtonGestureConsistencyTest, ButtonChangesDuringGesture) {
     verifyArgsFromGestures({
             mParamStartGesture,
             Gesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
@@ -1767,7 +1807,8 @@ TEST_P(GestureConverterConsistencyTest, ButtonChangesDuringGesture) {
     });
 }
 
-TEST_P(GestureConverterConsistencyTest, ButtonDownDuringGestureAndUpAfterEnd) {
+TEST_P(UncapturedGestureConverterButtonGestureConsistencyTest,
+       ButtonDownDuringGestureAndUpAfterEnd) {
     verifyArgsFromGestures({
             mParamStartGesture,
             Gesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
@@ -1779,7 +1820,7 @@ TEST_P(GestureConverterConsistencyTest, ButtonDownDuringGestureAndUpAfterEnd) {
     });
 }
 
-TEST_P(GestureConverterConsistencyTest, GestureStartAndEndDuringButtonDown) {
+TEST_P(UncapturedGestureConverterButtonGestureConsistencyTest, GestureStartAndEndDuringButtonDown) {
     verifyArgsFromGestures({
             Gesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
                     /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_NONE, /*is_tap=*/false),
@@ -1791,7 +1832,8 @@ TEST_P(GestureConverterConsistencyTest, GestureStartAndEndDuringButtonDown) {
     });
 }
 
-TEST_P(GestureConverterConsistencyTest, GestureStartsWhileButtonDownAndEndsAfterUp) {
+TEST_P(UncapturedGestureConverterButtonGestureConsistencyTest,
+       GestureStartsWhileButtonDownAndEndsAfterUp) {
     verifyArgsFromGestures({
             Gesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
                     /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_NONE, /*is_tap=*/false),
@@ -1803,7 +1845,7 @@ TEST_P(GestureConverterConsistencyTest, GestureStartsWhileButtonDownAndEndsAfter
     });
 }
 
-TEST_P(GestureConverterConsistencyTest, TapToClickDuringGesture) {
+TEST_P(UncapturedGestureConverterButtonGestureConsistencyTest, TapToClickDuringGesture) {
     verifyArgsFromGestures({
             mParamStartGesture,
             Gesture(kGestureButtonsChange, GESTURE_TIME, GESTURE_TIME,
@@ -1813,7 +1855,7 @@ TEST_P(GestureConverterConsistencyTest, TapToClickDuringGesture) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        GestureAndButtonInterleavings, GestureConverterConsistencyTest,
+        GestureAndButtonInterleavings, UncapturedGestureConverterButtonGestureConsistencyTest,
         testing::Values(
                 std::make_tuple(Gesture(kGestureScroll, GESTURE_TIME, GESTURE_TIME, 0, -10),
                                 Gesture(kGestureScroll, GESTURE_TIME, GESTURE_TIME, 0, -5),

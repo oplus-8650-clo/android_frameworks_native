@@ -163,13 +163,6 @@ flag {
 }
 
 flag {
-  name: "keyboard_repeat_keys"
-  namespace: "input"
-  description: "Allow user to enable key repeats or configure timeout before key repeat and key repeat delay rates."
-  bug: "336585002"
-}
-
-flag {
   name: "set_input_device_kernel_wake"
   namespace: "input"
   description: "Set input device's power/wakeup sysfs node"
@@ -248,16 +241,6 @@ flag {
 }
 
 flag {
-  name: "touchpad_bottom_right_click_region_fix"
-  namespace: "input"
-  description: "Fix the 'Bottom-right click' touchpad setting so it actually only affects the bottom-right corner of the touchpad, rather than the whole right side."
-  bug: "352584365"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "touchpad_down_time_fix"
   namespace: "input"
   description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
@@ -272,4 +255,24 @@ flag {
   namespace: "input"
   description: "Enable AttentionService APIs"
   bug: "438159795"
+}
+
+flag {
+  name: "fix_input_anr_by_send_message_exception"
+  namespace: "input"
+  description: "Fix a bug where unhandled finishInputEvent statuses were causing ANRs on cancelled motion events"
+  bug: "422114163"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "fix_action_up_resampling"
+  namespace: "input"
+  description: "Fix a bug where ACTION_UP events are not resampled causing noticeable jank"
+  bug: "119214052"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
 }

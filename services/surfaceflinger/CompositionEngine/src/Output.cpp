@@ -49,6 +49,7 @@
 #include <optional>
 #include <thread>
 
+#include "common/Panopticon.h"
 #include "renderengine/ExternalTexture.h"
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
@@ -61,6 +62,7 @@
 #pragma clang diagnostic pop // ignored "-Wconversion"
 
 #include <android-base/properties.h>
+#include <gui/LayerState.h>
 #include <ui/DebugUtils.h>
 #include <ui/HdrCapabilities.h>
 
@@ -464,6 +466,11 @@ void Output::prepare(const compositionengine::CompositionRefreshArgs& refreshArg
 
 ftl::Future<std::monostate> Output::present(
         const compositionengine::CompositionRefreshArgs& refreshArgs) {
+    std::optional<panopticon::ExclusiveToken> exclusive;
+    if (auto displayId = getDisplayId(); displayId) {
+        *exclusive = panopticon::exclusive(std::to_string(displayId->value));
+    }
+
     const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
         return getDisplayIdVariant()
                 .and_then(asPhysicalDisplayId)
@@ -487,7 +494,6 @@ ftl::Future<std::monostate> Output::present(
     SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
                    stringifyExpectedPresentTime().c_str());
     ALOGV(__FUNCTION__);
-
     updateColorProfile(refreshArgs);
     updateCompositionState(refreshArgs);
     planComposition();
@@ -799,10 +805,20 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
     // one, or create a new one if we do not.
     auto outputLayer = ensureOutputLayer(prevOutputLayerIndex, layerFE);
 
-    coverage.aboveBlurRequests += static_cast<int32_t>(layerFEState->backgroundBlurRadius > 0);
-    // Each blur region can contain a separate blur radius so we need to count each region
-    // as a separate request.
-    coverage.aboveBlurRequests += static_cast<int32_t>(layerFEState->blurRegions.size());
+    auto ownerIsPrivileged = ((layerFEState->permissions &
+                               layer_state_t::Permission::ACCESS_SURFACE_FLINGER) != 0) ||
+            ((layerFEState->permissions & layer_state_t::Permission::ROTATE_SURFACE_FLINGER) !=
+             0) ||
+            ((layerFEState->permissions & layer_state_t::Permission::INTERNAL_SYSTEM_WINDOW) !=
+             0) ||
+            ((layerFEState->permissions & layer_state_t::Permission::READ_FRAME_BUFFER) != 0);
+
+    if (!ownerIsPrivileged) {
+        coverage.aboveBlurRequests += static_cast<int32_t>(layerFEState->backgroundBlurRadius > 0);
+        // Each blur region can contain a separate blur radius so we need to count each region
+        // as a separate request.
+        coverage.aboveBlurRequests += static_cast<int32_t>(layerFEState->blurRegions.size());
+    }
 
     // Store the layer coverage information into the layer state as some of it
     // is useful later.
@@ -822,7 +838,8 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
     // See b/399120953: blurs are so expensive that they may be susceptible to compression side
     // channel attacks
     static constexpr auto kMaxBlurRequests = 10;
-    outputLayerState.ignoreBlur = coverage.aboveBlurRequests > kMaxBlurRequests;
+    outputLayerState.ignoreBlur =
+            coverage.aboveBlurRequests > kMaxBlurRequests && !ownerIsPrivileged;
     if (CC_UNLIKELY(computeAboveCoveredExcludingOverlays)) {
         outputLayerState.coveredRegionExcludingDisplayOverlays =
                 std::move(coveredRegionExcludingDisplayOverlays);
@@ -1084,18 +1101,18 @@ ui::Dataspace Output::getBestDataspace(ui::Dataspace* outHdrDataSpace,
                 break;
             case ui::Dataspace::BT2020_PQ:
             case ui::Dataspace::BT2020_ITU_PQ:
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 *outHdrDataSpace = ui::Dataspace::BT2020_PQ;
                 *outIsHdrClientComposition =
                         layer->getLayerFE().getCompositionState()->forceClientComposition;
                 break;
             case ui::Dataspace::BT2020_HLG:
             case ui::Dataspace::BT2020_ITU_HLG:
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
                 // When there's mixed PQ content and HLG content, we set the HDR
                 // data space to be BT2020_HLG and convert PQ to HLG.
                 if (*outHdrDataSpace == ui::Dataspace::UNKNOWN) {
@@ -1128,11 +1145,11 @@ compositionengine::Output::ColorProfile Output::pickColorProfile(
         case ui::ColorMode::DISPLAY_P3:
             bestDataSpace = ui::Dataspace::DISPLAY_P3;
             break;
-// QTI_BEGIN: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_BEGIN: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
         case ui::ColorMode::DISPLAY_BT2020:
             bestDataSpace = ui::Dataspace::DISPLAY_BT2020;
             break;
-// QTI_END: 2025-09-10: Multimedia/Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
+// QTI_END: 2025-09-10: Display: sf:BT2020: Add BT2020 blending space support for BT2020 gamut
         default:
             break;
     }
@@ -1239,7 +1256,9 @@ void Output::prepareFrame() {
 }
 
 ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync(bool flushEvenWhenDisabled) {
-    return ftl::Future<bool>(mHwComposerAsyncWorker->send([this, flushEvenWhenDisabled]() {
+    return ftl::Future<bool>(mHwComposerAsyncWorker->send([this, flushEvenWhenDisabled,
+                                                           registration = panopticon::share()]() {
+               registration->start();
                presentFrameAndReleaseLayers(flushEvenWhenDisabled);
                return true;
            }))
@@ -1248,8 +1267,10 @@ ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync(bool flush
 
 std::future<bool> Output::chooseCompositionStrategyAsync(
         std::optional<android::HWComposer::DeviceRequestedChanges>* changes) {
-    return mHwComposerAsyncWorker->send(
-            [&, changes]() { return chooseCompositionStrategy(changes); });
+    return mHwComposerAsyncWorker->send([&, changes, registration = panopticon::share()]() {
+        registration->start();
+        return chooseCompositionStrategy(changes);
+    });
 }
 
 GpuCompositionResult Output::prepareFrameAsync() {
@@ -1393,9 +1414,7 @@ void Output::updateProtectedContentState() {
     if (outputState.isProtected && supportsProtectedContent) {
         auto layers = getOutputLayersOrderedByZ();
         bool needsProtected = std::any_of(layers.begin(), layers.end(), [](auto* layer) {
-            return layer->getLayerFE().getCompositionState()->hasProtectedContent &&
-                    (!FlagManager::getInstance().protected_if_client() ||
-                     layer->requiresClientComposition());
+            return layer->getLayerFE().getCompositionState()->hasProtectedContent;
         });
 // QTI_BEGIN: 2023-04-28: Display: sf: Fix secure to nonsecure transitions
 

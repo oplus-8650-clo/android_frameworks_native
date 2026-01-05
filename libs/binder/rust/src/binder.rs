@@ -28,7 +28,7 @@ use std::convert::TryFrom;
 use std::ffi::{c_void, CStr, CString};
 use std::fmt;
 #[cfg(feature = "std")]
-use std::io::Write;
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::ops::Deref;
 #[cfg(feature = "std")]
@@ -69,6 +69,21 @@ pub trait Interface: Send + Sync + DowncastSync {
     /// Binder service struct that wishes to respond to dump transactions.
     #[cfg(feature = "std")]
     fn dump(&self, _writer: &mut dyn Write, _args: &[&CStr]) -> Result<()> {
+        Ok(())
+    }
+
+    #[cfg(all(feature = "std", not(android_ndk)))]
+    /// Shell command transaction handler for this Binder object.
+    ///
+    /// This handler is a no-op by default and should be implemented for each
+    /// Binder service struct that wishes to respond to shell commands.
+    fn shell_command(
+        &self,
+        _stdin: &mut dyn Read,
+        _stdout: &mut dyn Write,
+        _stderr: &mut dyn Write,
+        _args: &[&CStr],
+    ) -> Result<()> {
         Ok(())
     }
 }
@@ -198,6 +213,17 @@ pub trait Remotable: Send + Sync + 'static {
     /// object.
     #[cfg(feature = "std")]
     fn on_dump(&self, file: &mut dyn Write, args: &[&CStr]) -> Result<()>;
+
+    /// Handle a request to invoke the shell command transaction on this
+    /// object.
+    #[cfg(all(feature = "std", not(android_ndk)))]
+    fn on_shell_command(
+        &self,
+        stdin: &mut dyn Read,
+        stdout: &mut dyn Write,
+        stderr: &mut dyn Write,
+        args: &[&CStr],
+    ) -> Result<()>;
 
     /// Retrieve the class of this remote object.
     ///
@@ -402,6 +428,8 @@ impl InterfaceClass {
                 panic!("Expected non-null class pointer from AIBinder_Class_define!");
             }
             sys::AIBinder_Class_setOnDump(class, Some(I::on_dump));
+            #[cfg(not(android_ndk))]
+            sys::AIBinder_Class_setHandleShellCommand(class, Some(I::on_shell_command));
             class
         };
         InterfaceClass(ptr)
@@ -447,6 +475,8 @@ impl InterfaceClass {
         // a valid pointer returned by `AIBinder_Class_define`.
         unsafe {
             sys::AIBinder_Class_setOnDump(class, Some(I::on_dump));
+            #[cfg(not(android_ndk))]
+            sys::AIBinder_Class_setHandleShellCommand(class, Some(I::on_shell_command));
         }
         InterfaceClass(class)
     }
@@ -741,6 +771,24 @@ pub trait InterfaceClassMethods {
         args: *mut *const c_char,
         num_args: u32,
     ) -> status_t;
+
+    /// Called to handle the `shellCommand` transaction.
+    ///
+    /// # Safety
+    ///
+    /// Must be called with a non-null, valid pointer to a local `AIBinder` that
+    /// contains a `T` pointer in its user data. stdin, stdout, and stderr
+    /// should be non-owned file descriptors, and args must be an array of
+    /// null-terminated string pointers with length num_args.
+    #[cfg(not(android_ndk))]
+    unsafe extern "C" fn on_shell_command(
+        binder: *mut sys::AIBinder,
+        stdin: i32,
+        stdout: i32,
+        stderr: i32,
+        args: *mut *const c_char,
+        num_args: u32,
+    ) -> status_t;
 }
 
 /// Interface for transforming a generic SpIBinder into a specific remote
@@ -852,6 +900,37 @@ macro_rules! on_dump_impl {
 #[cfg(not(feature = "std"))]
 #[macro_export]
 macro_rules! on_dump_impl {
+    () => {};
+}
+
+/// A helper to generate on_shell_command.
+/// This is pulled out into its own macro so that it's
+/// correctly conditionally generated based on feature = "std".
+///
+/// It is not expected that callers use this directly, but it is
+/// exported because it's used in declare_binder_interface!
+#[doc(hidden)]
+#[cfg(all(feature = "std", not(android_ndk)))]
+#[macro_export]
+macro_rules! on_shell_command_impl {
+    () => {
+        fn on_shell_command(
+            &self,
+            stdin: &mut dyn std::io::Read,
+            stdout: &mut dyn std::io::Write,
+            stderr: &mut dyn std::io::Write,
+            args: &[&std::ffi::CStr],
+        ) -> std::result::Result<(), $crate::StatusCode> {
+            self.0.shell_command(stdin, stdout, stderr, args)
+        }
+    };
+}
+
+/// no-op version of `on_shell_command_impl` for `no_std` builds
+#[doc(hidden)]
+#[cfg(not(all(feature = "std", not(android_ndk))))]
+#[macro_export]
+macro_rules! on_shell_command_impl {
     () => {};
 }
 
@@ -1105,6 +1184,8 @@ macro_rules! declare_binder_interface {
             }
 
             $crate::on_dump_impl!();
+
+            $crate::on_shell_command_impl!();
 
             fn get_class() -> $crate::binder_impl::InterfaceClass {
                 static CLASS: std::sync::OnceLock<$crate::binder_impl::InterfaceClass> =

@@ -199,8 +199,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
 // QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     int intValue = 0;
 // QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
-// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
     if (!mQtiSurfaceExtn) {
+// QTI_BEGIN: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
         mQtiSurfaceExtn = new libguiextension::QtiSurfaceExtension(this);
 // QTI_END: 2024-04-07: Display: gui: use mapper5 for setting vendor metadata.
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
@@ -1879,6 +1879,9 @@ int Surface::perform(int operation, va_list args)
     case NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED:
         res = dispatchIsProducerThrottlingEnabled(args);
         break;
+    case NATIVE_WINDOW_SET_PRESENT_MODE:
+        res = dispatchSetPresentMode(args);
+        break;
     default:
         res = NAME_NOT_FOUND;
         break;
@@ -2124,6 +2127,11 @@ int Surface::dispatchIsProducerThrottlingEnabled(va_list args) {
     return isProducerThrottlingEnabled(outEnabled);
 }
 
+int Surface::dispatchSetPresentMode(va_list args) {
+    int32_t mode = va_arg(args, int32_t);
+    return setPresentMode(mode);
+}
+
 int Surface::dispatchAddCancelInterceptor(va_list args) {
     ANativeWindow_cancelBufferInterceptor interceptor =
             va_arg(args, ANativeWindow_cancelBufferInterceptor);
@@ -2248,6 +2256,7 @@ int Surface::dispatchSetFrameTimelineInfo(va_list args) {
     ftlInfo.skippedFrameVsyncId = nativeWindowFtlInfo.skippedFrameVsyncId;
     ftlInfo.skippedFrameStartTimeNanos = nativeWindowFtlInfo.skippedFrameStartTimeNanos;
     ftlInfo.vsyncResyncedJitterNanos = nativeWindowFtlInfo.vsyncResyncedJitterNanos;
+    ftlInfo.dequeueBufferDurationNanos = nativeWindowFtlInfo.dequeueBufferDurationNanos;
 
     return setFrameTimelineInfo(nativeWindowFtlInfo.frameNumber, ftlInfo);
 #endif
@@ -2601,8 +2610,8 @@ int Surface::setMaxDequeuedBufferCount(int maxDequeuedBuffers) {
         return err;
     }
 
-    if (maxDequeuedBuffers > (int)mSlots.size()) {
-        int newSlotCount = minUndequeuedBuffers + maxDequeuedBuffers;
+    int newSlotCount = minUndequeuedBuffers + maxDequeuedBuffers;
+    if (newSlotCount > (int)mSlots.size()) {
         err = mGraphicBufferProducer->extendSlotCount(newSlotCount);
         if (err != OK) {
             SURF_LOGE("IGraphicBufferProducer::extendSlotCount(%d) returned %s", newSlotCount,
@@ -3244,6 +3253,10 @@ status_t Surface::setAdditionalOptions(const std::vector<gui::AdditionalOptions>
     return mGraphicBufferProducer->setAdditionalOptions(options);
 }
 #endif
+
+status_t Surface::setPresentMode(int32_t mode) {
+    return mGraphicBufferProducer->setPresentMode(mode);
+}
 
 sp<IBinder> Surface::getSurfaceControlHandle() const {
     Mutex::Autolock lock(mMutex);

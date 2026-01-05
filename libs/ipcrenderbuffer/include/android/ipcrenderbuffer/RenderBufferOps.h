@@ -26,7 +26,10 @@
 /*
 #include <SkCanvasPriv.h>
 */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #include <SkCanvasVirtualEnforcer.h>
+#pragma clang diagnostic pop
 #include <SkColor.h>
 #include <SkDrawable.h>
 // #include <SkGainmapInfo.h>
@@ -75,11 +78,10 @@ namespace android {
 
 struct IPCClientBitmap {
     uint64_t id;
-    sp<GraphicBuffer> buffer;
 };
 
 struct IPCClientResourceCache {
-    std::map<uint32_t, IPCClientBitmap> bitmaps;
+    std::map<uint64_t, IPCClientBitmap> bitmaps;
 };
 
 struct IPCServerBitmap {

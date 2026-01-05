@@ -33,7 +33,10 @@ namespace android::gui {
 class FenceMonitor {
 public:
     explicit FenceMonitor(const char* name);
-    void queueFence(const sp<Fence>& fence);
+    void queueFence(const sp<Fence>& fence) {
+        queueFence(fence, {});
+    }
+    void queueFence(const sp<Fence>& fence, std::function<void(std::function<void()>)> tracer);
 
 private:
     void loop();
@@ -42,7 +45,12 @@ private:
     const char* mName;
     uint32_t mFencesQueued;
     uint32_t mFencesSignaled;
-    std::deque<sp<Fence>> mQueue;
+    struct Payload {
+        sp<Fence> fence;
+        std::function<void(std::function<void()>)> tracer;
+    };
+
+    std::deque<Payload> mQueue;
     std::condition_variable mCondition;
     std::mutex mMutex;
 // QTI_BEGIN: 2025-05-12: Performance: Add a new feature for GPU big jank detection by monitoring GPU completion in FenceMonitor

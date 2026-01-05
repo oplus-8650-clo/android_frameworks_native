@@ -28,4 +28,10 @@ constexpr bool kEnableKernelIpc = true;
 constexpr bool kEnableKernelIpc = false;
 #endif // BINDER_WITH_KERNEL_IPC
 
+#ifdef LIBBINDER_BINDER_OBSERVER_V2
+constexpr bool kBinderObserverV2Enabled = true;
+#else
+constexpr bool kBinderObserverV2Enabled = false;
+#endif
+
 } // namespace android

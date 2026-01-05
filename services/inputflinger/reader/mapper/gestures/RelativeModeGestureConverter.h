@@ -23,6 +23,7 @@
 #include "InputReaderContext.h"
 #include "NotifyArgs.h"
 #include "input/Input.h"
+#include "input/InputDevice.h"
 
 #include "include/gestures.h"
 
@@ -37,6 +38,9 @@ public:
     std::string dump() const;
 
     [[nodiscard]] std::list<NotifyArgs> reset(nsecs_t when);
+
+    void populateMotionRanges(InputDeviceInfo& info, double pointerMovementPerMm,
+                              double scrollTicksPerMm) const;
 
     [[nodiscard]] std::list<NotifyArgs> handleGesture(nsecs_t when, nsecs_t readTime,
                                                       nsecs_t gestureStartTime,

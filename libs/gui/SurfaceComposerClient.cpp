@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <algorithm>
 
+#include <android-base/logging.h>
 #include <android/gui/BnWindowInfosReportedListener.h>
 #include <android/gui/DisplayState.h>
 #include <android/gui/EdgeExtensionParameters.h>
@@ -2529,6 +2530,44 @@ SurfaceComposerClient::Transaction::clearTrustedPresentationCallback(const sp<Su
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderCommandBuffer(
+        const sp<SurfaceControl>& sc,
+        const std::shared_ptr<RenderCommandBufferProducer>& producer) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderCommandBufferChanged;
+    s->renderCommandBufferProducer = producer;
+    return *this;
+}
+
+SurfaceComposerClient::Transaction&
+SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<SurfaceControl>& sc,
+                                                                  uint64_t frameId) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderCommandBufferFrameIdChanged;
+    s->renderCommandBufferFrameId = frameId;
+    return *this;
+}
+
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderResourceToken(
+        const sp<SurfaceControl>& sc, const sp<IBinder>& token) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eRenderResourceTokenChanged;
+    s->renderResourceToken = token;
+    return *this;
+}
+
 // ---------------------------------------------------------------------------
 
 SurfaceComposerClient::SurfaceComposerClient() : mStatus(NO_INIT) {}
@@ -2652,17 +2691,34 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFr
     return nullptr;
 }
 
-sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
-    Mutex::Autolock _lm(mLock);
+sp<SurfaceControl> SurfaceComposerClient::mirrorLayerStack(DisplayId displayId) {
+    const Mutex::Autolock lock(mLock);
 
-    gui::CreateSurfaceResult result;
-    const binder::Status status = mClient->mirrorDisplay(displayId.value, &result);
-    const status_t err = statusTFromBinderStatus(status);
-    if (err == NO_ERROR) {
-        return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
-                                        result.handle, result.layerId, toString(result.layerName));
+    gui::CreateSurfaceResult outSurfaceResult;
+    const binder::Status status = mClient->mirrorLayerStack(displayId.value, &outSurfaceResult);
+    if (const status_t errorCode = statusTFromBinderStatus(status); errorCode != OK) {
+        LOG(ERROR) << "Failed to mirror layer stack for display ID " << to_string(displayId)
+                   << ". Error: " << statusToString(errorCode);
+        return nullptr;
     }
-    return nullptr;
+    return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
+                                    outSurfaceResult.handle, outSurfaceResult.layerId,
+                                    toString(outSurfaceResult.layerName));
+}
+
+sp<SurfaceControl> SurfaceComposerClient::mirrorDisplay(DisplayId displayId) {
+    const Mutex::Autolock lock(mLock);
+
+    gui::CreateSurfaceResult outSurfaceResult;
+    const binder::Status status = mClient->mirrorDisplay(displayId.value, &outSurfaceResult);
+    if (const status_t errorCode = statusTFromBinderStatus(status); errorCode != OK) {
+        LOG(ERROR) << "Failed to mirror display ID " << to_string(displayId)
+                   << ". Error: " << statusToString(errorCode);
+        return nullptr;
+    }
+    return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),
+                                    outSurfaceResult.handle, outSurfaceResult.layerId,
+                                    toString(outSurfaceResult.layerName));
 }
 
 status_t SurfaceComposerClient::clearLayerFrameStats(const sp<IBinder>& token) const {
@@ -2871,11 +2927,10 @@ status_t SurfaceComposerClient::getActiveDisplayMode(const sp<IBinder>& display,
     return NAME_NOT_FOUND;
 }
 
-status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                                           const gui::DisplayModeSpecs& specs) {
+status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(
+        const std::vector<gui::DisplayModeSpecs>& specs) {
     binder::Status status =
-            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(displayToken,
-                                                                                  specs);
+            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(specs);
     return statusTFromBinderStatus(status);
 }
 

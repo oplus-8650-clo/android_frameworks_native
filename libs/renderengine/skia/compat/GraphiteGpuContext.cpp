@@ -24,15 +24,14 @@
 #include <include/gpu/graphite/Surface.h>
 #include <include/gpu/graphite/vk/VulkanGraphiteUtils.h>
 
-#include "Base64.h"
 #include "GpuTypes.h"
 #include "SkRefCnt.h"
 #include "graphite/Image.h"
 #include "graphite/ImageProvider.h"
 #include "skia/compat/GraphiteBackendTexture.h"
+#include "skia/compat/PipelineCallbackHandler.h"
 
 #include <android-base/macros.h>
-#include <common/trace.h>
 #include <log/log_main.h>
 #include <memory>
 
@@ -40,27 +39,15 @@ namespace android::renderengine::skia {
 
 namespace {
 
-using PipelineCallbackContext = void*;
-
-void pipelineCallback(void* context, sk_sp<SkData> data) {
-    if (!data->size()) {
-        SFTRACE_FORMAT("re_skia_serialized_key:invalid_key_empty");
-        return;
-    }
-
-    std::string str;
-    str.resize(Base64::EncodedSize(data->size()));
-    Base64::Encode(data->data(), data->size(), str.data());
-
-    SFTRACE_FORMAT("re_skia_serialized_key:%s", str.c_str());
-}
-
 static skgpu::graphite::ContextOptions graphiteOptions(
-        SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects) {
+        SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
+        PipelineCallbackHandler* callbackHandler) {
     skgpu::graphite::ContextOptions options;
     options.fDisableDriverCorrectnessWorkarounds = true;
     options.fUserDefinedKnownRuntimeEffects = userDefinedKnownRuntimeEffects;
-    options.fPipelineCallback = pipelineCallback;
+
+    options.fPipelineCallbackContext = callbackHandler;
+    options.fPipelineCachingCallback = PipelineCallbackHandler::Callback;
 
     return options;
 }
@@ -84,11 +71,12 @@ public:
 
 std::unique_ptr<SkiaGpuContext> SkiaGpuContext::MakeVulkan_Graphite(
         const skgpu::VulkanBackendContext& vulkanBackendContext,
-        SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects) {
+        SkSpan<sk_sp<SkRuntimeEffect>> userDefinedKnownRuntimeEffects,
+        PipelineCallbackHandler* callbackHandler) {
     return std::make_unique<GraphiteGpuContext>(
-            skgpu::graphite::ContextFactory::MakeVulkan(vulkanBackendContext,
-                                                        graphiteOptions(
-                                                                userDefinedKnownRuntimeEffects)));
+            skgpu::graphite::ContextFactory::
+                    MakeVulkan(vulkanBackendContext,
+                               graphiteOptions(userDefinedKnownRuntimeEffects, callbackHandler)));
 }
 
 GraphiteGpuContext::GraphiteGpuContext(std::unique_ptr<skgpu::graphite::Context> context)

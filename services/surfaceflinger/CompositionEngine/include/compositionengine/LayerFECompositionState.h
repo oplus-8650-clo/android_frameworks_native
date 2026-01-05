@@ -195,6 +195,11 @@ struct LayerFECompositionState {
     Region surfaceDamage;
     uint64_t frameNumber = 0;
 
+    // Most recent frameId for the RenderCommandBuffer path when using
+    // compositor side rendering. Mostly passed through here as a way to
+    // check diffs when caching.
+    uint64_t renderCommandBufferFrameId;
+
     // The handle to use for a sideband stream for this layer
     sp<NativeHandle> sidebandStream;
     // If true, this sideband layer has a frame update
@@ -251,6 +256,8 @@ struct LayerFECompositionState {
     gui::CachingHint cachingHint = gui::CachingHint::Enabled;
 
     std::shared_ptr<gui::DisplayLuts> luts;
+
+    uint64_t permissions = 0;
 
     virtual ~LayerFECompositionState();
 

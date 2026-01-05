@@ -308,6 +308,8 @@ public:
     status_t setAdditionalOptions(const std::vector<gui::AdditionalOptions>& options);
 #endif
 
+    status_t setPresentMode(int32_t mode);
+
     status_t setProducerThrottlingEnabled(bool enabled);
     status_t isProducerThrottlingEnabled(bool* outEnabled) const;
 
@@ -377,6 +379,7 @@ private:
     int dispatchSetBuffersHdr10PlusMetadata(va_list args);
     int dispatchSetSurfaceDamage(va_list args);
     int dispatchSetSharedBufferMode(va_list args);
+    int dispatchSetPresentMode(va_list args);
     int dispatchSetAutoRefresh(va_list args);
     int dispatchGetDisplayRefreshCycleDuration(va_list args);
     int dispatchGetNextFrameId(va_list args);

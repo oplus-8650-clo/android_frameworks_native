@@ -284,7 +284,6 @@ public:
 
     // See mActiveModeOpt for thread safety.
     FrameRateMode getActiveMode() const EXCLUDES(mLock);
-    bool hasActiveMode() const EXCLUDES(mLock);
 
     // Returns a known frame rate that is the closest to frameRate
     Fps findClosestKnownFrameRate(Fps frameRate) const;
@@ -519,7 +518,6 @@ private:
     using PreferredFpsForMode = ftl::SmallMap<DisplayModeId, Fps, 8>;
     PreferredFpsForMode getPreferredFpsForMode(std::optional<int> anchorGroupOpt,
                                                RefreshRateOrder) const REQUIRES(mLock);
-    PreferredFpsForMode getMaxFpsForMode(std::optional<int> anchorGroupOpt) const REQUIRES(mLock);
 
     // The display modes of the active display. The DisplayModeIterators below are pointers into
     // this container, so must be invalidated whenever the DisplayModes change. The Policy below

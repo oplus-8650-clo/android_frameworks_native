@@ -111,6 +111,7 @@ cc_test {
 // buildtime if something's wrong.
 cc_library_static {
     name: "StructLayout_test",
+    host_supported: true,
     srcs: ["StructLayout_test.cpp"],
     compile_multilib: "both",
     cflags: [

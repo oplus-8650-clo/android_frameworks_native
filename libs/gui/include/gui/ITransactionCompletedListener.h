@@ -57,8 +57,8 @@ class ReleaseCallbackId : public Parcelable {
 public:
     static const ReleaseCallbackId INVALID_ID;
 
-    uint64_t bufferId;
-    uint64_t framenumber;
+    uint64_t bufferId = 0;
+    uint64_t framenumber = 0;
     ReleaseCallbackId() {}
     ReleaseCallbackId(uint64_t bufferId, uint64_t framenumber)
           : bufferId(bufferId), framenumber(framenumber) {}

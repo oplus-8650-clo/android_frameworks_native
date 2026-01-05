@@ -124,6 +124,7 @@ void FlagManager::dump(std::string& result) const {
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(anchor_list);
+    DUMP_ACONFIG_FLAG(configure_work_duration);
     DUMP_ACONFIG_FLAG(connected_displays_cursor);
     DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
@@ -133,7 +134,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_desktop_rollout);
-    DUMP_ACONFIG_FLAG(increase_missed_frame_jank_threshold);
     DUMP_ACONFIG_FLAG(jank_classification_v2);
     DUMP_ACONFIG_FLAG(luts_api);
     DUMP_ACONFIG_FLAG(md_degrade_hdr);
@@ -146,8 +146,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(refresh_rate_overlay_on_external_display);
     DUMP_ACONFIG_FLAG(resync_on_tx_separate_timer);
     DUMP_ACONFIG_FLAG(set_power_mode_async);
-    DUMP_ACONFIG_FLAG(supported_refresh_rate_update);
-    DUMP_ACONFIG_FLAG(use_at_least_60_for_min_vote);
+    DUMP_ACONFIG_FLAG(use_content_priority_for_jank_classification);
     DUMP_ACONFIG_FLAG(use_experimental_jank_classification);
 
     /// Trunk stable readonly flags ///
@@ -167,6 +166,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(hdcp_level_hal);
     DUMP_ACONFIG_FLAG(hdcp_negotiation);
     DUMP_ACONFIG_FLAG(local_tonemap_screenshots);
+    DUMP_ACONFIG_FLAG(modeset_multi_display);
     DUMP_ACONFIG_FLAG(modeset_state_machine);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
     DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type);
@@ -273,6 +273,7 @@ FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
 FLAG_MANAGER_ACONFIG_FLAG(local_tonemap_screenshots, "debug.sf.local_tonemap_screenshots");
+FLAG_MANAGER_ACONFIG_FLAG(modeset_multi_display, "");
 FLAG_MANAGER_ACONFIG_FLAG(modeset_state_machine, "");
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
 FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type,
@@ -295,6 +296,7 @@ FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(anchor_list, "")
+FLAG_MANAGER_ACONFIG_FLAG(configure_work_duration, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
@@ -304,7 +306,6 @@ FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
                           "debug.sf.get_display_known_vsync_sample_enabled");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
-FLAG_MANAGER_ACONFIG_FLAG(increase_missed_frame_jank_threshold, "");
 FLAG_MANAGER_ACONFIG_FLAG(jank_classification_v2, "debug.sf.jank_classification_v2")
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_uid_filtering, "");
@@ -316,8 +317,7 @@ FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")
 FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(resync_on_tx_separate_timer, "");
 FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
-FLAG_MANAGER_ACONFIG_FLAG(supported_refresh_rate_update, "");
-FLAG_MANAGER_ACONFIG_FLAG(use_at_least_60_for_min_vote, "");
+FLAG_MANAGER_ACONFIG_FLAG(use_content_priority_for_jank_classification, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///

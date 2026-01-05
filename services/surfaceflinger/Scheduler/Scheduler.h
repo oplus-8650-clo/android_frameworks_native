@@ -379,6 +379,9 @@ public:
         return pacesetterSelectorPtr()->getActiveMode().fps;
     }
 
+    // Returns true if the follower's refresh rate is close to the pacesetter's.
+    bool isLockstepFollower(PhysicalDisplayId) const EXCLUDES(mDisplayLock);
+
     Fps getNextFrameInterval(PhysicalDisplayId, TimePoint currentExpectedPresentTime) const
             EXCLUDES(mDisplayLock);
 
@@ -555,6 +558,9 @@ private:
     PhysicalDisplayId selectPacesetterDisplayLocked(
             std::optional<PhysicalDisplayId> desiredPacesetterId) const
             REQUIRES(kMainThreadContext, mDisplayLock);
+
+    bool isLockstepFollowerLocked(PhysicalDisplayId) const
+            REQUIRES(mDisplayLock, kMainThreadContext);
 
     // Returns true if any powered on display is capable of switching modes.
     bool canAnySelectorSwitch() const EXCLUDES(mDisplayLock);

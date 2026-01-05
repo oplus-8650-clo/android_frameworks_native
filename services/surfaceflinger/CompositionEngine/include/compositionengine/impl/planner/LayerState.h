@@ -447,6 +447,11 @@ private:
     OutputLayerState<uint64_t, LayerStateField::Buffer> mFrameNumber{
             [](auto layer) { return layer->getLayerFE().getCompositionState()->frameNumber; }};
 
+    // LayerStateField::Buffer perhaps not quite true but seems most likely to capture the intention
+    OutputLayerState<uint64_t, LayerStateField::Buffer> mRenderCommandBufferFrameId{[](auto layer) {
+        return layer->getLayerFE().getCompositionState()->renderCommandBufferFrameId;
+    }};
+
     int64_t mFramesSinceBufferUpdate = 0;
 
     OutputLayerState<half4, LayerStateField::SolidColor>
@@ -518,7 +523,7 @@ private:
     OutputLayerState<bool, LayerStateField::BlursDisabled> mIsBlursDisabled{
             [](auto layer) { return layer->getState().ignoreBlur; }};
 
-    static const constexpr size_t kNumNonUniqueFields = 21;
+    static const constexpr size_t kNumNonUniqueFields = 22;
 
     std::array<StateInterface*, kNumNonUniqueFields> getNonUniqueFields() {
         std::array<const StateInterface*, kNumNonUniqueFields> constFields =
@@ -532,12 +537,28 @@ private:
     }
 
     std::array<const StateInterface*, kNumNonUniqueFields> getNonUniqueFields() const {
-        return {&mDisplayFrame,   &mSourceCrop,     &mBufferTransform,      &mBlendMode,
-                &mAlpha,          &mLayerMetadata,  &mVisibleRegion,        &mOutputDataspace,
-                &mPixelFormat,    &mColorTransform, &mCompositionType,      &mSidebandStream,
-                &mBuffer,         &mSolidColor,     &mBackgroundBlurRadius, &mBlurRegions,
-                &mFrameNumber,    &mIsProtected,    &mCachingHint,          &mIsDimmingEnabled,
-                &mIsBlursDisabled};
+        return {&mDisplayFrame,
+                &mSourceCrop,
+                &mBufferTransform,
+                &mBlendMode,
+                &mAlpha,
+                &mLayerMetadata,
+                &mVisibleRegion,
+                &mOutputDataspace,
+                &mPixelFormat,
+                &mColorTransform,
+                &mCompositionType,
+                &mSidebandStream,
+                &mBuffer,
+                &mSolidColor,
+                &mBackgroundBlurRadius,
+                &mBlurRegions,
+                &mFrameNumber,
+                &mIsProtected,
+                &mCachingHint,
+                &mIsDimmingEnabled,
+                &mIsBlursDisabled,
+                &mRenderCommandBufferFrameId};
     }
 };
 

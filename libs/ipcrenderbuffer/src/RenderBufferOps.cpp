@@ -171,16 +171,28 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer
             break;
         }
         case TYPE_DRAWIMAGE: {
+            if (!cache) {
+                ALOGE("DrawImageOp failed due to unpopulated cache.");
+                break;
+            }
             DrawImageOp* co = (DrawImageOp*)op;
             co->draw(canvas, SkMatrix::I(), *cache);
             break;
         }
         case TYPE_DRAWIMAGERECT: {
+            if (!cache) {
+                ALOGE("DrawImageRectOp failed due to unpopulated cache.");
+                break;
+            }
             DrawImageRectOp* co = (DrawImageRectOp*)op;
             co->draw(canvas, SkMatrix::I(), *cache);
             break;
         }
         case TYPE_DRAWTEXTBLOB: {
+            if (!cache) {
+                ALOGE("DrawTextBlobOp failed due to unpopulated cache.");
+                break;
+            }
             DrawTextBlobOp* co = (DrawTextBlobOp*)op;
             co->draw(canvas, SkMatrix::I(), cache->fontManager);
             break;
@@ -277,11 +289,6 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
     auto buffer = consumer->consumerAcquire();
-
-    if (consumer->getContext() == nullptr) {
-        OffsetToImageCache* c = new OffsetToImageCache();
-        consumer->setContext(c, [](void* ctx) { delete (OffsetToImageCache*)ctx; });
-    }
 
     bool foundFirstDrawingOp = false;
 
@@ -507,8 +514,8 @@ ClipPathOp* ClipPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath&
 }
 
 void ClipPathOp::draw(SkCanvas* c, const SkMatrix&) {
-    SkPath path;
-    path.readFromMemory(pathData.data.get(), pathData.size);
+    const SkPath path =
+        SkPath::ReadFromMemory(pathData.data.get(), pathData.size).value_or(SkPath());
     c->clipPath(path, op, aa);
 }
 
@@ -646,8 +653,8 @@ DrawPathOp* DrawPathOp::Create(RenderCommandBuffer* commandBuffer, const SkPath&
 }
 
 void DrawPathOp::draw(SkCanvas* c, const SkMatrix&) {
-    SkPath path;
-    path.readFromMemory(pathData.data.get(), pathData.size);
+    const SkPath path =
+        SkPath::ReadFromMemory(pathData.data.get(), pathData.size).value_or(SkPath());
     c->drawPath(path, fromShmemPaint(paint));
 }
 std::string DrawPathOp::toString() const {
@@ -803,28 +810,14 @@ std::string DrawPictureOp::toString() const {
 DrawImageOp* DrawImageOp::Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId, SkScalar x,
                                  SkScalar y, const SkSamplingOptions& sampling,
                                  const SkPaint* paint) {
-    DrawImageOp* op = commandBuffer->allocAligned<DrawImageOp>();
-    OP_REQUIRE(op);
-    op->type = kType;
-    op->bitmapId = bitmapId;
-    op->x = x;
-    op->y = y;
-    op->sampling = sampling;
-    if (paint) {
-        op->paint = toShmemPaint(*paint);
-        op->hasPaint = true;
-    } else {
-        op->hasPaint = false;
-    }
-    return op;
+    // SkCanvas::drawImage uses ImageRectOp
+    IPCRENDERBUFFER_UNIMPLEMENTED;
+    return nullptr;
 }
 
 void DrawImageOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache) {
-    auto it = resourceCache.bitmaps.find(bitmapId);
-    LOG_ALWAYS_FATAL_IF(it == resourceCache.bitmaps.end(), "Bitmap not found in cache");
-    SkPaint p;
-    const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
-    c->drawImage(it->second.image, x, y, sampling, paintPtr);
+    // SkCanvas::drawImage uses ImageRectOp
+    IPCRENDERBUFFER_UNIMPLEMENTED;
 }
 std::string DrawImageOp::toString() const {
     return "DrawImageOp";
@@ -862,7 +855,7 @@ std::string DrawImageRectOp::toString() const {
     return "DrawImageRectOp";
 }
 
-sk_sp<SkData> serializeTypeFace(SkTypeface* tf, void* ctx) {
+SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
     thread_local static std::vector<char> sTmpTypefaceStorage;
 
     SkString familyName;
@@ -982,7 +975,6 @@ std::string DrawPointsOp::toString() const {
 DrawVerticesOp* DrawVerticesOp::Create(RenderCommandBuffer* commandBuffer,
                                        const SkVertices* vertices, SkBlendMode mode,
                                        const SkPaint& paint) {
-    
     IPCRENDERBUFFER_UNIMPLEMENTED;
     return nullptr;
 

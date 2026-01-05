@@ -1299,29 +1299,6 @@ const DisplayModePtr& RefreshRateSelector::getMaxRefreshRateByPolicyLocked(int a
     return max->get();
 }
 
-auto RefreshRateSelector::getMaxFpsForMode(std::optional<int> anchorGroupOpt) const
-        -> PreferredFpsForMode {
-    // find the highest frame rate for each display mode
-    PreferredFpsForMode maxRenderRateForMode;
-
-    // Use the highest frame rate for each mode to avoid increased latency due to SF waking up
-    // accoring to the render rate.
-    for (const auto& frameRateMode : mPrimaryFrameRates) {
-        if (anchorGroupOpt && frameRateMode.modePtr->getGroup() != anchorGroupOpt) {
-            continue;
-        }
-
-        const auto [iter, _] =
-                maxRenderRateForMode.try_emplace(frameRateMode.modePtr->getId(), frameRateMode.fps);
-        using fps_approx_ops::operator<;
-        if (iter->second < frameRateMode.fps) {
-            iter->second = frameRateMode.fps;
-        }
-    }
-
-    return maxRenderRateForMode;
-}
-
 auto RefreshRateSelector::getPreferredFpsForMode(std::optional<int> anchorGroupOpt,
                                                  RefreshRateOrder refreshRateOrder) const
         -> PreferredFpsForMode {
@@ -1329,10 +1306,6 @@ auto RefreshRateSelector::getPreferredFpsForMode(std::optional<int> anchorGroupO
 
     const bool ascending = (refreshRateOrder == RefreshRateOrder::Ascending);
     if (!ascending) return {};
-
-    if (!FlagManager::getInstance().use_at_least_60_for_min_vote()) {
-        return getMaxFpsForMode(anchorGroupOpt);
-    }
 
     // find the lowest >=60  frame rate for each display mode
     PreferredFpsForMode preferredFpsForMode;
@@ -1371,18 +1344,11 @@ auto RefreshRateSelector::rankFrameRates(std::optional<int> anchorGroupOpt,
 
         const auto id = modePtr->getId();
         const auto fpsOpt = preferredFpsForMode.get(id);
-        if (FlagManager::getInstance().use_at_least_60_for_min_vote()) {
-            if (fpsOpt && frameRateMode.fps != *fpsOpt) {
-                return;
-            }
-        } else {
-            if (ascending && frameRateMode.fps < *fpsOpt) {
-                return;
-            }
+        if (fpsOpt && frameRateMode.fps != *fpsOpt) {
+           return;
         }
 
         float score = calculateDistanceScoreFromMaxLocked(frameRateMode.fps);
-
         if (ascending) {
             score = 1.0f / score;
         }
@@ -1431,11 +1397,6 @@ FrameRateMode RefreshRateSelector::getActiveMode() const {
 
 const FrameRateMode& RefreshRateSelector::getActiveModeLocked() const {
     return *mActiveModeOpt;
-}
-
-bool RefreshRateSelector::hasActiveMode() const {
-    std::lock_guard lock(mLock);
-    return mActiveModeOpt.has_value();
 }
 
 void RefreshRateSelector::setActiveMode(DisplayModeId modeId, Fps renderFrameRate) {
@@ -1739,19 +1700,7 @@ void RefreshRateSelector::setLayerFilter(LayerFilter layerFilter) {
 }
 
 FpsRange RefreshRateSelector::getSupportedFrameRateRangeLocked() const {
-    if ((FlagManager::getInstance().anchor_list() && mIsVrrDisplay) ||
-        FlagManager::getInstance().supported_refresh_rate_update()) {
-        // When supported_refresh_rate_update is enabled include all the modes below 20Fps for MRR,
-        // and for VRR results are capped with the kMinSupportedRefreshRate, these checks
-        // are enforced in createFrameRateModes, that's why the range here starts with 0.
-        return {0_Hz, mMaxRefreshRateModeIt->second->getPeakFps()};
-    }
-
-    using fps_approx_ops::operator<;
-    if (mMaxRefreshRateModeIt->second->getPeakFps() < kMinSupportedFrameRate) {
-        return {mMaxRefreshRateModeIt->second->getPeakFps(), kMinSupportedFrameRate};
-    }
-    return {kMinSupportedFrameRate, mMaxRefreshRateModeIt->second->getPeakFps()};
+    return {0_Hz, mMaxRefreshRateModeIt->second->getPeakFps()};
 }
 
 auto RefreshRateSelector::getIdleTimerAction() const -> KernelIdleTimerAction {

@@ -55,6 +55,7 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
     bool anchor_list() const;
+    bool configure_work_duration() const;
     bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
@@ -64,7 +65,6 @@ public:
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
-    bool increase_missed_frame_jank_threshold() const;
     bool jank_classification_v2() const;
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
@@ -76,8 +76,7 @@ public:
     bool refresh_rate_overlay_on_external_display() const;
     bool resync_on_tx_separate_timer() const;
     bool set_power_mode_async() const;
-    bool supported_refresh_rate_update() const;
-    bool use_at_least_60_for_min_vote() const;
+    bool use_content_priority_for_jank_classification() const;
     bool use_experimental_jank_classification() const;
 
     /// Trunk stable readonly flags ///
@@ -99,6 +98,7 @@ public:
     bool idle_screen_refresh_rate_timeout() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
+    bool modeset_multi_display() const;
     bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
     bool parse_edid_version_and_input_type() const;

@@ -50,7 +50,9 @@
 #include <SkSurface.h>
 #include <SkTileMode.h>
 #include <android-base/stringprintf.h>
+#include <android/ipcrenderbuffer/RenderBufferHelpers.h>
 #include <common/FlagManager.h>
+#include <common/Panopticon.h>
 #include <common/trace.h>
 #include <gui/FenceMonitor.h>
 #include <include/gpu/ganesh/GrBackendSemaphore.h>
@@ -78,7 +80,6 @@
 #include "filters/BlurFilter.h"
 #include "filters/GainmapFactory.h"
 #include "filters/GaussianBlurFilter.h"
-#include "filters/KawaseBlurDualFilter.h"
 #include "filters/KawaseBlurDualFilterV2.h"
 #include "filters/KawaseBlurFilter.h"
 #include "filters/LutShader.h"
@@ -277,10 +278,13 @@ namespace skia {
 
 namespace {
 void trace(sp<Fence> fence) {
-    if (SFTRACE_ENABLED()) {
-        static gui::FenceMonitor sMonitor("RE Completion");
-        sMonitor.queueFence(std::move(fence));
-    }
+    static gui::FenceMonitor sMonitor("RE Completion");
+    sMonitor.queueFence(std::move(fence),
+                        [registration = panopticon::share()](std::function<void()> inner) {
+                            registration->start();
+                            auto slice = panopticon::slice(panopticon::SliceType::CG_Re_gpu);
+                            inner();
+                        });
 }
 } // namespace
 
@@ -339,11 +343,6 @@ SkiaRenderEngine::SkiaRenderEngine(Threaded threaded, PixelFormat pixelFormat,
         case BlurAlgorithm::Kawase: {
             ALOGD("Background Blurs Enabled (Kawase algorithm)");
             mBlurFilter = new KawaseBlurFilter(mRuntimeEffectManager);
-            break;
-        }
-        case BlurAlgorithm::KawaseDualFilter: {
-            ALOGD("Background Blurs Enabled (Kawase dual-filtering algorithm)");
-            mBlurFilter = new KawaseBlurDualFilter(mRuntimeEffectManager);
             break;
         }
         case BlurAlgorithm::KawaseDualFilterV2: {
@@ -796,6 +795,8 @@ void SkiaRenderEngine::drawLayersInternal(
         const std::shared_ptr<ExternalTexture>& buffer, base::unique_fd&& bufferFence) {
     SFTRACE_FORMAT("%s for %s", __func__, display.namePlusId.c_str());
 
+    auto slice = panopticon::slice(panopticon::SliceType::CG_Re_drawLayers);
+
     std::lock_guard<std::mutex> lock(mRenderingMutex);
 
     if (buffer == nullptr) {
@@ -876,6 +877,14 @@ void SkiaRenderEngine::drawLayersInternal(
                 blurCompositionLayer = &layer;
                 break;
             }
+        }
+        if (FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
+            !mBlurFilter->isBufferPreallocated() && !display.physicalDisplay.isEmpty() &&
+            supportsProtectedContent()) {
+            const bool inProtected = mInProtectedContext;
+            useProtectedContext(true);
+            mBlurFilter->preallocateBuffer(getActiveContext(), display.physicalDisplay.getSize());
+            useProtectedContext(inProtected);
         }
     }
 
@@ -1008,7 +1017,8 @@ void SkiaRenderEngine::drawLayersInternal(
 
                 if (layer.backgroundBlurRadius > 0) {
                     SFTRACE_NAME("BackgroundBlur");
-                    auto blurredImage = mBlurFilter->generate(context, layer.backgroundBlurRadius,
+                    auto blurredImage = mBlurFilter->generate(context, display,
+                                                              layer.backgroundBlurRadius,
                                                               blurInput, blurRect);
 
                     cachedBlurs[layer.backgroundBlurRadius] = blurredImage;
@@ -1023,8 +1033,8 @@ void SkiaRenderEngine::drawLayersInternal(
                     if (cachedBlurs[region.blurRadius] == nullptr) {
                         SFTRACE_NAME("BlurRegion");
                         cachedBlurs[region.blurRadius] =
-                                mBlurFilter->generate(context, region.blurRadius, blurInput,
-                                                      blurRect);
+                                mBlurFilter->generate(context, display, region.blurRadius,
+                                                      blurInput, blurRect);
                     }
 
                     mBlurFilter->drawBlurRegion(canvas, getBlurRRect(region), region.blurRadius,
@@ -1349,7 +1359,26 @@ void SkiaRenderEngine::drawLayersInternal(
             canvas->clipRRect(roundRectClip, enableAntiAlias);
         }
 
-        if (!bounds.isRect()) {
+        if (layer.renderCommandBufferConsumer) {
+            if (layer.renderResourceCache) {
+                for (auto& [id, bitmap] : layer.renderResourceCache->bitmaps) {
+                    auto imageTextureRef = getOrCreateBackendTexture(bitmap.buffer, false);
+
+                    if (!bitmap.image) {
+                        bitmap.image =
+                                imageTextureRef->makeImage(layerDataspace, kUnpremul_SkAlphaType);
+                    }
+                }
+            }
+
+            if (!bounds.isEmpty()) {
+                // Clip rect could be converted to bounds by getBoundsAndClip.
+                canvas->clipRRect(bounds);
+            }
+            renderCommandBufferToCanvas(layer.renderResourceCache.get(),
+                                        layer.renderCommandBufferConsumer.get(), canvas,
+                                        [&](int) {});
+        } else if (!bounds.isRect()) {
             paint.setAntiAlias(true);
             canvas->drawRRect(bounds, paint);
         } else {
@@ -1369,6 +1398,7 @@ void SkiaRenderEngine::drawLayersInternal(
     mCapture->endCapture();
 
     LOG_ALWAYS_FATAL_IF(activeSurface != dstSurface);
+
     auto drawFence = sp<Fence>::make(flushAndSubmit(context, dstSurface));
     trace(drawFence);
     FenceTimePtr fenceTime = FenceTime::makeValid(drawFence);
@@ -1478,6 +1508,14 @@ void SkiaRenderEngine::drawShadow(SkCanvas* canvas,
 }
 
 void SkiaRenderEngine::onActiveDisplaySizeChanged(ui::Size size) {
+    if (FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
+        supportsProtectedContent()) {
+        const bool inProtected = mInProtectedContext;
+        useProtectedContext(true);
+        mBlurFilter->preallocateBuffer(getActiveContext(), size);
+        useProtectedContext(inProtected);
+    }
+
     // This cache multiplier was selected based on review of cache sizes relative
     // to the screen resolution. Looking at the worst case memory needed by blur (~1.5x),
     // shadows (~1x), and general data structures (e.g. vertex buffers) we selected this as a

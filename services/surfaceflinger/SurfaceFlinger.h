@@ -33,6 +33,7 @@
  * NOTE: Make sure this file doesn't include  anything from <gl/ > or <gl2/ >
  */
 
+#include <android-base/expected.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
@@ -106,6 +107,7 @@
 #include "MutexUtils.h"
 #include "PowerAdvisor/PowerAdvisor.h"
 #include "QueuedTransactionState.h"
+#include "RenderResourceCache.h"
 #include "Scheduler/ISchedulerCallback.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/Scheduler.h"
@@ -642,8 +644,7 @@ private:
     status_t removeFpsListener(const sp<gui::IFpsListener>& listener);
     status_t addTunnelModeEnabledListener(const sp<gui::ITunnelModeEnabledListener>& listener);
     status_t removeTunnelModeEnabledListener(const sp<gui::ITunnelModeEnabledListener>& listener);
-    status_t setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                        const gui::DisplayModeSpecs&);
+    status_t setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&);
     status_t getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken, gui::DisplayModeSpecs*);
     status_t getDisplayBrightnessSupport(const sp<IBinder>& displayToken, bool* outSupport) const;
     status_t setDisplayBrightness(const sp<IBinder>& displayToken,
@@ -805,6 +806,8 @@ private:
                                             const scheduler::RefreshRateSelector&)
             REQUIRES(mStateLock, kMainThreadContext);
 
+    void updateWorkDuration(const sp<DisplayDevice>&, const gui::DisplayModeSpecs&);
+
     void commitTransactions() REQUIRES(kMainThreadContext, mStateLock);
     void commitTransactionsLocked(uint32_t transactionFlags)
             REQUIRES(mStateLock, kMainThreadContext);
@@ -906,13 +909,22 @@ private:
     status_t mirrorLayer(const LayerCreationArgs& args, const sp<IBinder>& mirrorFromHandle,
                          const sp<IBinder>& stopAtHandle, gui::CreateSurfaceResult& outResult);
 
-    status_t mirrorDisplay(DisplayId displayId, const LayerCreationArgs& args,
-                           gui::CreateSurfaceResult& outResult);
+    // Finds the layer stack associated with the provided `displayId`, and returns the surface
+    // control via `gui::CreateSurfaceResult`. Otherwise, PERMISSION_DENIED if the client lacks the
+    // necessary permissions, or NAME_NOT_FOUND if the `displayId` does not exist, or NO_MEMORY if
+    // the layer cannot be created due to a leak. Note: The mirrored layer stack does not change,
+    // even if the display's layer does.
+    base::expected<gui::CreateSurfaceResult, status_t> mirrorLayerStack(
+            DisplayId displayId, const LayerCreationArgs& args);
 
-    // add a layer to SurfaceFlinger
-    status_t addClientLayer(LayerCreationArgs& args, const sp<IBinder>& handle,
-                            const sp<Layer>& layer, const wp<Layer>& parentLayer,
-                            uint32_t* outTransformHint);
+    // Returns a surface control via `gui::CreateSurfaceResult` that mirrors the provided
+    // `displayIdToMirror` inside `args`. Otherwise, PERMISSION_DENIED if the client lacks necessary
+    // permissions, or NO_MEMORY if the layer cannot be created due to a leak. The
+    // `displayIdToMirror` must exist.
+    base::expected<gui::CreateSurfaceResult, status_t> mirrorDisplay(const LayerCreationArgs& args);
+
+    // Adds a layer to SurfaceFlinger
+    void addClientLayer(LayerCreationArgs& args, const sp<Layer>& layer);
 
     // Creates a promise for a future release fence for a layer. This allows for
     // the layer to keep track of when its buffer can be released.
@@ -1713,6 +1725,12 @@ private:
     // Map of displayid to mirrorRoot
     ftl::SmallMap<int64_t, sp<SurfaceControl>, 3> mMirrorMapForDebug;
 
+    // The IPC cache is used to manage render resources that are transferred from
+    // client processes to SurfaceFlinger. It is populated via the
+    // registerGraphicBuffers and unregisterGraphicBuffers AIDL calls, and is
+    // used to resolve resources during layer snapshotting.
+    sp<RenderResourceCache> mIpcCache = sp<RenderResourceCache>::make();
+
     // NotifyExpectedPresentHint
     enum class NotifyExpectedPresentHintStatus {
         // Represents that framework can start sending hint if required.
@@ -1773,8 +1791,7 @@ private:
     //  to rebuild layer stack instead of crashing.
     void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);
 
-    void setForcedClientCompositionLayerStacks(
-            compositionengine::CompositionRefreshArgs& refreshArgs) EXCLUDES(mStateLock);
+    void setForcedClientCompositionLayerStacks(compositionengine::CompositionRefreshArgs&);
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1869,8 +1886,7 @@ public:
             const sp<gui::ITunnelModeEnabledListener>& listener) override;
     binder::Status removeTunnelModeEnabledListener(
             const sp<gui::ITunnelModeEnabledListener>& listener) override;
-    binder::Status setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                              const gui::DisplayModeSpecs&) override;
+    binder::Status setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&) override;
     binder::Status getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
                                               gui::DisplayModeSpecs* outSpecs) override;
     binder::Status getDisplayBrightnessSupport(const sp<IBinder>& displayToken,
@@ -1919,6 +1935,8 @@ public:
     binder::Status removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
     binder::Status forcePacesetter(int64_t displayId) override;
     binder::Status resetForcedPacesetter() override;
+    binder::Status registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) override;
+    binder::Status unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) override;
 
 private:
     static const constexpr bool kUsePermissionCache = true;

@@ -140,7 +140,8 @@ BufferQueueCore::BufferQueueCore()
         mLastQueuedSlot(INVALID_BUFFER_SLOT),
         mUniqueId(getUniqueId()),
         mAutoPrerotation(false),
-        mTransformHintInUse(0) {
+        mTransformHintInUse(0),
+        mPresentMode(ANATIVEWINDOW_PRESENT_DEFAULT) {
     int numStartingBuffers = getMaxBufferCountLocked();
     for (int s = 0; s < numStartingBuffers; s++) {
         mFreeSlots.insert(s);
@@ -178,6 +179,8 @@ void BufferQueueCore::dumpState(const String8& prefix, String8* outResult) const
 
     outResult->appendFormat("mConnectedApi=%d, mConsumerUsageBits=%" PRIu64 ", ", mConnectedApi,
                             mConsumerUsageBits);
+
+    outResult->appendFormat("mPresentMode=%d\n", mPresentMode);
 
     String8 producerProcName = String8("\?\?\?");
     String8 consumerProcName = String8("\?\?\?");

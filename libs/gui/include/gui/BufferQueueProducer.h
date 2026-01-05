@@ -25,6 +25,7 @@
 #ifndef ANDROID_GUI_BUFFERQUEUEPRODUCER_H
 #define ANDROID_GUI_BUFFERQUEUEPRODUCER_H
 
+#include <android/native_window.h>
 #include <gui/AdditionalOptions.h>
 #include <gui/BufferQueueDefs.h>
 
@@ -207,8 +208,11 @@ public:
     // See IGraphicBufferProducer::setDequeueTimeout
     virtual status_t setDequeueTimeout(nsecs_t timeout) override;
 
-    // see IGraphicBufferProducer::setLegacyBufferDrop
+    // See IGraphicBufferProducer::setLegacyBufferDrop
     virtual status_t setLegacyBufferDrop(bool drop);
+
+    // See IGraphicBufferProducer::setPresentMode
+    virtual status_t setPresentMode(int32_t mode) override;
 
     // See IGraphicBufferProducer::getLastQueuedBuffer
     virtual status_t getLastQueuedBuffer(sp<GraphicBuffer>* outBuffer,

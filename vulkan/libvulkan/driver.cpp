@@ -691,6 +691,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::GOOGLE_display_timing:
             case ProcHook::KHR_present_id:
+            case ProcHook::KHR_present_id2:
             case ProcHook::KHR_external_fence_fd:
             case ProcHook::EXTENSION_CORE_1_0:
             case ProcHook::EXTENSION_CORE_1_1:
@@ -726,6 +727,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_shared_presentable_image:
             case ProcHook::GOOGLE_display_timing:
             case ProcHook::KHR_present_id:
+            case ProcHook::KHR_present_id2:
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
@@ -1127,8 +1129,13 @@ VkResult EnumerateDeviceExtensionProperties(
     std::vector<VkExtensionProperties> loader_extensions;
     loader_extensions.push_back({
         VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
-        VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION});
-
+        VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION,
+    });
+    if (flags::present_mode_fifo_latest_ready_ext()) {
+        loader_extensions.push_back(
+            {VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME,
+             VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_SPEC_VERSION});
+    }
     bool hdrBoardConfig = android::sysprop::has_HDR_display(false);
     if (hdrBoardConfig) {
         loader_extensions.push_back({VK_EXT_HDR_METADATA_EXTENSION_NAME,
@@ -1153,6 +1160,10 @@ VkResult EnumerateDeviceExtensionProperties(
 
     loader_extensions.push_back(
         {VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_KHR_PRESENT_ID_SPEC_VERSION});
+    if (flags::present_id2_khr()) {
+        loader_extensions.push_back(
+            {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
+    }
 
     // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
     // support is provided by the driver
@@ -1714,6 +1725,16 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                 compressionFeat->imageCompressionControlSwapchain = false;
                 imageCompressionControlSwapchainInChain = true;
             } break;
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR: {
+                if (flags::present_id2_khr()) {
+                    VkPhysicalDevicePresentId2FeaturesKHR* features =
+                        reinterpret_cast<VkPhysicalDevicePresentId2FeaturesKHR*>(
+                            pFeats);
+                    features->presentId2 = VK_TRUE;
+                }
+                break;
+            }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT: {
                 auto smf = reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT *>(

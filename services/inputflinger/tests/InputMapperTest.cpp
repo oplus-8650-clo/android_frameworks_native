@@ -16,15 +16,18 @@
 
 #include "InputMapperTest.h"
 
-#include <InputReaderBase.h>
+#include <android-base/result-gmock.h>
+#include <android-base/result.h>
 #include <gtest/gtest.h>
 #include <ui/Rotation.h>
 #include <utils/Timers.h>
 
+#include "InputReaderBase.h"
 #include "NotifyArgs.h"
 
 namespace android {
 
+using android::base::testing::Ok;
 using testing::_;
 using testing::NiceMock;
 using testing::Return;
@@ -114,6 +117,57 @@ std::list<NotifyArgs> InputMapperUnitTest::process(nsecs_t when, nsecs_t readTim
     event.code = code;
     event.value = value;
     return mMapper->process(event);
+}
+
+VerifyingInputMapperUnitTest::VerifyingInputMapperUnitTest() : mVerifier("Test verifier") {}
+
+std::list<NotifyArgs> VerifyingInputMapperUnitTest::process(nsecs_t when, nsecs_t readTime,
+                                                            int32_t type, int32_t code,
+                                                            int32_t value) {
+    std::list<NotifyArgs> args = InputMapperUnitTest::process(when, readTime, type, code, value);
+    processMotionArgs(args);
+    return args;
+}
+
+std::list<NotifyArgs> VerifyingInputMapperUnitTest::reconfigureMapper(
+        nsecs_t when, const InputReaderConfiguration& config, ConfigurationChanges changes) {
+    std::list<NotifyArgs> args = mMapper->reconfigure(when, config, changes);
+    processMotionArgs(args);
+    return args;
+}
+
+std::list<NotifyArgs> VerifyingInputMapperUnitTest::resetMapper(nsecs_t when) {
+    std::list<NotifyArgs> args = mMapper->reset(when);
+    processMotionArgs(args);
+    mVerifier.resetDevice(DEVICE_ID);
+    return args;
+}
+
+void VerifyingInputMapperUnitTest::processMotionArgs(const std::list<NotifyArgs>& args) {
+    for (const NotifyArgs& notifyArg : args) {
+        if (std::holds_alternative<NotifyDeviceResetArgs>(notifyArg)) {
+            const NotifyDeviceResetArgs& arg = std::get<NotifyDeviceResetArgs>(notifyArg);
+            mVerifier.resetDevice(arg.deviceId);
+        } else if (std::holds_alternative<NotifyMotionArgs>(notifyArg)) {
+            const NotifyMotionArgs& arg = std::get<NotifyMotionArgs>(notifyArg);
+            // We use an EXPECT rather than an ASSERT here, because if an ASSERT fails, we abort the
+            // method immediately and don't send any more events from this batch to the verifier.
+            // However, the test that's running may not abort, feeding further events to the
+            // verifier which it now rejects not because of new inconsistencies in the stream but
+            // because it didn't receive other events from the batch containing the initial
+            // inconsistency. This leads to multiple failures in the test log, of which only the
+            // earliest one is useful. Using EXPECT means that we pass all the events to the
+            // verifier and makes test failures less confusing.
+            EXPECT_THAT(mVerifier.processMovement(arg.deviceId, arg.eventTime, arg.source,
+                                                  arg.action, arg.actionButton,
+                                                  arg.getPointerCount(),
+                                                  arg.pointerProperties.data(),
+                                                  arg.pointerCoords.data(), arg.flags,
+                                                  arg.buttonState, arg.downTime),
+                        Ok())
+                    << "when processing " << arg.dump();
+        }
+    }
 }
 
 const char* InputMapperTest::DEVICE_NAME = "device";

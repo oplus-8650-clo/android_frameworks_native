@@ -525,9 +525,8 @@ public:
         return SurfaceFlinger::calculateMaxAcquiredBufferCount(refreshRate, presentLatency);
     }
 
-    auto setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                    const gui::DisplayModeSpecs& specs) {
-        return mFlinger->setDesiredDisplayModeSpecs(displayToken, specs);
+    auto setDesiredDisplayModeSpecs(const gui::DisplayModeSpecs& specs) {
+        return mFlinger->setDesiredDisplayModeSpecs({specs});
     }
 
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,

@@ -68,7 +68,7 @@ public:
                                  const std::string& packageName, int32_t userId, int32_t flags,
                                  int32_t appId, int32_t previousAppId, const std::string& seInfo,
                                  int32_t targetSdkVersion, int64_t* ceDataInode,
-                                 int64_t* deDataInode);
+                                 int64_t* deDataInode, int32_t pccUid, int32_t previousPccUid);
 
     binder::Status createAppData(
             const android::os::CreateAppDataArgs& args,
@@ -235,7 +235,8 @@ private:
                                        const std::string& packageName, int32_t userId,
                                        int32_t flags, int32_t appId, int32_t previousAppId,
                                        const std::string& seInfo, int32_t targetSdkVersion,
-                                       int64_t* ceDataInode, int64_t* deDataInode);
+                                       int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
+                                       int32_t previousPccId);
     binder::Status restoreconAppDataLocked(const std::optional<std::string>& uuid,
                                            const std::string& packageName, int32_t userId,
                                            int32_t flags, int32_t appId, const std::string& seInfo);
@@ -258,6 +259,17 @@ private:
     binder::Status restoreconSdkDataLocked(const std::optional<std::string>& uuid,
                                            const std::string& packageName, int32_t userId,
                                            int32_t flags, int32_t appId, const std::string& seInfo);
+
+    binder::Status clearCeDirectoryLocked(const std::string& path, int32_t flags);
+
+    binder::Status clearDeDirectoryLocked(const std::string& path, const std::string& suffix);
+
+    binder::Status createOrDeletePccDirectoryLocked(const char* volumeUuid, userid_t userId,
+                                                    const char* packageName, int32_t pccId,
+                                                    int32_t previousPccId, int32_t cacheGid,
+                                                    const std::string& seInfo, mode_t targetMode,
+                                                    long projectIdApp, long projectIdCache,
+                                                    bool isCeStorage);
 };
 
 }  // namespace installd

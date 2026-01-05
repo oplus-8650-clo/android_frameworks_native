@@ -33,6 +33,8 @@
 #include <gui/DisplayLuts.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/ITransactionCompletedListener.h>
+#include <gui/RenderCommandBufferConsumer.h>
+#include <gui/RenderCommandBufferProducer.h>
 #include <gui/view/Surface.h>
 #include <math/mat4.h>
 
@@ -176,6 +178,7 @@ struct layer_state_t {
         ACCESS_SURFACE_FLINGER = 0x1,
         ROTATE_SURFACE_FLINGER = 0x2,
         INTERNAL_SYSTEM_WINDOW = 0x4,
+        READ_FRAME_BUFFER = 0x8,
     };
 
     enum {
@@ -263,6 +266,9 @@ struct layer_state_t {
         eStopLayerChanged = 0x1000000'00000000,
         eBackgroundBlurScaleChanged = 0x2000000'00000000,
         eSystemContentPriorityChanged = 0x4000000'00000000,
+        eRenderCommandBufferChanged = 0x8000000'00000000,
+        eRenderCommandBufferFrameIdChanged = 0x10000000'00000000,
+        eRenderResourceTokenChanged = 0x20000000'00000000,
     };
 
     layer_state_t();
@@ -292,7 +298,9 @@ struct layer_state_t {
     static constexpr uint64_t BUFFER_CHANGES = layer_state_t::eApiChanged |
             layer_state_t::eBufferChanged | layer_state_t::eBufferCropChanged |
             layer_state_t::eBufferTransformChanged | layer_state_t::eDataspaceChanged |
-            layer_state_t::eSidebandStreamChanged | layer_state_t::eSurfaceDamageRegionChanged |
+            layer_state_t::eRenderCommandBufferFrameIdChanged |
+            layer_state_t::eRenderCommandBufferChanged | layer_state_t::eSidebandStreamChanged |
+            layer_state_t::eSurfaceDamageRegionChanged |
             layer_state_t::eTransformToDisplayInverseChanged |
             layer_state_t::eTransparentRegionChanged |
             layer_state_t::eExtendedRangeBrightnessChanged |
@@ -309,7 +317,9 @@ struct layer_state_t {
             layer_state_t::eHdrMetadataChanged | layer_state_t::eShadowRadiusChanged |
             layer_state_t::eStretchChanged | layer_state_t::ePictureProfileHandleChanged |
             layer_state_t::eAppContentPriorityChanged | layer_state_t::eBorderSettingsChanged |
-            layer_state_t::eBoxShadowSettingsChanged;
+            layer_state_t::eBoxShadowSettingsChanged |
+            layer_state_t::eRenderCommandBufferFrameIdChanged |
+            layer_state_t::eRenderCommandBufferChanged;
 
     // Changes which invalidates the layer's visible region in CE.
     static constexpr uint64_t CONTENT_DIRTY = layer_state_t::CONTENT_CHANGES |
@@ -515,6 +525,11 @@ struct layer_state_t {
 
     std::shared_ptr<gui::DisplayLuts> luts;
 
+    std::shared_ptr<RenderCommandBufferProducer> renderCommandBufferProducer;
+    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+    uint64_t renderCommandBufferFrameId;
+    sp<IBinder> renderResourceToken;
+
 protected:
     struct NotDefaultComparableState {
         Region transparentRegion;
@@ -587,10 +602,6 @@ struct DisplayState {
     Rect layerStackSpaceRect = Rect::EMPTY_RECT;
     Rect orientedDisplaySpaceRect = Rect::EMPTY_RECT;
 
-    // For physical displays, this is the resolution, which must match the active display mode. To
-    // change the resolution, the client must first call SurfaceControl.setDesiredDisplayModeSpecs
-    // with the new DesiredDisplayModeSpecs#defaultMode, then commit the matching width and height.
-    //
     // For virtual displays, this is an optional resolution that overrides its default dimensions.
     //
     uint32_t width = 0;

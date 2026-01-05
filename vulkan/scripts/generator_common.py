@@ -57,6 +57,7 @@ _BLOCKED_EXTENSIONS = [
     'VK_NV_win32_keyed_mutex',
     'VK_NVX_image_view_handle',
     'VK_QNX_screen_surface',
+    'VK_OHOS_surface',
 ]
 
 # Extensions not to probe in vkjson, but otherwise may be supportable
@@ -373,8 +374,12 @@ def parse_vulkan_registry():
         extname = extension.get('name')
         if (extension.get('type') == 'instance' and
             extension.get('promotedto') is not None):
-          promoted_inst_ext_dict[extname] = \
-              version_2_api_version(extension.get('promotedto'))
+            if extension.get('promotedto').startswith('VK_VERSION'):
+                # Note: we only want promotions to core versions!
+                # vk.xml has started describing promotions from EXT to KHR this
+                # way as well, which we skip.
+                promoted_inst_ext_dict[extname] = \
+                        version_2_api_version(extension.get('promotedto'))
         for req in extension.iter('require'):
           if req.get('feature') is not None:
             apiversion = req.get('feature')

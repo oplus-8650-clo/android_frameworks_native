@@ -36,6 +36,13 @@ flag {
 } # arr_surfacecontrol_setframerate_api
 
 flag {
+  name: "configure_work_duration"
+  namespace: "window_surfaces"
+  description: "Enable the work duration configuration via DisplayModeSpecs."
+  bug: "399491928"
+} # configure_work_duration
+
+flag {
   name: "connected_display_hdr_v2"
   namespace: "desktop_display"
   description: "enable connected display hdr selection"
@@ -192,13 +199,6 @@ flag {
 } # hdcp_negotiation
 
 flag {
-  name: "increase_missed_frame_jank_threshold"
-  namespace: "core_graphics"
-  description: "Increase the jank threshold to 4 milliseconds"
-  bug: "342265411"
-} # increase_missed_frame_jank_threshold
-
-flag {
   name: "jank_classification_v2"
   namespace: "core_graphics"
   description: "Refined jank classification"
@@ -229,6 +229,13 @@ flag {
   description: "Enables UID filtering when building layer snapshots of mirrors. Layers that have different UID from the mirror root's will be dropped "
   bug: "437391557"
 } # mirror_uid_filtering
+
+flag {
+  name: "modeset_multi_display"
+  namespace: "core_graphics"
+  description: "Allows multiple display to be modeset at the same time."
+  bug: "460127976"
+} # modeset_multi_display
 
 flag {
   name: "modeset_state_machine"
@@ -262,13 +269,6 @@ flag {
   bug: "428611036"
   is_fixed_read_only: true
 } # offload_gpu_composition
-
-flag {
-  name: "out_of_process_rendering"
-  namespace: "window_surfaces"
-  description: "Enable out of process rendering"
-  bug: "448153717"
-} # out_of_process_rendering
 
 flag {
   name: "parse_edid_version_and_input_type"
@@ -370,16 +370,6 @@ flag {
 } # stop_layer
 
 flag {
-    name: "supported_refresh_rate_update"
-    namespace: "core_graphics"
-    description: "Update the supported refresh rate list"
-    bug: "431061528"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-} # supported_refresh_rate_update
-
-flag {
   name: "synced_resolution_switch"
   namespace: "core_graphics"
   description: "Synchronize resolution modeset with framebuffer resizing"
@@ -395,14 +385,11 @@ flag {
 } # true_hdr_screenshots
 
 flag {
-    name: "use_at_least_60_for_min_vote"
+    name: "use_content_priority_for_jank_classification"
     namespace: "core_graphics"
-    description: "Chooses the lowest >= 60 render rate when all voters want Min frame rate"
-    bug: "441896528"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-} # use_at_least_60_for_min_vote
+    description: "Use content priority for jank classification"
+    bug: "423713756"
+} # use_content_priority_for_jank_classification
 
 flag {
     name: "use_experimental_jank_classification"

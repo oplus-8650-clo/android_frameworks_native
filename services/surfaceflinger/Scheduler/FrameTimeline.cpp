@@ -38,6 +38,7 @@ using FrameTimelineDataSource = impl::FrameTimeline::FrameTimelineDataSource;
 
 namespace {
 
+template <typename Period>
 void dumpTable(std::string& result, TimelineItem predictions, TimelineItem actuals,
                const std::string& indent, PredictionState predictionState, nsecs_t baseTime) {
     StringAppendF(&result, "%s", indent.c_str());
@@ -53,9 +54,9 @@ void dumpTable(std::string& result, TimelineItem predictions, TimelineItem actua
         std::chrono::nanoseconds endTime(predictions.endTime - baseTime);
         std::chrono::nanoseconds presentTime(predictions.presentTime - baseTime);
         StringAppendF(&result, "\t%10.2f\t|\t%10.2f\t|\t%10.2f\n",
-                      std::chrono::duration<double, std::milli>(startTime).count(),
-                      std::chrono::duration<double, std::milli>(endTime).count(),
-                      std::chrono::duration<double, std::milli>(presentTime).count());
+                      std::chrono::duration<double, Period>(startTime).count(),
+                      std::chrono::duration<double, Period>(endTime).count(),
+                      std::chrono::duration<double, Period>(presentTime).count());
     }
     StringAppendF(&result, "%s", indent.c_str());
     StringAppendF(&result, "Actual  \t|");
@@ -65,7 +66,7 @@ void dumpTable(std::string& result, TimelineItem predictions, TimelineItem actua
     } else {
         std::chrono::nanoseconds startTime(std::max<nsecs_t>(0, actuals.startTime - baseTime));
         StringAppendF(&result, "\t%10.2f\t|",
-                      std::chrono::duration<double, std::milli>(startTime).count());
+                      std::chrono::duration<double, Period>(startTime).count());
     }
     if (actuals.endTime <= 0) {
         // Animation leashes can send the endTime as -1
@@ -73,14 +74,14 @@ void dumpTable(std::string& result, TimelineItem predictions, TimelineItem actua
     } else {
         std::chrono::nanoseconds endTime(actuals.endTime - baseTime);
         StringAppendF(&result, "\t%10.2f\t|",
-                      std::chrono::duration<double, std::milli>(endTime).count());
+                      std::chrono::duration<double, Period>(endTime).count());
     }
     if (actuals.presentTime == 0) {
         StringAppendF(&result, "\t\tN/A\n");
     } else {
         std::chrono::nanoseconds presentTime(std::max<nsecs_t>(0, actuals.presentTime - baseTime));
         StringAppendF(&result, "\t%10.2f\n",
-                      std::chrono::duration<double, std::milli>(presentTime).count());
+                      std::chrono::duration<double, Period>(presentTime).count());
     }
 
     StringAppendF(&result, "%s", indent.c_str());
@@ -360,6 +361,12 @@ nsecs_t calculateDisplayPresentJitter(nsecs_t presentDelay, Fps refreshRate) {
 }
 
 bool delayMatchVsyncCadence(nsecs_t presentDelay, Fps refreshRate, nsecs_t presentThreshold) {
+    // For very high present delays, vsync cadence doesn't matter much. Just mark it as on cadence
+    // to avoid prediction errors.
+    if (presentDelay > impl::FrameTimeline::kThresholdFpsForAnimation.getPeriodNsecs()) {
+        return true;
+    }
+
     const nsecs_t deltaToVsync = calculateDisplayPresentJitter(presentDelay, refreshRate);
     return deltaToVsync < presentThreshold ||
             deltaToVsync >= refreshRate.getPeriodNsecs() - presentThreshold;
@@ -377,10 +384,12 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
                            scheduler::TimelineItem&& predictions,
                            std::shared_ptr<TimeStats> timeStats,
                            JankClassificationThresholds thresholds,
-                           TraceCookieCounter* traceCookieCounter, bool isBuffer, GameMode gameMode)
+                           TraceCookieCounter* traceCookieCounter, bool isBuffer, GameMode gameMode,
+                           int32_t systemContentPriority)
       : mToken(frameTimelineInfo.vsyncId),
         mInputEventId(frameTimelineInfo.inputEventId),
         mVsyncResyncedJitter(frameTimelineInfo.vsyncResyncedJitterNanos),
+        mDequeueBufferDuration(frameTimelineInfo.dequeueBufferDurationNanos),
         mOwnerPid(ownerPid),
         mOwnerUid(ownerUid),
         mLayerName(std::move(layerName)),
@@ -394,7 +403,8 @@ SurfaceFrame::SurfaceFrame(const FrameTimelineInfo& frameTimelineInfo, pid_t own
         mJankClassificationThresholds(thresholds),
         mTraceCookieCounter(*traceCookieCounter),
         mIsBuffer(isBuffer),
-        mGameMode(gameMode) {}
+        mGameMode(gameMode),
+        mSystemContentPriority(systemContentPriority) {}
 
 void SurfaceFrame::setActualStartTime(nsecs_t actualStartTime) {
     std::scoped_lock lock(mMutex);
@@ -557,6 +567,7 @@ bool SurfaceFrame::getIsBuffer() const {
     return mIsBuffer;
 }
 
+template <typename Period>
 void SurfaceFrame::dump(std::string& result, const std::string& indent, nsecs_t baseTime) const {
     std::scoped_lock lock(mMutex);
     StringAppendF(&result, "%s", indent.c_str());
@@ -583,7 +594,7 @@ void SurfaceFrame::dump(std::string& result, const std::string& indent, nsecs_t 
     if (mPresentState == PresentState::Dropped) {
         std::chrono::nanoseconds dropTime(mDropTime - baseTime);
         StringAppendF(&result, "Drop time : %10f\n",
-                      std::chrono::duration<double, std::milli>(dropTime).count());
+                      std::chrono::duration<double, Period>(dropTime).count());
         StringAppendF(&result, "%s", indent.c_str());
     }
     StringAppendF(&result, "Prediction State : %s\n", toString(mPredictionState).c_str());
@@ -598,20 +609,20 @@ void SurfaceFrame::dump(std::string& result, const std::string& indent, nsecs_t 
             std::max(static_cast<int64_t>(0), mLastFrameTimestamps.latchTime - baseTime));
     StringAppendF(&result, "%s", indent.c_str());
     StringAppendF(&result, "Last latch time: %10f\n",
-                  std::chrono::duration<double, std::milli>(latchTime).count());
+                  std::chrono::duration<double, Period>(latchTime).count());
     std::chrono::nanoseconds latchExpectedPresentTime(
             std::max(static_cast<int64_t>(0), mLastFrameTimestamps.expectedPresentTime - baseTime));
     StringAppendF(&result, "%s", indent.c_str());
     StringAppendF(&result, "Last expected present time: %10f\n",
-                  std::chrono::duration<double, std::milli>(latchTime).count());
+                  std::chrono::duration<double, Period>(latchTime).count());
     if (mPredictionState == PredictionState::Valid) {
         nsecs_t presentDelta = mActuals.presentTime - mPredictions.presentTime;
         std::chrono::nanoseconds presentDeltaNs(std::abs(presentDelta));
         StringAppendF(&result, "%s", indent.c_str());
         StringAppendF(&result, "Present delta: %10f\n",
-                      std::chrono::duration<double, std::milli>(presentDeltaNs).count());
+                      std::chrono::duration<double, Period>(presentDeltaNs).count());
     }
-    dumpTable(result, mPredictions, mActuals, indent, mPredictionState, baseTime);
+    dumpTable<Period>(result, mPredictions, mActuals, indent, mPredictionState, baseTime);
 }
 
 std::string SurfaceFrame::miniDump() const {
@@ -657,10 +668,7 @@ void SurfaceFrame::classifyJankLegacyLocked(int32_t displayFrameJankType, const 
         mFrameReadyMetadata.legacy() = FrameReadyMetadata::OnTimeFinish;
     }
 
-    const nsecs_t presentThreshold =
-            FlagManager::getInstance().increase_missed_frame_jank_threshold()
-            ? mJankClassificationThresholds.presentThresholdExtended
-            : mJankClassificationThresholds.presentThresholdLegacy;
+    const nsecs_t presentThreshold = mJankClassificationThresholds.presentThreshold;
     if (std::abs(presentDelay) > presentThreshold) {
         mFramePresentMetadata.legacy() = presentDelay > 0 ? FramePresentMetadata::LatePresent
                                                           : FramePresentMetadata::EarlyPresent;
@@ -824,16 +832,14 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         *outDeadlineDelta = deadlineDelta;
     }
 
-    if (deadlineDelta > mJankClassificationThresholds.deadlineThreshold) {
+    // Subtract the time spent in dequeueBuffer to avoid counting it in the app budget
+    if (deadlineDelta - mDequeueBufferDuration > mJankClassificationThresholds.deadlineThreshold) {
         mFrameReadyMetadata.experimental() = FrameReadyMetadata::LateFinish;
     } else {
         mFrameReadyMetadata.experimental() = FrameReadyMetadata::OnTimeFinish;
     }
 
-    const nsecs_t presentThreshold =
-            FlagManager::getInstance().increase_missed_frame_jank_threshold()
-            ? mJankClassificationThresholds.presentThresholdExtended
-            : mJankClassificationThresholds.presentThresholdLegacy;
+    const nsecs_t presentThreshold = mJankClassificationThresholds.presentThreshold;
 
     if (std::abs(mPresentDelay) <= presentThreshold) {
         mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
@@ -893,6 +899,13 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
 
     if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
         mJankType.experimental() = JankType::DisplayNotOn;
+        return;
+    }
+
+    if (FlagManager::getInstance().use_content_priority_for_jank_classification() &&
+        mSystemContentPriority < 0) {
+        mJankType.experimental() = JankType::NonAnimating;
+        mJankSeverityScore = static_cast<float>(mSystemContentPriority);
         return;
     }
 
@@ -985,7 +998,8 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankTypeLe
 
         gui::JankData jd;
         jd.frameVsyncId = mToken;
-        jd.jankType = mJankType.value();
+        jd.jankTypeLegacy = mJankType.legacy();
+        jd.jankTypeExperimental = mJankType.experimental();
         jd.frameIntervalNs =
                 (mRenderRate ? *mRenderRate : mDisplayFrameRenderRate).getPeriodNsecs();
         jd.presentDelayNs = presentDelay;
@@ -1234,14 +1248,15 @@ void FrameTimeline::registerDataSource() {
 
 std::shared_ptr<SurfaceFrame> FrameTimeline::createSurfaceFrameForToken(
         const FrameTimelineInfo& frameTimelineInfo, pid_t ownerPid, uid_t ownerUid, int32_t layerId,
-        std::string layerName, std::string debugName, bool isBuffer, GameMode gameMode) {
+        std::string layerName, std::string debugName, bool isBuffer, GameMode gameMode,
+        int32_t systemContentPriority) {
     SFTRACE_CALL();
     if (frameTimelineInfo.vsyncId == FrameTimelineInfo::INVALID_VSYNC_ID) {
         return std::make_shared<SurfaceFrame>(frameTimelineInfo, ownerPid, ownerUid, layerId,
                                               std::move(layerName), std::move(debugName),
                                               PredictionState::None, TimelineItem(), mTimeStats,
                                               mJankClassificationThresholds, &mTraceCookieCounter,
-                                              isBuffer, gameMode);
+                                              isBuffer, gameMode, systemContentPriority);
     }
     std::optional<TimelineItem> predictions =
             mTokenManager.getPredictionsForToken(frameTimelineInfo.vsyncId);
@@ -1250,13 +1265,14 @@ std::shared_ptr<SurfaceFrame> FrameTimeline::createSurfaceFrameForToken(
                                               std::move(layerName), std::move(debugName),
                                               PredictionState::Valid, std::move(*predictions),
                                               mTimeStats, mJankClassificationThresholds,
-                                              &mTraceCookieCounter, isBuffer, gameMode);
+                                              &mTraceCookieCounter, isBuffer, gameMode,
+                                              systemContentPriority);
     }
     return std::make_shared<SurfaceFrame>(frameTimelineInfo, ownerPid, ownerUid, layerId,
                                           std::move(layerName), std::move(debugName),
                                           PredictionState::Expired, TimelineItem(), mTimeStats,
                                           mJankClassificationThresholds, &mTraceCookieCounter,
-                                          isBuffer, gameMode);
+                                          isBuffer, gameMode, systemContentPriority);
 }
 
 FrameTimeline::DisplayFrame::DisplayFrame(std::shared_ptr<TimeStats> timeStats,
@@ -1356,9 +1372,7 @@ void FrameTimeline::DisplayFrame::setGpuFence(const std::shared_ptr<FenceTime>& 
 
 void FrameTimeline::DisplayFrame::classifyJankLegacy(nsecs_t presentDelay,
                                                      nsecs_t previousPresentTime) {
-    nsecs_t presentThreshold = FlagManager::getInstance().increase_missed_frame_jank_threshold()
-            ? mJankClassificationThresholds.presentThresholdExtended
-            : mJankClassificationThresholds.presentThresholdLegacy;
+    const nsecs_t presentThreshold = mJankClassificationThresholds.presentThreshold;
 
     if (std::abs(presentDelay) > presentThreshold) {
         mFramePresentMetadata.legacy() = presentDelay > 0 ? FramePresentMetadata::LatePresent
@@ -1502,9 +1516,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
 
     mPresentDelay = presentDelay;
 
-    nsecs_t presentThreshold = FlagManager::getInstance().increase_missed_frame_jank_threshold()
-            ? mJankClassificationThresholds.presentThresholdExtended
-            : mJankClassificationThresholds.presentThresholdLegacy;
+    const nsecs_t presentThreshold = mJankClassificationThresholds.presentThreshold;
 
     if (std::abs(presentDelay) <= presentThreshold) {
         mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
@@ -1548,7 +1560,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
         // Frames presented on time are not janky, but might be buffer stuffed.
         if (std::abs(presentDelay) <= presentThreshold) {
             mJankType.experimental() = JankType::None;
-        } else {
+        } else if (presentDelay > mRefreshRate.getPeriodNsecs() - presentThreshold) {
             mJankType.experimental() = JankType::SurfaceFlingerStuffing;
         }
     } else if (mFramePresentMetadata.experimental() == FramePresentMetadata::EarlyPresent) {
@@ -1820,16 +1832,19 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
 nsecs_t FrameTimeline::DisplayFrame::trace(pid_t surfaceFlingerPid, nsecs_t monoBootOffset,
                                            nsecs_t previousPredictionPresentTime,
                                            bool filterFramesBeforeTraceStarts) const {
+    const auto result = (mPredictionState == PredictionState::Valid)
+            ? mSurfaceFlingerPredictions.presentTime
+            : previousPredictionPresentTime;
     if (mSurfaceFrames.empty()) {
         // We don't want to trace display frames without any surface frames updates as this cannot
         // be janky
-        return previousPredictionPresentTime;
+        return result;
     }
 
     if (mToken == FrameTimelineInfo::INVALID_VSYNC_ID) {
         // DisplayFrame should not have an invalid token.
         ALOGE("Cannot trace DisplayFrame with invalid token");
-        return previousPredictionPresentTime;
+        return result;
     }
 
     if (mPredictionState == PredictionState::Valid) {
@@ -1845,7 +1860,7 @@ nsecs_t FrameTimeline::DisplayFrame::trace(pid_t surfaceFlingerPid, nsecs_t mono
 
     addSkippedFrame(surfaceFlingerPid, monoBootOffset, previousPredictionPresentTime,
                     filterFramesBeforeTraceStarts);
-    return mSurfaceFlingerPredictions.presentTime;
+    return result;
 }
 
 float FrameTimeline::computeFps(const std::unordered_set<int32_t>& layerIds) {
@@ -2031,13 +2046,15 @@ void FrameTimeline::DisplayFrame::dumpJank(std::string& result, nsecs_t baseTime
         }
     }
     StringAppendF(&result, "Display Frame %d", displayFrameCount);
-    dump(result, baseTime);
+    dump<std::milli>(result, baseTime);
 }
 
+template <typename Period>
 void FrameTimeline::DisplayFrame::dumpAll(std::string& result, nsecs_t baseTime) const {
-    dump(result, baseTime);
+    dump<Period>(result, baseTime);
 }
 
+template <typename Period>
 void FrameTimeline::DisplayFrame::dump(std::string& result, nsecs_t baseTime) const {
     if (mJankType.value() != JankType::None) {
         // Easily identify a janky Display Frame in the dump
@@ -2052,21 +2069,22 @@ void FrameTimeline::DisplayFrame::dump(std::string& result, nsecs_t baseTime) co
     StringAppendF(&result, "Start Metadata: %s\n", toString(mFrameStartMetadata).c_str());
     std::chrono::nanoseconds vsyncPeriod(mRefreshRate.getPeriodNsecs());
     StringAppendF(&result, "Vsync Period: %10f\n",
-                  std::chrono::duration<double, std::milli>(vsyncPeriod).count());
+                  std::chrono::duration<double, Period>(vsyncPeriod).count());
     nsecs_t presentDelta =
             mSurfaceFlingerActuals.presentTime - mSurfaceFlingerPredictions.presentTime;
     std::chrono::nanoseconds presentDeltaNs(std::abs(presentDelta));
     StringAppendF(&result, "Present delta: %10f\n",
-                  std::chrono::duration<double, std::milli>(presentDeltaNs).count());
+                  std::chrono::duration<double, Period>(presentDeltaNs).count());
     std::chrono::nanoseconds deltaToVsync(std::abs(presentDelta) % mRefreshRate.getPeriodNsecs());
     StringAppendF(&result, "Present delta %% refreshrate: %10f\n",
-                  std::chrono::duration<double, std::milli>(deltaToVsync).count());
-    dumpTable(result, mSurfaceFlingerPredictions, mSurfaceFlingerActuals, "", mPredictionState,
-              baseTime);
+                  std::chrono::duration<double, Period>(deltaToVsync).count());
+    StringAppendF(&result, "Jank Severity Score: %10f\n", mJankSeverityScore);
+    dumpTable<Period>(result, mSurfaceFlingerPredictions, mSurfaceFlingerActuals, "",
+                      mPredictionState, baseTime);
     StringAppendF(&result, "\n");
     std::string indent = "    "; // 4 spaces
     for (const auto& surfaceFrame : mSurfaceFrames) {
-        surfaceFrame->dump(result, indent, baseTime);
+        surfaceFrame->dump<Period>(result, indent, baseTime);
     }
     StringAppendF(&result, "\n");
 }
@@ -2080,13 +2098,25 @@ void FrameTimeline::DisplayFrame::dumpPresentTime(std::string& result) const {
 }
 
 // QTI_END: 2024-03-18: Performance: SF: Add one dump option to print present time only
+
+std::string FrameTimeline::dumpStateForTesting() {
+    std::scoped_lock lock(mMutex);
+    std::string result;
+    StringAppendF(&result, "Number of display frames : %d\n", (int)mDisplayFrames.size());
+    for (size_t i = 0; i < mDisplayFrames.size(); i++) {
+        StringAppendF(&result, "Display Frame %d", static_cast<int>(i));
+        mDisplayFrames[i]->dumpAll<std::nano>(result, /*baseTime*/ 0);
+    }
+
+    return result;
+}
 void FrameTimeline::dumpAll(std::string& result) {
     std::scoped_lock lock(mMutex);
     StringAppendF(&result, "Number of display frames : %d\n", (int)mDisplayFrames.size());
     nsecs_t baseTime = (mDisplayFrames.empty()) ? 0 : mDisplayFrames[0]->getBaseTime();
     for (size_t i = 0; i < mDisplayFrames.size(); i++) {
         StringAppendF(&result, "Display Frame %d", static_cast<int>(i));
-        mDisplayFrames[i]->dumpAll(result, baseTime);
+        mDisplayFrames[i]->dumpAll<std::milli>(result, baseTime);
     }
 }
 

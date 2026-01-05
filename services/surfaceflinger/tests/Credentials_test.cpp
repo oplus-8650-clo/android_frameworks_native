@@ -217,7 +217,7 @@ TEST_F(CredentialsTest, SetDesiredDisplayConfigsTest) {
     ASSERT_EQ(res, NO_ERROR);
     gui::DisplayModeSpecs setSpecs;
     std::function<status_t()> condition = [=]() {
-        return SurfaceComposerClient::setDesiredDisplayModeSpecs(display, specs);
+        return SurfaceComposerClient::setDesiredDisplayModeSpecs({specs});
     };
     ASSERT_NO_FATAL_FAILURE(checkWithPrivileges<status_t>(condition, NO_ERROR, PERMISSION_DENIED));
 }

@@ -642,10 +642,9 @@ void MotionEvent::copyFrom(const MotionEvent* other, bool keepHistory) {
         mSamplePointerCoords.clear();
         size_t pointerCount = other->getPointerCount();
         size_t historySize = other->getHistorySize();
-        mSamplePointerCoords
-                .insert(mSamplePointerCoords.end(),
-                        &other->mSamplePointerCoords[historySize * pointerCount],
-                        &other->mSamplePointerCoords[historySize * pointerCount + pointerCount]);
+        const PointerCoords* insertBegin = &other->mSamplePointerCoords[historySize * pointerCount];
+        mSamplePointerCoords.insert(mSamplePointerCoords.end(), insertBegin,
+                                    insertBegin + pointerCount);
     }
 }
 

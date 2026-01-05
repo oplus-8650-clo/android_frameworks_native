@@ -21,18 +21,21 @@
 
 #include <InputDevice.h>
 #include <InputMapper.h>
-#include <NotifyArgs.h>
+#include <android-base/result.h>
 #include <ftl/flags.h>
 #include <gmock/gmock.h>
 #include <utils/StrongPointer.h>
 
 #include "FakeEventHub.h"
 #include "FakeInputReaderPolicy.h"
+#include "InputReaderBase.h"
 #include "InstrumentedInputReader.h"
 #include "InterfaceMocks.h"
+#include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestInputListener.h"
 #include "input/Input.h"
+#include "input/InputVerifier.h"
 #include "input/PropertyMap.h"
 
 namespace android {
@@ -57,8 +60,8 @@ protected:
 
     std::list<NotifyArgs> process(int32_t type, int32_t code, int32_t value);
     std::list<NotifyArgs> process(nsecs_t when, int32_t type, int32_t code, int32_t value);
-    std::list<NotifyArgs> process(nsecs_t when, nsecs_t readTime, int32_t type, int32_t code,
-                                  int32_t value);
+    virtual std::list<NotifyArgs> process(nsecs_t when, nsecs_t readTime, int32_t type,
+                                          int32_t code, int32_t value);
 
     InputDeviceIdentifier mIdentifier;
     MockEventHubInterface mMockEventHub;
@@ -71,6 +74,33 @@ protected:
     // The mapper should be created by the subclasses.
     std::unique_ptr<InputMapper> mMapper;
     PropertyMap mPropertyMap;
+};
+
+/**
+ * A variant of InputMapperUnitTest that also runs NotifyMotionArgs produced by the mapper through
+ * an InputVerifier.
+ *
+ * When using this class, all args produced by the mapper need to be run through the verifier, so
+ * that it gets a full view of the input stream. This means that wrapper functions such as
+ * reconfigureMapper must be used instead of calling functions on the mapper directly.
+ */
+class VerifyingInputMapperUnitTest : public InputMapperUnitTest {
+protected:
+    VerifyingInputMapperUnitTest();
+
+    using InputMapperUnitTest::process;
+    virtual std::list<NotifyArgs> process(nsecs_t when, nsecs_t readTime, int32_t type,
+                                          int32_t code, int32_t value) override;
+
+    std::list<NotifyArgs> reconfigureMapper(nsecs_t when, const InputReaderConfiguration& config,
+                                            ConfigurationChanges changes);
+
+    std::list<NotifyArgs> resetMapper(nsecs_t when);
+
+private:
+    void processMotionArgs(const std::list<NotifyArgs>& args);
+
+    InputVerifier mVerifier;
 };
 
 /**

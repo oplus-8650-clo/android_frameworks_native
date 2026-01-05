@@ -165,7 +165,7 @@ VKAPI_ATTR void checkedGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2
     }
 }
 
-VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoEXT* pReleaseInfo) {
+VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoKHR* pReleaseInfo) {
     if (GetData(device).hook_extensions[ProcHook::EXT_swapchain_maintenance1]) {
         return ReleaseSwapchainImagesEXT(device, pReleaseInfo);
     } else {
@@ -609,6 +609,7 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_EXT_swapchain_maintenance1") == 0) return ProcHook::EXT_swapchain_maintenance1;
     if (strcmp(name, "VK_EXT_surface_maintenance1") == 0) return ProcHook::EXT_surface_maintenance1;
     if (strcmp(name, "VK_KHR_present_id") == 0) return ProcHook::KHR_present_id;
+    if (strcmp(name, "VK_KHR_present_id2") == 0) return ProcHook::KHR_present_id2;
     if (strcmp(name, "VK_ANDROID_external_memory_android_hardware_buffer") == 0) return ProcHook::ANDROID_external_memory_android_hardware_buffer;
     if (strcmp(name, "VK_KHR_bind_memory2") == 0) return ProcHook::KHR_bind_memory2;
     if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;

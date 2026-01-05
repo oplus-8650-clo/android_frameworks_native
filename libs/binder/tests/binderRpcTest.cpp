@@ -1322,8 +1322,6 @@ TEST_P(BinderRpcAccessor, InjectAndGetServiceHappyPath) {
 TEST_P(BinderRpcAccessor, InjectNoAccessorProvided) {
     const String16 kInstanceName("doesnt_matter_nothing_checks");
 
-    bool isProviderDeleted = false;
-
     auto receipt = addAccessorProvider({String8(kInstanceName).c_str()},
                                        [&](const String16&) -> sp<IBinder> { return nullptr; });
     EXPECT_FALSE(receipt.expired());
@@ -1367,9 +1365,6 @@ TEST_P(BinderRpcAccessor, InjectNoSockaddrProvided) {
 
     auto proc = createRpcTestSocketServerProcess({.numMaxThreads = kNumThreads});
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
-
-    bool isProviderDeleted = false;
-    bool isAccessorDeleted = false;
 
     auto receipt = addAccessorProvider({String8(kInstanceName).c_str()},
                                        [&](const String16& name) -> sp<IBinder> {
@@ -1828,7 +1823,6 @@ inline void getServiceTest(BinderRpcTestProcessSession& proc,
         GTEST_SKIP() << "Test disabled because Binder was built as a static library";
     }
 
-    constexpr size_t kNumThreads = 10;
     bool isDeleted = false;
 
     AccessorProviderData* data =

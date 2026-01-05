@@ -100,7 +100,7 @@ public:
     struct Message : public Flattenable<Message> {
         ReleaseCallbackId releaseCallbackId;
         sp<Fence> releaseFence = Fence::NO_FENCE;
-        uint32_t maxAcquiredBufferCount;
+        uint32_t maxAcquiredBufferCount = 0;
 
         Message() = default;
         Message(ReleaseCallbackId releaseCallbackId, sp<Fence> releaseFence,

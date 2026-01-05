@@ -49,6 +49,7 @@ public:
     nsecs_t nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
                                          std::optional<nsecs_t> lastVsyncOpt = {}) final
             EXCLUDES(mMutex);
+    nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const final EXCLUDES(mMutex);
     nsecs_t currentPeriod() const final EXCLUDES(mMutex);
     Period minFramePeriod() const final EXCLUDES(mMutex);
     void resetModel() final EXCLUDES(mMutex);

@@ -31,6 +31,7 @@
 #include <memory>
 #include <vector>
 
+#include <common/Panopticon.h>
 #include "compat/GraphitePipelineManager.h"
 
 namespace android::renderengine::skia {
@@ -70,7 +71,15 @@ std::future<void> GraphiteVkRenderEngine::primeCache(PrimeCacheConfig config) {
     // for Graphite TEMPORARILY, and this switch may be removed in the future without warning.
     // TODO(b/380159947): remove this option, and force just precompilation to always be enabled.
     if (base::GetBoolProperty("debug.renderengine.graphite.prewarm", true)) {
+        mPipelineCallbackHandler.beginWarmup();
+        mProtectedPipelineCallbackHandler.beginWarmup();
+
+        // Despite this returning a future, it is actually synchronous. This allows us to surround
+        // it with begin/end-Warmup calls in order to mark the warmed up Pipelines.
         ret = SkiaVkRenderEngine::primeCache(config);
+
+        mPipelineCallbackHandler.endWarmup();
+        mProtectedPipelineCallbackHandler.endWarmup();
     }
 
     // Note: this sysprop is for local debugging only! Graphite's precompilation should stay
@@ -102,7 +111,10 @@ std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
         VulkanInterface& vulkanInterface) {
     return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(),
                                                SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
-                                                      mRuntimeEffectManager.mKnownEffects.size()));
+                                                      mRuntimeEffectManager.mKnownEffects.size()),
+                                               vulkanInterface.isProtected()
+                                                       ? &mProtectedPipelineCallbackHandler
+                                                       : &mPipelineCallbackHandler);
 }
 
 void GraphiteVkRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {
@@ -161,6 +173,7 @@ base::unique_fd GraphiteVkRenderEngine::flushAndSubmit(SkiaGpuContext* context, 
     const bool inserted = context->graphiteContext()->insertRecording(insertInfo);
     LOG_ALWAYS_FATAL_IF(!inserted,
                         "graphite::Context::insertRecording(...) failed, check for Skia errors");
+    auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_submit);
     const bool submitted = context->graphiteContext()->submit(graphite::SyncToCpu::kNo);
     LOG_ALWAYS_FATAL_IF(!submitted, "graphite::Context::submit(...) failed, check for Skia errors");
     // Skia's "backend" semaphores can be deleted immediately after inserting the recording; only
@@ -182,6 +195,8 @@ base::unique_fd GraphiteVkRenderEngine::flushAndSubmit(SkiaGpuContext* context, 
 void GraphiteVkRenderEngine::appendBackendSpecificInfoToDump(std::string& result) {
     StringAppendF(&result, "\n ------------RE Vulkan (Graphite)----------\n");
     SkiaVkRenderEngine::appendBackendSpecificInfoToDump(result);
+    mPipelineCallbackHandler.report("Unprotected", result);
+    mProtectedPipelineCallbackHandler.report("Protected", result);
 }
 
 } // namespace android::renderengine::skia

@@ -48,6 +48,7 @@ public:
     // Initial data for tracking a binder call
     struct CallInfo {
         int64_t startTimeNanos;
+        int64_t cpuUsageStartTimeNanos;
         String16 interfaceDescriptor;
         String16 aidlMethodName;
         uint32_t code;

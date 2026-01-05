@@ -86,6 +86,7 @@ cc_defaults {
     cflags: [
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
         "-DLOG_TAG=\"SurfaceFlinger\"",
+        "-DFMT_CPP_LIB_FILESYSTEM=0", // b/455625875
         "-Wall",
         "-Wconversion",
         "-Werror",
@@ -294,8 +295,10 @@ filegroup {
         "FrontEnd/TransactionHandler.cpp",
         "FrontEnd/Caching/MergeableHierarchy.cpp",
         "FrontEnd/Caching/MergeableHierarchyManager.cpp",
+        "FrontEnd/Caching/TexturePool.cpp",
         "HdrLayerInfoReporter.cpp",
         "HdrSdrRatioOverlay.cpp",
+        "RenderResourceCache.cpp",
         "Jank/JankTracker.cpp",
         "Layer.cpp",
         "LayerFE.cpp",

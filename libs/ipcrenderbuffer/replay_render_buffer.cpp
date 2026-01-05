@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     consumer->setBitmapArenaAllocator(std::move(loadedAllocator));
     */
 
-    IPCResourceCache cache;
+    IPCServerResourceCache cache;
     resetRenderCommandBufferForReplay(&cache, consumer);
 
     // Dump to text file

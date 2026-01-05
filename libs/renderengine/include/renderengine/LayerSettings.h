@@ -21,6 +21,7 @@
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <gui/CornerRadii.h>
 #include <gui/DisplayLuts.h>
+#include <gui/RenderCommandBufferConsumer.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <renderengine/ExternalTexture.h>
@@ -41,6 +42,9 @@
 #include <iosfwd>
 
 namespace android {
+
+struct IPCServerResourceCache;
+
 namespace renderengine {
 
 // Metadata describing the input buffer to render from.
@@ -166,6 +170,9 @@ struct LayerSettings {
     float whitePointNits = -1.f;
 
     std::shared_ptr<gui::DisplayLuts> luts;
+
+    std::shared_ptr<IPCServerResourceCache> renderResourceCache;
+    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
 };
 
 // Keep in sync with custom comparison function in

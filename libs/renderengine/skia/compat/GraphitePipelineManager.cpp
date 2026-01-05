@@ -253,43 +253,6 @@ skgpu::graphite::PaintOptions MouriMapToneMap(RuntimeEffectManager& effectManage
     return paintOptions;
 }
 
-
-skgpu::graphite::PaintOptions KawaseBlurLowSrcSrcOver(RuntimeEffectManager& effectManager) {
-    sk_sp<SkRuntimeEffect> lowSampleBlurEffect = effectManager.mKnownEffects[kKawaseBlurDualFilter_LowSampleBlurEffect];
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                           { &ci, 1 },
-                                                           {});
-
-    sk_sp<PrecompileShader> kawase = PrecompileRuntimeEffects::MakePrecompileShader(
-            std::move(lowSampleBlurEffect),
-            { { img } });
-
-    PaintOptions paintOptions;
-    paintOptions.setShaders({ std::move(kawase) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrc, SkBlendMode::kSrcOver });
-    return paintOptions;
-}
-
-skgpu::graphite::PaintOptions KawaseBlurHighSrc(RuntimeEffectManager& effectManager) {
-    sk_sp<SkRuntimeEffect> highSampleBlurEffect = effectManager.mKnownEffects[kKawaseBlurDualFilter_HighSampleBlurEffect];
-
-    SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
-    sk_sp<PrecompileShader> img = PrecompileShaders::Image(ImageShaderFlags::kExcludeCubic,
-                                                           { &ci, 1 },
-                                                           {});
-
-    sk_sp<PrecompileShader> kawase = PrecompileRuntimeEffects::MakePrecompileShader(
-            std::move(highSampleBlurEffect),
-            { { img } });
-
-    PaintOptions paintOptions;
-    paintOptions.setShaders({ std::move(kawase) });
-    paintOptions.setBlendModes({ SkBlendMode::kSrc });
-    return paintOptions;
-}
-
 skgpu::graphite::PaintOptions BlurFilterMix(RuntimeEffectManager& effectManager) {
     sk_sp<SkRuntimeEffect> mixEffect = effectManager.mKnownEffects[
             kBlurFilter_MixEffect];
@@ -583,12 +546,6 @@ std::vector<PrecompileSettings> chooseBlurPrecompileSettings(RuntimeEffectManage
     // potential precompilation gaps when new blurring algorithms are added.
     switch (effectManager.getChosenBlurAlgorithm()) {
         case RenderEngine::BlurAlgorithm::None:
-            break;
-        case RenderEngine::BlurAlgorithm::KawaseDualFilter:
-            settingsList.push_back({KawaseBlurLowSrcSrcOver(effectManager),
-                                    DrawTypeFlags::kNonAAFillRect, kRGBA_1_D});
-            settingsList.push_back(
-                    {KawaseBlurHighSrc(effectManager), DrawTypeFlags::kNonAAFillRect, kRGBA_1_D});
             break;
         case RenderEngine::BlurAlgorithm::Gaussian:
         case RenderEngine::BlurAlgorithm::Kawase:

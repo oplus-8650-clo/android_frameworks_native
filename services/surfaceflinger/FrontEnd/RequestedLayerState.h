@@ -113,6 +113,7 @@ struct RequestedLayerState : layer_state_t {
     // The owner pid of the layer. If created from a non system process, it will be the calling pid.
     // If created from a system process, the value can be passed in.
     const gui::Pid ownerPid;
+    const uint64_t ownerPermissions;
     bool dataspaceRequested;
     bool hasColorTransform;
     bool transformIsValid = true;
@@ -129,6 +130,7 @@ struct RequestedLayerState : layer_state_t {
     uint32_t layerIdToMirror = UNASSIGNED_LAYER_ID;
     uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     ui::LayerStack layerStackToMirror = ui::UNASSIGNED_LAYER_STACK;
+    std::optional<DisplayId> displayIdToMirror{};
     uint32_t touchCropId = UNASSIGNED_LAYER_ID;
     uint32_t bgColorLayerId = UNASSIGNED_LAYER_ID;
     uint64_t barrierFrameNumber = 0;
@@ -142,6 +144,7 @@ struct RequestedLayerState : layer_state_t {
     std::vector<uint32_t> mirrorIds{};
     ftl::Flags<RequestedLayerState::Changes> changes;
     bool bgColorLayer = false;
+    nsecs_t lastUpdateTime = 0;
 };
 
 } // namespace android::surfaceflinger::frontend

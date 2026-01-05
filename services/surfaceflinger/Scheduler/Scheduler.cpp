@@ -424,6 +424,7 @@ void Scheduler::run() {
 
 void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
                               TimePoint expectedVsyncTime) {
+    SFTRACE_CALL();
     const auto debugPresentDelay = mDebugPresentDelay.load();
     mDebugPresentDelay.store(std::nullopt);
 
@@ -458,7 +459,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
             followerBeginFrameArgs.expectedVsyncTime = nextFollowerVsync;
 
             FrameTargeter& targeter = *display.targeterPtr;
-            if (followerDisplayBackpressure) {
+            if (followerDisplayBackpressure && !isLockstepFollowerLocked(id)) {
                 const size_t pendingFenceCount =
                         targeter.countPresentFencesPendingAt(beginFrameArgs.frameBeginTime);
                 const TimePoint nextFollowerVsync =
@@ -926,6 +927,28 @@ void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderFrameRate, bool ap
     display.schedulePtr->getTracker().setRenderRate(renderFrameRate, applyImmediately, overrides);
 }
 
+bool Scheduler::isLockstepFollower(PhysicalDisplayId id) const {
+    std::scoped_lock lock(mDisplayLock);
+    ftl::FakeGuard guard(kMainThreadContext);
+    return isLockstepFollowerLocked(id);
+}
+
+bool Scheduler::isLockstepFollowerLocked(PhysicalDisplayId id) const {
+    const auto displayOpt = mDisplays.get(id);
+    if (!displayOpt) {
+        ALOGW("%s: Invalid display %s!", __func__, to_string(id).c_str());
+        return false;
+    }
+    const Display& display = *displayOpt;
+
+    const Fps pacesetterRefreshRate = pacesetterSelectorPtrLocked()->getActiveMode().fps;
+    const Fps followerRefreshRate = display.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+    const float rateDiff = pacesetterRefreshRate.getValue() - followerRefreshRate.getValue();
+
+    constexpr float kRefreshRateEpsilon = 0.1f;
+    return rateDiff < kRefreshRateEpsilon;
+}
+
 Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,
                                     TimePoint currentExpectedPresentTime) const {
     std::scoped_lock lock(mDisplayLock);
@@ -947,17 +970,25 @@ Fps Scheduler::getNextFrameInterval(PhysicalDisplayId id,
 }
 
 void Scheduler::resync(ResyncCaller caller) {
-    static constexpr nsecs_t kRequestNextVsyncIgnoreDelay = ms2ns(750);
+    static constexpr int64_t kDefaultResyncOnChoreographerTimeout = ms2ns(750);
 
     const nsecs_t now = systemTime();
-    const nsecs_t last = (FlagManager::getInstance().resync_on_tx_separate_timer() &&
-                          caller == ResyncCaller::Transaction)
-            ? mLastResyncTimeOnTx.exchange(now)
-            : mLastResyncTime.exchange(now);
-
-    const auto ignoreDelay = caller == ResyncCaller::Transaction
-            ? VSyncTracker::kPredictorThreshold.ns()
-            : kRequestNextVsyncIgnoreDelay;
+    nsecs_t last, ignoreDelay;
+    if (FlagManager::getInstance().resync_on_tx_separate_timer()) {
+        static const int64_t resyncOnTxTimeout =
+                sysprop::resync_on_tx_timeout(VSyncTracker::kPredictorThreshold.ns());
+        static const int64_t resyncOnChoreographerTimeout =
+                sysprop::resync_on_choreographer_timeout(kDefaultResyncOnChoreographerTimeout);
+        last = (caller == ResyncCaller::Transaction) ? mLastResyncTimeOnTx.exchange(now)
+                                                     : mLastResyncTime.exchange(now);
+        ignoreDelay = (caller == ResyncCaller::Transaction) ? resyncOnTxTimeout
+                                                            : resyncOnChoreographerTimeout;
+        if (ignoreDelay == 0) return;
+    } else {
+        last = mLastResyncTime.exchange(now);
+        ignoreDelay = caller == ResyncCaller::Transaction ? VSyncTracker::kPredictorThreshold.ns()
+                                                          : kDefaultResyncOnChoreographerTimeout;
+    }
 
     if (now - last > ignoreDelay) {
         resyncAllToHardwareVsync(false /* allowToEnable */);
@@ -1586,7 +1617,8 @@ auto Scheduler::applyPolicy(S Policy::* statePtr, T&& newState,
         modeRequests.reserve(modeChoices.size());
         emitModeChangedEvents.reserve(modeChoices.size());
         for (auto& [id, choice] : modeChoices) {
-            modeRequests.emplace_back(display::DisplayModeRequest{.mode = choice.mode});
+            modeRequests.emplace_back(
+                    display::DisplayModeRequest{.mode = choice.mode, .seamless = true});
             emitModeChangedEvents.emplace_back(
                     display::DisplayModeRequest{.mode = choice.mode,
                                                 .emitEvent = choice.consideredSignals

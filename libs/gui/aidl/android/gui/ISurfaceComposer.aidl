@@ -19,6 +19,8 @@ package android.gui;
 import android.gui.CaptureArgs;
 import android.gui.Color;
 import android.gui.CompositionPreference;
+import android.gui.GraphicBuffersRegisterInfo;
+import android.gui.GraphicBuffersUnregisterInfo;
 import android.gui.ContentSamplingAttributes;
 import android.gui.DisplayBrightness;
 import android.gui.DisplayCaptureArgs;
@@ -424,11 +426,11 @@ interface ISurfaceComposer {
     void removeTunnelModeEnabledListener(ITunnelModeEnabledListener listener);
 
     /**
-     * Sets the refresh rate boundaries for the display.
+     * Sets the mode specifications for multiple displays, to be applied atomically.
      *
      * @see DisplayModeSpecs.aidl for details.
      */
-    void setDesiredDisplayModeSpecs(IBinder displayToken, in DisplayModeSpecs specs);
+    void setDesiredDisplayModeSpecs(in DisplayModeSpecs[] specs);
 
     DisplayModeSpecs getDesiredDisplayModeSpecs(IBinder displayToken);
 
@@ -668,4 +670,20 @@ interface ISurfaceComposer {
      * Requires root
      */
      void resetForcedPacesetter();
+
+    /**
+     * Registers a list of graphic buffers with SurfaceFlinger.
+     * This is used to notify SurfaceFlinger about buffers that will be used
+     * in the future, so that it can prepare them for use by out-of-process
+     * rendering.
+     */
+    oneway void registerGraphicBuffers(in GraphicBuffersRegisterInfo info);
+
+    /**
+     * Unregisters a list of graphic buffers from SurfaceFlinger.
+     * This is used to notify SurfaceFlinger that the buffers are no longer
+     * needed, so that it can release any resources associated with them for
+     * out-of-process rendering.
+     */
+    oneway void unregisterGraphicBuffers(in GraphicBuffersUnregisterInfo info);
 }

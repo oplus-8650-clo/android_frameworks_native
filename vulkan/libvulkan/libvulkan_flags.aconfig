@@ -2,11 +2,32 @@ package: "com.android.graphics.libvulkan.flags"
 container: "system"
 
 flag {
+  name: "present_id2_khr"
+  namespace: "gpu"
+  description: "Enable the VK_KHR_present_id2 extension"
+  bug: "441466636"
+}
+
+flag {
+  name: "oem_and_platform_layers"
+  namespace: "gpu"
+  description: "Enable support for OEM and Platform Layers"
+  bug: "333952056"
+}
+
+flag {
   name: "swapchain_mutable_format_ext"
   namespace: "core_graphics"
   description: "Enable the VK_KHR_swapchain_mutable_format vulkan extension"
   bug: "341978292"
   is_fixed_read_only: true
+}
+
+flag {
+  name: "present_mode_fifo_latest_ready_ext"
+  namespace: "core_graphics"
+  description: "Enable the VK_EXT_present_mode_fifo_latest_ready vulkan extension"
+  bug: "378669647"
 }
 
 flag {

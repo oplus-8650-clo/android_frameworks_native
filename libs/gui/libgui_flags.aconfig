@@ -157,3 +157,11 @@ flag {
   }
   is_fixed_read_only: true
 } # surface_texture_updateteximage_stop_early
+
+flag {
+  name: "out_of_process_rendering"
+  namespace: "window_surfaces"
+  description: "Enable out of process rendering"
+  bug: "448153717"
+} # out_of_process_rendering
+

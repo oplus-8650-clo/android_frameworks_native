@@ -45,12 +45,17 @@ public:
     static constexpr Duration kPredictorThreshold = std::chrono::milliseconds(200);
 
     /*
-     * Adds a known timestamp from a vsync timing source (HWVsync signal, present fence)
-     * to the model.
+     * Adds a known timestamp from a vsync timing source to the model. This timestamp
+     * is used to correct the model's internal phase and period.
      *
-     * \param [in] timestamp    The timestamp when the vsync signal was.
+     * The sources for this `timestamp` can include:
+     * 1. A direct hardware vsync callback.
+     * 2. A query via `getDisplayKnownVsyncSample` (which retrieves the last known hardware VSYNC).
+     * 3. A present fence (signaling when a frame was actually presented).
+     *
+     * \param [in] timestamp    The timestamp (in nanoseconds) when the vsync signal occurred.
      * \return                  True if the timestamp was consistent with the internal model,
-     *                          False otherwise
+     *                          False otherwise.
      */
     virtual bool addVsyncTimestamp(nsecs_t timestamp) = 0;
 
@@ -68,6 +73,15 @@ public:
      */
     virtual nsecs_t nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
                                                  std::optional<nsecs_t> lastVsyncOpt = {}) = 0;
+
+    /*
+     * For a given known vsync, return the model's prediction error in nanoseconds.
+     * This is a query-only function and does not affect the state of the model.
+     *
+     * \param [in] knownVsync   A vsync timestamp to compare against the model.
+     * \return                  The model's prediction error in nanoseconds.
+     */
+    virtual nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const = 0;
 
     /*
      * The current period of the vsync signal.

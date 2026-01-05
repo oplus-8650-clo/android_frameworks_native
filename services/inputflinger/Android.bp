@@ -123,6 +123,7 @@ cc_defaults {
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
+        "libprotolog",
         "libstatslog_inputflinger",
         "libstatspull",
         "libstatssocket",
@@ -165,7 +166,6 @@ cc_library_shared {
         "inputflinger_defaults",
         "libinputflinger_defaults",
         "libinputreader_defaults",
-        "protolog_all_deps",
     ],
     srcs: [
         "InputManager.cpp",

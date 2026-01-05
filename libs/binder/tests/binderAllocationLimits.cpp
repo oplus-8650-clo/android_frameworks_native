@@ -378,7 +378,7 @@ TEST(BinderAccessorAllocation, AddAccessorCheckService) {
 
     sp<IBinder> binder = sm->checkService(kInstanceName16);
 
-    status_t status = android::removeAccessorProvider(receipt);
+    (void)android::removeAccessorProvider(receipt);
 }
 
 TEST(RpcBinderAllocation, SetupRpcServer) {
@@ -439,17 +439,18 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     }
 
     android::BinderStatsPusher pusher;
-    auto service = pusher.getBinderStatsServiceLocked(currentTimeNanos);
+    auto service = pusher.getBinderStatsServiceLocked(currentTimeNanos / 1000'000'000);
+    EXPECT_NE(service, nullptr);
     size_t mallocs = 0, totalBytes = 0;
     {
         const auto on_malloc = OnMalloc([&](size_t bytes) {
             mallocs++;
             totalBytes += bytes;
         });
-        pusher.aggregateStatsLocked(data, service, currentTimeNanos);
+        pusher.aggregateStatsLocked(data, service, currentTimeNanos / 1000'000'000);
     }
     EXPECT_EQ(mallocs, 12u);
-    EXPECT_EQ(totalBytes, 1120u);
+    EXPECT_EQ(totalBytes, 1200u);
 
     currentTimeNanos = 18'100'000'000;
 
@@ -472,10 +473,10 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
             mallocs++;
             totalBytes += bytes;
         });
-        pusher.aggregateStatsLocked(data, service, currentTimeNanos);
+        pusher.aggregateStatsLocked(data, service, currentTimeNanos / 1000'000'000);
     }
     EXPECT_EQ(mallocs, 967u);
-    EXPECT_EQ(totalBytes, 136214u);
+    EXPECT_EQ(totalBytes, 148294u);
 }
 
 int main(int argc, char** argv) {

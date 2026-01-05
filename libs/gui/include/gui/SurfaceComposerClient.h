@@ -177,10 +177,9 @@ public:
     // TODO(b/180391891): Update clients to use getDynamicDisplayInfo and remove this function.
     static status_t getActiveDisplayMode(const sp<IBinder>& display, ui::DisplayMode*);
 
-    // Sets the refresh rate boundaries for the display.
-    static status_t setDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
-                                               const gui::DisplayModeSpecs&);
-    // Gets the refresh rate boundaries for the display.
+    // Sets the mode specifications for multiple displays, to be applied atomically.
+    static status_t setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&);
+    // Gets the mode specifications for the display.
     static status_t getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
                                                gui::DisplayModeSpecs*);
 
@@ -410,6 +409,16 @@ public:
     sp<SurfaceControl> mirrorSurface(SurfaceControl* mirrorFromSurface,
                                      SurfaceControl* stopAt = nullptr);
 
+    // Finds the layer stack associated with the provided `displayId`, and returns the
+    // `SurfaceControl` associated with the root layer of the mirrored hierarchy. Otherwise, nullptr
+    // if the client lacks necessary permissions, the `displayId` does not exist, the layer cannot
+    // be created due to a leak, or if there is a binder error. Note: The mirrored layer stack does
+    // not change, even if the display's layer stack does.
+    sp<SurfaceControl> mirrorLayerStack(DisplayId displayId);
+
+    // Returns the `SurfaceControl` associated with the root layer that mirrors the layer hierarchy
+    // of a `displayId` that exists. Otherwise, nullptr if the client lacks necessary permissions,
+    // there is a layer leak and cannot create layer, or if there is a binder error.
     sp<SurfaceControl> mirrorDisplay(DisplayId displayId);
 
     static const std::string kEmpty;
@@ -756,6 +765,10 @@ public:
         // Queues up transactions using this token in SurfaceFlinger.  By default, all transactions
         // from a client are placed on the same queue. This can be used to prevent multiple
         // transactions from blocking each other.
+        //
+        // For display transactions, if the client requests DesiredDisplayModeSpecs with the same
+        // apply token prior to applying the transaction, then the modeset will be deferred until
+        // the transaction is committed.
         Transaction& setApplyToken(const sp<IBinder>& token);
 
         /**
@@ -824,6 +837,60 @@ public:
          * can be reliably sequenced.
          */
         Transaction& addTransactionBarrier(gui::TransactionBarrier barrier);
+
+        /**
+         * Set a "RenderCommandBuffer" on the SurfaceControl, referencing a
+         * a shared memory region of commands to be rendered by SurfaceFlinger
+         * as an alternative to buffer composition.
+         *
+         * WIP: b/448153717
+         */
+        Transaction& setRenderCommandBuffer(
+                const sp<SurfaceControl>& sc,
+                const std::shared_ptr<RenderCommandBufferProducer>& producer);
+
+        /**
+         * Associates a render resource token with a layer. This token is used to identify a
+         * client-managed cache of resources, such as GraphicBuffers, that can be used by a
+         * RenderCommandBuffer.
+         *
+         * When a RenderCommandBuffer is drawn, it may contain commands that reference these
+         * resources by their unique IDs. SurfaceFlinger uses the provided token to look up the
+         * corresponding RenderResourceCache, which contains the actual resource data (e.g.,
+         * the GraphicBuffer). This allows for efficient, cross-process rendering without needing
+         * to serialize the entire resource with each command.
+         *
+         * The lifecycle of the cache is tied to the lifecycle of the token. When the token is
+         * destroyed (e.g., the client process dies), SurfaceFlinger will automatically clean up
+         * the associated resource cache.
+         *
+         * @param sc The SurfaceControl for the layer to which the token will be applied.
+         * @param token A binder token that uniquely identifies the client's RenderResourceCache.
+         * @return A reference to the Transaction object for chaining calls.
+         *
+         * @see registerGraphicBuffers
+         * @see unregisterGraphicBuffers
+         * @see setRenderCommandBuffer
+         */
+        Transaction& setRenderResourceToken(const sp<SurfaceControl>& sc, const sp<IBinder>& token);
+
+        /**
+         * Advance the frameId of the RenderCommandBuffer consumer. SurfaceFlinger
+         * will not acquire a RenderCommandBuffer with frameId < the last buffer
+         * applied here, and so this allows for a barrier mechanism.
+         *
+         * More importantly it provides a way to wake up and poke SurfaceFlinger
+         * as otherwise no work would happen at all with the RenderCommandBuffer
+         * path. It would be nice to have a way to advance the frameId continuously
+         * when we know an animation is happening.
+         *
+         * The frame barrier stuff is currently unimplemented and at the moment
+         * this functions just to poke SurfaceFlinger.
+         *
+         * TODO(b/459526480): Finish sync support.
+         * TODO(b/459526115): Enable transaction bypass
+         */
+        Transaction& setRenderCommandBufferFrameId(const sp<SurfaceControl>& sc, uint64_t frameId);
 
         status_t setDisplaySurface(const sp<IBinder>& token,
                 const sp<IGraphicBufferProducer>& bufferProducer);
