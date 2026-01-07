@@ -32,6 +32,7 @@
 #include "skia/compat/PipelineCallbackHandler.h"
 
 #include <android-base/macros.h>
+#include <common/trace.h>
 #include <log/log_main.h>
 #include <memory>
 
@@ -176,6 +177,12 @@ void GraphiteGpuContext::setResourceCacheLimit(size_t maxResourceBytes) {
 void GraphiteGpuContext::purgeUnlockedScratchResources() {
     mContext->freeGpuResources();
     mRecorder->freeGpuResources();
+}
+
+void GraphiteGpuContext::purgeResourcesNotUsedIn(std::chrono::milliseconds duration) {
+    SFTRACE_CALL();
+    mContext->performDeferredCleanup(duration);
+    mRecorder->performDeferredCleanup(duration);
 }
 
 void GraphiteGpuContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {

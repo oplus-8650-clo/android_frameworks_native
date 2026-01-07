@@ -40,6 +40,7 @@ public:
     void setResourceCacheLimit(size_t maxResourceBytes) override;
 
     void purgeUnlockedScratchResources() override;
+    void purgeResourcesNotUsedIn(std::chrono::milliseconds) override;
     void resetContextIfApplicable() override;
 
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;

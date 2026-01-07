@@ -104,6 +104,8 @@ public:
      */
     virtual sk_sp<SkSurface> createRenderTarget(SkImageInfo imageInfo) = 0;
 
+    virtual void purgeResourcesNotUsedIn(std::chrono::milliseconds) = 0;
+
     virtual bool isAbandonedOrDeviceLost() = 0;
     virtual size_t getMaxRenderTargetSize() const = 0;
     virtual size_t getMaxTextureSize() const = 0;
