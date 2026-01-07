@@ -207,16 +207,6 @@ flag {
 }
 
 flag {
-  name: "touchpad_down_time_fix"
-  namespace: "input"
-  description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
-  bug: "447603159"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "enable_attention_service_apis"
   namespace: "input"
   description: "Enable AttentionService APIs"

@@ -24,7 +24,6 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
-#include <com_android_input_flags.h>
 #include <ftl/enum.h>
 #include <linux/input-event-codes.h>
 #include <log/log_main.h>
@@ -33,8 +32,6 @@
 #include "TouchCursorInputMapperCommon.h"
 #include "gestures/GestureConverterCommon.h"
 #include "input/Input.h"
-
-namespace input_flags = com::android::input::flags;
 
 namespace android {
 
@@ -252,7 +249,7 @@ std::list<NotifyArgs> UncapturedGestureConverter::handleButtonsChange(nsecs_t wh
             buttonsPressed &
                     (GESTURES_BUTTON_LEFT | GESTURES_BUTTON_MIDDLE | GESTURES_BUTTON_RIGHT);
     coords.setAxisValue(AMOTION_EVENT_AXIS_PRESSURE, pointerDown ? 1.0f : 0.0f);
-    if (input_flags::touchpad_down_time_fix() && !isPointerDown(mButtonState) && pointerDown) {
+    if (!isPointerDown(mButtonState) && pointerDown) {
         out += exitHover(when, readTime);
         mDownTime = when;
     }
@@ -269,10 +266,6 @@ std::list<NotifyArgs> UncapturedGestureConverter::handleButtonsChange(nsecs_t wh
         }
     }
     if (!isPointerDown(mButtonState) && isPointerDown(newButtonState)) {
-        if (!input_flags::touchpad_down_time_fix()) {
-            mDownTime = when;
-            out += exitHover(when, readTime);
-        }
         out.push_back(makeMotionArgs(when, readTime, AMOTION_EVENT_ACTION_DOWN,
                                      /* actionButton= */ 0, newButtonState, /* pointerCount= */ 1,
                                      &coords));
