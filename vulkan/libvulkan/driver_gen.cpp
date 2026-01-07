@@ -446,10 +446,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceFeatures2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFeatures2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceFormatProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFormatProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFormatProperties2KHR),
         nullptr,
     },
     {
@@ -460,10 +474,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceImageFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceImageFormatProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceMemoryProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceMemoryProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceMemoryProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceMemoryProperties2KHR),
         nullptr,
     },
     {
@@ -481,6 +509,13 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceQueueFamilyProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
@@ -488,10 +523,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceQueueFamilyProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceSparseImageFormatProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceSparseImageFormatProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceSparseImageFormatProperties2KHR),
         nullptr,
     },
     {
@@ -666,6 +715,7 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_KHR_android_surface") == 0) return ProcHook::KHR_android_surface;
     if (strcmp(name, "VK_KHR_get_surface_capabilities2") == 0) return ProcHook::KHR_get_surface_capabilities2;
     if (strcmp(name, "VK_KHR_incremental_present") == 0) return ProcHook::KHR_incremental_present;
+    if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;
     if (strcmp(name, "VK_KHR_shared_presentable_image") == 0) return ProcHook::KHR_shared_presentable_image;
     if (strcmp(name, "VK_KHR_surface") == 0) return ProcHook::KHR_surface;
     if (strcmp(name, "VK_KHR_surface_protected_capabilities") == 0) return ProcHook::KHR_surface_protected_capabilities;
@@ -677,7 +727,6 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_EXT_present_timing") == 0) return ProcHook::EXT_present_timing;
     if (strcmp(name, "VK_ANDROID_external_memory_android_hardware_buffer") == 0) return ProcHook::ANDROID_external_memory_android_hardware_buffer;
     if (strcmp(name, "VK_KHR_bind_memory2") == 0) return ProcHook::KHR_bind_memory2;
-    if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;
     if (strcmp(name, "VK_KHR_device_group_creation") == 0) return ProcHook::KHR_device_group_creation;
     if (strcmp(name, "VK_KHR_external_memory_capabilities") == 0) return ProcHook::KHR_external_memory_capabilities;
     if (strcmp(name, "VK_KHR_external_semaphore_capabilities") == 0) return ProcHook::KHR_external_semaphore_capabilities;

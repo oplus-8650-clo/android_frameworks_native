@@ -1037,6 +1037,89 @@ TEST_F(AImageReaderVulkanSwapchainTest, TestFifoLatestReadySupport) {
     cleanUpSwapchainForTest();
 }
 
+static bool HasExtension(std::vector<VkExtensionProperties> const & extensions,
+        char const *extensionName)
+{
+    for (auto const &ext : extensions)
+        if (!strcmp(ext.extensionName, extensionName))
+            return true;
+    return false;
+}
+
+TEST_F(AImageReaderVulkanSwapchainTest, TestKhrFeaturesCorrectlyExposed) {
+    std::vector<char const *> instanceExtensions10 = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+        VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+    };
+
+    VkInstance instance10;
+
+    VkApplicationInfo appInfo10 = {
+        VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        nullptr,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        VK_API_VERSION_1_0,
+    };
+
+    VkInstanceCreateInfo ici10 = {
+        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        nullptr,
+        0,
+        &appInfo10,
+        0,
+        nullptr,
+        static_cast<uint32_t>(instanceExtensions10.size()),
+        instanceExtensions10.data()
+    };
+    vkCreateInstance(&ici10, nullptr, &instance10);
+
+    ASSERT_NE(instance10, nullptr);
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance10, &deviceCount, nullptr);
+    if (!deviceCount)
+        GTEST_SKIP() << "No vulkan devices";
+
+    VkPhysicalDevice physicalDevice;
+    deviceCount = 1;   // only fetch first physical device.
+    vkEnumeratePhysicalDevices(instance10, &deviceCount, &physicalDevice);
+
+    ASSERT_NE(physicalDevice, nullptr);
+
+    uint32_t deviceExtensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &deviceExtensionCount, nullptr);
+    std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &deviceExtensionCount, deviceExtensions.data());
+
+    if (!HasExtension(deviceExtensions, VK_KHR_PRESENT_ID_EXTENSION_NAME))
+        GTEST_SKIP() << "Device does not offer KHR_present_id";
+
+    // Now deliberately use the _KHR_ version of the GPDF2 function to fetch the
+    // features associated with this extension.
+    VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR,
+        nullptr,
+        VK_FALSE,   /* present id */
+    };
+    VkPhysicalDeviceFeatures2KHR features2 = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+        &presentIdFeatures,
+
+    };
+
+    auto gpdf2 = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(
+            instance10, "vkGetPhysicalDeviceFeatures2KHR");
+    gpdf2(physicalDevice, &features2);
+
+    // Our feature should have been populated!
+    ASSERT_EQ(presentIdFeatures.presentId, VK_TRUE);
+}
+
 }  // namespace libvulkantest
 
 }  // namespace android

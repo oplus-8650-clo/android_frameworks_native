@@ -646,6 +646,29 @@ def transform_list_member_name(member_name: str) -> str:
     return snake_case_name
 
 
+def generate_core_list_resizing_logic(vulkan_api_version: str, vk_properties_setter_line: str) -> str:
+    """
+    Generates C++ code for resizing lists in core Vulkan structs.
+    For a given Vulkan version (e.g., '1_4'), this function identifies core
+    structs with dynamically sized arrays (like VkPhysicalDeviceVulkan14Properties)
+    and generates the necessary C++ code to resize std::vector members and
+    re-query properties.
+    """
+    version_key = f"Core{vulkan_api_version.replace('_', '')}"
+    core_struct_list = VK.VULKAN_CORES_AND_STRUCTS_MAPPING['versions'].get(version_key, [])
+    if not core_struct_list:
+        return ""
+
+    # Flatten the list of dictionaries into a single list of structure names.
+    core_structures = []
+    for struct in core_struct_list:
+        for key in struct:
+            core_structures.append(key)
+    extension_name = f"core{vulkan_api_version.replace('_', '')}"
+
+    return generate_list_resizing_logic(core_structures, vk_properties_setter_line, extension_name, core_struct_name='properties')
+
+
 def generate_ext_dependent_structs_list_resizing_logic(
         vk_properties_setter_line: str,
 ) -> str:
@@ -690,8 +713,24 @@ def generate_ext_independent_structs_list_resizing_logic(
 def generate_list_resizing_logic(
         structures: List[str],
         vk_properties_setter_line: str,
-        extension: Optional[str] = None
+        extension: Optional[str] = None,
+        core_struct_name: Optional[str] = None
 ) -> str:
+    """
+    Generates C++ code to handle dynamic lists in Vulkan structs by resizing
+    vector, connecting it to the struct, and then re-querying the
+    properties.
+    Args:
+        structures: A list of Vulkan structure names to process.
+        vk_properties_setter_line: The C++ line for re-querying properties.
+        extension: The name of the extension or core version used as a prefix
+            in the C++ code (e.g., 'khr_shader_float16_int8' or 'core14').
+        core_struct_name: If provided, this name is used for the struct
+            instance in the C++ code, overriding the default name generation.
+            Used for core structs (e.g., 'properties').
+    Returns:
+        A string containing the generated C++ code blocks.
+    """
     def _generate_if_condition_codeblock(
             if_condition: str,
             list_resize_codeblock: str,
@@ -726,8 +765,11 @@ def generate_list_resizing_logic(
                 CONST_PHYSICAL_DEVICE_PROPERTIES_2 in struct_category_mapping
         ) and resolved_structure_name in VK.STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING
         if is_valid_struct:
-            dynamic_size_list_variables = VK.STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING[resolved_structure_name]
-            struct_instance_name = get_struct_name(structure)
+            dynamic_size_list_variables = VK.STRUCT_WITH_DYNAMIC_SIZE_LIST_MAPPING.get(resolved_structure_name, [])
+            if core_struct_name:
+                struct_instance_name = core_struct_name
+            else:
+                struct_instance_name = get_struct_name(structure)
             code_block_list = [] # list of pair(if condition logic, resizing code)
             for list_name in sorted(dynamic_size_list_variables):
                 if list_name in VK.LIST_TYPE_FIELD_AND_SIZE_MAPPING:
