@@ -25,7 +25,6 @@
 #include <com_android_input_flags.h>
 #include <ftl/enum.h>
 #include <input/AccelerationCurve.h>
-#include <input/InputFlags.h>
 
 #include "CursorButtonAccumulator.h"
 #include "CursorScrollAccumulator.h"

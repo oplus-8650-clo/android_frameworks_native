@@ -608,15 +608,8 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
         return;
     }
 
-    bool computeAboveCoveredExcludingOverlays = [&]() {
-        if (FlagManager::getInstance().connected_displays_cursor()) {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.skipScreenshot;
-        } else {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.toInternalDisplay;
-        }
-    }();
+    const bool computeAboveCoveredExcludingOverlays =
+        coverage.aboveCoveredLayersExcludingOverlays && !layerFEState->outputFilter.skipScreenshot;
 
     /*
      * opaqueRegion: area of a surface that is fully opaque.

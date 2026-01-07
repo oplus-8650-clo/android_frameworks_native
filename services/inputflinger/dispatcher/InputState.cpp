@@ -17,7 +17,6 @@
 #include "DebugConfig.h"
 #include "input/Input.h"
 #include "input/InputDevice.h"
-#include "input/InputFlags.h"
 
 #include "InputState.h"
 
@@ -223,10 +222,9 @@ ssize_t InputState::findKeyMemento(const KeyEntry& entry) const {
 }
 
 ssize_t InputState::findMotionMemento(const MotionEntry& entry, bool hovering) const {
-    // If we have connected displays a mouse can move between displays and displayId may change
+    // On connected displays a mouse can move between displays and displayId may change
     // while a gesture is in-progress.
-    const bool skipDisplayCheck =
-            InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(entry.source);
+    const bool skipDisplayCheck = isMouseOrTouchpad(entry.source);
     for (size_t i = 0; i < mMotionMementos.size(); i++) {
         const MotionMemento& memento = mMotionMementos[i];
         if (memento.deviceId == entry.deviceId && memento.source == entry.source &&
@@ -347,8 +345,7 @@ bool InputState::shouldCancelPreviousStream(const MotionEntry& motionEntry) cons
         // it's unlikely that those two streams would be consistent with each other. Therefore,
         // cancel the previous gesture if the display id changes.
         // Except when we have connected-displays where a mouse may move across display boundaries.
-        const bool skipDisplayCheck = (InputFlags::connectedDisplaysCursorEnabled() &&
-                                       isMouseOrTouchpad(motionEntry.source));
+        const bool skipDisplayCheck = isMouseOrTouchpad(motionEntry.source);
         if (!skipDisplayCheck && motionEntry.displayId != lastMemento.displayId) {
             LOG(INFO) << "Canceling stream: last displayId was " << lastMemento.displayId
                       << " and new event is " << motionEntry;

@@ -58,7 +58,6 @@ public:
     bool bugfix_resize_virtual_display_surfaces() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
-    bool connected_displays_cursor() const;
     bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;

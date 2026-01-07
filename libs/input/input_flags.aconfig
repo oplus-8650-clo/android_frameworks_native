@@ -180,13 +180,6 @@ flag {
 }
 
 flag {
-  name: "connected_displays_cursor"
-  namespace: "lse_desktop_experience"
-  description: "Allow cursor to transition across multiple connected displays"
-  bug: "362719483"
-}
-
-flag {
   name: "prevent_merging_input_pointer_devices"
   namespace: "desktop_input"
   description: "Prevent merging input sub-devices that provide pointer input streams"
