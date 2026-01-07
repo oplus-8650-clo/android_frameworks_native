@@ -1075,6 +1075,9 @@ class TestGenerateVkCoreStructsInitCode(unittest.TestCase):
                     {"VkPhysicalDeviceVulkan12Features1": "VK_TYPE_12_FEATS_1"},
                     {"VkPhysicalDeviceVulkan12Properties2": "VK_TYPE_12_PROPS_2"},
                     {"VkPhysicalDeviceVulkan12Features2": "VK_TYPE_12_FEATS_2"}
+                ],
+                "CoreWithUnknown": [
+                    {"VkPhysicalDeviceUnknownStruct": "VK_TYPE_UNKNOWN"}
                 ]
             }
         }
@@ -1134,23 +1137,33 @@ class TestGenerateVkCoreStructsInitCode(unittest.TestCase):
         self.assertEqual("", actual_props)
         self.assertEqual("", actual_feats)
 
+    def test_raises_exception_for_unknown_struct(self):
+        with self.assertRaisesRegex(Exception, "Warning: Unknown Mapping: for struct 'VkPhysicalDeviceUnknownStruct'"):
+            src.generate_vk_core_structs_init_code("CoreWithUnknown")
 
 class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        cls.mapping = {
+    def setUp(self):
+        self.mock_vk_patcher = patch('vkjson_gen_util.VK')
+        self.mock_vk = self.mock_vk_patcher.start()
+
+        self.mock_vk.STRUCT_EXTENDS_MAPPING = {
+            "VkPhysicalDeviceDriverPropertiesKHR": "VkPhysicalDeviceProperties2",
+            "VkPhysicalDeviceVariablePointerFeaturesKHR": "VkPhysicalDeviceFeatures2",
+            "VkPhysicalDeviceVariablePointersFeaturesKHR": "VkPhysicalDeviceFeatures2",
+            "VkPhysicalDeviceVulkanMemoryModelFeaturesKHR": "VkPhysicalDeviceFeatures2",
+            "VkPhysicalDeviceVideoMaintenance1FeaturesKHR": "VkPhysicalDeviceFeatures2",
+        }
+
+    def tearDown(self):
+        self.mock_vk_patcher.stop()
+
+    def test_handles_single_extension_single_struct(self):
+        mapping = {
             "VK_KHR_driver_state": [
                 {"VkPhysicalDeviceDriverPropertiesKHR": "VK_STRUCT_DRIVER"}
             ],
-            "VK_KHR_variable_pointers": [
-                {"VkPhysicalDeviceVariablePointerFeaturesKHR": "VK_STRUCT_VARIABLE"},
-                {"VkPhysicalDeviceVariablePointersFeaturesKHR": "VK_STRUCT_VARIABLES"},
-                {"SomeThingElse": "SOME_OTHER_STRUCT"}
-            ]
         }
-
-    def test_handles_single_extension_single_struct(self):
         extension_var = src.get_vkjson_struct_variable_name("VK_KHR_driver_state")
         struct_name = src.get_struct_name("VkPhysicalDeviceDriverPropertiesKHR")
 
@@ -1163,10 +1176,16 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 f"    properties.pNext = &device.{extension_var}.{struct_name};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Properties")
+            src.generate_vk_extension_structs_init_code(mapping, "Properties")
         )
 
     def test_handles_single_extension_multiple_structs(self):
+        mapping = {
+            "VK_KHR_variable_pointers": [
+                {"VkPhysicalDeviceVariablePointerFeaturesKHR": "VK_STRUCT_VARIABLE"},
+                {"VkPhysicalDeviceVariablePointersFeaturesKHR": "VK_STRUCT_VARIABLES"},
+            ]
+        }
         extension_var = src.get_vkjson_struct_variable_name("VK_KHR_variable_pointers")
         struct_name1 = src.get_struct_name("VkPhysicalDeviceVariablePointerFeaturesKHR")
         struct_name2 = src.get_struct_name("VkPhysicalDeviceVariablePointersFeaturesKHR")
@@ -1183,18 +1202,34 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 f"    features.pNext = &device.{extension_var}.{struct_name2};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Features")
+            src.generate_vk_extension_structs_init_code(mapping, "Features")
         )
 
-    def test_handles_no_matching_struct(self):
-        self.assertRaises(
+    def test_raises_exception_for_unknown_struct(self):
+        mapping = {
+            "VK_KHR_variable_pointers": [
+                {"SomeThingElse": "SOME_OTHER_STRUCT"},
+            ]
+        }
+        with self.assertRaisesRegex(
             Exception,
-            src.generate_vk_extension_structs_init_code(self.mapping, "Extension")
-        )
+            "Warning: Unknown Mapping: for struct 'SomeThingElse'",
+        ):
+            src.generate_vk_extension_structs_init_code(mapping, "Extension")
+
+    def test_handles_struct_with_invalid_struct_category(self):
+        self.mock_vk.STRUCT_EXTENDS_MAPPING["VkInvalidDummyProperties"] = "SomeOtherThing"
+        mapping = {
+            "VK_FAKE_EXTENSION": [
+                {"VkInvalidDummyProperties": "VK_FAKE_STRUCT"}
+            ]
+        }
+        result = src.generate_vk_extension_structs_init_code(mapping, "Properties")
+        self.assertEqual("", result)
 
     def test_handles_multiple_extensions(self):
         # Resetting mapping as we only want extensions containing feature structs with valid structextends mapping
-        self.mapping = {
+        mapping = {
             "VK_KHR_vulkan_memory_model": [{"VkPhysicalDeviceVulkanMemoryModelFeaturesKHR": "VK_STRUCT_MEMORY"}],
             "VK_KHR_video_maintenance1": [{"VkPhysicalDeviceVideoMaintenance1FeaturesKHR": "VK_STRUCT_VIDEO"}],
         }
@@ -1218,7 +1253,7 @@ class TestGenerateVkExtensionStructsInitCode(unittest.TestCase):
                 f"    features.pNext = &device.{extension_var2}.{struct_name2};\n"
                 '  }\n'
             ),
-            src.generate_vk_extension_structs_init_code(self.mapping, "Features")
+            src.generate_vk_extension_structs_init_code(mapping, "Features")
         )
 
 

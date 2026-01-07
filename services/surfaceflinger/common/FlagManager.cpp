@@ -167,7 +167,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(modeset_multi_display);
     DUMP_ACONFIG_FLAG(modeset_state_machine);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
-    DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type);
     DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type_v2);
     DUMP_ACONFIG_FLAG(protected_if_client);
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
@@ -275,8 +274,6 @@ FLAG_MANAGER_ACONFIG_FLAG(local_tonemap_screenshots, "debug.sf.local_tonemap_scr
 FLAG_MANAGER_ACONFIG_FLAG(modeset_multi_display, "");
 FLAG_MANAGER_ACONFIG_FLAG(modeset_state_machine, "");
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
-FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type,
-                          "debug.sf.parse_edid_version_and_input_type");
 FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type_v2,
                           "debug.sf.parse_edid_version_and_input_type_v2");
 FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")

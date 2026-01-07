@@ -527,8 +527,9 @@ def generate_vk_core_structs_init_code(version):
                 target_code_list = properties_code
                 struct_field_name = "properties"
             else:
-                # TODO: b/415707715 (Add tests for exceptions for structs not extending (VkPhysicalDeviceProperties2/VkPhysicalDeviceFeatures2))
-                raise Exception(f"Warning: Unknown Mapping: ' " f"for struct '{struct_name}'")
+                raise Exception(
+                    f"Warning: Unknown Mapping: for struct '{struct_name}'"
+                )
 
             if target_code_list is not None:
                 target_code_list.extend(
@@ -568,8 +569,10 @@ def generate_vk_extension_structs_init_code(mapping, struct_category):
                     is_valid_struct_category = (CONST_PHYSICAL_DEVICE_PROPERTIES_2 in mapping_name and struct_category == "Properties") or (
                         CONST_PHYSICAL_DEVICE_FEATURE_2 in mapping_name and struct_category == "Features"
                     )
-                elif struct_category.lower() in struct_name.lower():
-                    raise Exception(f"Warning: Unknown Mapping: ' " f"for struct '{struct_name}'")
+                else:
+                    raise Exception(
+                        f"Warning: Unknown Mapping: for struct '{struct_name}'"
+                    )
 
                 if is_valid_struct_category:
                     struct_count += 1
@@ -622,7 +625,6 @@ def get_dynamic_size_list_member_from_structures(properties_and_feature_set: Lis
                     name = transform_list_member_name(list_name)
                     entries.append((list_type, name))
     return entries
-
 
 
 def transform_list_member_name(member_name: str) -> str:

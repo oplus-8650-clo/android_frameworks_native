@@ -100,7 +100,6 @@ public:
     bool modeset_multi_display() const;
     bool modeset_state_machine() const;
     bool no_vsyncs_on_screen_off() const;
-    bool parse_edid_version_and_input_type() const;
     bool parse_edid_version_and_input_type_v2() const;
     bool protected_if_client() const;
     bool renderable_buffer_usage() const;
