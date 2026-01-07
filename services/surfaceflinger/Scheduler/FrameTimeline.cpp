@@ -1199,9 +1199,7 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
             actualSurfaceFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
             actualSurfaceFrameStartEvent->set_jank_type_experimental(
                     jankTypeBitmaskToProto(mJankType.altValue()));
-            // TODO(458128234): uncomment once the proto changes from
-            //  https://github.com/google/perfetto/pull/4124 makes it to main
-            // actualSurfaceFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
+            actualSurfaceFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
             actualSurfaceFrameStartEvent->set_vsync_resynced_jitter_millis(mVsyncResyncedJitter /
                                                                            1e6f);
             const auto [score, type] =
@@ -1854,9 +1852,7 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
             actualDisplayFrameStartEvent->set_jank_type_experimental(
                     jankTypeBitmaskToProto(mJankType.altValue()));
             actualDisplayFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
-            // TODO(458128234): uncomment once the proto changes from
-            //  https://github.com/google/perfetto/pull/4124 makes it to main
-            // actualDisplayFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
+            actualDisplayFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
 
             const auto [score, type] =
                     calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
