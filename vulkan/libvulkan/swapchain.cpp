@@ -1359,7 +1359,7 @@ VkResult GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice pdev,
         // know if VK_PRESENT_MODE_SHARED_MAILBOX_KHR is supported without a
         // surface, and that cannot be relied upon.  Therefore, don't return it.
         present_modes.push_back(VK_PRESENT_MODE_FIFO_KHR);
-        if (flags::present_mode_fifo_latest_ready_ext()) {
+        if (flags::present_mode_fifo_latest_ready_ext2()) {
             present_modes.push_back(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT);
         }
     } else {
@@ -1389,7 +1389,7 @@ VkResult GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice pdev,
         if (min_undequeued_buffers + 1 < max_buffer_count)
             present_modes.push_back(VK_PRESENT_MODE_MAILBOX_KHR);
         present_modes.push_back(VK_PRESENT_MODE_FIFO_KHR);
-        if (flags::present_mode_fifo_latest_ready_ext()) {
+        if (flags::present_mode_fifo_latest_ready_ext2()) {
             present_modes.push_back(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT);
         }
     }

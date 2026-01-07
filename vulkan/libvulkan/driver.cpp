@@ -1133,7 +1133,7 @@ VkResult EnumerateDeviceExtensionProperties(
         VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
         VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION,
     });
-    if (flags::present_mode_fifo_latest_ready_ext()) {
+    if (flags::present_mode_fifo_latest_ready_ext2()) {
         loader_extensions.push_back(
             {VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME,
              VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_SPEC_VERSION});
