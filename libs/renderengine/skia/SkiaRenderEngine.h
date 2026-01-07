@@ -157,25 +157,6 @@ protected:
 
     GrContextOptions::PersistentCache& ganeshPersistentCache(const void* identity, ssize_t size);
 
-    // Define the options each context type has for managing its resource cache. By default, this
-    // is assigned to be the original behavior (kUponContextSwitch).
-    //
-    // Originally, purging at that point helped keep cache size in check. However, since then,
-    // RenderEngine has updated to alternate between contexts much more frequently (e.g. between
-    // frames). This means resources are often purged prematurely when they are still likely to be
-    // reused and that these resources must be recreated, which can be quite costly to performance.
-    //
-    // TODO(b/471228757): Eventually, have all backends agree on the cache management policy for
-    // both the protected and unprotected context. Remove any relevant intermediary structures that
-    // were necessary to initially enable GraphiteVkRenderEngine to define its own policies.
-    enum CacheManagementPolicy : uint8_t {
-        kUponContextSwitch = 0,
-        kClearStaleResourcesPostRender,
-        kOnlyWhenOverBudget // No RenderEngine action needed; handled by Skia
-    };
-    CacheManagementPolicy mUnprotectedCachePolicy = CacheManagementPolicy::kUponContextSwitch;
-    CacheManagementPolicy mProtectedCachePolicy = CacheManagementPolicy::kUponContextSwitch;
-
 private:
     virtual SkiaBackend backend() const = 0;
 
@@ -203,8 +184,6 @@ private:
     void waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd);
 
     void dump(std::string& result) override final;
-
-    CacheManagementPolicy activeContextCachePolicy() const;
 
     // If requiresLinearEffect is true or the layer has a stretchEffect a new shader is returned.
     // Otherwise it returns the input shader.

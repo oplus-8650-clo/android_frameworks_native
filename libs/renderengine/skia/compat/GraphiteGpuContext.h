@@ -43,7 +43,6 @@ public:
 
     void setResourceCacheLimit(size_t maxResourceBytes) override;
     void purgeUnlockedScratchResources() override;
-    void purgeResourcesNotUsedIn(std::chrono::milliseconds) override;
 
     // No-op (only applicable to GL).
     void resetContextIfApplicable() override{};

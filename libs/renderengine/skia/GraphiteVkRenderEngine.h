@@ -38,18 +38,7 @@ protected:
     void appendBackendSpecificInfoToDump(std::string& result) override;
 
 private:
-    GraphiteVkRenderEngine(const RenderEngineCreationArgs& args) : SkiaVkRenderEngine(args) {
-        // GraphiteVk is the first RenderEngine implementation to switch from the default cache
-        // management strategy of CacheManagementPolicy::kUponContextSwitch. Eventually, it would be
-        // ideal for all RenderEngine backends to align on the CacheManagementPolicy for protected
-        // contexts (kClearStaleResourcesPostRender) and, independently, the CacheManagementPolicy
-        // for unprotected contexts.
-        // The latter is likely to eventually also be kClearStaleResourcesPostRender, though perhaps
-        // with a different time duration for purging than that for protected resources. For now,
-        // only clear the unprotected cache if it exceeds its budget (handled by Skia Graphite).
-        mUnprotectedCachePolicy = CacheManagementPolicy::kOnlyWhenOverBudget;
-        mProtectedCachePolicy = CacheManagementPolicy::kClearStaleResourcesPostRender;
-    }
+    GraphiteVkRenderEngine(const RenderEngineCreationArgs& args) : SkiaVkRenderEngine(args) {}
 
     SkiaBackend backend() const override { return SkiaBackend::Graphite; }
 

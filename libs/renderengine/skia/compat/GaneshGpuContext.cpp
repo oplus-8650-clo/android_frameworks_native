@@ -32,7 +32,6 @@
 #include "skia/compat/SkiaBackendTexture.h"
 
 #include <android-base/macros.h>
-#include <common/trace.h>
 #include <log/log_main.h>
 #include <memory>
 
@@ -108,11 +107,6 @@ void GaneshGpuContext::setResourceCacheLimit(size_t maxResourceBytes) {
 
 void GaneshGpuContext::purgeUnlockedScratchResources() {
     mGrContext->purgeUnlockedResources(GrPurgeResourceOptions::kScratchResourcesOnly);
-}
-
-void GaneshGpuContext::purgeResourcesNotUsedIn(std::chrono::milliseconds duration) {
-    SFTRACE_CALL();
-    mGrContext->performDeferredCleanup(duration);
 }
 
 void GaneshGpuContext::resetContextIfApplicable() {
