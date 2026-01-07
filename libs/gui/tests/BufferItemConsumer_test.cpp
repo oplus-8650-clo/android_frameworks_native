@@ -20,6 +20,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <gui/BufferItemConsumer.h>
+#include <gui/IGraphicBufferConsumer.h>
 #include <gui/IProducerListener.h>
 #include <gui/Surface.h>
 #include <system/window.h>
@@ -432,6 +433,93 @@ TEST_F(BufferItemConsumerTest, Cache_Disconnect_FreesSlot) {
 
     buffer = nullptr;
     EXPECT_EQ(nullptr, weakBufferToDelete.promote());
+}
+
+TEST_F(BufferItemConsumerTest, SetMaxAcquiredBufferCount_TriggersCallback) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(10));
+    ASSERT_EQ(OK, consumer->setMaxAcquiredBufferCount(10));
+
+    for (int i = 0; i < 10; i++) {
+        sp<GraphicBuffer> buffer;
+        sp<Fence> fence;
+        ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+        ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+    }
+    for (int i = 0; i < 10; i++) {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+
+    int freedCount = 0;
+    auto callback = [&](auto&) { freedCount++; };
+
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(1));
+    ASSERT_EQ(OK, consumer->setMaxAcquiredBufferCount(1, callback));
+
+    // 8 are freed because there's one dequeued and one acquired slot max, down from ten.
+    EXPECT_EQ(8, freedCount);
+}
+
+TEST_F(BufferItemConsumerTest, Abandon_TriggersCallback) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(10));
+    ASSERT_EQ(OK, consumer->setMaxAcquiredBufferCount(10));
+
+    for (int i = 0; i < 10; i++) {
+        sp<GraphicBuffer> buffer;
+        sp<Fence> fence;
+        ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+        ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+    }
+    for (int i = 0; i < 10; i++) {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+
+    int freedCount = 0;
+    auto callback = [&](auto&) { freedCount++; };
+
+    consumer->abandon(callback);
+    EXPECT_EQ(10, freedCount);
+}
+
+TEST_F(BufferItemConsumerTest, DiscardFreeBuffers_TriggersCallback) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(10));
+    ASSERT_EQ(OK, consumer->setMaxAcquiredBufferCount(10));
+
+    for (int i = 0; i < 10; i++) {
+        sp<GraphicBuffer> buffer;
+        sp<Fence> fence;
+        ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+        ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+    }
+    for (int i = 0; i < 10; i++) {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->releaseBuffer(item, item.mFence));
+    }
+    int freedCount = 0;
+    auto callback = [&](auto&) { freedCount++; };
+
+    status_t ret = consumer->discardFreeBuffers(callback);
+    ASSERT_EQ(NO_ERROR, ret);
+    EXPECT_EQ(10, freedCount);
 }
 
 }  // namespace android

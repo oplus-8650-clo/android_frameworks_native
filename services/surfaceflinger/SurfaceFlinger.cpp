@@ -8515,6 +8515,8 @@ void SurfaceFlinger::captureDisplay(DisplayId displayId, const CaptureArgs& args
                                   .isSecure = args.secureLayerMode == SecureLayerMode::Capture,
                                   .includeProtected = false,
                                   .preserveDisplayColors = args.preserveDisplayColors,
+                                  .requireDpuReadback =
+                                          args.captureMode == CaptureMode::RequireOptimized,
                                   .debugName = "ScreenCapture"};
 
     captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(args.pixelFormat),
@@ -8703,8 +8705,10 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
 
                 if (!canDpuReadback && args.requireDpuReadback) {
                     if (hasProtectedOrDisallowedSecureLayers) {
+                        ALOGE("Failed to readback disallowed layers");
                         return base::unexpected<status_t>(PERMISSION_DENIED);
                     } else {
+                        ALOGE("Failed to set up DPU readback");
                         return base::unexpected<status_t>(INVALID_OPERATION);
                     }
                 }
@@ -8939,8 +8943,13 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         args.isSecure &= display->isSecure();
         args.snapshotRequest.layerStack = display->getLayerStack();
         args.sourceCrop = layerStackSpaceRect;
-        args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
-        args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+
+        if (args.requireDpuReadback) {
+            args.size = display->getSize();
+        } else {
+            args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
+            args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+        }
 
         // We could query a real value for this but it'll be a long, long time until we support
         // displays that need upwards of 1GB per buffer so...
@@ -8970,7 +8979,11 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         // Set the requested width/height to the logical display layer stack rect size by
         // default
         if (args.size.width == 0 || args.size.height == 0) {
-            args.size = layerStackSpaceRect.getSize();
+            if (args.requireDpuReadback) {
+                args.size = display->getSize();
+            } else {
+                args.size = layerStackSpaceRect.getSize();
+            }
         }
 
         // Screenshot initiated for region sampling
@@ -11153,6 +11166,7 @@ void SurfaceFlinger::validateForReadback(LayerFE* layer) {
                     // screenshot request on the floor and erroring out. BUT: for clients that
                     // don't explicitly want DPU readback we can be nicer and bounce over to
                     // renderScreenImpl() to hit the GPU path.
+                    ALOGD("Dropping invalid screen readback for %" PRIu64, request.id.value);
                     invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
                     mReadbackRequests.erase(it);
                     break;
@@ -11188,6 +11202,7 @@ void SurfaceFlinger::finalizeReadback(
 
     for (auto& request : mReadbackRequests) {
         if (request.buffer) {
+            ALOGD("Screen readback not finalized for %" PRIu64, request.id.value);
             invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
         }
     }

@@ -372,6 +372,48 @@ bool delayMatchVsyncCadence(nsecs_t presentDelay, Fps refreshRate, nsecs_t prese
             deltaToVsync >= refreshRate.getPeriodNsecs() - presentThreshold;
 }
 
+// Formula explained in go/refined-jank-metric
+std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
+                                                         nsecs_t expectedPresentDelta,
+                                                         nsecs_t actualPresentDelta) {
+    if (expectedPresentDelta <= 0) return {0.0f, JankSeverityType::Unknown};
+
+    const int32_t jankBitmask = JankType::DisplayHAL | JankType::SurfaceFlingerCpuDeadlineMissed |
+            JankType::SurfaceFlingerGpuDeadlineMissed | JankType::AppDeadlineMissed |
+            JankType::PredictionError | JankType::SurfaceFlingerScheduling | JankType::Unknown |
+            JankType::Dropped | JankType::AppResyncedJitter;
+    const int32_t nonJankBitmask = JankType::BufferStuffing | JankType::SurfaceFlingerStuffing |
+            JankType::NonAnimating | JankType::DisplayNotOn;
+    static_assert((kJankTypeAll & ~(jankBitmask | nonJankBitmask)) == 0);
+
+    if ((jankType & jankBitmask) == 0) { // Not Janky
+        return {0.0f, JankSeverityType::None};
+    }
+
+    if (jankType == JankType::Dropped) {
+        return {0.0f, JankSeverityType::Unknown};
+    }
+
+    const auto absDelay = std::abs(expectedPresentDelta - actualPresentDelta);
+    const float ratio = static_cast<float>(absDelay + expectedPresentDelta) /
+            static_cast<float>(expectedPresentDelta);
+    const float w_s = std::log2(ratio);
+    const float w_f = std::sqrt(static_cast<float>(expectedPresentDelta) /
+                                static_cast<float>((120_Hz).getPeriodNsecs()));
+    const float score = w_s * w_f;
+
+    JankSeverityType type;
+    if (score == 0) {
+        type = JankSeverityType::None;
+    } else if (score < 0.9f) {
+        type = JankSeverityType::Partial;
+    } else {
+        type = JankSeverityType::Full;
+    }
+
+    return {score, type};
+}
+
 } // namespace
 
 int64_t TraceCookieCounter::getCookieForTracing() {
@@ -827,6 +869,9 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         *outPresentDelay = mPresentDelay;
     }
 
+    mExpectedPresentDelta = (mRenderRate ? *mRenderRate : mDisplayFrameRenderRate).getPeriodNsecs();
+    mActualPresentDelta = mExpectedPresentDelta + mPresentDelay;
+
     const nsecs_t deadlineDelta = mActuals.endTime - mPredictions.endTime;
     if (outDeadlineDelta) {
         *outDeadlineDelta = deadlineDelta;
@@ -859,27 +904,27 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
                     mFramePresentMetadata.experimental() = FramePresentMetadata::LatePresent;
                     break;
                 case PreviousFrameData::Status::Valid: {
-                    const nsecs_t actualPresentDelta =
+                    mActualPresentDelta =
                             mActuals.presentTime - previousFrameData.actuals.presentTime;
-                    const nsecs_t expectedPresentDelta =
+                    mExpectedPresentDelta =
                             mPredictions.presentTime - previousFrameData.predictions.presentTime;
                     const nsecs_t presentationConsistencyDelay =
-                            actualPresentDelta - expectedPresentDelta;
-                    const float deltaFrameRatio = expectedPresentDelta == 0
+                            mActualPresentDelta - mExpectedPresentDelta;
+                    const float deltaFrameRatio = mExpectedPresentDelta == 0
                             ? 0
                             : abs(static_cast<float>(presentationConsistencyDelay) /
-                                  static_cast<float>(expectedPresentDelta));
+                                  static_cast<float>(mExpectedPresentDelta));
                     const bool smooth =
-                            expectedPresentDelta < impl::FrameTimeline::kThresholdFpsForAnimation
-                                                           .getPeriodNsecs() &&
+                            mExpectedPresentDelta < impl::FrameTimeline::kThresholdFpsForAnimation
+                                                            .getPeriodNsecs() &&
                             deltaFrameRatio <= impl::FrameTimeline::kDeltaFramesRatioThreshold;
                     if (smooth) {
-                        mJankSeverityScore = deltaFrameRatio;
                         mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
+                        mJankDebugMetadata = deltaFrameRatio;
                     } else {
-                        mJankSeverityScore = static_cast<float>(std::abs(mPresentDelay)) /
-                                static_cast<float>(expectedPresentDelta);
-                        if (mJankSeverityScore > impl::FrameTimeline::kDeltaFramesRatioThreshold) {
+                        const auto delayRatio = static_cast<float>(std::abs(mPresentDelay)) /
+                                static_cast<float>(mExpectedPresentDelta);
+                        if (delayRatio > impl::FrameTimeline::kDeltaFramesRatioThreshold) {
                             mFramePresentMetadata.experimental() =
                                     (presentationConsistencyDelay > 0)
                                     ? FramePresentMetadata::LatePresent
@@ -891,6 +936,7 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
                             mFramePresentMetadata.experimental() =
                                     FramePresentMetadata::UnknownPresent;
                         }
+                        mJankDebugMetadata = delayRatio;
                     }
                 }
             }
@@ -905,7 +951,7 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
     if (FlagManager::getInstance().use_content_priority_for_jank_classification() &&
         mSystemContentPriority < 0) {
         mJankType.experimental() = JankType::NonAnimating;
-        mJankSeverityScore = static_cast<float>(mSystemContentPriority);
+        mJankDebugMetadata = static_cast<float>(mSystemContentPriority);
         return;
     }
 
@@ -1149,14 +1195,22 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
         actualSurfaceFrameStartEvent->set_jank_type(jankTypeBitmaskToProto(mJankType.value()));
         actualSurfaceFrameStartEvent->set_prediction_type(toProto(mPredictionState));
         actualSurfaceFrameStartEvent->set_is_buffer(mIsBuffer);
-        actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
         if (FlagManager::getInstance().jank_classification_v2()) {
             actualSurfaceFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
             actualSurfaceFrameStartEvent->set_jank_type_experimental(
                     jankTypeBitmaskToProto(mJankType.altValue()));
-            actualSurfaceFrameStartEvent->set_jank_severity_score(mJankSeverityScore);
+            // TODO(458128234): uncomment once the proto changes from
+            //  https://github.com/google/perfetto/pull/4124 makes it to main
+            // actualSurfaceFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
             actualSurfaceFrameStartEvent->set_vsync_resynced_jitter_millis(mVsyncResyncedJitter /
                                                                            1e6f);
+            const auto [score, type] =
+                    calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
+                                          mActualPresentDelta);
+            actualSurfaceFrameStartEvent->set_jank_severity_score(score);
+            actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(type));
+        } else {
+            actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
         }
     });
 
@@ -1515,31 +1569,29 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
     }
 
     mPresentDelay = presentDelay;
+    mActualPresentDelta = mSurfaceFlingerActuals.presentTime - previousActualPresentTime;
+    mExpectedPresentDelta = mSurfaceFlingerPredictions.presentTime - previousPredictedPresentTime;
 
     const nsecs_t presentThreshold = mJankClassificationThresholds.presentThreshold;
 
     if (std::abs(presentDelay) <= presentThreshold) {
         mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
     } else {
-        const nsecs_t actualPresentDelta =
-                mSurfaceFlingerActuals.presentTime - previousActualPresentTime;
-        const nsecs_t expectedPresentDelta =
-                mSurfaceFlingerPredictions.presentTime - previousPredictedPresentTime;
-        const nsecs_t presentationConsistencyDelay = actualPresentDelta - expectedPresentDelta;
-        const float deltaFramesRatio = expectedPresentDelta == 0
+        const nsecs_t presentationConsistencyDelay = mActualPresentDelta - mExpectedPresentDelta;
+        const float deltaFramesRatio = mExpectedPresentDelta == 0
                 ? 0
                 : abs(static_cast<float>(presentationConsistencyDelay) /
-                      static_cast<float>(expectedPresentDelta));
+                      static_cast<float>(mExpectedPresentDelta));
         const bool smoothAnimation =
-                expectedPresentDelta < kThresholdFpsForAnimation.getPeriodNsecs() &&
+                mExpectedPresentDelta < kThresholdFpsForAnimation.getPeriodNsecs() &&
                 deltaFramesRatio <= kDeltaFramesRatioThreshold;
         if (smoothAnimation) {
-            mJankSeverityScore = deltaFramesRatio;
             mFramePresentMetadata.experimental() = FramePresentMetadata::OnTimePresent;
+            mJankDebugMetadata = deltaFramesRatio;
         } else {
-            mJankSeverityScore = static_cast<float>(std::abs(presentDelay)) /
-                    static_cast<float>(expectedPresentDelta);
-            if (mJankSeverityScore > kDeltaFramesRatioThreshold) {
+            const auto delayRatio = static_cast<float>(std::abs(presentDelay)) /
+                    static_cast<float>(mExpectedPresentDelta);
+            if (delayRatio > kDeltaFramesRatioThreshold) {
                 mFramePresentMetadata.experimental() = (presentationConsistencyDelay > 0)
                         ? FramePresentMetadata::LatePresent
                         : FramePresentMetadata::EarlyPresent;
@@ -1548,6 +1600,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
                 // the previous frame. In that case, mark it as non animation.
                 mFramePresentMetadata.experimental() = FramePresentMetadata::UnknownPresent;
             }
+            mJankDebugMetadata = delayRatio;
         }
     }
 
@@ -1795,14 +1848,23 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
         actualDisplayFrameStartEvent->set_gpu_composition(mGpuFence != FenceTime::NO_FENCE);
         actualDisplayFrameStartEvent->set_jank_type(jankTypeBitmaskToProto(mJankType.value()));
         actualDisplayFrameStartEvent->set_prediction_type(toProto(mPredictionState));
-        actualDisplayFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
         if (FlagManager::getInstance().jank_classification_v2()) {
             actualDisplayFrameStartEvent->set_present_type_experimental(
                     toProto(mFramePresentMetadata.altValue()));
             actualDisplayFrameStartEvent->set_jank_type_experimental(
                     jankTypeBitmaskToProto(mJankType.altValue()));
             actualDisplayFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
-            actualDisplayFrameStartEvent->set_jank_severity_score(mJankSeverityScore);
+            // TODO(458128234): uncomment once the proto changes from
+            //  https://github.com/google/perfetto/pull/4124 makes it to main
+            // actualDisplayFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
+
+            const auto [score, type] =
+                    calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
+                                          mActualPresentDelta);
+            actualDisplayFrameStartEvent->set_jank_severity_score(score);
+            actualDisplayFrameStartEvent->set_jank_severity_type(toProto(type));
+        } else {
+            actualDisplayFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
         }
     });
 
@@ -2078,7 +2140,7 @@ void FrameTimeline::DisplayFrame::dump(std::string& result, nsecs_t baseTime) co
     std::chrono::nanoseconds deltaToVsync(std::abs(presentDelta) % mRefreshRate.getPeriodNsecs());
     StringAppendF(&result, "Present delta %% refreshrate: %10f\n",
                   std::chrono::duration<double, Period>(deltaToVsync).count());
-    StringAppendF(&result, "Jank Severity Score: %10f\n", mJankSeverityScore);
+    StringAppendF(&result, "Jank Debug Metadata: %10f\n", mJankDebugMetadata);
     dumpTable<Period>(result, mSurfaceFlingerPredictions, mSurfaceFlingerActuals, "",
                       mPredictionState, baseTime);
     StringAppendF(&result, "\n");

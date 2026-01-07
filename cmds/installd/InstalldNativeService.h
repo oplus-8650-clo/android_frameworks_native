@@ -93,11 +93,15 @@ public:
     binder::Status fixupAppData(const std::optional<std::string>& uuid, int32_t flags);
 
     binder::Status snapshotAppData(const std::optional<std::string>& volumeUuid,
-            const std::string& packageName, const int32_t user, const int32_t snapshotId,
-            int32_t storageFlags, int64_t* _aidl_return);
+                                   const std::string& packageName, const int32_t user,
+                                   const int32_t snapshotId, int32_t storageFlags,
+                                   int64_t* _aidl_return);
+
     binder::Status restoreAppDataSnapshot(const std::optional<std::string>& volumeUuid,
-            const std::string& packageName, const int32_t appId, const std::string& seInfo,
-            const int32_t user, const int32_t snapshotId, int32_t storageFlags);
+                                          const std::string& packageName, const int32_t appId,
+                                          const int32_t pccId, const std::string& seInfo,
+                                          const int32_t user, const int32_t snapshotId,
+                                          int32_t storageFlags);
     binder::Status destroyAppDataSnapshot(const std::optional<std::string> &volumeUuid,
             const std::string& packageName, const int32_t user, const int64_t ceSnapshotInode,
             const int32_t snapshotId, int32_t storageFlags);

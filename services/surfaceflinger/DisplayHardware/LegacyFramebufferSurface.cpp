@@ -156,8 +156,8 @@ status_t LegacyFramebufferSurface::advanceFrame(float hdrSdrRatio) {
     return NO_ERROR;
 }
 
-void LegacyFramebufferSurface::freeBufferLocked(int slotIndex) {
-    ConsumerBase::freeBufferLocked(slotIndex);
+void LegacyFramebufferSurface::freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) {
+    ConsumerBase::freeBufferLocked(slotIndex, onBufferFreed);
     if (slotIndex == mCurrentBufferSlot) {
         mCurrentBufferSlot = BufferQueue::INVALID_BUFFER_SLOT;
     }

@@ -168,21 +168,46 @@ int ConsumerBase::getSlotForBufferLocked(const sp<GraphicBuffer>& buffer) {
     return BufferQueue::INVALID_BUFFER_SLOT;
 }
 
-status_t ConsumerBase::detachBufferLocked(int slotIndex) {
-    status_t result = mConsumer->detachBuffer(slotIndex);
+status_t ConsumerBase::detachBufferLocked(const sp<GraphicBuffer>& buffer,
+                                          BufferFreedCallback onBufferFreed) {
+    if (mAbandoned) {
+        CB_LOGE("detachBuffer: ConsumerBase is abandoned!");
+        return NO_INIT;
+    }
+    if (buffer == nullptr) {
+        return BAD_VALUE;
+    }
 
+    int slotIndex = getSlotForBufferLocked(buffer);
+    if (slotIndex == BufferQueue::INVALID_BUFFER_SLOT) {
+        return BAD_VALUE;
+    }
+
+    return detachBufferLocked(slotIndex, onBufferFreed);
+}
+
+status_t ConsumerBase::detachBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) {
+    if (mAbandoned) {
+        CB_LOGE("detachBuffer: ConsumerBase is abandoned!");
+        return NO_INIT;
+    }
+
+    status_t result = mConsumer->detachBuffer(slotIndex);
     if (result != NO_ERROR) {
         CB_LOGE("Failed to detach buffer: %d", result);
         return result;
     }
 
-    freeBufferLocked(slotIndex);
+    freeBufferLocked(slotIndex, onBufferFreed);
 
     return result;
 }
 
-void ConsumerBase::freeBufferLocked(int slotIndex) {
+void ConsumerBase::freeBufferLocked(int slotIndex, BufferFreedCallback bufferFreedCallback) {
     CB_LOGV("freeBufferLocked: slotIndex=%d", slotIndex);
+    if (mSlots[slotIndex].mGraphicBuffer) {
+        bufferFreedCallback(mSlots[slotIndex].mGraphicBuffer);
+    }
     mSlots[slotIndex].mGraphicBuffer = nullptr;
     mSlots[slotIndex].mFence = Fence::NO_FENCE;
     mSlots[slotIndex].mFrameNumber = 0;
@@ -277,10 +302,10 @@ void ConsumerBase::onFrameReplaced(const BufferItem &item) {
 
 void ConsumerBase::onBuffersReleased() {
     Mutex::Autolock lock(mMutex);
-    onBuffersReleasedLocked();
+    onBuffersReleasedLocked([](auto&) {});
 }
 
-void ConsumerBase::onBuffersReleasedLocked() {
+void ConsumerBase::onBuffersReleasedLocked(BufferFreedCallback bufferFreedCallback) {
     CB_LOGV("onBuffersReleased");
 
     if (mAbandoned) {
@@ -293,7 +318,7 @@ void ConsumerBase::onBuffersReleasedLocked() {
     mConsumer->getReleasedBuffersExtended(&mask);
     for (size_t i = 0; i < mSlots.size(); i++) {
         if (mask[i]) {
-            freeBufferLocked(i);
+            freeBufferLocked(i, bufferFreedCallback);
         }
     }
 #else
@@ -301,7 +326,7 @@ void ConsumerBase::onBuffersReleasedLocked() {
     mConsumer->getReleasedBuffers(&mask);
     for (int i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
         if (mask & (1ULL << i)) {
-            freeBufferLocked(i);
+            freeBufferLocked(i, bufferFreedCallback);
         }
     }
 #endif
@@ -326,12 +351,11 @@ void ConsumerBase::abandon() {
     Mutex::Autolock lock(mMutex);
 
     if (!mAbandoned) {
-        abandonLocked();
-        mAbandoned = true;
+        abandonLocked([](auto&) {});
     }
 }
 
-void ConsumerBase::abandonLocked() {
+void ConsumerBase::abandonLocked(BufferFreedCallback bufferFreedCallback) {
     CB_LOGV("abandonLocked");
     if (mAbandoned) {
         CB_LOGE("abandonLocked: ConsumerBase is abandoned!");
@@ -342,11 +366,12 @@ void ConsumerBase::abandonLocked() {
 #else
     for (int i =0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
 #endif
-        freeBufferLocked(i);
+        freeBufferLocked(i, bufferFreedCallback);
     }
     // disconnect from the BufferQueue
     mConsumer->consumerDisconnect();
     mConsumer.clear();
+    mAbandoned = true;
 }
 
 bool ConsumerBase::isAbandoned() {
@@ -374,33 +399,13 @@ void ConsumerBase::setFrameAvailableListener(
 status_t ConsumerBase::detachBuffer(int slot) {
     CB_LOGV("detachBuffer");
     Mutex::Autolock lock(mMutex);
-
-    if (mAbandoned) {
-        CB_LOGE("detachBuffer: ConsumerBase is abandoned!");
-        return NO_INIT;
-    }
-
-    return detachBufferLocked(slot);
+    return detachBufferLocked(slot, [](auto&) {});
 }
 
 status_t ConsumerBase::detachBuffer(const sp<GraphicBuffer>& buffer) {
     CB_LOGV("detachBuffer");
     Mutex::Autolock lock(mMutex);
-
-    if (mAbandoned) {
-        CB_LOGE("detachBuffer: ConsumerBase is abandoned!");
-        return NO_INIT;
-    }
-    if (buffer == nullptr) {
-        return BAD_VALUE;
-    }
-
-    int slotIndex = getSlotForBufferLocked(buffer);
-    if (slotIndex == BufferQueue::INVALID_BUFFER_SLOT) {
-        return BAD_VALUE;
-    }
-
-    return detachBufferLocked(slotIndex);
+    return detachBufferLocked(buffer, [](auto&) {});
 }
 
 status_t ConsumerBase::addReleaseFence(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence) {
@@ -489,12 +494,18 @@ status_t ConsumerBase::setMaxBufferCount(int bufferCount) {
 
 status_t ConsumerBase::setMaxAcquiredBufferCount(int maxAcquiredBuffers) {
     Mutex::Autolock lock(mMutex);
+    return setMaxAcquiredBufferCountLocked(maxAcquiredBuffers, [](auto&) {});
+}
+
+status_t ConsumerBase::setMaxAcquiredBufferCountLocked(int maxAcquiredBuffers,
+                                                       BufferFreedCallback onBufferFreed) {
     if (mAbandoned) {
         CB_LOGE("setMaxAcquiredBufferCount: ConsumerBase is abandoned!");
         return NO_INIT;
     }
-    return mConsumer->setMaxAcquiredBufferCount(maxAcquiredBuffers,
-                                                {[this]() { onBuffersReleasedLocked(); }});
+    return mConsumer->setMaxAcquiredBufferCount(maxAcquiredBuffers, {[&onBufferFreed, this]() {
+                                                    onBuffersReleasedLocked(onBufferFreed);
+                                                }});
 }
 
 status_t ConsumerBase::setConsumerIsProtected(bool isProtected) {
@@ -535,6 +546,10 @@ status_t ConsumerBase::getOccupancyHistory(bool forceFlush,
 
 status_t ConsumerBase::discardFreeBuffers() {
     Mutex::Autolock _l(mMutex);
+    return discardFreeBuffersLocked([](auto&) {});
+}
+
+status_t ConsumerBase::discardFreeBuffersLocked(BufferFreedCallback onBufferFreed) {
     if (mAbandoned) {
         CB_LOGE("discardFreeBuffers: ConsumerBase is abandoned!");
         return NO_INIT;
@@ -548,7 +563,7 @@ status_t ConsumerBase::discardFreeBuffers() {
     mConsumer->getReleasedBuffersExtended(&mask);
     for (int i = 0; i < (int)mSlots.size(); i++) {
         if (mask[i]) {
-            freeBufferLocked(i);
+            freeBufferLocked(i, onBufferFreed);
         }
     }
 #else
@@ -556,7 +571,7 @@ status_t ConsumerBase::discardFreeBuffers() {
     mConsumer->getReleasedBuffers(&mask);
     for (int i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
         if (mask & (1ULL << i)) {
-            freeBufferLocked(i);
+            freeBufferLocked(i, onBufferFreed);
         }
     }
 #endif
@@ -594,8 +609,9 @@ sp<IGraphicBufferConsumer> ConsumerBase::getIGraphicBufferConsumer() const {
     return mConsumer;
 }
 
-status_t ConsumerBase::acquireBufferLocked(BufferItem *item,
-        nsecs_t presentWhen, uint64_t maxFrameNumber) {
+status_t ConsumerBase::acquireBufferLocked(BufferItem* item, nsecs_t presentWhen,
+                                           uint64_t maxFrameNumber,
+                                           BufferFreedCallback onBufferFreed) {
     if (mAbandoned) {
         CB_LOGE("acquireBufferLocked: ConsumerBase is abandoned!");
         return NO_INIT;
@@ -608,7 +624,7 @@ status_t ConsumerBase::acquireBufferLocked(BufferItem *item,
 
     if (item->mGraphicBuffer != nullptr) {
         if (mSlots[item->mSlot].mGraphicBuffer != nullptr) {
-            freeBufferLocked(item->mSlot);
+            freeBufferLocked(item->mSlot, onBufferFreed);
         }
         mSlots[item->mSlot].mGraphicBuffer = item->mGraphicBuffer;
     }
@@ -690,10 +706,12 @@ status_t ConsumerBase::addReleaseFenceLocked(int slot, const sp<GraphicBuffer>& 
 }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer) {
+status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                           BufferFreedCallback onBufferFreed) {
 #else
 status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
-                                           EGLDisplay display, EGLSyncKHR eglFence) {
+                                           EGLDisplay display, EGLSyncKHR eglFence,
+                                           BufferFreedCallback onBufferFreed) {
 #endif
     if (mAbandoned) {
         CB_LOGE("releaseBufferLocked: ConsumerBase is abandoned!");
@@ -718,7 +736,7 @@ status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& gr
             display, eglFence, mSlots[slot].mFence);
 #endif
     if (err == IGraphicBufferConsumer::STALE_BUFFER_SLOT) {
-        freeBufferLocked(slot);
+        freeBufferLocked(slot, onBufferFreed);
     }
 
     mPrevFinalReleaseFence = mSlots[slot].mFence;
