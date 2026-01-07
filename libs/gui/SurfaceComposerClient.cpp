@@ -2428,6 +2428,26 @@ DisplayState& SurfaceComposerClient::Transaction::getDisplayState(const sp<IBind
     return mState.getDisplayState(token);
 }
 
+status_t SurfaceComposerClient::Transaction::setDisplaySurface(const sp<IBinder>& token,
+                                                               const sp<Surface>& surface) {
+    if (surface.get() != nullptr) {
+        // Make sure that composition can never be stalled by a virtual display
+        // consumer that isn't processing buffers fast enough.
+        status_t err = surface->setAsyncMode(true);
+        if (err != NO_ERROR) {
+            ALOGE("Composer::setDisplaySurface Failed to enable async mode on the "
+                  "BufferQueue. This BufferQueue cannot be used for virtual "
+                  "display. (%d)",
+                  err);
+            return err;
+        }
+    }
+    DisplayState& s(getDisplayState(token));
+    s.surface = view::Surface::fromSurface(surface);
+    s.what |= DisplayState::eSurfaceChanged;
+    return NO_ERROR;
+}
+
 status_t SurfaceComposerClient::Transaction::setDisplaySurface(
         const sp<IBinder>& token, const sp<IGraphicBufferProducer>& bufferProducer) {
     if (bufferProducer.get() != nullptr) {

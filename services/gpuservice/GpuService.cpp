@@ -24,7 +24,6 @@
 #include <binder/IResultReceiver.h>
 #include <binder/Parcel.h>
 #include <binder/PermissionCache.h>
-#include <com_android_graphics_graphicsenv_flags.h>
 #include <cutils/properties.h>
 #include <cutils/multiuser.h>
 #include <feature_override/FeatureOverrideParser.h>
@@ -40,8 +39,6 @@
 
 #include <thread>
 #include <memory>
-
-namespace graphicsenv_flags = com::android::graphics::graphicsenv::flags;
 
 namespace android {
 

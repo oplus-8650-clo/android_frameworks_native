@@ -68,6 +68,7 @@ class HdrCapabilities;
 class IGraphicBufferProducer;
 class ITunnelModeEnabledListener;
 class Region;
+class Surface;
 class TransactionCompletedListener;
 
 using gui::DisplayCaptureArgs;
@@ -894,8 +895,12 @@ public:
          */
         Transaction& setRenderCommandBufferFrameId(const sp<SurfaceControl>& sc, uint64_t frameId);
 
+        status_t setDisplaySurface(const sp<IBinder>& token, const sp<Surface>& surface);
+
         status_t setDisplaySurface(const sp<IBinder>& token,
-                const sp<IGraphicBufferProducer>& bufferProducer);
+                                   const sp<IGraphicBufferProducer>& bufferProducer)
+                __attribute__((deprecated(
+                        "Use setDisplaySurface(const sp<IBinder>&, const sp<Surface>&) instead.")));
 
         void setDisplayLayerStack(const sp<IBinder>& token, ui::LayerStack);
 

@@ -6816,7 +6816,7 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
                 ALOGW("Attempt to set power mode %d for virtual display", mode);
             }
         } else {
-            Mutex::Autolock lock(mStateLock);
+            ftl::FakeGuard guard(mStateLock);
             if (FlagManager::getInstance().set_power_mode_async() &&
                 display->getCompositionDisplay()->supportsOffloadPresent()) {
                 ALOGD("Setting power mode %d asynchronously for a physical display with token %p",

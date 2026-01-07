@@ -163,5 +163,6 @@ cc_library_shared {
         "libgrallocusage",
         "libvulkanallocator",
         "libvulkanflags",
+        "libVulkanProperties",
     ],
 }

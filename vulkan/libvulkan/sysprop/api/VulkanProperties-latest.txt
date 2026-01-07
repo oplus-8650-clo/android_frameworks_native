@@ -1,0 +1,13 @@
+props {
+  module: "android.sysprop.VulkanProperties"
+  prop {
+    api_name: "platform_layers"
+    type: String
+    prop_name: "ro.vulkan.layers.platform"
+  }
+  prop {
+    api_name: "oem_layers"
+    type: String
+    prop_name: "ro.vulkan.layers.oem"
+  }
+}
