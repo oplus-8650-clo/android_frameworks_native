@@ -378,7 +378,6 @@ cc_defaults {
         "-clang-analyzer-optin.cplusplus.VirtualCall",
         "-clang-analyzer-optin.performance.Padding",
         "-clang-analyzer-security.ArrayBound",
-        "-clang-analyzer-unix.BlockInCriticalSection",
         "-clang-analyzer-unix.StdCLibraryFunctions",
         "-clang-diagnostic-deprecated-declarations",
         "-misc-header-include-cycle",
