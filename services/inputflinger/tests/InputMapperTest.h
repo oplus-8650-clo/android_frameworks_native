@@ -34,6 +34,7 @@
 #include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestInputListener.h"
+#include "TestInputQueue.h"
 #include "input/Input.h"
 #include "input/InputVerifier.h"
 #include "input/PropertyMap.h"
@@ -58,16 +59,18 @@ protected:
 
     void setSwitchState(int32_t state, std::set<int32_t> switchCodes);
 
-    std::list<NotifyArgs> process(int32_t type, int32_t code, int32_t value);
-    std::list<NotifyArgs> process(nsecs_t when, int32_t type, int32_t code, int32_t value);
-    virtual std::list<NotifyArgs> process(nsecs_t when, nsecs_t readTime, int32_t type,
-                                          int32_t code, int32_t value);
+    void process(int32_t type, int32_t code, int32_t value);
+    void process(nsecs_t when, int32_t type, int32_t code, int32_t value);
+    virtual void process(nsecs_t when, nsecs_t readTime, int32_t type, int32_t code, int32_t value);
+
+    virtual void processArgs(const std::list<NotifyArgs>& args);
 
     InputDeviceIdentifier mIdentifier;
     MockEventHubInterface mMockEventHub;
     sp<FakeInputReaderPolicy> mFakePolicy;
     MockInputReaderContext mMockInputReaderContext;
     std::unique_ptr<MockInputDevice> mDevice;
+    TestInputQueue mFakeListener;
 
     std::unique_ptr<InputDeviceContext> mDeviceContext;
     InputReaderConfiguration mReaderConfiguration;
@@ -89,13 +92,14 @@ protected:
     VerifyingInputMapperUnitTest();
 
     using InputMapperUnitTest::process;
-    virtual std::list<NotifyArgs> process(nsecs_t when, nsecs_t readTime, int32_t type,
-                                          int32_t code, int32_t value) override;
+    virtual void process(nsecs_t when, nsecs_t readTime, int32_t type, int32_t code,
+                         int32_t value) override;
+    virtual void processArgs(const std::list<NotifyArgs>& args) override;
 
-    std::list<NotifyArgs> reconfigureMapper(nsecs_t when, const InputReaderConfiguration& config,
-                                            ConfigurationChanges changes);
+    void reconfigureMapper(nsecs_t when, const InputReaderConfiguration& config,
+                           ConfigurationChanges changes);
 
-    std::list<NotifyArgs> resetMapper(nsecs_t when);
+    void resetMapper(nsecs_t when);
 
 private:
     void processMotionArgs(const std::list<NotifyArgs>& args);
