@@ -39,13 +39,6 @@ public:
      *      adb shell setprop persist.wm.debug.desktop_experience_devopts 1
      */
     static bool connectedDisplaysCursorEnabled();
-
-    /**
-     * Check if display density based cursor scaling is enabled.
-     * This setting can be overridden with the dev option similar to the
-     * connectedDisplaysCursorEnabled flag.
-     */
-    static bool scaleCursorSpeedWithDisplayDensity();
 };
 
 } // namespace android

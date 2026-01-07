@@ -53,11 +53,4 @@ bool InputFlags::connectedDisplaysCursorEnabled() {
     return com::android::input::flags::connected_displays_cursor();
 }
 
-bool InputFlags::scaleCursorSpeedWithDisplayDensity() {
-    if (getConnectedDisplaysDevOptionValue().value_or(false)) {
-        return true;
-    }
-    return com::android::input::flags::scale_cursor_speed_with_dpi();
-}
-
 } // namespace android

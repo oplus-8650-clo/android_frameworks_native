@@ -1192,7 +1192,6 @@ TEST_F(CursorInputMapperUnitTest, ConfigureAccelerationOnDisplayChange) {
 
 class DensityDependentCursorUnitTest : public CursorInputMapperUnitTest {
 protected:
-    FIXTURE_FLAG_OVERRIDE(scale_cursor_speed_with_dpi, true);
 
     void createViewport(int32_t densityDpi, float xDpi = ACONFIGURATION_DENSITY_NONE,
                         float yDpi = ACONFIGURATION_DENSITY_NONE) {

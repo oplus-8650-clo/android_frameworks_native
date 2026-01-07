@@ -526,8 +526,7 @@ void CursorInputMapper::configureOnChangePointerSpeed(const InputReaderConfigura
                                      mDisplayId.value_or(ui::LogicalDisplayId::INVALID)) != 0;
 
     if (mParameters.mode == Parameters::Mode::POINTER) {
-        if (!disableAllScaling && InputFlags::scaleCursorSpeedWithDisplayDensity() &&
-                   isDensityValueSupportedForScaling(mViewportDensityDpi)) {
+        if (!disableAllScaling && isDensityValueSupportedForScaling(mViewportDensityDpi)) {
             mXScale = mYScale = static_cast<float>(mViewportDensityDpi) / SCALING_BASELINE_DENSITY;
         } else {
             mXScale = mYScale = 1.0f;

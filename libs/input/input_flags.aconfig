@@ -187,13 +187,6 @@ flag {
 }
 
 flag {
-  name: "scale_cursor_speed_with_dpi"
-  namespace: "lse_desktop_experience"
-  description: "Scale the cursor speed based on display density"
-  bug: "367662715"
-}
-
-flag {
   name: "prevent_merging_input_pointer_devices"
   namespace: "desktop_input"
   description: "Prevent merging input sub-devices that provide pointer input streams"
