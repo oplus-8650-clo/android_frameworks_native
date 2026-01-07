@@ -96,18 +96,13 @@ sk_sp<SkSurface> GraphiteBackendTexture::makeSurface(ui::Dataspace dataspace,
 
 void GraphiteBackendTexture::logFatalTexture(const char* msg, ui::Dataspace dataspace,
                                              SkColorType colorType) {
-    // TODO: b/293371537 - Iterate on this logging (validate failure cases, possibly check
-    // VulkanTextureInfo, etc.)
-    // TODO: b/293371537 - add sampleCount() back after https://review.skia.org/1100357 rolls.
     const skgpu::graphite::TextureInfo& textureInfo = mBackendTexture.info();
     LOG_ALWAYS_FATAL("%s isOutputBuffer:%d, dataspace:%d, colorType:%d"
                      "\n\tBackendTexture: isValid:%d, dimensions:%dx%d"
-                     "\n\t\tTextureInfo: isValid:%d, mipmapped:%d, isProtected: %d",
+                     "\n\t\tTextureInfo: %s",
                      msg, isOutputBuffer(), static_cast<int32_t>(dataspace), colorType,
                      mBackendTexture.isValid(), mBackendTexture.dimensions().width(),
-                     mBackendTexture.dimensions().height(), textureInfo.isValid(),
-                     static_cast<int32_t>(textureInfo.mipmapped()),
-                     static_cast<int32_t>(textureInfo.isProtected()));
+                     mBackendTexture.dimensions().height(), textureInfo.toString().c_str());
 }
 
 } // namespace android::renderengine::skia

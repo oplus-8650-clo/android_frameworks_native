@@ -197,16 +197,6 @@ flag {
 }
 
 flag {
-  name: "enable_display_topology_validation"
-  namespace: "input"
-  description: "Set to true to enable display topology validation"
-  bug: "401219231"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "use_topology_aware_flag"
   namespace: "input"
   description: "Require apps to use topology-aware flag to receive cross-display gestures"
