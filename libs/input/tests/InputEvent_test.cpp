@@ -251,6 +251,23 @@ TEST_F(KeyEventTest, Properties) {
     ASSERT_EQ(newDisplayId, event.getDisplayId());
 }
 
+TEST_F(KeyEventTest, StreamOperator_WithUnknownKeycode) {
+    KeyEvent event;
+
+    static constexpr int32_t INVALID_KEYCODE = 9999;
+    static constexpr nsecs_t ARBITRARY_DOWN_TIME = 1;
+    static constexpr nsecs_t ARBITRARY_EVENT_TIME = 2;
+    const int32_t id = InputEvent::nextId();
+    // Initialize a KeyEvent with a keycode that is not in the list of known keycodes.
+    event.initialize(id, 0, AINPUT_SOURCE_GAMEPAD, DISPLAY_ID, INVALID_HMAC, AKEY_EVENT_ACTION_DOWN,
+                     AKEY_EVENT_FLAG_FROM_SYSTEM, INVALID_KEYCODE, 121, AMETA_ALT_ON, 1,
+                     ARBITRARY_DOWN_TIME, ARBITRARY_EVENT_TIME);
+    std::stringstream out;
+    out << event;
+
+    // The main goal is to check that << operator does not crash, and we aren't checking the output
+    // of it here.
+}
 
 // --- MotionEventTest ---
 

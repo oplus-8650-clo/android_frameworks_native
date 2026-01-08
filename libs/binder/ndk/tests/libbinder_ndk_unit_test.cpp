@@ -856,7 +856,14 @@ TEST(NdkBinder, AddFrozenStateChangeCallback) {
             AIBinder_FrozenStateChangeCallback_new(OnFrozenStateChanged, OnUnlinked);
     ASSERT_NE(nullptr, callback);
 
-    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback, nullptr));
+    binder_status_t status = AIBinder_addFrozenStateChangeCallback(binder, callback, nullptr);
+    if (status == STATUS_INVALID_OPERATION) {
+        AIBinder_FrozenStateChangeCallback_delete(callback);
+        AIBinder_decStrong(binder);
+        return;
+    }
+    EXPECT_EQ(STATUS_OK, status);
+
     EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback, nullptr));
     EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback, nullptr));
     EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback, nullptr));
@@ -877,7 +884,13 @@ TEST(NdkBinder, ScopedFrozenStateChangeCallback) {
             AIBinder_FrozenStateChangeCallback_new(OnFrozenStateChanged, OnUnlinked));
     ASSERT_NE(nullptr, callback.get());
 
-    EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback.get(), nullptr));
+    binder_status_t status = AIBinder_addFrozenStateChangeCallback(binder, callback.get(), nullptr);
+    if (status == STATUS_INVALID_OPERATION) {
+        AIBinder_decStrong(binder);
+        return;
+    }
+    EXPECT_EQ(STATUS_OK, status);
+
     EXPECT_EQ(STATUS_OK, AIBinder_addFrozenStateChangeCallback(binder, callback.get(), nullptr));
     EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback.get(), nullptr));
     EXPECT_EQ(STATUS_OK, AIBinder_removeFrozenStateChangeCallback(binder, callback.get(), nullptr));

@@ -773,7 +773,9 @@ int64_t VSyncPredictor::VsyncTimeline::getFreezeSequencePhase(
 std::optional<TimePoint> VSyncPredictor::VsyncTimeline::nextAnticipatedVSyncTimeFrom(
         Model model, std::optional<Period> minFramePeriodOpt, nsecs_t vsync,
         MissedVsync missedVsync, std::optional<nsecs_t> lastVsyncOpt) {
-    SFTRACE_FORMAT("renderRate %s", mRenderRateOpt ? to_string(*mRenderRateOpt).c_str() : "NA");
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        SFTRACE_FORMAT("renderRate %s", mRenderRateOpt ? to_string(*mRenderRateOpt).c_str() : "NA");
+    }
 
     nsecs_t vsyncTime = snapToVsyncAlignedWithRenderRate(model, vsync);
     const auto threshold = model.slope / 2;

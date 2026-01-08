@@ -20,7 +20,6 @@
 
 #include <android-base/result-gmock.h>
 #include <android-base/result.h>
-#include <com_android_input_flags.h>
 #include <flag_macros.h>
 #include <gestures/UncapturedGestureConverter.h>
 #include <gtest/gtest.h>
@@ -39,11 +38,7 @@
 
 namespace android {
 
-namespace input_flags = com::android::input::flags;
-
 namespace {
-
-const auto TOUCHPAD_DOWN_TIME_FIX = ACONFIG_FLAG(input_flags, touchpad_down_time_fix);
 
 constexpr stime_t GESTURE_TIME = 1.2;
 
@@ -282,8 +277,7 @@ TEST_F(UncapturedGestureConverterTest, DragWithButton) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, DownTime,
-                  REQUIRES_FLAGS_ENABLED(TOUCHPAD_DOWN_TIME_FIX)) {
+TEST_F(UncapturedGestureConverterTest, DownTime) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);

@@ -562,13 +562,7 @@ VkOpticalFlowGridSizeFlagsNV = VkFlags
 VkPhysicalDeviceSchedulingControlsFlagsARM = VkFlags64
 
 
-# --- Empty Handle Dataclasses ---
-@dataclass
-class VkPhysicalDevice:
-    pass
-
 # --- Pre-defined Struct Definitions ---
-
 @dataclass
 class VkExtent3D:
     width: uint32_t
@@ -607,6 +601,12 @@ class VkQueueFamilyProperties:
     queueCount: uint32_t
     timestampValidBits: uint32_t
     minImageTransferGranularity: VkExtent3D
+
+
+# --- Empty Handle Dataclasses ---
+@dataclass
+class VkPhysicalDevice:
+    pass
 
 
 # --- Vulkan Struct Definitions (Dependencies first, then PhysicalDevice structs) ---

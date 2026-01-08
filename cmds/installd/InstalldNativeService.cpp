@@ -1615,6 +1615,57 @@ static int32_t copy_directory_recursive(const char* from, const char* to) {
     return logwrap_fork_execvp(ARRAY_SIZE(argv), argv, nullptr, false, LOG_ALOG, false, nullptr);
 }
 
+static binder::Status createSnapshotForPackage(const std::string& from, const std::string& to,
+                                               const std::string& rollback_package_path,
+                                               bool& clear_on_exit) {
+    binder::Status res = ok();
+    int rc = create_dir_if_needed(to.c_str(), kRollbackFolderMode);
+    if (rc != 0) {
+        return error(rc, "Failed to create folder " + to);
+    }
+
+    rc = delete_dir_contents(rollback_package_path, true /* ignore_if_missing */);
+    if (rc != 0) {
+        return error(rc, "Failed clearing existing snapshot " + rollback_package_path);
+    }
+
+    // Check if we have data to copy.
+    if (access(from.c_str(), F_OK) == 0) {
+        rc = copy_directory_recursive(from.c_str(), to.c_str());
+    }
+
+    if (rc != 0) {
+        res = error(rc, "Failed copying " + from + " to " + to);
+        clear_on_exit = true;
+        return res;
+    }
+    return res;
+}
+
+static binder::Status createDeSnapshotForPackage(const char* volume_uuid, const char* package_name,
+                                                 int32_t userId, int32_t snapshotId,
+                                                 bool& clear_de_on_exit) {
+    auto from = create_data_user_de_package_path(volume_uuid, userId, package_name);
+    auto to = create_data_misc_de_rollback_path(volume_uuid, userId, snapshotId);
+    auto rollback_package_path =
+            create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                      package_name);
+
+    return createSnapshotForPackage(from, to, rollback_package_path, clear_de_on_exit);
+}
+
+static binder::Status createCeSnapshotForPackage(const char* volume_uuid, const char* package_name,
+                                                 int32_t userId, int32_t snapshotId,
+                                                 bool& clear_ce_on_exit) {
+    auto from = create_data_user_ce_package_path(volume_uuid, userId, package_name);
+    auto to = create_data_misc_ce_rollback_path(volume_uuid, userId, snapshotId);
+    auto rollback_package_path =
+            create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                      package_name);
+
+    return createSnapshotForPackage(from, to, rollback_package_path, clear_ce_on_exit);
+}
+
 binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::string>& volumeUuid,
                                                       const std::string& packageName,
                                                       int32_t userId, int32_t snapshotId,
@@ -1627,6 +1678,7 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
 
     const char* volume_uuid = volumeUuid ? volumeUuid->c_str() : nullptr;
     const char* package_name = packageName.c_str();
+    const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
 
     binder::Status res = ok();
     // Default result to 0, it will be populated with inode of ce data snapshot
@@ -1637,12 +1689,19 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
     bool clear_de_on_exit = false;
 
     auto deleter = [&clear_ce_on_exit, &clear_de_on_exit, &volume_uuid, &userId, &package_name,
-                    &snapshotId] {
+                    &pccPackageName, &snapshotId] {
         if (clear_de_on_exit) {
             auto to = create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
                                                                 package_name);
             if (delete_dir_contents(to.c_str(), 1, nullptr) != 0) {
                 LOG(WARNING) << "Failed to delete app data snapshot: " << to;
+            }
+
+            auto to_pcc = create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                                    pccPackageName.c_str());
+            if (delete_dir_contents(to_pcc.c_str(), 1, nullptr, true /* ignore_if_missing */) !=
+                0) {
+                LOG(WARNING) << "Failed to delete app data PCC snapshot: " << to_pcc;
             }
         }
 
@@ -1652,42 +1711,37 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
             if (delete_dir_contents(to.c_str(), 1, nullptr) != 0) {
                 LOG(WARNING) << "Failed to delete app data snapshot: " << to;
             }
+
+            auto to_pcc = create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                                    pccPackageName.c_str());
+            if (delete_dir_contents(to_pcc.c_str(), 1, nullptr, true /* ignore_if_missing */) !=
+                0) {
+                LOG(WARNING) << "Failed to delete app data PCC snapshot: " << to_pcc;
+            }
         }
     };
 
     auto scope_guard = android::base::make_scope_guard(deleter);
 
     if (storageFlags & FLAG_STORAGE_DE) {
-        auto from = create_data_user_de_package_path(volume_uuid, userId, package_name);
-        auto to = create_data_misc_de_rollback_path(volume_uuid, userId, snapshotId);
-        auto rollback_package_path =
-                create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
-                                                          package_name);
-
-        int rc = create_dir_if_needed(to.c_str(), kRollbackFolderMode);
-        if (rc != 0) {
-            return error(rc, "Failed to create folder " + to);
+        res = createDeSnapshotForPackage(volume_uuid, package_name, userId, snapshotId,
+                                         clear_de_on_exit);
+        if (!res.isOk()) {
+            return res;
         }
 
-        rc = delete_dir_contents(rollback_package_path, true /* ignore_if_missing */);
-        if (rc != 0) {
-            return error(rc, "Failed clearing existing snapshot " + rollback_package_path);
-        }
-
-        // Check if we have data to copy.
-        if (access(from.c_str(), F_OK) == 0) {
-          rc = copy_directory_recursive(from.c_str(), to.c_str());
-        }
-        if (rc != 0) {
-            res = error(rc, "Failed copying " + from + " to " + to);
-            clear_de_on_exit = true;
+        res = createDeSnapshotForPackage(volume_uuid, pccPackageName.c_str(), userId, snapshotId,
+                                         clear_de_on_exit);
+        if (!res.isOk()) {
             return res;
         }
     }
 
     // The app may not have any data at all, in which case it's OK to skip here.
     auto from_ce = create_data_user_ce_package_path(volume_uuid, userId, package_name);
-    if (access(from_ce.c_str(), F_OK) != 0) {
+    auto from_pcc_ce =
+            create_data_user_ce_package_path(volume_uuid, userId, pccPackageName.c_str());
+    if (access(from_ce.c_str(), F_OK) != 0 && access(from_pcc_ce.c_str(), F_OK) != 0) {
         LOG(INFO) << "Missing source " << from_ce;
         return ok();
     }
@@ -1712,33 +1766,23 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
     }
 
     if (storageFlags & FLAG_STORAGE_CE) {
-        auto from = create_data_user_ce_package_path(volume_uuid, userId, package_name);
-        auto to = create_data_misc_ce_rollback_path(volume_uuid, userId, snapshotId);
-        auto rollback_package_path =
-                create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
-                                                          package_name);
-
-        int rc = create_dir_if_needed(to.c_str(), kRollbackFolderMode);
-        if (rc != 0) {
-            return error(rc, "Failed to create folder " + to);
-        }
-
-        rc = delete_dir_contents(rollback_package_path, true /* ignore_if_missing */);
-        if (rc != 0) {
-            return error(rc, "Failed clearing existing snapshot " + rollback_package_path);
-        }
-
-        rc = copy_directory_recursive(from.c_str(), to.c_str());
-        if (rc != 0) {
-            res = error(rc, "Failed copying " + from + " to " + to);
-            clear_ce_on_exit = true;
+        res = createCeSnapshotForPackage(volume_uuid, package_name, userId, snapshotId,
+                                         clear_ce_on_exit);
+        if (!res.isOk()) {
             return res;
         }
+
+        res = createCeSnapshotForPackage(volume_uuid, pccPackageName.c_str(), userId, snapshotId,
+                                         clear_ce_on_exit);
+        if (!res.isOk()) {
+            return res;
+        }
+
         if (_aidl_return != nullptr) {
             auto ce_snapshot_path =
                     create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
                                                               package_name);
-            rc = get_path_inode(ce_snapshot_path, reinterpret_cast<ino_t*>(_aidl_return));
+            int rc = get_path_inode(ce_snapshot_path, reinterpret_cast<ino_t*>(_aidl_return));
             if (rc != 0) {
                 res = error(rc, "Failed to get_path_inode for " + ce_snapshot_path);
                 clear_ce_on_exit = true;
@@ -1750,9 +1794,43 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
     return res;
 }
 
+static void deleteDirsOnFailedRollback(const char* volume_uuid, const char* package_name,
+                                       const char* pcc_package_name, const int32_t userId,
+                                       bool delete_ce, bool delete_de, bool delete_pcc_ce,
+                                       bool delete_pcc_de) {
+    if (delete_de) {
+        auto de_data = create_data_user_de_package_path(volume_uuid, userId, package_name);
+        LOG(WARNING) << "rollback failed. Erasing rolled back de_data " << de_data;
+        if (delete_dir_contents(de_data.c_str(), 1, nullptr) != 0) {
+            LOG(WARNING) << "Failed to delete rolled back de_data " << de_data;
+        }
+    }
+    if (delete_ce) {
+        auto ce_data = create_data_user_ce_package_path(volume_uuid, userId, package_name);
+        LOG(WARNING) << "rollback failed. Erasing rolled back ce_data " << ce_data;
+        if (delete_dir_contents(ce_data.c_str(), 1, nullptr) != 0) {
+            LOG(WARNING) << "Failed to delete rolled back ce_data " << ce_data;
+        }
+    }
+    if (delete_pcc_de) {
+        auto pcc_de_data = create_data_user_de_package_path(volume_uuid, userId, pcc_package_name);
+        LOG(WARNING) << "rollback failed. Erasing rolled back pcc_de_data " << pcc_de_data;
+        if (delete_dir_contents(pcc_de_data.c_str(), 1, nullptr) != 0) {
+            LOG(WARNING) << "Failed to delete rolled back pcc_de_data " << pcc_de_data;
+        }
+    }
+    if (delete_pcc_ce) {
+        auto pcc_ce_data = create_data_user_ce_package_path(volume_uuid, userId, pcc_package_name);
+        LOG(WARNING) << "rollback failed. Erasing rolled back ce_data " << pcc_ce_data;
+        if (delete_dir_contents(pcc_ce_data.c_str(), 1, nullptr) != 0) {
+            LOG(WARNING) << "Failed to delete rolled back pcc_ce_data " << pcc_ce_data;
+        }
+    }
+}
+
 binder::Status InstalldNativeService::restoreAppDataSnapshot(
         const std::optional<std::string>& volumeUuid, const std::string& packageName,
-        const int32_t appId, const std::string& seInfo, const int32_t userId,
+        const int32_t appId, const int32_t pccId, const std::string& seInfo, const int32_t userId,
         const int32_t snapshotId, int32_t storageFlags) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
@@ -1762,18 +1840,28 @@ binder::Status InstalldNativeService::restoreAppDataSnapshot(
 
     const char* volume_uuid = volumeUuid ? volumeUuid->c_str() : nullptr;
     const char* package_name = packageName.c_str();
+    const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
 
     auto from_ce = create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
                                                              package_name);
     auto from_de = create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
                                                              package_name);
+    auto from_pcc_ce = create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                                 pccPackageName.c_str());
+    auto from_pcc_de = create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                                 pccPackageName.c_str());
 
-    const bool needs_ce_rollback = (storageFlags & FLAG_STORAGE_CE) &&
-        (access(from_ce.c_str(), F_OK) == 0);
-    const bool needs_de_rollback = (storageFlags & FLAG_STORAGE_DE) &&
-        (access(from_de.c_str(), F_OK) == 0);
+    const bool needs_ce_rollback =
+            ((storageFlags & FLAG_STORAGE_CE) != 0) && (access(from_ce.c_str(), F_OK) == 0);
+    const bool needs_de_rollback =
+            ((storageFlags & FLAG_STORAGE_DE) != 0) && (access(from_de.c_str(), F_OK) == 0);
+    const bool needs_pcc_ce_rollback = pccId > 0 && ((storageFlags & FLAG_STORAGE_CE) != 0) &&
+            (access(from_pcc_ce.c_str(), F_OK) == 0);
+    const bool needs_pcc_de_rollback = pccId > 0 && ((storageFlags & FLAG_STORAGE_DE) != 0) &&
+            (access(from_pcc_de.c_str(), F_OK) == 0);
 
-    if (!needs_ce_rollback && !needs_de_rollback) {
+    if (!needs_ce_rollback && !needs_de_rollback && !needs_pcc_ce_rollback &&
+        !needs_pcc_de_rollback) {
         return ok();
     }
 
@@ -1806,21 +1894,60 @@ binder::Status InstalldNativeService::restoreAppDataSnapshot(
         auto to_de = create_data_user_de_path(volume_uuid, userId);
         int rc = copy_directory_recursive(from_de.c_str(), to_de.c_str());
         if (rc != 0) {
-            if (needs_ce_rollback) {
-                auto ce_data = create_data_user_ce_package_path(volume_uuid, userId, package_name);
-                LOG(WARNING) << "de_data rollback failed. Erasing rolled back ce_data " << ce_data;
-                if (delete_dir_contents(ce_data.c_str(), 1, nullptr) != 0) {
-                    LOG(WARNING) << "Failed to delete rolled back ce_data " << ce_data;
-                }
-            }
+            deleteDirsOnFailedRollback(volume_uuid, package_name, pccPackageName.c_str(), userId,
+                                       /* delete_ce=*/needs_ce_rollback, /* delete_de= */ false,
+                                       /* delete_pcc_ce= */ false, /* delete_pcc_de= */ false);
             res = error(rc, "Failed copying " + from_de + " to " + to_de);
             return res;
         }
         delete_dir_contents_and_dir(from_de, true /* ignore_if_missing */);
     }
 
+    if (needs_pcc_ce_rollback) {
+        auto to_ce = create_data_user_ce_path(volume_uuid, userId);
+        int rc = copy_directory_recursive(from_pcc_ce.c_str(), to_ce.c_str());
+        if (rc != 0) {
+            deleteDirsOnFailedRollback(volume_uuid, package_name, pccPackageName.c_str(), userId,
+                                       /* delete_ce=*/needs_ce_rollback,
+                                       /* delete_de= */ needs_de_rollback,
+                                       /* delete_pcc_ce= */ false, /* delete_pcc_de= */ false);
+            res = error(rc, "Failed copying " + from_pcc_ce + " to " + to_ce);
+            return res;
+        }
+        delete_dir_contents_and_dir(from_pcc_ce, true /* ignore_if_missing */);
+    }
+
+    if (needs_pcc_de_rollback) {
+        auto to_de = create_data_user_de_path(volume_uuid, userId);
+        int rc = copy_directory_recursive(from_pcc_de.c_str(), to_de.c_str());
+        if (rc != 0) {
+            deleteDirsOnFailedRollback(volume_uuid, package_name, pccPackageName.c_str(), userId,
+                                       /* delete_ce=*/needs_ce_rollback,
+                                       /* delete_de= */ needs_de_rollback,
+                                       /* delete_pcc_ce= */ needs_pcc_ce_rollback,
+                                       /* delete_pcc_de= */ false);
+            res = error(rc, "Failed copying " + from_pcc_de + " to " + to_de);
+            return res;
+        }
+        delete_dir_contents_and_dir(from_pcc_de, true /* ignore_if_missing */);
+    }
+
     // Finally, restore the SELinux label on the app data.
-    return restoreconAppData(volumeUuid, packageName, userId, storageFlags, appId, seInfo);
+    res = restoreconAppData(volumeUuid, packageName, userId, storageFlags, appId, seInfo);
+
+    if (!res.isOk()) {
+        return res;
+    }
+
+    if (pccId > 0) {
+        auto pccRes =
+                restoreconAppData(volumeUuid, pccPackageName, userId, storageFlags, pccId, seInfo);
+        if (!pccRes.isOk()) {
+            return pccRes;
+        }
+    }
+
+    return res;
 }
 
 binder::Status InstalldNativeService::destroyAppDataSnapshot(
@@ -1835,14 +1962,22 @@ binder::Status InstalldNativeService::destroyAppDataSnapshot(
 
     const char* volume_uuid = volumeUuid ? volumeUuid->c_str() : nullptr;
     const char* package_name = packageName.c_str();
+    const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
 
     if (storageFlags & FLAG_STORAGE_DE) {
         auto de_snapshot_path = create_data_misc_de_rollback_package_path(volume_uuid, userId,
                                                                           snapshotId, package_name);
+        auto pcc_de_snapshot_path =
+                create_data_misc_de_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                          pccPackageName.c_str());
 
         int res = delete_dir_contents_and_dir(de_snapshot_path, true /* ignore_if_missing */);
         if (res != 0) {
             return error(res, "Failed clearing snapshot " + de_snapshot_path);
+        }
+        res = delete_dir_contents_and_dir(pcc_de_snapshot_path, true /* ignore_if_missing */);
+        if (res != 0) {
+            return error(res, "Failed clearing snapshot " + pcc_de_snapshot_path);
         }
     }
 
@@ -1850,9 +1985,17 @@ binder::Status InstalldNativeService::destroyAppDataSnapshot(
         auto ce_snapshot_path =
                 create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
                                                           package_name, ceSnapshotInode);
+        auto pcc_ce_snapshot_path =
+                create_data_misc_ce_rollback_package_path(volume_uuid, userId, snapshotId,
+                                                          pccPackageName.c_str(), 0);
+
         int res = delete_dir_contents_and_dir(ce_snapshot_path, true /* ignore_if_missing */);
         if (res != 0) {
             return error(res, "Failed clearing snapshot " + ce_snapshot_path);
+        }
+        res = delete_dir_contents_and_dir(pcc_ce_snapshot_path, true /* ignore_if_missing */);
+        if (res != 0) {
+            return error(res, "Failed clearing snapshot " + pcc_ce_snapshot_path);
         }
     }
     return ok();

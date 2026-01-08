@@ -124,21 +124,14 @@ status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>&
     // destroyed the client side is dead and there won't be anyone to send the callback to.
     sp<IBinder> surfaceControl = handle->surfaceControl.promote();
     if (surfaceControl) {
-        sp<Fence> prevFence = nullptr;
-
-        for (auto& future : handle->previousReleaseFences) {
-            mergeFence(handle->name.c_str(), future.get().value_or(Fence::NO_FENCE), prevFence);
-        }
-
-        handle->previousReleaseFence = prevFence;
-        handle->previousReleaseFences.clear();
+        sp<Fence> previousReleaseFence = handle->fenceMerger.waitAndGetFence(handle->name.c_str());
 
         FrameEventHistoryStats eventStats(handle->frameNumber, handle->previousFrameNumber,
                                           handle->gpuCompositionDoneFence->getSnapshot().fence,
                                           handle->compositorTiming, handle->refreshStartTime,
                                           handle->dequeueReadyTime);
         transactionStats->surfaceStats.emplace_back(surfaceControl, handle->acquireTimeOrFence,
-                                                    handle->previousReleaseFence,
+                                                    previousReleaseFence,
                                                     handle->transformHint,
                                                     handle->currentMaxAcquiredBufferCount,
                                                     handle->cornerRadii, eventStats,
@@ -149,13 +142,13 @@ status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>&
                 if (auto previousBuffer = handle->previousBuffer.lock()) {
                     previousBuffer->getBuffer()
                             ->getDependencyMonitor()
-                            .addEgress(FenceTime::makeValid(handle->previousReleaseFence),
+                            .addEgress(FenceTime::makeValid(previousReleaseFence),
                                        "Txn release");
                 }
             }
             mBufferReleases.emplace_back(handle->name, handle->bufferReleaseChannel,
                                          handle->previousReleaseCallbackId,
-                                         handle->previousReleaseFence,
+                                         previousReleaseFence,
                                          handle->currentMaxAcquiredBufferCount);
         }
     }

@@ -71,19 +71,19 @@ static uint64_t getUniqueId() {
     return id | counter++;
 }
 
-static status_t getProcessName(int pid, String8& name) {
-    FILE* fp = fopen(String8::format("/proc/%d/cmdline", pid), "r");
-    if (NULL != fp) {
-        const size_t size = 64;
-        char proc_name[size];
-        char* result = fgets(proc_name, size, fp);
-        fclose(fp);
-        if (result != nullptr) {
-            name = proc_name;
-            return NO_ERROR;
-        }
+static status_t getProcessName(pid_t pid, String8& name) {
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/exe", pid);
+
+    char proc_name[64];
+    // readlink is a fast, non-blocking operation in this context
+    ssize_t len = readlink(path, proc_name, sizeof(proc_name) - 1);
+    if (len != -1) {
+        proc_name[len] = '\0'; // Null-terminate the string out of paranoia.
+        return name.setTo(proc_name, len);
+    } else {
+        return INVALID_OPERATION;
     }
-    return INVALID_OPERATION;
 }
 
 BufferQueueCore::BufferQueueCore()
@@ -184,7 +184,7 @@ void BufferQueueCore::dumpState(const String8& prefix, String8* outResult) const
 
     String8 producerProcName = String8("\?\?\?");
     String8 consumerProcName = String8("\?\?\?");
-    int32_t pid = getpid();
+    pid_t pid = getpid();
     getProcessName(mConnectedPid, producerProcName);
     getProcessName(pid, consumerProcName);
     outResult->appendFormat("mId=%" PRIx64 ", producer=[%d:%s], consumer=[%d:%s])\n", mUniqueId,

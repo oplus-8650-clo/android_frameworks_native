@@ -379,8 +379,10 @@ private:
     std::weak_ptr<SurfaceFrame> mPreviousSurfaceFrame GUARDED_BY(mMutex);
 
     // Alternative jank classification, Experimental for now.
-    float mJankSeverityScore GUARDED_BY(mMutex) = 0.0f;
     nsecs_t mPresentDelay GUARDED_BY(mMutex) = 0;
+    float mJankDebugMetadata GUARDED_BY(mMutex) = 0.0f;
+    nsecs_t mExpectedPresentDelta GUARDED_BY(mMutex) = 0;
+    nsecs_t mActualPresentDelta GUARDED_BY(mMutex) = 0;
 };
 
 /*
@@ -599,8 +601,10 @@ public:
 
         // Alternative jank classification, Experimental for now.
         nsecs_t mPresentDelay = 0;
-        float mJankSeverityScore = 0.0f;
+        float mJankDebugMetadata = 0.0f;
         bool mDisplayOn = true;
+        nsecs_t mExpectedPresentDelta = 0;
+        nsecs_t mActualPresentDelta = 0;
     };
 
     FrameTimeline(std::shared_ptr<TimeStats> timeStats, pid_t surfaceFlingerPid,

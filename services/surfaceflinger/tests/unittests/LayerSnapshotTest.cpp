@@ -17,7 +17,6 @@
 #include <cmath>
 
 #include <com_android_graphics_libgui_flags.h>
-#include <com_android_input_flags.h>
 #include <common/test/FlagUtils.h>
 #include <flag_macros.h>
 #include <gmock/gmock.h>
@@ -44,8 +43,6 @@
     })
 
 namespace android::surfaceflinger::frontend {
-
-namespace input_flags = com::android::input::flags;
 
 using ftl::Flags;
 using namespace ftl::flag_operators;
@@ -601,8 +598,7 @@ TEST_F(LayerSnapshotTest, displayMirrorRespectsLayerSkipScreenshotFlag) {
     UPDATE_AND_VERIFY(mSnapshotBuilder, expected);
 }
 
-TEST_F_WITH_FLAGS(LayerSnapshotTest, layerMirrorRespectsLayerSkipScreenshotFlag,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+TEST_F(LayerSnapshotTest, layerMirrorRespectsLayerSkipScreenshotFlag) {
     setFlags(12, layer_state_t::eLayerSkipScreenshot, layer_state_t::eLayerSkipScreenshot);
     createLayerMirrorLayer(3, 1);
     setLayerStack(3, 1);

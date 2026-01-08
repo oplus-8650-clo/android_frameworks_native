@@ -200,32 +200,31 @@ protected:
         std::this_thread::sleep_for(std::chrono::milliseconds(205));
     }
 
-    std::list<NotifyArgs> oneFingerSwipe() {
+    void oneFingerSwipe() {
         int32_t moveX = 500;
-        std::list<NotifyArgs> args;
-        args += process(EV_ABS, ABS_MT_SLOT, 0);
-        args += process(EV_ABS, ABS_MT_TRACKING_ID, 3);
-        args += process(EV_KEY, BTN_TOUCH, 1);
-        args += process(EV_KEY, BTN_TOOL_FINGER, 1);
+        process(EV_ABS, ABS_MT_SLOT, 0);
+        process(EV_ABS, ABS_MT_TRACKING_ID, 3);
+        process(EV_KEY, BTN_TOUCH, 1);
+        process(EV_KEY, BTN_TOOL_FINGER, 1);
         setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_FINGER});
-        args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
-        args += process(EV_ABS, ABS_MT_POSITION_Y, 500);
-        args += process(EV_ABS, ABS_MT_PRESSURE, 25);
-        args += process(EV_SYN, SYN_REPORT, 0);
+        process(EV_ABS, ABS_MT_POSITION_X, moveX);
+        process(EV_ABS, ABS_MT_POSITION_Y, 500);
+        process(EV_ABS, ABS_MT_PRESSURE, 25);
+        process(EV_SYN, SYN_REPORT, 0);
+
         for (int32_t i = 0; i < 3; i++) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             moveX += 100;
 
-            args += process(EV_ABS, ABS_MT_POSITION_X, moveX);
-            args += process(EV_SYN, SYN_REPORT, 0);
+            process(EV_ABS, ABS_MT_POSITION_X, moveX);
+            process(EV_SYN, SYN_REPORT, 0);
         }
-        args += process(EV_ABS, ABS_MT_PRESSURE, 0);
-        args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-        args += process(EV_KEY, BTN_TOUCH, 0);
-        args += process(EV_KEY, BTN_TOOL_FINGER, 0);
+        process(EV_ABS, ABS_MT_PRESSURE, 0);
+        process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+        process(EV_KEY, BTN_TOUCH, 0);
+        process(EV_KEY, BTN_TOOL_FINGER, 0);
         setScanCodeState(KeyState::UP, {BTN_TOUCH, BTN_TOOL_FINGER});
-        args += process(EV_SYN, SYN_REPORT, 0);
-        return args;
+        process(EV_SYN, SYN_REPORT, 0);
     }
 };
 
@@ -241,52 +240,49 @@ TEST_F(TouchpadInputMapperTest, HoverAndLeftButtonPress) {
             createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
                            /*isActive=*/true, "local:0", NO_PORT, ViewportType::INTERNAL);
     mFakePolicy->addDisplayViewport(viewport);
-    std::list<NotifyArgs> args;
 
-    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                              InputReaderConfiguration::Change::DISPLAY_INFO);
-    ASSERT_THAT(args, testing::IsEmpty());
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
+    mFakeListener.assertNoEvents();
 
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_KEY, BTN_TOUCH, 1);
     setScanCodeState(KeyState::DOWN, {BTN_TOOL_FINGER});
-    args += process(EV_KEY, BTN_TOOL_FINGER, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 50);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 50);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args, testing::IsEmpty());
+    process(EV_KEY, BTN_TOOL_FINGER, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 50);
+    process(EV_ABS, ABS_MT_POSITION_Y, 50);
+    process(EV_ABS, ABS_MT_PRESSURE, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
 
     // Without this sleep, the test fails.
     // TODO(b/284133337): Figure out whether this can be removed
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    args += process(EV_KEY, BTN_LEFT, 1);
+    process(EV_KEY, BTN_LEFT, 1);
     setScanCodeState(KeyState::DOWN, {BTN_LEFT});
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_SYN, SYN_REPORT, 0);
 
-    args += process(EV_KEY, BTN_LEFT, 0);
+    process(EV_KEY, BTN_LEFT, 0);
     setScanCodeState(KeyState::UP, {BTN_LEFT});
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_ENTER)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_EXIT)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_DOWN)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(BUTTON_PRESS)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(BUTTON_RELEASE)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_UP)),
-                            VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_ENTER))));
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(HOVER_ENTER));
+    mFakeListener.expectMotion(WithMotionAction(HOVER_MOVE));
+    mFakeListener.expectMotion(WithMotionAction(HOVER_EXIT));
+    mFakeListener.expectMotion(WithMotionAction(ACTION_DOWN));
+    mFakeListener.expectMotion(WithMotionAction(BUTTON_PRESS));
+    mFakeListener.expectMotion(WithMotionAction(BUTTON_RELEASE));
+    mFakeListener.expectMotion(WithMotionAction(ACTION_UP));
+    mFakeListener.expectMotion(WithMotionAction(HOVER_ENTER));
 
     // Liftoff
-    args.clear();
-    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_ABS, ABS_MT_PRESSURE, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_KEY, BTN_TOUCH, 0);
     setScanCodeState(KeyState::UP, {BTN_TOOL_FINGER});
-    args += process(EV_KEY, BTN_TOOL_FINGER, 0);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args, testing::IsEmpty());
+    process(EV_KEY, BTN_TOOL_FINGER, 0);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
 }
 
 // Regression test for b/458469793, where a HOVER_EXIT event was incorrectly reported after
@@ -297,29 +293,27 @@ TEST_F(TouchpadInputMapperTest, ScrollThenResetThenHoverMoveIsConsistent) {
             createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
                            /*isActive=*/true, "local:0", NO_PORT, ViewportType::INTERNAL);
     mFakePolicy->addDisplayViewport(viewport);
-    std::list<NotifyArgs> args;
 
-    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                              InputReaderConfiguration::Change::DISPLAY_INFO);
-    ASSERT_THAT(args, testing::IsEmpty());
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
 
     // Scroll on the touchpad.
     int32_t scrollY = 300;
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 500);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 50);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 2);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 800);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 50);
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_KEY, BTN_TOOL_DOUBLETAP, 1);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 500);
+    process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
+    process(EV_ABS, ABS_MT_PRESSURE, 50);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    process(EV_ABS, ABS_MT_POSITION_X, 800);
+    process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
+    process(EV_ABS, ABS_MT_PRESSURE, 50);
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_KEY, BTN_TOOL_DOUBLETAP, 1);
     setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_DOUBLETAP});
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args, testing::IsEmpty());
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
 
     for (int32_t i = 0; i < 5; i++) {
         // Without these sleeps, the test fails.
@@ -327,29 +321,28 @@ TEST_F(TouchpadInputMapperTest, ScrollThenResetThenHoverMoveIsConsistent) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         scrollY += 50;
 
-        args += process(EV_ABS, ABS_MT_SLOT, 0);
-        args += process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
-        args += process(EV_ABS, ABS_MT_SLOT, 1);
-        args += process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
-        args += process(EV_SYN, SYN_REPORT, 0);
+        process(EV_ABS, ABS_MT_SLOT, 0);
+        process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
+        process(EV_ABS, ABS_MT_SLOT, 1);
+        process(EV_ABS, ABS_MT_POSITION_Y, scrollY);
+        process(EV_SYN, SYN_REPORT, 0);
     }
 
     // Lift the fingers.
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_KEY, BTN_TOUCH, 0);
-    args += process(EV_KEY, BTN_TOOL_DOUBLETAP, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_KEY, BTN_TOOL_DOUBLETAP, 0);
     setScanCodeState(KeyState::UP, {BTN_TOUCH, BTN_TOOL_DOUBLETAP});
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_SYN, SYN_REPORT, 0);
     // We don't care exactly what events are output here (as we're just concerned with consistency
     // enforced by the verifier), but we want to check that the events above did actually trigger a
     // complete two-finger swipe.
-    ASSERT_THAT(args,
-                Contains(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithMotionAction(ACTION_UP),
-                              WithMotionClassification(MotionClassification::TWO_FINGER_SWIPE)))));
+    mFakeListener.consumeUntilAndExpectMotion(
+            AllOf(WithMotionAction(ACTION_UP),
+                  WithMotionClassification(MotionClassification::TWO_FINGER_SWIPE)));
 
     sleepAfterTouchLift();
 
@@ -358,8 +351,8 @@ TEST_F(TouchpadInputMapperTest, ScrollThenResetThenHoverMoveIsConsistent) {
 
     // Move a finger on the touchpad. Again, we don't care about the detailed events, but check a
     // cursor movement was detected.
-    ASSERT_THAT(oneFingerSwipe(),
-                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE))));
+    oneFingerSwipe();
+    mFakeListener.consumeUntilAndExpectMotion(WithMotionAction(HOVER_MOVE));
 }
 
 TEST_F(TouchpadInputMapperTest, EnterRelativeCaptureDuringClickIsConsistent) {
@@ -374,64 +367,60 @@ TEST_F(TouchpadInputMapperTest, EnterRelativeCaptureDuringClickIsConsistent) {
             createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
                            /*isActive=*/true, "local:0", NO_PORT, ViewportType::INTERNAL);
     mFakePolicy->addDisplayViewport(viewport);
-    std::list<NotifyArgs> args;
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
 
-    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                              InputReaderConfiguration::Change::DISPLAY_INFO);
-    ASSERT_THAT(args, testing::IsEmpty());
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
 
     // Press the touchpad's button.
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_KEY, BTN_TOOL_FINGER, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_KEY, BTN_TOOL_FINGER, 1);
     setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_FINGER});
-    args += process(EV_ABS, ABS_MT_POSITION_X, 50);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 50);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, 50);
+    process(EV_ABS, ABS_MT_POSITION_Y, 50);
+    process(EV_ABS, ABS_MT_PRESSURE, 1);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // Without this sleep, the test fails.
     // TODO(b/284133337): Figure out whether this can be removed
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    args += process(EV_KEY, BTN_LEFT, 1);
+    process(EV_KEY, BTN_LEFT, 1);
     setScanCodeState(KeyState::DOWN, {BTN_LEFT});
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args, Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_DOWN))));
-    ASSERT_THAT(args, Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(BUTTON_PRESS))));
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.consumeUntilAndExpectMotion(WithMotionAction(ACTION_DOWN));
+    mFakeListener.expectMotion(WithMotionAction(BUTTON_PRESS));
     // Capture the touchpad.
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
-    args.clear();
-    args += reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                              InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
 
     // Release the button.
-    args += process(EV_KEY, BTN_LEFT, 0);
+    process(EV_KEY, BTN_LEFT, 0);
     setScanCodeState(KeyState::UP, {BTN_LEFT});
-    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_KEY, BTN_TOUCH, 0);
-    args += process(EV_KEY, BTN_TOOL_FINGER, 0);
+    process(EV_ABS, ABS_MT_PRESSURE, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_KEY, BTN_TOOL_FINGER, 0);
     setScanCodeState(KeyState::UP, {BTN_TOUCH, BTN_TOOL_FINGER});
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_SYN, SYN_REPORT, 0);
 
     sleepAfterTouchLift();
 
     // Move a finger on the touchpad.
-    ASSERT_THAT(oneFingerSwipe(),
-                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_MOVE))));
+    oneFingerSwipe();
+    mFakeListener.consumeUntilAndExpectMotion(WithMotionAction(ACTION_MOVE));
 
     // Release touchpad capture.
-    args.clear();
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
-    args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
 
     sleepAfterTouchLift();
 
     // Move a finger on the touchpad.
-    ASSERT_THAT(oneFingerSwipe(),
-                Contains(VariantWith<NotifyMotionArgs>(WithMotionAction(HOVER_MOVE))));
+    oneFingerSwipe();
+    mFakeListener.consumeUntilAndExpectMotion(WithMotionAction(HOVER_MOVE));
 }
 
 TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
@@ -439,16 +428,15 @@ TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
                 ElementsAre(true));
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
-    std::list<NotifyArgs> args;
-    args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
 
     ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(false));
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
-    args = reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
 
     ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(true));
@@ -456,18 +444,18 @@ TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
 
 TEST_F(TouchpadInputMapperTest, TouchpadHardwareState) {
     mReaderConfiguration.shouldNotifyTouchpadHardwareState = true;
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
 
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_KEY, BTN_TOUCH, 1);
     setScanCodeState(KeyState::DOWN, {BTN_TOOL_FINGER});
-    args += process(EV_KEY, BTN_TOOL_FINGER, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 50);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 50);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_KEY, BTN_TOOL_FINGER, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 50);
+    process(EV_ABS, ABS_MT_POSITION_Y, 50);
+    process(EV_ABS, ABS_MT_PRESSURE, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
 
     mFakePolicy->assertTouchpadHardwareStateNotified();
 }
@@ -476,9 +464,8 @@ TEST_F(TouchpadInputMapperTest, TouchpadAccelerationDisabled) {
     mReaderConfiguration.touchpadAccelerationEnabled = false;
     mReaderConfiguration.touchpadPointerSpeed = 3;
 
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
 
     ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(
             createFlatAccelerationCurve(mReaderConfiguration.touchpadPointerSpeed)));
@@ -489,10 +476,8 @@ TEST_F(TouchpadInputMapperTest, TouchpadAccelerationEnabled) {
     mReaderConfiguration.touchpadAccelerationEnabled = true;
     mReaderConfiguration.touchpadPointerSpeed = 3;
 
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
-    ASSERT_THAT(args, testing::IsEmpty());
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
 
     // Use createAccelerationCurveForPointerSensitivity to get expected curve segments.
     ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(
@@ -501,14 +486,16 @@ TEST_F(TouchpadInputMapperTest, TouchpadAccelerationEnabled) {
 
 TEST_F(TouchpadInputMapperTest, AccelerationDisabledDuringCapture) {
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
     ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
-    args = reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+
     ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(
             mReaderConfiguration.touchpadPointerSpeed)));
 }
@@ -516,18 +503,19 @@ TEST_F(TouchpadInputMapperTest, AccelerationDisabledDuringCapture) {
 TEST_F(TouchpadInputMapperTest, ExitingCaptureWithAccelerationDisabledDoesntReenable) {
     mReaderConfiguration.touchpadAccelerationEnabled = false;
     mReaderConfiguration.touchpadPointerSpeed = 3;
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
-    args = reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+    mFakeListener.expectDeviceReset(AllOf(WithDeviceId(DEVICE_ID), WithEventTime(ARBITRARY_TIME)));
     ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
-    args = reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+    mFakeListener.expectDeviceReset(AllOf(WithDeviceId(DEVICE_ID), WithEventTime(ARBITRARY_TIME)));
 
     ASSERT_NO_FATAL_FAILURE(assertBothCurvesEqual(
             createFlatAccelerationCurve(mReaderConfiguration.touchpadPointerSpeed)));
@@ -538,23 +526,26 @@ TEST_F(TouchpadInputMapperTest, ChangingSettingsDuringCaptureDoesntReenableAccel
     ASSERT_NE(mReaderConfiguration.touchpadPointerSpeed, NEW_POINTER_SPEED);
 
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::RELATIVE;
-    std::list<NotifyArgs> args =
-            reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                              InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+    mFakeListener.expectDeviceReset(AllOf(WithDeviceId(DEVICE_ID), WithEventTime(ARBITRARY_TIME)));
     ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
 
     // Changing the pointer speed settings shouldn't result in an immediate change to the curve,
     // since we're in pointer capture.
     mReaderConfiguration.touchpadAccelerationEnabled = true;
     mReaderConfiguration.touchpadPointerSpeed = NEW_POINTER_SPEED;
-    args = reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                             InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::TOUCHPAD_SETTINGS);
     ASSERT_NO_FATAL_FAILURE(assertRelativeModeCurvesInUse());
 
     // ...but once we leave capture, the new speed should take effect.
     mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
-    args = reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
-                             InputReaderConfiguration::Change::POINTER_CAPTURE);
+    reconfigureMapper(ARBITRARY_TIME, mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+    mFakeListener.expectDeviceReset(AllOf(WithDeviceId(DEVICE_ID), WithEventTime(ARBITRARY_TIME)));
+    mFakeListener.assertNoEvents();
+
     ASSERT_NO_FATAL_FAILURE(
             assertBothCurvesEqual(createAccelerationCurveForPointerSensitivity(NEW_POINTER_SPEED)));
 }

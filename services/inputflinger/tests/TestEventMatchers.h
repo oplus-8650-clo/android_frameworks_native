@@ -70,6 +70,10 @@ public:
         return mSource == args.source;
     }
 
+    bool MatchAndExplain(const NotifySensorArgs& args, std::ostream*) const {
+        return mSource == args.source;
+    }
+
     bool MatchAndExplain(const InputEvent& event, std::ostream*) const {
         return mSource == event.getSource();
     }
@@ -212,6 +216,10 @@ public:
         return mDeviceId == args.deviceId;
     }
 
+    bool MatchAndExplain(const NotifySensorArgs& args, std::ostream*) const {
+        return mDeviceId == args.deviceId;
+    }
+
     bool MatchAndExplain(const NotifyDeviceResetArgs& args, std::ostream*) const {
         return mDeviceId == args.deviceId;
     }
@@ -230,6 +238,40 @@ private:
 
 inline WithDeviceIdMatcher WithDeviceId(DeviceId deviceId) {
     return WithDeviceIdMatcher(deviceId);
+}
+
+MATCHER_P(WithSensorType, sensorType, "NotifySensorArgs with specified sensor type") {
+    *result_listener << "expected sensor type " << ftl::enum_string(sensorType) << ", but got "
+                     << ftl::enum_string(arg.sensorType);
+    return arg.sensorType == sensorType;
+}
+
+MATCHER_P(WithSensorAccuracy, accuracy, "NotifySensorArgs with specified sensor accuracy") {
+    *result_listener << "expected sensor accuracy " << ftl::enum_string(accuracy) << ", but got "
+                     << ftl::enum_string(arg.accuracy);
+    return arg.accuracy == accuracy;
+}
+
+MATCHER_P(WithSensorTimestamp, timestamp, "NotifySensorArgs with specified sensor timestamp") {
+    *result_listener << "expected sensor timestamp " << timestamp << ", but got "
+                     << arg.hwTimestamp;
+    return arg.hwTimestamp == timestamp;
+}
+
+MATCHER_P(WithSensorValues, values, "NotifySensorArgs with specified sensor values") {
+    if (arg.values.size() != values.size()) {
+        *result_listener << "expected " << values.size() << " values, but got "
+                         << arg.values.size();
+        return false;
+    }
+    for (size_t i = 0; i < values.size(); i++) {
+        if (!internal::valuesMatch(values[i], arg.values[i])) {
+            *result_listener << "expected value at index " << i << " to be " << values[i]
+                             << ", but got " << arg.values[i];
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Flags
@@ -974,6 +1016,11 @@ MATCHER_P(WithEventTime, eventTime, "InputEvent with specified eventTime") {
     return arg.eventTime == eventTime;
 }
 
+MATCHER_P(WithReadTime, readTime, "InputEvent with specified readTime") {
+    *result_listener << "expected read time " << readTime << ", but got " << arg.readTime;
+    return arg.readTime == readTime;
+}
+
 MATCHER_P(WithDownTime, downTime, "InputEvent with specified downTime") {
     *result_listener << "expected down time " << downTime << ", but got " << arg.downTime;
     return arg.downTime == downTime;
@@ -989,6 +1036,17 @@ MATCHER_P(WithPolicyFlags, policyFlags, "InputEvent with specified policy flags"
     *result_listener << "expected policy flags 0x" << std::hex << policyFlags << ", but got 0x"
                      << arg.policyFlags;
     return arg.policyFlags == static_cast<uint32_t>(policyFlags);
+}
+
+MATCHER_P(WithSwitchValues, switchValues, "NotifySwitchArgs with specified switchValues") {
+    *result_listener << "expected switchValues " << switchValues << ", but got "
+                     << arg.switchValues;
+    return arg.switchValues == switchValues;
+}
+
+MATCHER_P(WithSwitchMask, switchMask, "NotifySwitchArgs with specified switchMask") {
+    *result_listener << "expected switchMask " << switchMask << ", but got " << arg.switchMask;
+    return arg.switchMask == switchMask;
 }
 
 } // namespace android

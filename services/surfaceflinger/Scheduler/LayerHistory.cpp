@@ -214,11 +214,14 @@ auto LayerHistory::summarize(nsecs_t now) -> Summary {
 
             const float layerArea = transformed.getWidth() * transformed.getHeight();
             float weight = mDisplayArea ? layerArea / mDisplayArea : 0.0f;
-            const std::string categoryString = vote.category == FrameRateCategory::Default
-                    ? ""
-                    : base::StringPrintf("category=%s", ftl::enum_string(vote.category).c_str());
-            SFTRACE_FORMAT_INSTANT("%s %s %s (%.2f)", ftl::enum_string(vote.type).c_str(),
-                                   to_string(vote.fps).c_str(), categoryString.c_str(), weight);
+            if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+                const std::string categoryString = vote.category == FrameRateCategory::Default
+                        ? ""
+                        : base::StringPrintf("category=%s",
+                                             ftl::enum_string(vote.category).c_str());
+                SFTRACE_FORMAT_INSTANT("%s %s %s (%.2f)", ftl::enum_string(vote.type).c_str(),
+                                       to_string(vote.fps).c_str(), categoryString.c_str(), weight);
+            }
             if (mQtiThermalFps > 0 && (int32_t)vote.fps.getValue() > (int32_t)mQtiThermalFps) {
                 vote.fps = Fps::fromValue(mQtiThermalFps);
             }

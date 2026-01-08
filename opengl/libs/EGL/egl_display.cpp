@@ -22,7 +22,6 @@
 #include <android-base/properties.h>
 #include <android/dlext.h>
 #include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <com_android_graphics_graphicsenv_flags.h>
 #include <configstore/Utils.h>
 #include <dlfcn.h>
 #include <graphicsenv/GraphicsEnv.h>
@@ -38,7 +37,6 @@
 
 using namespace android::hardware::configstore;
 using namespace android::hardware::configstore::V1_0;
-namespace graphicsenv_flags = com::android::graphics::graphicsenv::flags;
 
 namespace android {
 

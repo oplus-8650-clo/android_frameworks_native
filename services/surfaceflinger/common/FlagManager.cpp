@@ -33,7 +33,6 @@
 #include <android_os.h>
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
-#include <com_android_input_flags.h>
 #include <com_android_server_display_feature_flags.h>
 
 namespace android {
@@ -126,7 +125,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
-    DUMP_ACONFIG_FLAG(connected_displays_cursor);
     DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
@@ -169,7 +167,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(modeset_multi_display);
     DUMP_ACONFIG_FLAG(modeset_state_machine);
     DUMP_ACONFIG_FLAG(no_vsyncs_on_screen_off);
-    DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type);
     DUMP_ACONFIG_FLAG(parse_edid_version_and_input_type_v2);
     DUMP_ACONFIG_FLAG(protected_if_client);
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
@@ -277,8 +274,6 @@ FLAG_MANAGER_ACONFIG_FLAG(local_tonemap_screenshots, "debug.sf.local_tonemap_scr
 FLAG_MANAGER_ACONFIG_FLAG(modeset_multi_display, "");
 FLAG_MANAGER_ACONFIG_FLAG(modeset_state_machine, "");
 FLAG_MANAGER_ACONFIG_FLAG(no_vsyncs_on_screen_off, "debug.sf.no_vsyncs_on_screen_off")
-FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type,
-                          "debug.sf.parse_edid_version_and_input_type");
 FLAG_MANAGER_ACONFIG_FLAG(parse_edid_version_and_input_type_v2,
                           "debug.sf.parse_edid_version_and_input_type_v2");
 FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
@@ -323,7 +318,6 @@ FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(connected_displays_cursor, "", com::android::input::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
                                    android::companion::virtualdevice::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);

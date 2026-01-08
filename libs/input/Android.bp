@@ -239,7 +239,6 @@ cc_library {
         "InputConsumerNoResampling.cpp",
         "InputDevice.cpp",
         "InputEventLabels.cpp",
-        "InputFlags.cpp",
         "InputTransport.cpp",
         "InputVerifier.cpp",
         "KeyCharacterMap.cpp",

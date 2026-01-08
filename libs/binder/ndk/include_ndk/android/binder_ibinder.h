@@ -909,6 +909,14 @@ struct AIBinder_FrozenStateChangeCallback;
 typedef struct AIBinder_FrozenStateChangeCallback AIBinder_FrozenStateChangeCallback;
 
 /**
+ * This macro is not defined in older versions of the NDK. This can be
+ * used to write code that is compatible with older versions of the NDK, by
+ * compiling out references to the unavailable functions if this is not defined.
+ * However, updating the NDK is the only supported way to use the NDK.
+ */
+#define __ANDROID_BINDER_HAS_FROZEN_CALLBACK__
+
+/**
  * This function is executed when the frozen state of the binder changes.
  *
  * Available since API level 37.

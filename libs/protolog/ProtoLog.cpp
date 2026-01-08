@@ -209,7 +209,8 @@ static inline void internStringArgs(
 
 template <typename MessageIdGetter, typename ArgProcessor>
 void LogInternal(ProtoLogLevel level, const std::string_view group,
-                 MessageIdGetter message_id_getter, ArgProcessor arg_processor) {
+                 MessageIdGetter message_id_getter, ArgProcessor arg_processor,
+                 bool incrementalStateRequired) {
     if (!android_tracing_native_proto_logging()) {
         return;
     }
@@ -238,7 +239,7 @@ void LogInternal(ProtoLogLevel level, const std::string_view group,
         perfetto_protos_TracePacket_begin_protolog_message(&msg_packet.msg, &protolog_msg);
         perfetto_protos_ProtoLogMessage_set_message_id(&protolog_msg, msgId);
 
-        bool needsIncrementalState = false;
+        bool needsIncrementalState = incrementalStateRequired;
         if (stacktrace_res.id != 0) {
             perfetto_protos_ProtoLogMessage_set_stacktrace_iid(&protolog_msg, stacktrace_res.id);
             needsIncrementalState = true;
@@ -270,10 +271,9 @@ public:
 
     ~VarArgumentProvider() override { va_end(current_args_); }
 
-    void newPass() override {
-        va_end(current_args_);
-        va_copy(current_args_, original_args_);
-    }
+    void newPass() override { va_copy(current_args_, original_args_); }
+
+    void endPass() override { va_end(current_args_); }
 
     long long nextInt() override { return va_arg(current_args_, int); }
 
@@ -335,7 +335,9 @@ void Log(ProtoLogLevel level, const std::string_view group, const char* format,
                                 break;
                             case 's': {
                                 const char* str = args_provider.nextString();
-                                if (!str) str = "null";
+                                if (!str) {
+                                    str = "null";
+                                }
                                 auto res = incr_state.internString(str);
                                 if (res.is_new) {
                                     new_strings.emplace_back(str, res);
@@ -359,8 +361,11 @@ void Log(ProtoLogLevel level, const std::string_view group, const char* format,
                     }
                     p++;
                 }
+
+                args_provider.endPass();
                 return needsIncrementalState;
-            });
+            },
+            true);
 }
 
 void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash, int paramsMask,
@@ -410,8 +415,11 @@ void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash
                         }
                     }
                 }
+
+                args_provider.endPass();
                 return needsIncrementalState;
-            });
+            },
+            false);
 }
 
 } // namespace protolog

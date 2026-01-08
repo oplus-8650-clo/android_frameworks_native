@@ -68,16 +68,16 @@ TEST_F(JoystickInputMapperTest, Configure_AssignsDisplayUniqueId) {
     std::list<NotifyArgs> out;
 
     // Send an axis event
-    out = process(EV_ABS, ABS_X, 100);
-    ASSERT_THAT(out, IsEmpty());
-    out = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(out, ElementsAre(VariantWith<NotifyMotionArgs>(WithDisplayId(viewport.displayId))));
+    process(EV_ABS, ABS_X, 100);
+    mFakeListener.assertNoEvents();
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithDisplayId(viewport.displayId));
 
     // Send another axis event
-    out = process(EV_ABS, ABS_Y, 100);
-    ASSERT_THAT(out, IsEmpty());
-    out = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(out, ElementsAre(VariantWith<NotifyMotionArgs>(WithDisplayId(viewport.displayId))));
+    process(EV_ABS, ABS_Y, 100);
+    mFakeListener.assertNoEvents();
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithDisplayId(viewport.displayId));
 }
 
 TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
@@ -102,11 +102,9 @@ TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
     process(eventTime, EV_ABS, ABS_Y, 127);
 
     // Sync and verify: ABS_Y value should be taken
-    std::list<NotifyArgs> out = process(eventTime, EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(out,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                       WithAxes({{AMOTION_EVENT_AXIS_X, 1.0f}})))));
+    process(eventTime, EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                              WithAxes({{AMOTION_EVENT_AXIS_X, 1.0f}})));
 
     // Reset and test reverse order of events
     ASSERT_THAT(mMapper->reset(eventTime), IsEmpty());
@@ -117,11 +115,9 @@ TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
     process(eventTime, EV_ABS, ABS_X, 0);
 
     // Sync and verify: ABS_X value should be taken
-    out = process(eventTime, EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(out,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                       WithAxes({{AMOTION_EVENT_AXIS_X, 0}})))));
+    process(eventTime, EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(testing::AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                              WithAxes({{AMOTION_EVENT_AXIS_X, 0}})));
 }
 
 } // namespace android
