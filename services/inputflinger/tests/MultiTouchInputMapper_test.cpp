@@ -53,22 +53,16 @@ constexpr int32_t ACTION_POINTER_0_UP =
 constexpr int32_t ACTION_POINTER_1_DOWN =
         AMOTION_EVENT_ACTION_POINTER_DOWN | (1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 
-template <typename... Args>
-void assertNotifyArgs(const std::list<NotifyArgs>& args, Args... matchers) {
-    ASSERT_THAT(args, ElementsAre(matchers...))
-            << "Got instead: " << dumpContainer(args, streamableToString);
-}
-
 } // namespace
 
 /**
  * Unit tests for MultiTouchInputMapper.
  */
-class MultiTouchInputMapperUnitTest : public InputMapperUnitTest {
+class MultiTouchInputMapperUnitTest : public VerifyingInputMapperUnitTest {
 protected:
     void SetUp() override { SetUp(/*bus=*/0, /*isExternal=*/false); }
     void SetUp(int bus, bool isExternal) override {
-        InputMapperUnitTest::SetUp(bus, isExternal);
+        VerifyingInputMapperUnitTest::SetUp(bus, isExternal);
 
         // Present scan codes
         expectScanCodes(/*present=*/true,
@@ -182,8 +176,6 @@ protected:
  * new display id.
  */
 TEST_F(MultiTouchInputMapperUnitTest, ChangeAssociatedDisplayIdWhenTouchIsActive) {
-    std::list<NotifyArgs> args;
-
     // Add a second viewport that later will be associated with our device.
     DisplayViewport secondViewport =
             createViewport(SECOND_DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
@@ -200,98 +192,82 @@ TEST_F(MultiTouchInputMapperUnitTest, ChangeAssociatedDisplayIdWhenTouchIsActive
 
     // Start with the first viewport
     ON_CALL((*mDevice), getAssociatedViewport).WillByDefault(Return(firstViewport));
-    args += mMapper->reconfigure(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                                 InputReaderConfiguration::Change::DISPLAY_INFO);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
 
     int32_t x1 = 100, y1 = 125;
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID)))));
-    args.clear();
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x1);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN), WithDisplayId(DISPLAY_ID)));
 
     // Now associate with the second viewport, and reconfigure.
     ON_CALL((*mDevice), getAssociatedViewport).WillByDefault(Return(secondViewport));
-    args += mMapper->reconfigure(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                                 InputReaderConfiguration::Change::DISPLAY_INFO);
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(ACTION_CANCEL), WithDisplayId(DISPLAY_ID))),
-                     VariantWith<NotifyDeviceResetArgs>(WithDeviceId(DEVICE_ID)));
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(ACTION_CANCEL), WithDisplayId(DISPLAY_ID)));
+    mFakeListener.expectDeviceReset(WithDeviceId(DEVICE_ID));
 
     // The remainder of the gesture is ignored
     // Move.
     x1 += 10;
     y1 += 15;
-    args = process(EV_ABS, ABS_MT_POSITION_X, x1);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, x1);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    process(EV_SYN, SYN_REPORT, 0);
     // Up
-    args += process(EV_KEY, BTN_TOUCH, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_SYN, SYN_REPORT, 0);
-
-    ASSERT_THAT(args, IsEmpty());
+    process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // New touch is delivered with the new display id.
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 2);
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x1 + 20);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1 + 40);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(AllOf(WithMotionAction(ACTION_DOWN),
-                                                         WithDisplayId(SECOND_DISPLAY_ID))));
+    process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x1 + 20);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1 + 40);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN), WithDisplayId(SECOND_DISPLAY_ID)));
 }
 
 // This test simulates a multi-finger gesture with unexpected reset in between. This might happen
 // due to buffer overflow and device with report a SYN_DROPPED. In this case we expect mapper to be
 // reset, MT slot state to be re-populated and the gesture should be cancelled and restarted.
 TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
-    std::list<NotifyArgs> args;
-
     // Two fingers down at once.
     constexpr int32_t FIRST_TRACKING_ID = 1, SECOND_TRACKING_ID = 2;
     int32_t x1 = 100, y1 = 125, x2 = 200, y2 = 225;
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, FIRST_TRACKING_ID);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, SECOND_TRACKING_ID);
-    ASSERT_THAT(args, IsEmpty());
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x1);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, FIRST_TRACKING_ID);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x2);
+    process(EV_ABS, ABS_MT_POSITION_Y, y2);
+    process(EV_ABS, ABS_MT_TRACKING_ID, SECOND_TRACKING_ID);
 
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
-                            VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(ACTION_POINTER_1_DOWN))));
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion((WithMotionAction(AMOTION_EVENT_ACTION_DOWN)));
+    mFakeListener.expectMotion((WithMotionAction(ACTION_POINTER_1_DOWN)));
 
     // Move.
     x1 += 10;
     y1 += 15;
     x2 += 5;
     y2 -= 10;
-    args = process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
-    ASSERT_THAT(args, IsEmpty());
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, x1);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x2);
+    process(EV_ABS, ABS_MT_POSITION_Y, y2);
 
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        WithMotionAction(AMOTION_EVENT_ACTION_MOVE))));
-    const auto pointerCoordsBeforeReset = std::get<NotifyMotionArgs>(args.back()).pointerCoords;
+    process(EV_SYN, SYN_REPORT, 0);
+    NotifyMotionArgs args = mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_MOVE));
+    const auto pointerCoordsBeforeReset = args.pointerCoords;
 
     // On buffer overflow mapper will be reset and MT slots data will be repopulated
     EXPECT_CALL(mMockEventHub, getAbsoluteAxisValue(EVENTHUB_ID, ABS_MT_SLOT))
@@ -302,97 +278,76 @@ TEST_F(MultiTouchInputMapperUnitTest, MultiFingerGestureWithUnexpectedReset) {
 
     setScanCodeState(KeyState::DOWN, {BTN_TOUCH});
 
-    args = mMapper->reset(systemTime(SYSTEM_TIME_MONOTONIC));
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        WithMotionAction(AMOTION_EVENT_ACTION_CANCEL))));
+    resetMapper(systemTime(SYSTEM_TIME_MONOTONIC));
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_CANCEL));
 
     // SYN_REPORT should restart the gesture again
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
-                            VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(ACTION_POINTER_1_DOWN))));
-    ASSERT_EQ(std::get<NotifyMotionArgs>(args.back()).pointerCoords, pointerCoordsBeforeReset);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_DOWN));
+    NotifyMotionArgs motion = mFakeListener.expectMotion(WithMotionAction(ACTION_POINTER_1_DOWN));
+    ASSERT_EQ(motion.pointerCoords, pointerCoordsBeforeReset);
 
     // Move.
     x1 += 10;
     y1 += 15;
     x2 += 5;
     y2 -= 10;
-    args = process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x1);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y1);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, x2);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, y2);
-    ASSERT_THAT(args, IsEmpty());
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, x1);
+    process(EV_ABS, ABS_MT_POSITION_Y, y1);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, x2);
+    process(EV_ABS, ABS_MT_POSITION_Y, y2);
 
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        WithMotionAction(AMOTION_EVENT_ACTION_MOVE))));
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_MOVE));
 
     // First finger up.
-    args = process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    ASSERT_THAT(args, IsEmpty());
-
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(WithMotionAction(ACTION_POINTER_0_UP))));
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(ACTION_POINTER_0_UP));
 
     // Second finger up.
-    args = process(EV_KEY, BTN_TOUCH, 0);
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    ASSERT_THAT(args, IsEmpty());
-
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(
-                        VariantWith<NotifyMotionArgs>(WithMotionAction(AMOTION_EVENT_ACTION_UP))));
+    process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_UP));
 }
 
 /**
  * Check what happens when two pointers are hovering (BTN_TOUCH is not pressed).
  */
 TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithoutBtnTouch) {
-    std::list<NotifyArgs> args;
-
     // Set up two pointers hovering (BTN_TOUCH is not pressed)
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, 100);
+    process(EV_ABS, ABS_MT_POSITION_Y, 100);
 
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
-
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 200);
+    process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // In general, Android does not support two pointers hovering. No events should be produced,
     // since both pointers are being added in the same frame here.
-    ASSERT_THAT(args, IsEmpty());
+    mFakeListener.assertNoEvents();
 
     // Now lift pointer 0. Pointer 1 remains.
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // We expect HOVER_MOVE with 1 pointer (pointer 1)
     // Since we previously dropped 2 pointers, this looks like we are transitioning from 0 to 1
     // hovering pointer.
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                   WithPointerCount(1), WithPointerId(0, 1))),
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
-                                   WithPointerCount(1), WithPointerId(0, 1))));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                     WithPointerCount(1), WithPointerId(0, 1)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                     WithPointerCount(1), WithPointerId(0, 1)));
 }
 
 /**
@@ -404,30 +359,27 @@ TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithPressure) {
     mMapper = createInputMapper<MultiTouchInputMapper>(*mDeviceContext,
                                                        mFakePolicy->getReaderConfiguration());
 
-    std::list<NotifyArgs> args;
-
     // Press BTN_TOUCH, but pressure is 0. This should cause the pointers to hover.
-    args += process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_KEY, BTN_TOUCH, 1);
 
     // Pointer 0: Hovering (pressure 0)
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, 100);
+    process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    process(EV_ABS, ABS_MT_PRESSURE, 0);
 
     // Pointer 1: Hovering (pressure 0)
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
-    args += process(EV_ABS, ABS_MT_PRESSURE, 0);
-
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 200);
+    process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    process(EV_ABS, ABS_MT_PRESSURE, 0);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // In general, Android does not support two pointers hovering. No events should be produced,
     // since both pointers are being added in the same frame here.
-    ASSERT_THAT(args, IsEmpty());
+    mFakeListener.assertNoEvents();
 }
 
 /**
@@ -435,62 +387,50 @@ TEST_F(MultiTouchInputMapperUnitTest, TwoPointersHoveringWithPressure) {
  * pointer is not reported, because Android does not support multiple hovering pointers.
  */
 TEST_F(MultiTouchInputMapperUnitTest, OneToTwoPointersHovering) {
-    std::list<NotifyArgs> args;
-
     // Start with 1 pointer hovering (P0)
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, 100);
+    process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // Expect HOVER_ENTER {0}
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                   WithPointerCount(1), WithPointerId(0, 0))),
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
-                                   WithPointerCount(1), WithPointerId(0, 0))));
-    args.clear();
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                     WithPointerCount(1), WithPointerId(0, 0)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                     WithPointerCount(1), WithPointerId(0, 0)));
 
     // Add second pointer hovering (P1). Now have P0, P1.
-    args += process(EV_ABS, ABS_MT_SLOT, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 200);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 200);
+    process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // Expect HOVER_EXIT {0} because multi-pointer hover is suppressed.
     // The mapper detects >1 pointers, clears them, so cooked state becomes empty.
     // Transition from {0} to {} triggers HOVER_EXIT {0}.
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
-                                   WithPointerCount(1), WithPointerId(0, 0))));
-    args.clear();
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
+                                     WithPointerCount(1), WithPointerId(0, 0)));
 
     // Move pointers (P0, P1).
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 110);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 110);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_POSITION_X, 110);
+    process(EV_ABS, ABS_MT_POSITION_Y, 110);
+    process(EV_SYN, SYN_REPORT, 0);
     // Still suppressed.
-    ASSERT_THAT(args, IsEmpty());
+    mFakeListener.assertNoEvents();
 
     // Lift P0. P1 remains.
-    args += process(EV_ABS, ABS_MT_SLOT, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // Transition from {} to {1}. Expect HOVER_ENTER {1}.
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                   WithPointerCount(1), WithPointerId(0, 1))),
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
-                                   WithPointerCount(1), WithPointerId(0, 1))));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                     WithPointerCount(1), WithPointerId(0, 1)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                     WithPointerCount(1), WithPointerId(0, 1)));
 }
 
 class ExternalMultiTouchInputMapperTest : public MultiTouchInputMapperUnitTest {
@@ -502,19 +442,15 @@ protected:
  * Expect fallback to internal viewport if device is external and external viewport is not present.
  */
 TEST_F(ExternalMultiTouchInputMapperTest, Viewports_Fallback) {
-    std::list<NotifyArgs> args;
-
     // Expect the event to be sent to the internal viewport,
     // because an external viewport is not present.
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 200);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 100);
+    process(EV_ABS, ABS_MT_POSITION_Y, 200);
+    process(EV_SYN, SYN_REPORT, 0);
 
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID))));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID)));
 
     // Expect the event to be sent to the external viewport if it is present.
     DisplayViewport externalViewport =
@@ -524,27 +460,24 @@ TEST_F(ExternalMultiTouchInputMapperTest, Viewports_Fallback) {
     std::optional<DisplayViewport> internalViewport =
             mFakePolicy->getDisplayViewportByUniqueId("local:0");
     mReaderConfiguration.setDisplayViewports({*internalViewport, externalViewport});
-    args = mMapper->reconfigure(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
-                                InputReaderConfiguration::Change::DISPLAY_INFO);
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::DISPLAY_INFO);
 
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(
-                             AllOf(WithMotionAction(ACTION_CANCEL), WithDisplayId(DISPLAY_ID))),
-                     VariantWith<NotifyDeviceResetArgs>(WithDeviceId(DEVICE_ID)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(ACTION_CANCEL), WithDisplayId(DISPLAY_ID)));
+    mFakeListener.expectDeviceReset(WithDeviceId(DEVICE_ID));
     // Lift up the old pointer.
-    args = process(EV_KEY, BTN_TOUCH, 0);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, -1);
-    args += process(EV_SYN, SYN_REPORT, 0);
+    process(EV_KEY, BTN_TOUCH, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, -1);
+    process(EV_SYN, SYN_REPORT, 0);
 
     // Send new pointer
-    args += process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 2);
-    args += process(EV_ABS, ABS_MT_POSITION_X, 111);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 211);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    assertNotifyArgs(args,
-                     VariantWith<NotifyMotionArgs>(AllOf(WithMotionAction(ACTION_DOWN),
-                                                         WithDisplayId(SECOND_DISPLAY_ID))));
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    process(EV_ABS, ABS_MT_POSITION_X, 111);
+    process(EV_ABS, ABS_MT_POSITION_Y, 211);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(
+            AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(SECOND_DISPLAY_ID)));
 }
 
 class MultiTouchInputMapperPointerModeUnitTest : public MultiTouchInputMapperUnitTest {
@@ -562,78 +495,56 @@ protected:
 };
 
 TEST_F(MultiTouchInputMapperPointerModeUnitTest, MouseToolOnlyDownWhenMouseButtonsAreDown) {
-    std::list<NotifyArgs> args;
-
     // Set the tool type to mouse.
-    args += process(EV_KEY, BTN_TOOL_MOUSE, 1);
-
-    args += process(EV_ABS, ABS_MT_POSITION_X, 100);
-    args += process(EV_ABS, ABS_MT_POSITION_Y, 100);
-    args += process(EV_ABS, ABS_MT_TRACKING_ID, 1);
-    ASSERT_THAT(args, IsEmpty());
-
-    args = process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                          WithToolType(ToolType::MOUSE))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
-                                          WithToolType(ToolType::MOUSE)))));
+    process(EV_KEY, BTN_TOOL_MOUSE, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 100);
+    process(EV_ABS, ABS_MT_POSITION_Y, 100);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                     WithToolType(ToolType::MOUSE)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                     WithToolType(ToolType::MOUSE)));
 
     // Setting BTN_TOUCH does not make a mouse pointer go down.
-    args = process(EV_KEY, BTN_TOUCH, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE))));
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE));
 
     // The mouse button is pressed, so the mouse goes down.
-    args = process(EV_KEY, BTN_MOUSE, 1);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
-                                          WithToolType(ToolType::MOUSE))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
-                                          WithToolType(ToolType::MOUSE),
-                                          WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
-                                          WithToolType(ToolType::MOUSE),
-                                          WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY),
-                                          WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY)))));
+    process(EV_KEY, BTN_MOUSE, 1);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
+                                     WithToolType(ToolType::MOUSE)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
+                                     WithToolType(ToolType::MOUSE),
+                                     WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
+                                     WithToolType(ToolType::MOUSE),
+                                     WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY),
+                                     WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY)));
 
     // The mouse button is released, so the mouse starts hovering.
-    args = process(EV_KEY, BTN_MOUSE, 0);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
-                                          WithButtonState(0), WithToolType(ToolType::MOUSE),
-                                          WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_UP),
-                                          WithToolType(ToolType::MOUSE), WithButtonState(0))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                          WithToolType(ToolType::MOUSE))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
-                                          WithToolType(ToolType::MOUSE)))));
+    process(EV_KEY, BTN_MOUSE, 0);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+                                     WithButtonState(0), WithToolType(ToolType::MOUSE),
+                                     WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_UP),
+                                     WithToolType(ToolType::MOUSE), WithButtonState(0)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
+                                     WithToolType(ToolType::MOUSE)));
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE),
+                                     WithToolType(ToolType::MOUSE)));
 
     // Change the tool type so that it is no longer a mouse.
     // The default tool type is finger, and the finger is already down.
-    args = process(EV_KEY, BTN_TOOL_MOUSE, 0);
-    args += process(EV_SYN, SYN_REPORT, 0);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
-                                          WithToolType(ToolType::MOUSE))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
-                                          WithToolType(ToolType::FINGER)))));
+    process(EV_KEY, BTN_TOOL_MOUSE, 0);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
+                                     WithToolType(ToolType::MOUSE)));
+    mFakeListener.expectMotion(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN), WithToolType(ToolType::FINGER)));
 }
 
 } // namespace android

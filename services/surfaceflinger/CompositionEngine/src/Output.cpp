@@ -471,28 +471,30 @@ ftl::Future<std::monostate> Output::present(
         *exclusive = panopticon::exclusive(std::to_string(displayId->value));
     }
 
-    const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
-        return getDisplayIdVariant()
-                .and_then(asPhysicalDisplayId)
-                .and_then([&refreshArgs](PhysicalDisplayId id) {
-                    return refreshArgs.frameTargets.get(id);
-                })
-                .transform([](const auto& frameTargetPtr) {
-                    return frameTargetPtr.get()->expectedPresentTime();
-                })
-                .transform([](TimePoint expectedPresentTime) {
-                    return base::StringPrintf(" vsyncIn %.2fms",
-                                              ticks<std::milli, float>(expectedPresentTime -
-                                                                       TimePoint::now()));
-                })
-                .or_else([] {
-                    // There is no vsync for this output.
-                    return std::make_optional(std::string());
-                })
-                .value();
-    };
-    SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
-                   stringifyExpectedPresentTime().c_str());
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
+            return getDisplayIdVariant()
+                    .and_then(asPhysicalDisplayId)
+                    .and_then([&refreshArgs](PhysicalDisplayId id) {
+                        return refreshArgs.frameTargets.get(id);
+                    })
+                    .transform([](const auto& frameTargetPtr) {
+                        return frameTargetPtr.get()->expectedPresentTime();
+                    })
+                    .transform([](TimePoint expectedPresentTime) {
+                        return base::StringPrintf(" vsyncIn %.2fms",
+                                                  ticks<std::milli, float>(expectedPresentTime -
+                                                                           TimePoint::now()));
+                    })
+                    .or_else([] {
+                        // There is no vsync for this output.
+                        return std::make_optional(std::string());
+                    })
+                    .value();
+        };
+        SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
+                       stringifyExpectedPresentTime().c_str());
+    }
     ALOGV(__FUNCTION__);
     updateColorProfile(refreshArgs);
     updateCompositionState(refreshArgs);
@@ -608,15 +610,8 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
         return;
     }
 
-    bool computeAboveCoveredExcludingOverlays = [&]() {
-        if (FlagManager::getInstance().connected_displays_cursor()) {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.skipScreenshot;
-        } else {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.toInternalDisplay;
-        }
-    }();
+    const bool computeAboveCoveredExcludingOverlays =
+        coverage.aboveCoveredLayersExcludingOverlays && !layerFEState->outputFilter.skipScreenshot;
 
     /*
      * opaqueRegion: area of a surface that is fully opaque.
@@ -1452,9 +1447,11 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     ALOGV(__FUNCTION__);
 
     const auto& outputState = getState();
-    const TracedOrdinal<bool> hasClientComposition = {
-        base::StringPrintf("hasClientComposition %s", mNamePlusId.c_str()),
-        outputState.usesClientComposition};
+    const TracedOrdinal<bool> hasClientComposition =
+            {CC_UNLIKELY(SFTRACE_ENABLED())
+                     ? base::StringPrintf("hasClientComposition %s", mNamePlusId.c_str())
+                     : "",
+             outputState.usesClientComposition};
     if (!hasClientComposition) {
         setExpensiveRenderingExpected(false);
         return base::unique_fd();

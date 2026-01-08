@@ -157,8 +157,10 @@ status_t LegacySurfaceTexture::releaseTexImage() {
 }
 
 status_t LegacySurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t presentWhen,
-                                                   uint64_t maxFrameNumber) {
-    status_t err = ConsumerBase::acquireBufferLocked(item, presentWhen, maxFrameNumber);
+                                                   uint64_t maxFrameNumber,
+                                                   BufferFreedCallback onBufferFreed) {
+    status_t err =
+            ConsumerBase::acquireBufferLocked(item, presentWhen, maxFrameNumber, onBufferFreed);
     if (err != NO_ERROR) {
         return err;
     }
@@ -177,20 +179,22 @@ status_t LegacySurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t pre
 }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t LegacySurfaceTexture::releaseBufferLocked(int buf,
-                                                   const sp<GraphicBuffer>& graphicBuffer) {
+status_t LegacySurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
+                                                   BufferFreedCallback onBufferFreed) {
 #else
 status_t LegacySurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
-                                                   EGLDisplay display, EGLSyncKHR eglFence) {
+                                                   EGLDisplay display, EGLSyncKHR eglFence,
+                                                   BufferFreedCallback onBufferFreed) {
 #endif
     // release the buffer if it hasn't already been discarded by the
     // BufferQueue. This can happen, for example, when the producer of this
     // buffer has reallocated the original buffer slot after this buffer
     // was acquired.
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    status_t err = ConsumerBase::releaseBufferLocked(buf, graphicBuffer);
+    status_t err = ConsumerBase::releaseBufferLocked(buf, graphicBuffer, onBufferFreed);
 #else
-    status_t err = ConsumerBase::releaseBufferLocked(buf, graphicBuffer, display, eglFence);
+    status_t err =
+            ConsumerBase::releaseBufferLocked(buf, graphicBuffer, display, eglFence, onBufferFreed);
 #endif
     // We could be releasing an EGL/Vulkan buffer, even if not currently
     // attached to a GL context.
@@ -477,7 +481,7 @@ std::shared_ptr<FenceTime> LegacySurfaceTexture::getCurrentFenceTime() const {
     return mCurrentFenceTime;
 }
 
-void LegacySurfaceTexture::freeBufferLocked(int slotIndex) {
+void LegacySurfaceTexture::freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) {
     SFT_LOGV("freeBufferLocked: slotIndex=%d", slotIndex);
     if (slotIndex == mCurrentTexture) {
         mCurrentTexture = BufferQueue::INVALID_BUFFER_SLOT;
@@ -486,13 +490,13 @@ void LegacySurfaceTexture::freeBufferLocked(int slotIndex) {
     // for sure. Buffers can be freed after LegacySurfaceTexture has detached from GL
     // context or View.
     mEGLConsumer.onFreeBufferLocked(slotIndex);
-    ConsumerBase::freeBufferLocked(slotIndex);
+    ConsumerBase::freeBufferLocked(slotIndex, onBufferFreed);
 }
 
-void LegacySurfaceTexture::abandonLocked() {
+void LegacySurfaceTexture::abandonLocked(BufferFreedCallback onBufferFreed) {
     SFT_LOGV("abandonLocked");
     mEGLConsumer.onAbandonLocked();
-    ConsumerBase::abandonLocked();
+    ConsumerBase::abandonLocked(onBufferFreed);
 }
 
 status_t LegacySurfaceTexture::setConsumerUsageBits(uint64_t usage) {

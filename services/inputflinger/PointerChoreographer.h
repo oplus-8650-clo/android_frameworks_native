@@ -52,11 +52,6 @@ struct ConstructorDelegate {
  */
 class PointerChoreographerInterface : public InputListenerInterface {
 public:
-    /**
-     * Set the display that pointers, like the mouse cursor and drawing tablets,
-     * should be drawn on.
-     */
-    virtual void setDefaultMouseDisplayId(ui::LogicalDisplayId displayId) = 0;
     virtual void setDisplayViewports(const std::vector<DisplayViewport>& viewports) = 0;
     virtual std::optional<DisplayViewport> getViewportForPointerDevice(
             ui::LogicalDisplayId associatedDisplayId = ui::LogicalDisplayId::INVALID) = 0;
@@ -133,7 +128,6 @@ public:
                                   PointerChoreographerPolicyInterface&);
     ~PointerChoreographer() override;
 
-    void setDefaultMouseDisplayId(ui::LogicalDisplayId displayId) override;
     void setDisplayViewports(const std::vector<DisplayViewport>& viewports) override;
     std::optional<DisplayViewport> getViewportForPointerDevice(
             ui::LogicalDisplayId associatedDisplayId) override;

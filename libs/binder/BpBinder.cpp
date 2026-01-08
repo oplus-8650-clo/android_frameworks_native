@@ -621,7 +621,6 @@ status_t BpBinder::addFrozenStateChangeCallback(const wp<FrozenStateChangeCallba
               "and ProcessState::setThreadPoolMaxThreadCount. Generally you should "
               "setup the binder threadpool before other initialization steps.",
               String8(getInterfaceDescriptor()).c_str());
-        return INVALID_OPERATION;
     }
     LOG_ALWAYS_FATAL_IF(callback == nullptr,
                         "addFrozenStateChangeCallback(): callback must be non-NULL");

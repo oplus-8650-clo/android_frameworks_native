@@ -15727,7 +15727,6 @@ protected:
 };
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGesture) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
     SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
 
     // Only the windows that are topology aware receive the cross display gesture.
@@ -15738,15 +15737,12 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGesture) {
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGestureWithoutTopologyAwareFlag) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
     SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, false);
 
     testMultiDisplayMouseGesture();
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrimaryDisplay) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-
     EXPECT_TRUE(startDrag(true, AINPUT_SOURCE_MOUSE));
     // Move on window.
     mDispatcher->notifyMotion(
@@ -15809,8 +15805,6 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrim
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonPrimaryDisplay) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-
     EXPECT_TRUE(startDrag(true, AINPUT_SOURCE_MOUSE, SECOND_DISPLAY_ID));
     // Move on window.
     mDispatcher->notifyMotion(
@@ -15874,7 +15868,6 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonP
  */
 TEST_F(InputDispatcherConnectedDisplayTest,
        NonPrimaryDisplayTouchStateIsMaintainedOnWindowInfoUpdate) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
     sp<FakeWindowHandle> window0 =
             sp<FakeWindowHandle>::make(std::make_shared<FakeApplicationHandle>(), mDispatcher,
                                        "TestWindowOnPrimaryDisplay", mTopology.primaryDisplayId);
@@ -15907,8 +15900,6 @@ TEST_F(InputDispatcherConnectedDisplayTest,
 using InputDispatcherConnectedDisplayPointerInWindowTest = InputDispatcherConnectedDisplayTest;
 
 TEST_F(InputDispatcherConnectedDisplayPointerInWindowTest, MouseOnWindowOnPrimaryDisplay) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-
     mDispatcher->notifyMotion(
             MotionArgsBuilder(ACTION_HOVER_ENTER, AINPUT_SOURCE_MOUSE)
                     .pointer(PointerBuilder(/*id=*/0, ToolType::MOUSE).x(50).y(50))
@@ -15927,8 +15918,6 @@ TEST_F(InputDispatcherConnectedDisplayPointerInWindowTest, MouseOnWindowOnPrimar
 }
 
 TEST_F(InputDispatcherConnectedDisplayPointerInWindowTest, MouseOnWindowOnNonPrimaryDisplay) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
-
     mDispatcher->notifyMotion(
             MotionArgsBuilder(ACTION_HOVER_ENTER, AINPUT_SOURCE_MOUSE)
                     .displayId(SECOND_DISPLAY_ID)
@@ -16009,7 +15998,6 @@ protected:
 };
 
 TEST_P(InputDispatcherCrossDisplayGestureTestFixture, InputDispatcherCrossDisplayGestureTest) {
-    SCOPED_FLAG_OVERRIDE(connected_displays_cursor, true);
     SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
 
     const auto& [_, sourceDisplayOrientation, destinationDisplayOrientation, sourceDisplayDensity,

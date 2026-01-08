@@ -31,6 +31,7 @@ _INTERCEPTED_EXTENSIONS = [
     'VK_KHR_android_surface',
     'VK_KHR_get_surface_capabilities2',
     'VK_KHR_incremental_present',
+    'VK_KHR_get_physical_device_properties2',
     'VK_KHR_shared_presentable_image',
     'VK_KHR_surface',
     'VK_KHR_surface_protected_capabilities',
@@ -46,7 +47,6 @@ _INTERCEPTED_EXTENSIONS = [
 _KNOWN_EXTENSIONS = _INTERCEPTED_EXTENSIONS + [
     'VK_ANDROID_external_memory_android_hardware_buffer',
     'VK_KHR_bind_memory2',
-    'VK_KHR_get_physical_device_properties2',
     'VK_KHR_device_group_creation',
     'VK_KHR_external_memory_capabilities',
     'VK_KHR_external_semaphore_capabilities',
@@ -160,6 +160,17 @@ _INTERCEPTED_COMMANDS = [
     'vkGetPhysicalDeviceQueueFamilyProperties2',
     'vkGetPhysicalDeviceMemoryProperties2',
     'vkGetPhysicalDeviceSparseImageFormatProperties2',
+
+    # Original KHR version of same, since we must intercept
+    # to fill properties and features structures of loader-implementated
+    # extensions.
+    'vkGetPhysicalDeviceFeatures2KHR',
+    'vkGetPhysicalDeviceProperties2KHR',
+    'vkGetPhysicalDeviceFormatProperties2KHR',
+    'vkGetPhysicalDeviceImageFormatProperties2KHR',
+    'vkGetPhysicalDeviceQueueFamilyProperties2KHR',
+    'vkGetPhysicalDeviceMemoryProperties2KHR',
+    'vkGetPhysicalDeviceSparseImageFormatProperties2KHR',
 
     # For promoted VK_KHR_external_memory_capabilities
     'vkGetPhysicalDeviceExternalBufferProperties',

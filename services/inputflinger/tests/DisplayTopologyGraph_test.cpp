@@ -15,10 +15,8 @@
  */
 
 #include <android/configuration.h>
-#include <com_android_input_flags.h>
 #include <gtest/gtest.h>
 #include <input/DisplayTopologyGraph.h>
-#include <input/ScopedFlagOverride.h>
 
 #include <string>
 #include <string_view>
@@ -46,7 +44,6 @@ class DisplayTopologyGraphTestFixture
         public testing::WithParamInterface<DisplayTopologyGraphTestFixtureParam> {};
 
 TEST_P(DisplayTopologyGraphTestFixture, DisplayTopologyGraphTest) {
-    SCOPED_FLAG_OVERRIDE(enable_display_topology_validation, true);
     auto [_, primaryDisplayId, graph, isValid] = GetParam();
     auto result = DisplayTopologyGraph::create(primaryDisplayId, std::move(graph));
     EXPECT_EQ(isValid, result.ok());

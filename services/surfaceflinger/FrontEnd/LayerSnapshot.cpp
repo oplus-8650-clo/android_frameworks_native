@@ -229,14 +229,8 @@ bool LayerSnapshot::getIsVisible() const {
         return false;
     }
 
-    if (FlagManager::getInstance().connected_displays_cursor()) {
-        if (handleSkipScreenshotFlag && outputFilter.skipScreenshot) {
-            return false;
-        }
-    } else {
-        if (handleSkipScreenshotFlag && outputFilter.toInternalDisplay) {
-            return false;
-        }
+    if (handleSkipScreenshotFlag && outputFilter.skipScreenshot) {
+        return false;
     }
 
     if (!hasSomethingToDraw()) {
@@ -258,12 +252,7 @@ std::string LayerSnapshot::getIsVisibleReason() const {
         return "layer only reachable via relative parent";
     if (isHiddenByPolicyFromParent) return "hidden by parent or layer flag";
     if (isHiddenByPolicyFromRelativeParent) return "hidden by relative parent";
-    if (FlagManager::getInstance().connected_displays_cursor()) {
-        if (handleSkipScreenshotFlag && outputFilter.skipScreenshot) return "eLayerSkipScreenshot";
-    } else {
-        if (handleSkipScreenshotFlag & outputFilter.toInternalDisplay)
-            return "eLayerSkipScreenshot (toInternalDisplay=true)";
-    }
+    if (handleSkipScreenshotFlag && outputFilter.skipScreenshot) return "eLayerSkipScreenshot";
     if (invalidTransform) return "invalidTransform";
     if (color.a == 0.0f && !hasBlur()) return "alpha = 0 and no blur";
     if (!hasSomethingToDraw()) return "nothing to draw";

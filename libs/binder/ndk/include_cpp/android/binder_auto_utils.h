@@ -38,6 +38,10 @@
 #include <iostream>
 #include <string>
 
+// Old NDKs may not declare these, but forward declare (instead of compiling this class out)
+// to allow code that uses ScopedAIBinder_FrozenStateChangeCallback to be more code compatible.
+struct AIBinder_FrozenStateChangeCallback;
+
 namespace ndk {
 
 /**
@@ -363,7 +367,11 @@ static void AIBinder_FrozenStateChangeCallback_delete_plumbing(
 #endif  // __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__
 
 #if defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+#if defined(__ANDROID_BINDER_HAS_FROZEN_CALLBACK__)
         AIBinder_FrozenStateChangeCallback_delete(callback);
+#else
+        if (callback != nullptr) __assert(__FILE__, __LINE__, "Should not be able to create callback if we can't delete it.");
+#endif  // __ANDROID_BINDER_HAS_FROZEN_CALLBACK__
 #endif  // __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ || __ANDROID_API__ >= 37
 
 #ifdef __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__

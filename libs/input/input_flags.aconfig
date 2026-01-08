@@ -180,34 +180,10 @@ flag {
 }
 
 flag {
-  name: "connected_displays_cursor"
-  namespace: "lse_desktop_experience"
-  description: "Allow cursor to transition across multiple connected displays"
-  bug: "362719483"
-}
-
-flag {
-  name: "scale_cursor_speed_with_dpi"
-  namespace: "lse_desktop_experience"
-  description: "Scale the cursor speed based on display density"
-  bug: "367662715"
-}
-
-flag {
   name: "prevent_merging_input_pointer_devices"
   namespace: "desktop_input"
   description: "Prevent merging input sub-devices that provide pointer input streams"
   bug: "389689566"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
-  name: "enable_display_topology_validation"
-  namespace: "input"
-  description: "Set to true to enable display topology validation"
-  bug: "401219231"
   metadata {
     purpose: PURPOSE_BUGFIX
   }
@@ -228,16 +204,6 @@ flag {
   namespace: "input"
   description: "Log low-level events from evdev and the Gestures library in traces"
   bug: "394861376"
-}
-
-flag {
-  name: "touchpad_down_time_fix"
-  namespace: "input"
-  description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
-  bug: "447603159"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
 }
 
 flag {

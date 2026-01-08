@@ -196,6 +196,33 @@ VKAPI_ATTR void GetPhysicalDeviceExternalFenceProperties(
     const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo,
     VkExternalFenceProperties* pExternalFenceProperties);
 
+VKAPI_ATTR void GetPhysicalDeviceProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkPhysicalDeviceProperties2KHR* pProperties);
+VKAPI_ATTR void GetPhysicalDeviceFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkFormat format,
+    VkFormatProperties2KHR* pFormatProperties);
+VKAPI_ATTR VkResult GetPhysicalDeviceImageFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    const VkPhysicalDeviceImageFormatInfo2KHR* pImageFormatInfo,
+    VkImageFormatProperties2KHR* pImageFormatProperties);
+VKAPI_ATTR void GetPhysicalDeviceMemoryProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkPhysicalDeviceMemoryProperties2KHR* pMemoryProperties);
+VKAPI_ATTR void GetPhysicalDeviceQueueFamilyProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    uint32_t *pQueueFamilyPropertyCount,
+    VkQueueFamilyProperties2KHR* pQueueFamilyProperties);
+VKAPI_ATTR void GetPhysicalDeviceFeatures2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkPhysicalDeviceFeatures2KHR* pFeatures);
+VKAPI_ATTR void GetPhysicalDeviceSparseImageFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    const VkPhysicalDeviceSparseImageFormatInfo2KHR* pFormatInfo,
+    uint32_t* pPropertyCount,
+    VkSparseImageFormatProperties2KHR* pProperties);
+
 template <typename DispatchableType>
 void StaticAssertDispatchable(DispatchableType) {
     static_assert(

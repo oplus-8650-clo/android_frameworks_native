@@ -97,18 +97,17 @@ void InputMapperUnitTest::setSwitchState(int32_t state, std::set<int32_t> switch
     }
 }
 
-std::list<NotifyArgs> InputMapperUnitTest::process(int32_t type, int32_t code, int32_t value) {
+void InputMapperUnitTest::process(int32_t type, int32_t code, int32_t value) {
     nsecs_t when = systemTime(SYSTEM_TIME_MONOTONIC);
-    return process(when, type, code, value);
+    process(when, type, code, value);
 }
 
-std::list<NotifyArgs> InputMapperUnitTest::process(nsecs_t when, int32_t type, int32_t code,
-                                                   int32_t value) {
-    return process(when, when, type, code, value);
+void InputMapperUnitTest::process(nsecs_t when, int32_t type, int32_t code, int32_t value) {
+    process(when, when, type, code, value);
 }
 
-std::list<NotifyArgs> InputMapperUnitTest::process(nsecs_t when, nsecs_t readTime, int32_t type,
-                                                   int32_t code, int32_t value) {
+void InputMapperUnitTest::process(nsecs_t when, nsecs_t readTime, int32_t type, int32_t code,
+                                  int32_t value) {
     RawEvent event;
     event.when = when;
     event.readTime = readTime;
@@ -116,31 +115,36 @@ std::list<NotifyArgs> InputMapperUnitTest::process(nsecs_t when, nsecs_t readTim
     event.type = type;
     event.code = code;
     event.value = value;
-    return mMapper->process(event);
+    processArgs(mMapper->process(event));
+}
+
+void InputMapperUnitTest::processArgs(const std::list<NotifyArgs>& args) {
+    for (const NotifyArgs& arg : args) {
+        mFakeListener.addEvent(arg);
+    }
 }
 
 VerifyingInputMapperUnitTest::VerifyingInputMapperUnitTest() : mVerifier("Test verifier") {}
 
-std::list<NotifyArgs> VerifyingInputMapperUnitTest::process(nsecs_t when, nsecs_t readTime,
-                                                            int32_t type, int32_t code,
-                                                            int32_t value) {
-    std::list<NotifyArgs> args = InputMapperUnitTest::process(when, readTime, type, code, value);
-    processMotionArgs(args);
-    return args;
+void VerifyingInputMapperUnitTest::process(nsecs_t when, nsecs_t readTime, int32_t type,
+                                           int32_t code, int32_t value) {
+    InputMapperUnitTest::process(when, readTime, type, code, value);
 }
 
-std::list<NotifyArgs> VerifyingInputMapperUnitTest::reconfigureMapper(
-        nsecs_t when, const InputReaderConfiguration& config, ConfigurationChanges changes) {
-    std::list<NotifyArgs> args = mMapper->reconfigure(when, config, changes);
-    processMotionArgs(args);
-    return args;
+void VerifyingInputMapperUnitTest::reconfigureMapper(nsecs_t when,
+                                                     const InputReaderConfiguration& config,
+                                                     ConfigurationChanges changes) {
+    processArgs(mMapper->reconfigure(when, config, changes));
 }
 
-std::list<NotifyArgs> VerifyingInputMapperUnitTest::resetMapper(nsecs_t when) {
-    std::list<NotifyArgs> args = mMapper->reset(when);
-    processMotionArgs(args);
+void VerifyingInputMapperUnitTest::resetMapper(nsecs_t when) {
+    processArgs(mMapper->reset(when));
     mVerifier.resetDevice(DEVICE_ID);
-    return args;
+}
+
+void VerifyingInputMapperUnitTest::processArgs(const std::list<NotifyArgs>& args) {
+    InputMapperUnitTest::processArgs(args);
+    processMotionArgs(args);
 }
 
 void VerifyingInputMapperUnitTest::processMotionArgs(const std::list<NotifyArgs>& args) {

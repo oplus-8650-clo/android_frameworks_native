@@ -23,7 +23,6 @@
 #if defined(__ANDROID__)
 #include <gui/SurfaceComposerClient.h>
 #endif
-#include <input/InputFlags.h>
 #include <input/Keyboard.h>
 #include <input/PrintTools.h>
 #include <unordered_set>
@@ -297,8 +296,7 @@ void PointerChoreographer::processPointerDeviceMotionEventLocked(NotifyMotionArg
     const float deltaY = newArgs.pointerCoords[0].getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y);
     const vec2 filteredDelta = filterPointerMotionForAccessibilityLocked(pc, vec2{deltaX, deltaY});
     vec2 unconsumedDelta = pc.move(filteredDelta.x, filteredDelta.y);
-    if (InputFlags::connectedDisplaysCursorEnabled() &&
-        (std::abs(unconsumedDelta.x) > 0 || std::abs(unconsumedDelta.y) > 0)) {
+    if (std::abs(unconsumedDelta.x) > 0 || std::abs(unconsumedDelta.y) > 0) {
         handleUnconsumedDeltaLocked(pc, unconsumedDelta);
         // pointer may have moved to a different viewport
         newArgs.displayId = pc.getDisplayId();
@@ -813,23 +811,6 @@ PointerChoreographer::calculatePointerDisplayChangeToNotify() {
     }
     mNotifiedPointerDisplayId = displayIdToNotify;
     return {{displayIdToNotify, cursorPosition}};
-}
-
-void PointerChoreographer::setDefaultMouseDisplayId(ui::LogicalDisplayId displayId) {
-    if (InputFlags::connectedDisplaysCursorEnabled()) {
-        // In connected displays scenario, default mouse display will only be updated from topology.
-        return;
-    }
-    PointerDisplayChange pointerDisplayChange;
-
-    { // acquire lock
-        std::scoped_lock _l(getLock());
-
-        mCurrentMouseDisplayId = displayId;
-        pointerDisplayChange = updatePointerControllersLocked();
-    } // release lock
-
-    notifyPointerDisplayChange(pointerDisplayChange, mPolicy);
 }
 
 void PointerChoreographer::setDisplayViewports(const std::vector<DisplayViewport>& viewports) {

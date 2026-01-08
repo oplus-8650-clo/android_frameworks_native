@@ -36,6 +36,13 @@ flag {
 flag {
   name: "present_mode_fifo_latest_ready_ext"
   namespace: "gpu"
+  description: "This flag has been replaced by present_mode_fifo_latest_ready_ext2 to allow a namespace change"
+  bug: "378669647"
+}
+
+flag {
+  name: "present_mode_fifo_latest_ready_ext2"
+  namespace: "gpu"
   description: "Enable the VK_EXT_present_mode_fifo_latest_ready vulkan extension"
   bug: "378669647"
 }

@@ -805,8 +805,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         // field is used to hide mirrored layers with the flag set.
         snapshot.handleSkipScreenshotFlag = parentSnapshot.handleSkipScreenshotFlag ||
                 (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK) ||
-                (FlagManager::getInstance().connected_displays_cursor() &&
-                 requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
+                (requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eAlphaChanged) {
@@ -818,16 +817,10 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eFlagsChanged) {
         snapshot.isSecure =
                 parentSnapshot.isSecure || (requested.flags & layer_state_t::eLayerSecure);
-        if (FlagManager::getInstance().connected_displays_cursor()) {
-            snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
-                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
-            // This may cause a layer to become invisible, removing it from the hierarchy
-            mResortSnapshots = true;
-        } else {
-            snapshot.outputFilter.toInternalDisplay =
-                    parentSnapshot.outputFilter.toInternalDisplay ||
-                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
-        }
+        snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
+                (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        // This may cause a layer to become invisible, removing it from the hierarchy
+        mResortSnapshots = true;
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eStretchChanged) {

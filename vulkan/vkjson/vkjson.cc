@@ -7797,9 +7797,8 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
                             &device->uniform_buffer_standard_layout_features) &&
              visitor->Visit("vulkanMemoryModelFeatures",
                             &device->vulkan_memory_model_features) &&
-
-             visitor->Visit("core11", &device->core11);
-      ret &= visitor->Visit("core12", &device->core12);
+             visitor->Visit("core11", &device->core11) &&
+             visitor->Visit("core12", &device->core12);
       FALLTHROUGH_INTENDED;
     case VK_API_VERSION_1_1:
       ret &=
@@ -7828,6 +7827,7 @@ inline bool Iterate(Visitor* visitor, VkJsonDevice* device) {
                          &device->variable_pointer_features) &&
           visitor->Visit("variablePointersFeatures",
                          &device->variable_pointers_features) &&
+
           visitor->Visit("externalFenceProperties",
                          &device->external_fence_properties) &&
           visitor->Visit("externalSemaphoreProperties",

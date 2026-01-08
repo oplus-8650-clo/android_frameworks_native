@@ -446,8 +446,16 @@ const char* KeyEvent::actionToString(int32_t action) {
 std::ostream& operator<<(std::ostream& out, const KeyEvent& event) {
     out << "KeyEvent { action=" << KeyEvent::actionToString(event.getAction());
 
-    out << ", keycode=" << event.getKeyCode() << "(" << KeyEvent::getLabel(event.getKeyCode())
-        << ")";
+    // Get the keycode label and check for null
+    const char* keyLabel = KeyEvent::getLabel(event.getKeyCode());
+
+    out << ", keycode=" << event.getKeyCode() << "(";
+    if (keyLabel != nullptr) {
+        out << keyLabel;
+    } else {
+        out << "(unknown/null label)"; // Provide a placeholder if the label is null
+    }
+    out << ")";
 
     if (event.getMetaState() != 0) {
         out << ", metaState=" << event.getMetaState();

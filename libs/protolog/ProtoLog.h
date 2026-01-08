@@ -29,6 +29,7 @@ class IArgumentProvider {
 public:
     virtual ~IArgumentProvider() = default;
     virtual void newPass() = 0;
+    virtual void endPass() = 0;
     virtual long long nextInt() = 0;
     virtual double nextDouble() = 0;
     virtual const char* nextString() = 0;

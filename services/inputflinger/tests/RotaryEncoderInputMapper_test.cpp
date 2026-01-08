@@ -122,15 +122,12 @@ TEST_F(RotaryEncoderInputMapperTest, ConfigureDisplayIdWithAssociatedViewport) {
     EXPECT_CALL((*mDevice), getAssociatedViewport).WillRepeatedly(Return(secondaryViewport));
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
 
-    std::list<NotifyArgs> args;
     // Ensure input events are generated for the secondary display.
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
-    EXPECT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
-                              WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
-                              WithDisplayId(SECONDARY_DISPLAY_ID)))));
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
+                                     WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
+                                     WithDisplayId(SECONDARY_DISPLAY_ID)));
 }
 
 TEST_F(RotaryEncoderInputMapperTest, ConfigureDisplayIdNoAssociatedViewport) {
@@ -142,27 +139,22 @@ TEST_F(RotaryEncoderInputMapperTest, ConfigureDisplayIdNoAssociatedViewport) {
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
 
     // Ensure input events are generated without display ID
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
-    EXPECT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
-                              WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
-                              WithDisplayId(ui::LogicalDisplayId::INVALID)))));
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
+                                     WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
+                                     WithDisplayId(ui::LogicalDisplayId::INVALID)));
 }
 
 TEST_F(RotaryEncoderInputMapperTest, ProcessRegularScroll) {
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
-    EXPECT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
-                              WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(1.0f)))));
+    mFakeListener.expectMotion(AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
+                                     WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
+                                     WithScroll(1.0f)));
 }
 
 TEST_F(RotaryEncoderInputMapperTest, ProcessHighResScroll) {
@@ -171,14 +163,12 @@ TEST_F(RotaryEncoderInputMapperTest, ProcessHighResScroll) {
             .WillRepeatedly(Return(true));
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL_HI_RES, 60);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL_HI_RES, 60);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
-    EXPECT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
-                              WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(0.5f)))));
+    mFakeListener.expectMotion(AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
+                                     WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
+                                     WithScroll(0.5f)));
 }
 
 TEST_F(RotaryEncoderInputMapperTest, HighResScrollIgnoresRegularScroll) {
@@ -187,15 +177,13 @@ TEST_F(RotaryEncoderInputMapperTest, HighResScrollIgnoresRegularScroll) {
             .WillRepeatedly(Return(true));
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL_HI_RES, 60);
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL_HI_RES, 60);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 1);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
-    EXPECT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
-                              WithMotionAction(AMOTION_EVENT_ACTION_SCROLL), WithScroll(0.5f)))));
+    mFakeListener.expectMotion(AllOf(WithSource(AINPUT_SOURCE_ROTARY_ENCODER),
+                                     WithMotionAction(AMOTION_EVENT_ACTION_SCROLL),
+                                     WithScroll(0.5f)));
 }
 
 TEST_F(RotaryEncoderInputMapperTest, ZeroResolution_NoRotationLogging) {
@@ -206,9 +194,8 @@ TEST_F(RotaryEncoderInputMapperTest, ZeroResolution_NoRotationLogging) {
     InputDeviceInfo info;
     mMapper->populateDeviceInfo(info);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
@@ -222,9 +209,8 @@ TEST_F(RotaryEncoderInputMapperTest, NegativeMinLogRotation_NoRotationLogging) {
     InputDeviceInfo info;
     mMapper->populateDeviceInfo(info);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
@@ -238,9 +224,8 @@ TEST_F(RotaryEncoderInputMapperTest, ZeroMinLogRotation_NoRotationLogging) {
     InputDeviceInfo info;
     mMapper->populateDeviceInfo(info);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
@@ -254,9 +239,8 @@ TEST_F(RotaryEncoderInputMapperTest, NoMinLogRotation_NoRotationLogging) {
     InputDeviceInfo info;
     mMapper->populateDeviceInfo(info);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 700);
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
@@ -274,36 +258,35 @@ TEST_F(RotaryEncoderInputMapperTest, RotationLogging) {
     InputDeviceInfo info;
     mMapper->populateDeviceInfo(info);
 
-    std::list<NotifyArgs> args;
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 15); // total scroll = 15
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 15); // total scroll = 15
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
 
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 13); // total scroll = 28
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 13); // total scroll = 28
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     // Expect 0 since `min_rotations_to_log` = 2, and total scroll 28 only has 1 rotation.
     ASSERT_EQ(mTelemetryLogCounts.find("input.value_rotary_input_device_full_rotation_count"),
               mTelemetryLogCounts.end());
 
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 10); // total scroll = 38
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, 10); // total scroll = 38
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     // Total scroll includes >= `min_rotations_to_log` (2), expect log.
     ASSERT_EQ(mTelemetryLogCounts["input.value_rotary_input_device_full_rotation_count"], 2);
 
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -22); // total scroll = 60
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -22); // total scroll = 60
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     // Expect no additional telemetry. Total rotation is 3, and total unlogged rotation is 1, which
     // is less than `min_rotations_to_log`.
     ASSERT_EQ(mTelemetryLogCounts["input.value_rotary_input_device_full_rotation_count"], 2);
 
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -16); // total scroll = 76
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -16); // total scroll = 76
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     // Total unlogged rotation >= `min_rotations_to_log` (2), so expect 2 more logged rotation.
     ASSERT_EQ(mTelemetryLogCounts["input.value_rotary_input_device_full_rotation_count"], 4);
 
-    args += process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -76); // total scroll = 152
-    args += process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
+    process(ARBITRARY_TIME, EV_REL, REL_WHEEL, -76); // total scroll = 152
+    process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
     // Total unlogged scroll >= 4*`min_rotations_to_log`. Expect *all* unlogged rotations to be
     // logged, even if that's more than multiple of `min_rotations_to_log`.
     ASSERT_EQ(mTelemetryLogCounts["input.value_rotary_input_device_full_rotation_count"], 8);

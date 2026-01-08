@@ -3486,74 +3486,77 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Display Changes");
     }
 
-    ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
-    auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
+        auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
 
-    uint64_t prevOverrideBufferId = 0;
-    for (auto& [layer, layerFE] : layers) {
-        CompositionResult compositionResult{layerFE->stealCompositionResult()};
-        if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
-            if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
-                // add a space to separate displays
-                compositionSummary.push_back(' ');
+        uint64_t prevOverrideBufferId = 0;
+        for (auto& [layer, layerFE] : layers) {
+            CompositionResult compositionResult{layerFE->stealCompositionResult()};
+            if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
+                if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
+                    // add a space to separate displays
+                    compositionSummary.push_back(' ');
+                }
+                lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
             }
-            lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
-        }
 
-        // If there are N layers in a cached set they should all share the same buffer id.
-        // The first layer in the cached set will be not skipped and layers 1..N-1 will be skipped.
-        // We expect all layers in the cached set to be marked as composited by HWC.
-        // Here is a made up example of how it is visualized
-        //
-        //      [b:rrc][s:cc]
-        //
-        // This should be interpreted to mean that there are 2 cached sets.
-        // So there are only 2 non skipped layers -- b and s.
-        // The layers rrc and cc are flattened into layers b and s respectively.
-        const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
-        if (hwcState.overrideBufferId != prevOverrideBufferId) {
-            // End the existing run.
-            if (prevOverrideBufferId) {
-                compositionSummary.push_back(']');
+            // If there are N layers in a cached set they should all share the same buffer id.
+            // The first layer in the cached set will be not skipped and layers 1..N-1 will be
+            // skipped. We expect all layers in the cached set to be marked as composited by HWC.
+            // Here is a made up example of how it is visualized
+            //
+            //      [b:rrc][s:cc]
+            //
+            // This should be interpreted to mean that there are 2 cached sets.
+            // So there are only 2 non skipped layers -- b and s.
+            // The layers rrc and cc are flattened into layers b and s respectively.
+            const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
+            if (hwcState.overrideBufferId != prevOverrideBufferId) {
+                // End the existing run.
+                if (prevOverrideBufferId) {
+                    compositionSummary.push_back(']');
+                }
+                // Start a new run.
+                if (hwcState.overrideBufferId) {
+                    compositionSummary.push_back('[');
+                }
             }
-            // Start a new run.
-            if (hwcState.overrideBufferId) {
-                compositionSummary.push_back('[');
+
+            compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
+
+            if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
+                compositionSummary.push_back(':');
+            }
+            prevOverrideBufferId = hwcState.overrideBufferId;
+
+            if (layerFE->mSnapshot->hasEffect()) {
+                compositedWorkload |= adpf::Workload::EFFECTS;
+            }
+
+            if (compositionResult.lastClientCompositionFence) {
+                layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
+            }
+            if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
+                mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
             }
         }
-
-        compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
-
-        if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
-            compositionSummary.push_back(':');
-        }
-        prevOverrideBufferId = hwcState.overrideBufferId;
-
-        if (layerFE->mSnapshot->hasEffect()) {
-            compositedWorkload |= adpf::Workload::EFFECTS;
+        // End the last run.
+        if (prevOverrideBufferId) {
+            compositionSummary.push_back(']');
         }
 
-        if (compositionResult.lastClientCompositionFence) {
-            layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
-        }
-        if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
-            mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
-        }
+        // Concisely describe the layers composited this frame using single chars. GPU composited
+        // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
+        // shadow, etc.). This provides a snapshot of the compositing workload.
+        SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
+                                  ftl::Concat("Layers: ", layers.size(), " ",
+                                              ftl::truncated<
+                                                      WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
+                                                      std::string_view(compositionSummary.begin(),
+                                                                       compositionSummary.size())))
+                                          .c_str());
     }
-    // End the last run.
-    if (prevOverrideBufferId) {
-        compositionSummary.push_back(']');
-    }
-
-    // Concisely describe the layers composited this frame using single chars. GPU composited layers
-    // are uppercase, DPU composited are lowercase. Special chars denote effects (blur, shadow,
-    // etc.). This provides a snapshot of the compositing workload.
-    SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
-                              ftl::Concat("Layers: ", layers.size(), " ",
-                                          ftl::truncated<WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
-                                                  std::string_view(compositionSummary.begin(),
-                                                                   compositionSummary.size())))
-                                      .c_str());
 
     mPowerAdvisor->setCompositedWorkload(compositedWorkload);
     SFTRACE_ASYNC_FOR_TRACK_END(WorkloadTracer::TRACK_NAME,
@@ -6816,7 +6819,7 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
                 ALOGW("Attempt to set power mode %d for virtual display", mode);
             }
         } else {
-            Mutex::Autolock lock(mStateLock);
+            ftl::FakeGuard guard(mStateLock);
             if (FlagManager::getInstance().set_power_mode_async() &&
                 display->getCompositionDisplay()->supportsOffloadPresent()) {
                 ALOGD("Setting power mode %d asynchronously for a physical display with token %p",
@@ -8515,6 +8518,8 @@ void SurfaceFlinger::captureDisplay(DisplayId displayId, const CaptureArgs& args
                                   .isSecure = args.secureLayerMode == SecureLayerMode::Capture,
                                   .includeProtected = false,
                                   .preserveDisplayColors = args.preserveDisplayColors,
+                                  .requireDpuReadback =
+                                          args.captureMode == CaptureMode::RequireOptimized,
                                   .debugName = "ScreenCapture"};
 
     captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(args.pixelFormat),
@@ -8703,8 +8708,10 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
 
                 if (!canDpuReadback && args.requireDpuReadback) {
                     if (hasProtectedOrDisallowedSecureLayers) {
+                        ALOGE("Failed to readback disallowed layers");
                         return base::unexpected<status_t>(PERMISSION_DENIED);
                     } else {
+                        ALOGE("Failed to set up DPU readback");
                         return base::unexpected<status_t>(INVALID_OPERATION);
                     }
                 }
@@ -8939,8 +8946,13 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         args.isSecure &= display->isSecure();
         args.snapshotRequest.layerStack = display->getLayerStack();
         args.sourceCrop = layerStackSpaceRect;
-        args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
-        args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+
+        if (args.requireDpuReadback) {
+            args.size = display->getSize();
+        } else {
+            args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
+            args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+        }
 
         // We could query a real value for this but it'll be a long, long time until we support
         // displays that need upwards of 1GB per buffer so...
@@ -8970,7 +8982,11 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         // Set the requested width/height to the logical display layer stack rect size by
         // default
         if (args.size.width == 0 || args.size.height == 0) {
-            args.size = layerStackSpaceRect.getSize();
+            if (args.requireDpuReadback) {
+                args.size = display->getSize();
+            } else {
+                args.size = layerStackSpaceRect.getSize();
+            }
         }
 
         // Screenshot initiated for region sampling
@@ -11153,6 +11169,7 @@ void SurfaceFlinger::validateForReadback(LayerFE* layer) {
                     // screenshot request on the floor and erroring out. BUT: for clients that
                     // don't explicitly want DPU readback we can be nicer and bounce over to
                     // renderScreenImpl() to hit the GPU path.
+                    ALOGD("Dropping invalid screen readback for %" PRIu64, request.id.value);
                     invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
                     mReadbackRequests.erase(it);
                     break;
@@ -11188,6 +11205,7 @@ void SurfaceFlinger::finalizeReadback(
 
     for (auto& request : mReadbackRequests) {
         if (request.buffer) {
+            ALOGD("Screen readback not finalized for %" PRIu64, request.id.value);
             invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
         }
     }
