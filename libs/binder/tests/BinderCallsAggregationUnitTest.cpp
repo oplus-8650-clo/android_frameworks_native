@@ -18,6 +18,7 @@
 
 #include "../BuildFlags.h"
 #include "../observer/BinderCallsMapAggregation.h"
+#include "../observer/BinderCallsVectorAggregation.h"
 
 using namespace android;
 
@@ -251,4 +252,183 @@ TEST_F(BinderCallsMapAggregationTest, DurationOverflow) {
     }
     EXPECT_EQ(metrics.cpuTimeSumMicros, expected_cpu_micros);
     EXPECT_EQ(metrics.cpuTimeSumSquaredMicros, limited_cpu_micros * limited_cpu_micros);
+}
+
+// --- BinderCallsVectorAggregation Tests ---
+class BinderCallsVectorAggregationTest : public testing::Test {};
+
+TEST_F(BinderCallsVectorAggregationTest, DataProcessedOnTimeChange) {
+    BinderCallsVectorAggregation buffer;
+    std::vector<BinderCallData> processedData;
+    auto callback = [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+        processedData.insert(processedData.end(), data.begin(), data.end());
+    };
+
+    // This call will set cutoffSec = 1. The data will be in currentSecondCalls.
+    // callback is called with empty previousSecondCalls.
+    buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000}, callback);
+    EXPECT_TRUE(processedData.empty());
+
+    // This call will set cutoffSec = 2.
+    // callback is called with empty previousSecondCalls.
+    // currentSecondCalls (with 1.5s data) is swapped to previousSecondCalls.
+    buffer.addCallStatsLocked({.endTimeNanos = 2500'000'000}, callback);
+    EXPECT_TRUE(processedData.empty());
+
+    // This call will set cutoffSec = 3.
+    // callback is called with previousSecondCalls (containing 1.5s data).
+    buffer.addCallStatsLocked({.endTimeNanos = 3500'000'000}, callback);
+    ASSERT_EQ(processedData.size(), 1);
+    EXPECT_EQ(processedData[0].endTimeNanos, 1500'000'000);
+}
+
+TEST_F(BinderCallsVectorAggregationTest, AddCallToPreviousBucket) {
+    BinderCallsVectorAggregation buffer;
+    std::vector<BinderCallData> processedData;
+    auto callback = [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+        processedData = data;
+    };
+
+    // Set cutoffSec=1.
+    buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000}, callback);
+    processedData.clear();
+
+    // This call will go to previousSecondCalls.
+    buffer.addCallStatsLocked({.endTimeNanos = 500'000'000}, callback);
+    EXPECT_TRUE(processedData.empty()); // No processing yet.
+
+    // This call will trigger processing of previousSecondCalls.
+    buffer.addCallStatsLocked({.endTimeNanos = 2500'000'000}, callback);
+
+    ASSERT_EQ(processedData.size(), 1);
+    EXPECT_EQ(processedData[0].endTimeNanos, 500'000'000);
+}
+
+TEST_F(BinderCallsVectorAggregationTest, PreviousSecondBufferFull) {
+    BinderCallsVectorAggregation buffer;
+    bool callbackCalled = false;
+    std::vector<BinderCallData> processedData;
+    auto callback = [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+        callbackCalled = true;
+        processedData = data;
+    };
+
+    // Set cutoffSec=1
+    buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000},
+                              [&]([[maybe_unused]] int64_t,
+                                  [[maybe_unused]] std::vector<BinderCallData>& data) {});
+    callbackCalled = false;
+
+    for (size_t i = 0; i < BinderCallsVectorAggregation::kMaxBinderCallsBufferSize; ++i) {
+        buffer.addCallStatsLocked({.endTimeNanos = 500'000'000}, callback);
+    }
+
+    ASSERT_FALSE(callbackCalled);
+
+    // This call should be dropped as the buffer is full.
+    buffer.addCallStatsLocked({.endTimeNanos = 600'000'000}, callback);
+
+    ASSERT_FALSE(callbackCalled);
+
+    // This call will trigger processing of previousSecondCalls.
+    buffer.addCallStatsLocked({.endTimeNanos = 2500'000'000}, callback);
+
+    EXPECT_TRUE(callbackCalled);
+    EXPECT_EQ(processedData.size(), BinderCallsVectorAggregation::kMaxBinderCallsBufferSize);
+
+    // Verify that the 0.6s call is not present because it was dropped.
+    for (const auto& call : processedData) {
+        EXPECT_NE(call.endTimeNanos, 600'000'000);
+    }
+}
+
+TEST_F(BinderCallsVectorAggregationTest, CurrentSecondBufferFull) {
+    BinderCallsVectorAggregation buffer;
+    std::vector<BinderCallData> processedData;
+    auto callback = [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+        processedData.insert(processedData.end(), data.begin(), data.end());
+    };
+
+    // Set cutoffSec=1 and fill currentSecondCalls
+    for (size_t i = 0; i < BinderCallsVectorAggregation::kMaxBinderCallsBufferSize; ++i) {
+        buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000}, callback);
+    }
+    processedData.clear();
+
+    // This call should be dropped.
+    buffer.addCallStatsLocked({.endTimeNanos = 1600'000'000}, callback);
+
+    // Move to next second to swap buffers, and next to process.
+    buffer.addCallStatsLocked({.endTimeNanos = 2500'000'000}, callback);
+    buffer.addCallStatsLocked({.endTimeNanos = 3500'000'000}, callback);
+
+    // Only kMaxBinderCallsBufferSize calls should have been processed.
+    EXPECT_EQ(processedData.size(), BinderCallsVectorAggregation::kMaxBinderCallsBufferSize);
+
+    // Verify no 1.6s call is present.
+    for (const auto& call : processedData) {
+        EXPECT_NE(call.endTimeNanos, 1600'000'000);
+    }
+}
+
+TEST_F(BinderCallsVectorAggregationTest, DataHandlingAcrossMultipleSeconds) {
+    BinderCallsVectorAggregation buffer;
+    std::vector<BinderCallData> processedData;
+    auto callback = [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+        processedData.insert(processedData.end(), data.begin(), data.end());
+    };
+
+    // sec 0
+    buffer.addCallStatsLocked({.endTimeNanos = 500'000'000}, callback); // current (cutoff=0)
+
+    // sec 1
+    buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000},
+                              callback); // current (cutoff=1), previous={0.5s}
+    buffer.addCallStatsLocked({.endTimeNanos = 1800'000'000}, callback); // current (cutoff=1)
+
+    // sec 2: processes data from sec 0
+    buffer.addCallStatsLocked({.endTimeNanos = 2500'000'000},
+                              callback); // current (cutoff=2), cb on {0.5s}, previous={1.5s, 1.8s}
+
+    ASSERT_EQ(processedData.size(), 1);
+    EXPECT_EQ(processedData[0].endTimeNanos, 500'000'000);
+    processedData.clear();
+
+    // sec 3: processes data from sec 1
+    buffer.addCallStatsLocked({.endTimeNanos = 3500'000'000},
+                              callback); // current (cutoff=3), cb on {1.5s, 1.8s}, previous={2.5s}
+
+    ASSERT_EQ(processedData.size(), 2);
+    EXPECT_EQ(processedData[0].endTimeNanos, 1500'000'000);
+    EXPECT_EQ(processedData[1].endTimeNanos, 1800'000'000);
+}
+
+TEST_F(BinderCallsVectorAggregationTest, TimeJumpDropsOldData) {
+    BinderCallsVectorAggregation buffer;
+
+    // This will set cutoffSec=3 and the data will be in current.
+    buffer.addCallStatsLocked({.endTimeNanos = 3500'000'000}, [](int64_t, auto&) {});
+    // This data for 1.5s is too old and will be dropped.
+    // cutoffSec=3, so anything with endTimeNanos < 2s is dropped.
+    buffer.addCallStatsLocked({.endTimeNanos = 1500'000'000}, [](int64_t, auto&) {});
+
+    std::vector<BinderCallData> processedData;
+    // This will set cutoffSec=4. The data from second 3 is moved to previous.
+    buffer.addCallStatsLocked({.endTimeNanos = 4500'000'000},
+                              [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+                                  processedData = data;
+                              });
+
+    // No data processed yet because previous was empty before the swap.
+    ASSERT_TRUE(processedData.empty());
+
+    // This will set cutoffSec=5 and process the data from second 3.
+    buffer.addCallStatsLocked({.endTimeNanos = 5500'000'000},
+                              [&]([[maybe_unused]] int64_t, std::vector<BinderCallData>& data) {
+                                  processedData = data;
+                              });
+
+    // Data for 3.5s is in previousSecondCalls and gets processed.
+    ASSERT_EQ(processedData.size(), 1);
+    EXPECT_EQ(processedData[0].endTimeNanos, 3500'000'000);
 }

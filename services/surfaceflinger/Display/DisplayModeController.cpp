@@ -278,6 +278,15 @@ auto DisplayModeController::initiateModeChange(PhysicalDisplayId displayId,
         outTimeline.refreshRequired = false;
         outTimeline.newVsyncAppliedTimeNanos = systemTime();
     }
+
+    if (error != OK) {
+        if (FlagManager::getInstance().modeset_state_machine()) {
+            displayPtr->pendingModeOpt.reset();
+        } else {
+            displayPtr->isModeSetPending = false;
+        }
+    }
+
     switch (error) {
         case FAILED_TRANSACTION:
             return ModeChangeResult::Rejected;

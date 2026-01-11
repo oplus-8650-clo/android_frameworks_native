@@ -99,7 +99,8 @@ protected:
     hal::VsyncPeriodChangeConstraints expectModeSet(const DisplayModeRequest& request,
                                                     hal::VsyncPeriodChangeTimeline& timeline,
                                                     bool subsequent = false,
-                                                    bool useDisplayCommand = false) {
+                                                    bool useDisplayCommand = false,
+                                                    hal::Error halError = hal::Error::NONE) {
         EXPECT_CALL(*mComposerHal, isDisplayCommandModesetSupported())
                 .WillOnce(Return(useDisplayCommand));
 
@@ -122,10 +123,10 @@ protected:
                     .WillOnce(Return(true));
             EXPECT_CALL(*mComposerHal,
                         setActiveConfigWithConstraints(kHwcDisplayId, hwcModeId, constraints, _))
-                    .WillOnce(DoAll(SetArgPointee<3>(timeline), Return(hal::Error::NONE)));
+                    .WillOnce(DoAll(SetArgPointee<3>(timeline), Return(halError)));
         } else {
             EXPECT_CALL(*mComposerHal, setDisplayMode(kHwcDisplayId, hwcModeId, false))
-                    .WillOnce(Return(hal::Error::NONE));
+                    .WillOnce(Return(halError));
         }
 
         return constraints;
@@ -248,6 +249,32 @@ TEST_F(DisplayModeControllerTest, initiateModeChangeLegacy) REQUIRES(kMainThread
     EXPECT_FALSE(mDmc.getDesiredMode(mDisplayId));
 }
 
+TEST_F(DisplayModeControllerTest, rejectModeChangeLegacy) REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, false);
+
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
+
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+    auto modeRequest = kDesiredMode90;
+
+    hal::VsyncPeriodChangeTimeline timeline;
+    const auto constraints =
+            expectModeSet(modeRequest, timeline, false, false, hal::Error::CONFIG_FAILED);
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Rejected,
+              mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));
+
+    EXPECT_FALSE(mDmc.isModeSetPending(mDisplayId));
+
+    // Caller is responsible for clearing on failure.
+    mDmc.clearDesiredMode(mDisplayId);
+    EXPECT_FALSE(mDmc.getDesiredMode(mDisplayId));
+}
+
 TEST_F(DisplayModeControllerTest, initiateModeChange) REQUIRES(kMainThreadContext) {
     SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
 
@@ -277,6 +304,32 @@ TEST_F(DisplayModeControllerTest, initiateModeChange) REQUIRES(kMainThreadContex
     auto* changePtr = std::get_if<DisplayModeController::RefreshRateChange>(&modeChange);
     ASSERT_TRUE(changePtr);
     EXPECT_DISPLAY_MODE_REQUEST(kDesiredMode90, changePtr->activeMode);
+}
+
+TEST_F(DisplayModeControllerTest, rejectModeChange) REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
+
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
+
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+
+    const auto desiredModeOpt = mDmc.takeDesiredModeIfMatches(mDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, desiredModeOpt);
+    auto modeRequest = *desiredModeOpt;
+
+    hal::VsyncPeriodChangeTimeline timeline;
+    const auto constraints =
+            expectModeSet(modeRequest, timeline, false, false, hal::Error::CONFIG_FAILED);
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Rejected,
+              mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));
+
+    EXPECT_FALSE(mDmc.getPendingMode(mDisplayId));
+    EXPECT_FALSE(mDmc.getDesiredMode(mDisplayId));
 }
 
 TEST_F(DisplayModeControllerTest, initiateModeChangeDisplayCommand) REQUIRES(kMainThreadContext) {

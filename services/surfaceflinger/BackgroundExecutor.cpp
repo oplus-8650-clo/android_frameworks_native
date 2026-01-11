@@ -58,7 +58,7 @@ BackgroundExecutor::BackgroundExecutor(bool highPriority) {
         }
     });
     if (highPriority) {
-        pthread_setname_np(mThread.native_handle(), "BckgrndExec HP");
+        pthread_setname_np(mThread.native_handle(), "BckgrndExec WL");
     } else {
         pthread_setname_np(mThread.native_handle(), "BckgrndExec LP");
     }

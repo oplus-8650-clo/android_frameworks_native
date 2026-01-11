@@ -14,16 +14,24 @@
  * limitations under the License.
  */
 
+// #define LOG_NDEBUG 0
+
 #include <cutils/compiler.h>
+#include <gui/BufferItemConsumer.h>
 #include <gui/BufferQueue.h>
+#include <gui/Surface.h>
+#include <math/mat4.h>
 #include <surfacetexture/ImageConsumer.h>
 #include <surfacetexture/SurfaceTexture.h>
 #include <surfacetexture/surface_texture_platform.h>
-#include <math/mat4.h>
 #include <system/window.h>
+#include <ui/GraphicBuffer.h>
 #include <utils/Trace.h>
 
 #include <com_android_graphics_libgui_flags.h>
+#include <atomic>
+#include <mutex>
+#include <string>
 
 namespace android {
 
@@ -37,8 +45,7 @@ static const mat4 mtxIdentity;
 
 SurfaceTexture::SurfaceTexture(uint32_t tex, uint32_t texTarget, bool useFenceSync,
                                bool isControlledByApp)
-      : ConsumerBase(isControlledByApp),
-        mCurrentCrop(Rect::EMPTY_RECT),
+      : mCurrentCrop(Rect::EMPTY_RECT),
         mCurrentTransform(0),
         mCurrentScalingMode(NATIVE_WINDOW_SCALING_MODE_FREEZE),
         mCurrentFence(Fence::NO_FENCE),
@@ -51,12 +58,15 @@ SurfaceTexture::SurfaceTexture(uint32_t tex, uint32_t texTarget, bool useFenceSy
         mTexName(tex),
         mUseFenceSync(useFenceSync),
         mTexTarget(texTarget),
-        mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
-        mOpMode(OpMode::attachedToGL) {}
+        mCurrentTexture(nullptr),
+        mOpMode(OpMode::attachedToGL) {
+    std::tie(mConsumer, mSurface) =
+            BufferItemConsumer::create(DEFAULT_USAGE_FLAGS, BufferItemConsumer::DEFAULT_MAX_BUFFERS,
+                                       isControlledByApp);
+}
 
 SurfaceTexture::SurfaceTexture(uint32_t texTarget, bool useFenceSync, bool isControlledByApp)
-      : ConsumerBase(isControlledByApp),
-        mCurrentCrop(Rect::EMPTY_RECT),
+      : mCurrentCrop(Rect::EMPTY_RECT),
         mCurrentTransform(0),
         mCurrentScalingMode(NATIVE_WINDOW_SCALING_MODE_FREEZE),
         mCurrentFence(Fence::NO_FENCE),
@@ -69,49 +79,15 @@ SurfaceTexture::SurfaceTexture(uint32_t texTarget, bool useFenceSync, bool isCon
         mTexName(0),
         mUseFenceSync(useFenceSync),
         mTexTarget(texTarget),
-        mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
-        mOpMode(OpMode::detached) {}
-
-SurfaceTexture::SurfaceTexture(const sp<IGraphicBufferConsumer>& bq, uint32_t tex,
-                               uint32_t texTarget, bool useFenceSync, bool isControlledByApp)
-      : ConsumerBase(bq, isControlledByApp),
-        mCurrentCrop(Rect::EMPTY_RECT),
-        mCurrentTransform(0),
-        mCurrentScalingMode(NATIVE_WINDOW_SCALING_MODE_FREEZE),
-        mCurrentFence(Fence::NO_FENCE),
-        mCurrentTimestamp(0),
-        mCurrentDataSpace(HAL_DATASPACE_UNKNOWN),
-        mCurrentFrameNumber(0),
-        mDefaultWidth(1),
-        mDefaultHeight(1),
-        mFilteringEnabled(true),
-        mTexName(tex),
-        mUseFenceSync(useFenceSync),
-        mTexTarget(texTarget),
-        mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
-        mOpMode(OpMode::attachedToGL) {}
-
-SurfaceTexture::SurfaceTexture(const sp<IGraphicBufferConsumer>& bq, uint32_t texTarget,
-                               bool useFenceSync, bool isControlledByApp)
-      : ConsumerBase(bq, isControlledByApp),
-        mCurrentCrop(Rect::EMPTY_RECT),
-        mCurrentTransform(0),
-        mCurrentScalingMode(NATIVE_WINDOW_SCALING_MODE_FREEZE),
-        mCurrentFence(Fence::NO_FENCE),
-        mCurrentTimestamp(0),
-        mCurrentDataSpace(HAL_DATASPACE_UNKNOWN),
-        mCurrentFrameNumber(0),
-        mDefaultWidth(1),
-        mDefaultHeight(1),
-        mFilteringEnabled(true),
-        mTexName(0),
-        mUseFenceSync(useFenceSync),
-        mTexTarget(texTarget),
-        mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
-        mOpMode(OpMode::detached) {}
+        mCurrentTexture(nullptr),
+        mOpMode(OpMode::detached) {
+    std::tie(mConsumer, mSurface) =
+            BufferItemConsumer::create(DEFAULT_USAGE_FLAGS, BufferItemConsumer::DEFAULT_MAX_BUFFERS,
+                                       isControlledByApp);
+}
 
 status_t SurfaceTexture::setDefaultBufferSize(uint32_t w, uint32_t h) {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     if (mAbandoned) {
         SFT_LOGE("setDefaultBufferSize: SurfaceTexture is abandoned!");
         return NO_INIT;
@@ -124,7 +100,7 @@ status_t SurfaceTexture::setDefaultBufferSize(uint32_t w, uint32_t h) {
 status_t SurfaceTexture::updateTexImage() {
     ATRACE_CALL();
     SFT_LOGV("updateTexImage");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
 
     if (mAbandoned) {
         SFT_LOGE("updateTexImage: SurfaceTexture is abandoned!");
@@ -144,7 +120,7 @@ status_t SurfaceTexture::releaseTexImage() {
     // releaseTexImage can be invoked even when not attached to a GL context.
     ATRACE_CALL();
     SFT_LOGV("releaseTexImage");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
 
     if (mAbandoned) {
         SFT_LOGE("releaseTexImage: SurfaceTexture is abandoned!");
@@ -155,10 +131,10 @@ status_t SurfaceTexture::releaseTexImage() {
 }
 
 status_t SurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t presentWhen,
-                                             uint64_t maxFrameNumber,
-                                             BufferFreedCallback onBufferFreed) {
+                                             uint64_t maxFrameNumber) {
     status_t err =
-            ConsumerBase::acquireBufferLocked(item, presentWhen, maxFrameNumber, onBufferFreed);
+            mConsumer->acquireBuffer(item, presentWhen, maxFrameNumber,
+                                     [&](auto& maybeBuffer) { onBufferFreedLocked(maybeBuffer); });
     if (err != NO_ERROR) {
         return err;
     }
@@ -167,7 +143,7 @@ status_t SurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t presentWh
         case OpMode::attachedToConsumer:
             break;
         case OpMode::attachedToGL:
-            mEGLConsumer.onAcquireBufferLocked(item, *this);
+            mEGLConsumer.onAcquireBufferLocked(item);
             break;
         case OpMode::detached:
             break;
@@ -176,35 +152,25 @@ status_t SurfaceTexture::acquireBufferLocked(BufferItem* item, nsecs_t presentWh
     return NO_ERROR;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-status_t SurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
-                                             BufferFreedCallback onBufferFreed) {
-#else
-status_t SurfaceTexture::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,
-                                             EGLDisplay display, EGLSyncKHR eglFence,
-                                             BufferFreedCallback onBufferFreed) {
-#endif
+status_t SurfaceTexture::releaseBufferLocked(const sp<GraphicBuffer>& graphicBuffer) {
     // release the buffer if it hasn't already been discarded by the
     // BufferQueue. This can happen, for example, when the producer of this
     // buffer has reallocated the original buffer slot after this buffer
     // was acquired.
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    status_t err = ConsumerBase::releaseBufferLocked(buf, graphicBuffer, onBufferFreed);
-#else
-    status_t err =
-            ConsumerBase::releaseBufferLocked(buf, graphicBuffer, display, eglFence, onBufferFreed);
-#endif
+    status_t err = mConsumer->releaseBuffer(graphicBuffer, Fence::NO_FENCE, [&](auto& maybeBuffer) {
+        onBufferFreedLocked(maybeBuffer);
+    });
+
     // We could be releasing an EGL/Vulkan buffer, even if not currently
     // attached to a GL context.
-    mImageConsumer.onReleaseBufferLocked(buf);
-    mEGLConsumer.onReleaseBufferLocked(buf);
+    mImageConsumer.onReleaseBufferLocked(graphicBuffer);
     return err;
 }
 
 status_t SurfaceTexture::detachFromContext() {
     ATRACE_CALL();
     SFT_LOGV("detachFromContext");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
 
     if (mAbandoned) {
         SFT_LOGE("detachFromContext: abandoned SurfaceTexture");
@@ -227,7 +193,7 @@ status_t SurfaceTexture::detachFromContext() {
 status_t SurfaceTexture::attachToContext(uint32_t tex) {
     ATRACE_CALL();
     SFT_LOGV("attachToContext");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
 
     if (mAbandoned) {
         SFT_LOGE("attachToContext: abandoned SurfaceTexture");
@@ -245,7 +211,7 @@ status_t SurfaceTexture::attachToContext(uint32_t tex) {
 
 void SurfaceTexture::takeConsumerOwnership() {
     ATRACE_CALL();
-    Mutex::Autolock _l(mMutex);
+    std::scoped_lock _l(mMutex);
     if (mAbandoned) {
         SFT_LOGE("attachToView: abandoned SurfaceTexture");
         return;
@@ -253,9 +219,9 @@ void SurfaceTexture::takeConsumerOwnership() {
     if (mOpMode == OpMode::detached) {
         mOpMode = OpMode::attachedToConsumer;
 
-        if (mCurrentTexture != BufferQueue::INVALID_BUFFER_SLOT) {
+        if (!mCurrentTexture) {
             // release possible EGLConsumer texture cache
-            mEGLConsumer.onFreeBufferLocked(mCurrentTexture);
+            mEGLConsumer.onFreeBufferLocked(*this, mCurrentTexture);
             mEGLConsumer.onAbandonLocked();
         }
     } else {
@@ -265,7 +231,7 @@ void SurfaceTexture::takeConsumerOwnership() {
 
 void SurfaceTexture::releaseConsumerOwnership() {
     ATRACE_CALL();
-    Mutex::Autolock _l(mMutex);
+    std::scoped_lock _l(mMutex);
 
     if (mAbandoned) {
         SFT_LOGE("detachFromView: abandoned SurfaceTexture");
@@ -284,12 +250,12 @@ uint32_t SurfaceTexture::getCurrentTextureTarget() const {
 }
 
 void SurfaceTexture::getTransformMatrix(float mtx[16]) {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     memcpy(mtx, mCurrentTransformMatrix, sizeof(mCurrentTransformMatrix));
 }
 
 void SurfaceTexture::setFilteringEnabled(bool enabled) {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     if (mAbandoned) {
         SFT_LOGE("setFilteringEnabled: SurfaceTexture is abandoned!");
         return;
@@ -297,25 +263,27 @@ void SurfaceTexture::setFilteringEnabled(bool enabled) {
     bool needsRecompute = mFilteringEnabled != enabled;
     mFilteringEnabled = enabled;
 
-    if (needsRecompute && mCurrentTexture == BufferQueue::INVALID_BUFFER_SLOT) {
+    if (needsRecompute && mCurrentTexture) {
         SFT_LOGD("setFilteringEnabled called with no current item");
     }
 
-    if (needsRecompute && mCurrentTexture != BufferQueue::INVALID_BUFFER_SLOT) {
+    if (needsRecompute && mCurrentTexture) {
         computeCurrentTransformMatrixLocked();
     }
 }
 
+status_t SurfaceTexture::setConsumerIsProtected(bool isProtected) {
+    SFT_LOGV("computeCurrentTransformMatrixLocked");
+    return mConsumer->setConsumerIsProtected(isProtected);
+}
+
 void SurfaceTexture::computeCurrentTransformMatrixLocked() {
     SFT_LOGV("computeCurrentTransformMatrixLocked");
-    sp<GraphicBuffer> buf = (mCurrentTexture == BufferQueue::INVALID_BUFFER_SLOT)
-            ? nullptr
-            : mSlots[mCurrentTexture].mGraphicBuffer;
-    if (buf == nullptr) {
+    if (mCurrentTexture == nullptr) {
         SFT_LOGD("computeCurrentTransformMatrixLocked: no current item");
     }
-    computeTransformMatrix(mCurrentTransformMatrix, buf, mCurrentCrop, mCurrentTransform,
-                           mFilteringEnabled);
+    computeTransformMatrix(mCurrentTransformMatrix, mCurrentTexture, mCurrentCrop,
+                           mCurrentTransform, mFilteringEnabled);
 }
 
 void SurfaceTexture::computeTransformMatrix(float outTransform[16], const sp<GraphicBuffer>& buf,
@@ -434,79 +402,109 @@ Rect SurfaceTexture::scaleDownCrop(const Rect& crop, uint32_t bufferWidth, uint3
 
 nsecs_t SurfaceTexture::getTimestamp() {
     SFT_LOGV("getTimestamp");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentTimestamp;
 }
 
 android_dataspace SurfaceTexture::getCurrentDataSpace() {
     SFT_LOGV("getCurrentDataSpace");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentDataSpace;
 }
 
 uint64_t SurfaceTexture::getFrameNumber() {
     SFT_LOGV("getFrameNumber");
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentFrameNumber;
 }
 
 Rect SurfaceTexture::getCurrentCrop() const {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return (mCurrentScalingMode == NATIVE_WINDOW_SCALING_MODE_SCALE_CROP)
             ? scaleDownCrop(mCurrentCrop, mDefaultWidth, mDefaultHeight)
             : mCurrentCrop;
 }
 
 uint32_t SurfaceTexture::getCurrentTransform() const {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentTransform;
 }
 
 uint32_t SurfaceTexture::getCurrentScalingMode() const {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentScalingMode;
 }
 
 sp<Fence> SurfaceTexture::getCurrentFence() const {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentFence;
 }
 
 std::shared_ptr<FenceTime> SurfaceTexture::getCurrentFenceTime() const {
-    Mutex::Autolock lock(mMutex);
+    std::scoped_lock _l(mMutex);
     return mCurrentFenceTime;
 }
 
-void SurfaceTexture::freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) {
-    SFT_LOGV("freeBufferLocked: slotIndex=%d", slotIndex);
-    if (slotIndex == mCurrentTexture) {
-        mCurrentTexture = BufferQueue::INVALID_BUFFER_SLOT;
+void SurfaceTexture::onBufferFreed(const wp<GraphicBuffer>& maybeBuffer) {
+    std::scoped_lock _l(mMutex);
+    onBufferFreedLocked(maybeBuffer);
+}
+
+void SurfaceTexture::onBufferFreedLocked(const wp<GraphicBuffer>& maybeBuffer) {
+    sp<GraphicBuffer> buffer = maybeBuffer.promote();
+    if (buffer == nullptr) {
+        return;
+    }
+
+    SFT_LOGV("onBufferFreed: bufferId=%" PRIu64, buffer->getId());
+    if (buffer == mCurrentTexture) {
+        mCurrentTexture = nullptr;
     }
     // The slotIndex buffer could have EGL cache, but there is no way to tell
     // for sure. Buffers can be freed after SurfaceTexture has detached from GL
     // context or View.
-    mEGLConsumer.onFreeBufferLocked(slotIndex);
-    ConsumerBase::freeBufferLocked(slotIndex, onBufferFreed);
+    mEGLConsumer.onFreeBufferLocked(*this, buffer);
+    mImageConsumer.onFreeBufferLocked(*this, buffer);
 }
 
-void SurfaceTexture::abandonLocked(BufferFreedCallback onBufferFreed) {
-    SFT_LOGV("abandonLocked");
-    mEGLConsumer.onAbandonLocked();
-    ConsumerBase::abandonLocked(onBufferFreed);
+void SurfaceTexture::onFrameAvailable(const BufferItem& item) {
+    sp<SurfaceTextureListener> listener;
+    {
+        std::scoped_lock _l(mMutex);
+        listener = mSurfaceTextureListener;
+    }
+
+    if (listener) {
+        listener->onFrameAvailable(item);
+    }
 }
 
+void SurfaceTexture::onSetFrameRate(float frameRate, int8_t compatibility,
+                                    int8_t changeFrameRateStrategy) {
+    sp<SurfaceTextureListener> listener;
+    {
+        std::scoped_lock _l(mMutex);
+        listener = mSurfaceTextureListener;
+    }
+
+    if (listener) {
+        listener->onSetFrameRate(frameRate, compatibility, changeFrameRateStrategy);
+    }
+}
 status_t SurfaceTexture::setConsumerUsageBits(uint64_t usage) {
-    return ConsumerBase::setConsumerUsageBits(usage | DEFAULT_USAGE_FLAGS);
+    return mConsumer->setConsumerUsageBits(usage | DEFAULT_USAGE_FLAGS);
 }
 
-void SurfaceTexture::dumpLocked(String8& result, const char* prefix) const {
-    result.appendFormat("%smTexName=%d mCurrentTexture=%d\n"
+void SurfaceTexture::dumpState(String8& result, const char* prefix) {
+    std::scoped_lock _l(mMutex);
+    auto currentTextureId = mCurrentTexture ? std::to_string(mCurrentTexture->getId()) : "n/a";
+    result.appendFormat("%smTexName=%d mCurrentTexture=%s\n"
                         "%smCurrentCrop=[%d,%d,%d,%d] mCurrentTransform=%#x\n",
-                        prefix, mTexName, mCurrentTexture, prefix, mCurrentCrop.left,
+                        prefix, mTexName, currentTextureId.c_str(), prefix, mCurrentCrop.left,
                         mCurrentCrop.top, mCurrentCrop.right, mCurrentCrop.bottom,
                         mCurrentTransform);
 
-    ConsumerBase::dumpLocked(result, prefix);
+    mConsumer->dumpState(result, prefix);
 }
 
 sp<GraphicBuffer> SurfaceTexture::dequeueBuffer(int* outSlotid, android_dataspace* outDataspace,
@@ -516,7 +514,7 @@ sp<GraphicBuffer> SurfaceTexture::dequeueBuffer(int* outSlotid, android_dataspac
                                                 SurfaceTexture_createReleaseFence createFence,
                                                 SurfaceTexture_fenceWait fenceWait,
                                                 void* fencePassThroughHandle, ARect* currentCrop) {
-    Mutex::Autolock _l(mMutex);
+    std::scoped_lock _l(mMutex);
     sp<GraphicBuffer> buffer;
 
     if (mAbandoned) {
@@ -541,56 +539,52 @@ void SurfaceTexture::setSurfaceTextureListener(
         const sp<android::SurfaceTexture::SurfaceTextureListener>& listener) {
     SFT_LOGV("setSurfaceTextureListener");
 
-    Mutex::Autolock _l(mMutex);
+    std::scoped_lock _l(mMutex);
     mSurfaceTextureListener = listener;
-    if (mSurfaceTextureListener != nullptr) {
-        mFrameAvailableListenerProxy =
-                sp<FrameAvailableListenerProxy>::make(mSurfaceTextureListener);
-        setFrameAvailableListener(mFrameAvailableListenerProxy);
-    } else {
-        mFrameAvailableListenerProxy.clear();
-    }
 }
 
-void SurfaceTexture::FrameAvailableListenerProxy::onFrameAvailable(const BufferItem& item) {
-    const auto listener = mSurfaceTextureListener.promote();
-    if (listener) {
-        listener->onFrameAvailable(item);
-    }
+status_t SurfaceTexture::setMaxBufferCount(int bufferCount) {
+    return mConsumer->setMaxBufferCount(bufferCount);
 }
 
-void SurfaceTexture::onSetFrameRate(float frameRate, int8_t compatibility,
-                                    int8_t changeFrameRateStrategy) {
-    SFT_LOGV("onSetFrameRate: %.2f", frameRate);
-
-    auto listener = [&] {
-        Mutex::Autolock _l(mMutex);
-        return mSurfaceTextureListener;
-    }();
-
-    if (listener) {
-        listener->onSetFrameRate(frameRate, compatibility, changeFrameRateStrategy);
-    }
+void SurfaceTexture::setName(String8 name) {
+    mConsumer->setName(name);
 }
 
-void SurfaceTexture::initialize() {
-    SFT_LOGV("SurfaceTexture");
+void SurfaceTexture::abandon() {
+    SFT_LOGV("abandon");
+    std::scoped_lock _l(mMutex);
+
+    if (mAbandoned) {
+        SFT_LOGE("abandon: SurfaceTexture is already abandoned!");
+        return;
+    }
+
+    mConsumer->abandon([&](const sp<GraphicBuffer>& buffer) { onBufferFreedLocked(buffer); });
+    mEGLConsumer.onAbandonLocked();
+    mImageConsumer.onAbandonLocked();
+    mAbandoned = true;
+}
+
+bool SurfaceTexture::isAbandoned() const {
+    std::scoped_lock _l(mMutex);
+    return mAbandoned;
+}
+
+void SurfaceTexture::onFirstRef() {
+    static std::atomic_int32_t sSurfaceTextureId = 0;
+
+    SFT_LOGV("SurfaceTexture::onFirstRef");
 
     memcpy(mCurrentTransformMatrix, mtxIdentity.asArray(), sizeof(mCurrentTransformMatrix));
 
     mConsumer->setConsumerUsageBits(DEFAULT_USAGE_FLAGS);
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
-    if (status_t err = mConsumer->allowUnlimitedSlots(false); err != NO_ERROR) {
-        SFT_LOGE("ConsumerBase: error marking as not allowed to have unlimited slots: %s (%d)",
-                 strerror(-err), err);
-    }
-#endif
-}
+    mName = String8::format("SurfaceTexture-%d-%d", getpid(), sSurfaceTextureId++);
+    mConsumer->setName(mName);
 
-void SurfaceTexture::onFirstRef() {
-    ConsumerBase::onFirstRef();
-    initialize();
+    mConsumer->setBufferFreedListener(wp<BufferFreedListener>::fromExisting(this));
+    mConsumer->setFrameAvailableListener(wp<FrameAvailableListener>::fromExisting(this));
 }
 
 } // namespace android

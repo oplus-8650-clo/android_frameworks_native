@@ -1780,7 +1780,12 @@ void SurfaceFlinger::initiateDisplayModeChanges() {
                 mDisplayModeController.initiateModeChange(displayId, std::move(desiredMode),
                                                           constraints, outTimeline);
         if (error != display::DisplayModeController::ModeChangeResult::Changed) {
-            dropModeRequest(displayId);
+            if (FlagManager::getInstance().modeset_state_machine()) {
+                mScheduler->setModeChangePending(displayId, false);
+            } else {
+                dropModeRequest(displayId);
+            }
+
             if (error == display::DisplayModeController::ModeChangeResult::Rejected) {
                 mScheduler->onDisplayModeRejected(displayId, desiredModeId);
             }
