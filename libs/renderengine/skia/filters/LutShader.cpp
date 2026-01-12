@@ -337,6 +337,12 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     mBuilder->uniform("normalizeScalar") = uNormalizeScalar;
 
+/* QTI_BEGIN */
+    if (lutSourceIsHwc == 1) {
+        return mBuilder->makeShader();
+    }
+/* QTI_END */
+
     // de-gamma the image without changing the primaries
     return mBuilder->makeShader()->makeWithWorkingColorSpace(
             toSkColorSpace(srcDataspace)->makeLinearGamma());
@@ -346,7 +352,7 @@ sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      std::shared_ptr<gui::DisplayLuts> displayLuts,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                      ui::Dataspace srcDataspace
-                                     , bool lutSourceIsHwc
+                                     , sk_sp<SkColorSpace> outColorSpace, bool lutSourceIsHwc
                                     ) {
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     if (mBuilder == nullptr) {
@@ -393,6 +399,12 @@ sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      );
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         }
+
+/* QTI_BEGIN */
+        if (lutSourceIsHwc == 1) {
+            input = input->makeWithWorkingColorSpace(outColorSpace);
+        }
+/* QTI_END */
     }
     return input;
 }
