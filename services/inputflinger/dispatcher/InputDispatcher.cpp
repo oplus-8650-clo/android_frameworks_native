@@ -3024,8 +3024,7 @@ void InputDispatcher::DispatcherTouchState::addPointerWindowTarget(
                    << ", windowInfo->globalScaleFactor=" << windowInfo.globalScaleFactor;
     }
     ui::Transform transform = windowInfo.transform;
-    if (input_flags::use_topology_aware_flag() &&
-        !windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE) &&
+    if (!windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE) &&
         pointerDisplayId.has_value() && windowInfo.displayId != pointerDisplayId.value()) {
         transform = transform *
                 (mWindowInfos.getDisplayTransform(windowInfo.displayId).inverse() *
@@ -3477,7 +3476,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                 bool shouldCreateNewMotionEntry = resolvedAction != motionEntry.action;
 
                 ui::LogicalDisplayId resolvedDisplayId = motionEntry.displayId;
-                if (input_flags::use_topology_aware_flag() && !connection->isFocusMonitor) {
+                if (!connection->isFocusMonitor) {
                     const WindowInfo& windowInfo = *inputTarget.windowHandle->getInfo();
                     if (motionEntry.displayId.isValid() &&
                         motionEntry.displayId != windowInfo.displayId &&
@@ -5276,8 +5275,7 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
         // Sending pointer to a different display than the window. This is a
         // cross-display drag gesture, use the new display's transform if window is topology aware.
         // Otherwise use the window's display coordinate space.
-        if (!input_flags::use_topology_aware_flag() ||
-            windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
+        if (windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
             return getDisplayTransform(*pointerDisplayId);
         } else {
             // If the window is not topology aware it will receive event in its own display's

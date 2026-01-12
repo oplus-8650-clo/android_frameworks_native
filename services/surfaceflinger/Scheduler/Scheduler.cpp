@@ -536,7 +536,10 @@ bool Scheduler::isVsyncValid(TimePoint expectedVsyncTime, uid_t uid) const {
         return true;
     }
 
-    SFTRACE_FORMAT("%s uid: %d frameRate: %s", __func__, uid, to_string(*frameRate).c_str());
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        SFTRACE_FORMAT("%s uid: %d frameRate: %s", __func__, uid, to_string(*frameRate).c_str());
+    }
+
     return getVsyncSchedule()->getTracker().isVSyncInPhase(expectedVsyncTime.ns(), *frameRate);
 }
 

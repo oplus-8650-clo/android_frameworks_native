@@ -15660,86 +15660,86 @@ protected:
 
         mDispatcher->setDisplayTopology(mTopology);
     }
-
-    void testMultiDisplayMouseGesture() {
-        // pointer-down
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
-                                          .displayId(DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                          .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID),
-                                          WithRawCoords(60, 60)));
-
-        mDispatcher->notifyMotion(
-                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
-                        .displayId(DISPLAY_ID)
-                        .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                        .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
-                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
-
-        // pointer-move
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                          .displayId(DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                          .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
-
-        // pointer-move with different display, by default windows are not topology aware and
-        // receive events as if they were in the same display.
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                          .displayId(SECOND_DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                                          .build());
-        // events should be delivered with the second displayId and in corresponding coordinate
-        // space.
-        // The second display is in ROT_270 orientation, so the input coordinates are transformed
-        // accordingly (70, 70) -> (70, 430)
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                          WithDisplayId(SECOND_DISPLAY_ID),
-                                          WithRawCoords(70, 430)));
-
-        // pointer-up
-        mDispatcher->notifyMotion(
-                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
-                        .displayId(SECOND_DISPLAY_ID)
-                        .buttonState(0)
-                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                        .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
-                                          WithDisplayId(SECOND_DISPLAY_ID),
-                                          WithRawCoords(70, 430)));
-
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
-                                          .displayId(SECOND_DISPLAY_ID)
-                                          .buttonState(0)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(430))
-                                          .build());
-        mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
-    }
 };
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGesture) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
-
     // Only the windows that are topology aware receive the cross display gesture.
     mWindow->setDisplayTopologyAware(true);
     updateWindowInfos();
 
-    testMultiDisplayMouseGesture();
-}
+    // pointer-down
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(ACTION_DOWN),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
 
-TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGestureWithoutTopologyAwareFlag) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, false);
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
 
-    testMultiDisplayMouseGesture();
+    // pointer-move
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
+
+    // pointer-move with different display, by default windows are not topology aware and
+    // receive events as if they were in the same display.
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                    .build());
+    // events should be delivered with the second displayId and in corresponding coordinate
+    // space.
+    // The second display is in ROT_270 orientation, so the input coordinates are transformed
+    // accordingly (70, 70) -> (70, 430)
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+            WithDisplayId(SECOND_DISPLAY_ID),
+            WithRawCoords(70, 430)));
+
+    // pointer-up
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(0)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+            WithDisplayId(SECOND_DISPLAY_ID),
+            WithRawCoords(70, 430)));
+
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(0)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(430))
+                    .build());
+    mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrimaryDisplay) {
@@ -15998,8 +15998,6 @@ protected:
 };
 
 TEST_P(InputDispatcherCrossDisplayGestureTestFixture, InputDispatcherCrossDisplayGestureTest) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
-
     const auto& [_, sourceDisplayOrientation, destinationDisplayOrientation, sourceDisplayDensity,
                  destinationDisplayDensity, sourceDisplayCoords, destinationDisplayCoords] =
             GetParam();

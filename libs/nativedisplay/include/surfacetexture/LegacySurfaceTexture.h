@@ -343,7 +343,7 @@ protected:
      */
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
     virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
-                                         BufferFreedCallback onBufferFreed) override;
+                                         BufferFreedCallback onBufferFreed = [](auto&){}) override;
 #else
     virtual status_t releaseBufferLocked(
             int slot, const sp<GraphicBuffer>& graphicBuffer, EGLDisplay display = EGL_NO_DISPLAY,

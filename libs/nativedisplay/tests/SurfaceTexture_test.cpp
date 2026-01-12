@@ -28,6 +28,7 @@
 #include <system/window.h>
 #include <ui/BufferQueueDefs.h>
 #include <ui/GraphicBuffer.h>
+#include <ui/PixelFormat.h>
 #include <ui/Rect.h>
 #include <utils/Errors.h>
 
@@ -45,6 +46,7 @@ constexpr uint32_t kBlue = 0x0000ffff;
 constexpr ui::Size kTextureSize = {4, 4};
 
 using com::android::graphics::libgui::flags::surface_texture_updateteximage_stop_early;
+using com::android::graphics::libgui::flags::wb_surfacetexture;
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_SURFACETEXTURE)
 typedef SurfaceTexture SurfaceTextureType;
@@ -494,9 +496,108 @@ TEST_F(SurfaceTextureTest, DetachAndReattachToContext) {
     EXPECT_TRUE(checkAllPixelsMatch(textureId2, kRed));
 }
 
+TEST_F(SurfaceTextureTest, MemoryManagement_GLModeClearsBuffers_WhenBufferDetached) {
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    // Run a single buffer all the way through the queue.
+    sp<GraphicBuffer> bufferA;
+    queueColorToSurface(surface, kRed, &bufferA);
+
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    ASSERT_TRUE(checkAllPixelsMatch(textureId1, kRed));
+
+    queueColorToSurface(surface, kBlue);
+    ASSERT_EQ(OK, surfaceTexture->updateTexImage());
+    ASSERT_TRUE(checkAllPixelsMatch(textureId1, kBlue));
+
+    // When the buffer has been acquired and finally released by the second updateTexImage, remove
+    // it from the BQ and make sure it's not referenced anywhere else.
+    sp<GraphicBuffer> bufferToDelete;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&bufferToDelete, &fence));
+
+    ASSERT_EQ(bufferA, bufferToDelete)
+            << "Unexpected buffer from queue. Expected " << bufferA->getId() << " but got "
+            << bufferToDelete->getId();
+
+    wp<GraphicBuffer> weakBufferToDelete = bufferToDelete;
+    bufferToDelete = bufferA = nullptr;
+
+    ASSERT_NE(nullptr, weakBufferToDelete.promote())
+            << "The ST should hold a reference to buffers it's seen if they're still in the queue.";
+
+    ASSERT_EQ(OK, surface->detachBuffer(weakBufferToDelete.promote()));
+
+    ASSERT_EQ(nullptr, weakBufferToDelete.promote())
+            << "When the buffer is removed from the queue, it should be removed from the ST.";
+}
+
+TEST_F(SurfaceTextureTest, MemoryManagement_ConsumerModeClearsBuffers_WhenBufferDetached) {
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+    ASSERT_EQ(OK, surface->setUsage(GRALLOC_USAGE_SW_WRITE_OFTEN));
+
+    ASSERT_EQ(OK, surfaceTexture->detachFromContext());
+    surfaceTexture->takeConsumerOwnership();
+
+    // Run a single buffer all the way through the queue.
+    sp<GraphicBuffer> bufferA;
+    queueColorToSurface(surface, kRed, &bufferA);
+
+    sp<GraphicBuffer> dequeuedBuffer = dequeueFromSurfaceTextureConsumer(surfaceTexture);
+    ASSERT_EQ(bufferA, dequeuedBuffer);
+
+    queueColorToSurface(surface, kBlue);
+    dequeueFromSurfaceTextureConsumer(surfaceTexture);
+
+    // When the buffer has been acquired and finally released by the second updateTexImage, remove
+    // it from the BQ and make sure it's not referenced anywhere else.
+    sp<GraphicBuffer> bufferToDelete;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&bufferToDelete, &fence));
+
+    ASSERT_EQ(bufferA, bufferToDelete)
+            << "Unexpected buffer from queue. Expected " << bufferA->getId() << " but got "
+            << bufferToDelete->getId();
+
+    wp<GraphicBuffer> weakBufferToDelete = bufferToDelete;
+    bufferToDelete = dequeuedBuffer = bufferA = nullptr;
+
+    ASSERT_NE(nullptr, weakBufferToDelete.promote())
+            << "The ST should hold a reference to buffers it's seen if they're still in the queue.";
+
+    ASSERT_EQ(OK, surface->detachBuffer(weakBufferToDelete.promote()));
+
+    ASSERT_EQ(nullptr, weakBufferToDelete.promote())
+            << "When the buffer is removed from the queue, it should be removed from the ST.";
+}
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 // See b/458169755.
-TEST_F(SurfaceTextureTest, UnlimitedSlots_NotAllowed) {
+TEST_F(SurfaceTextureTest, Legacy_UnlimitedSlots_NotAllowed) {
+    if (wb_surfacetexture()) {
+        GTEST_SKIP();
+        return;
+    }
+
     GLuint textureId1;
     glGenTextures(1, &textureId1);
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
@@ -509,6 +610,35 @@ TEST_F(SurfaceTextureTest, UnlimitedSlots_NotAllowed) {
 
     EXPECT_NE(OK, surface->setMaxDequeuedBufferCount(BufferQueueDefs::NUM_BUFFER_SLOTS * 2));
 }
-#endif
 
+TEST_F(SurfaceTextureTest, UnlimitedSlots_Allowed) {
+    constexpr size_t kManyDequeuedBuffers = BufferQueueDefs::NUM_BUFFER_SLOTS * 2;
+    if (!wb_surfacetexture()) {
+        GTEST_SKIP();
+        return;
+    }
+
+    GLuint textureId1;
+    glGenTextures(1, &textureId1);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId1);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId1);
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(kManyDequeuedBuffers));
+
+    std::vector<Surface::BatchBuffer> buffers(kManyDequeuedBuffers);
+    ASSERT_EQ(OK, surface->dequeueBuffers(&buffers));
+
+    for (size_t i = 0; i < kManyDequeuedBuffers; i++) {
+        auto& buffer = buffers[i];
+        sp<GraphicBuffer> graphicBuffer = static_cast<GraphicBuffer*>(buffer.buffer);
+        EXPECT_EQ(OK, surface->queueBuffer(graphicBuffer, sp<Fence>::make(buffer.fenceFd)))
+                << "Unable to queue buffer " << graphicBuffer->getId() << " #" << i;
+    }
+}
+#endif
 } // namespace android

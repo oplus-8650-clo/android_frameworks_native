@@ -39,6 +39,12 @@ public:
         return instance;
     }
 
+    static BackgroundExecutor& getInstanceForTransaction() {
+        static BackgroundExecutor instance(true);
+        pthread_setname_np(instance.mThread.native_handle(), "BckgrndExec HP");
+        return instance;
+    }
+
     using Callbacks = ftl::SmallVector<std::function<void()>, 10>;
     // Queues callbacks onto a work queue to be executed by a background thread.
     // This is safe to call from multiple threads.
