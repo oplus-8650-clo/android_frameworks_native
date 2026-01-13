@@ -47,9 +47,7 @@ const SkString kEffectSource_LutEffect(R"(
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     uniform int lutSourceIsHwc;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     uniform int interpolation;
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     uniform vec3 luminanceCoefficients; // for CIE_Y
     // for hlg/pq transfer function, we need normalize it to [0.0, 1.0]
     // we use `normalizeScalar` to do so
@@ -313,9 +311,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     const int ulutSourceIsHwc = lutSourceIsHwc ? 1 : 0;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     const int uInterpolation = static_cast<int>(INTERPOLATION_METHOD);
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     const float uNormalizeScalar = static_cast<float>(normalizeScalar);
 
     if (static_cast<LutProperties::SamplingKey>(samplingKey) == LutProperties::SamplingKey::CIE_Y) {
@@ -332,9 +328,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     mBuilder->uniform("lutSourceIsHwc") = ulutSourceIsHwc;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     mBuilder->uniform("interpolation") = uInterpolation;
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     mBuilder->uniform("normalizeScalar") = uNormalizeScalar;
 
 /* QTI_BEGIN */
