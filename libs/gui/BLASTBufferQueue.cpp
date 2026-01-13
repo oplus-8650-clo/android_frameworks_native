@@ -269,8 +269,18 @@ BLASTBufferQueue::~BLASTBufferQueue() {
 // QTI_END: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
     TransactionCompletedListener::getInstance()->removeQueueStallListener(this);
 
-    if (mTransactionReadyCallback) {
-        mTransactionReadyCallback(mSyncTransaction);
+    std::function<void(SurfaceComposerClient::Transaction*)> callback;
+    SurfaceComposerClient::Transaction* transaction;
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        callback = mTransactionReadyCallback;
+        transaction = mSyncTransaction;
+        mTransactionReadyCallback = nullptr;
+        mSyncTransaction = nullptr;
+    }
+
+    if (callback) {
+        callback(transaction);
     }
 
     if (mPendingTransactions.empty()) {
@@ -1367,7 +1377,6 @@ void BLASTBufferQueue::resizeFrameEventHistory(size_t newSize) {
     // point in time, so just ignore. This can go away once the class relationships and lifetimes of
     // objects are cleaned up with a major refactor of BufferQueue as a whole.
     if (mBufferItemConsumer != nullptr) {
-        std::unique_lock _lock{mMutex};
         mBufferItemConsumer->resizeFrameEventHistory(newSize);
     }
 }

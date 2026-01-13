@@ -58,6 +58,7 @@ struct ProcHook {
         KHR_present_id,
         KHR_present_id2,
         EXT_present_timing,
+        KHR_present_wait2,
         ANDROID_external_memory_android_hardware_buffer,
         KHR_bind_memory2,
         KHR_device_group_creation,

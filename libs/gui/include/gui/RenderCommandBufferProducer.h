@@ -41,16 +41,18 @@ public:
 
         mCurrentBuffer = nullptr;
         mCommandBuffer->producerRelease();
+        mSharedRegionRenderCommands->mFrameNumber++;
     }
 
     void startRecording();
     void finishRecording();
 
     status_t writeToParcel(Parcel* parcel) const;
+    uint64_t getFrameNumber() { return mSharedRegionRenderCommands->mFrameNumber; }
 
 private:
     int mAshmemFdRenderCommands;
-    void* mSharedRegionRenderCommands;
+    IpcRenderRegion* mSharedRegionRenderCommands;
     LocklessTripleBuffer<RenderCommandBuffer>* mCommandBuffer;
     RenderCommandBuffer* mCurrentBuffer = nullptr;
 };

@@ -16,7 +16,9 @@
 
 #pragma once
 
+#include <gui/LocklessTripleBuffer.h>
 #include <log/log.h>
+#include <atomic>
 #include <string>
 #include "RPointer.h"
 
@@ -94,5 +96,10 @@ inline bool SetRSpan(RSpan<T>& span, RenderCommandBuffer* commandBuffer, const T
     }
     return true;
 }
+
+struct IpcRenderRegion {
+    LocklessTripleBuffer<RenderCommandBuffer> mCommandBuffers;
+    std::atomic<uint64_t> mFrameNumber;
+};
 
 } // namespace android

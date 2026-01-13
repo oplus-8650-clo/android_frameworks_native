@@ -23,6 +23,7 @@
 #include <android/binder_libbinder.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
+#include <android/binder_stability.h>
 #include <gtest/gtest.h>
 #include <iface/iface.h>
 #include <selinux/selinux.h>
@@ -1248,6 +1249,17 @@ TEST(NdkBinder, SetMinThreadsNull) {
 
 TEST(NdkBinder, SetMinThreadsZero) {
     EXPECT_EQ(STATUS_BAD_VALUE, AIBinder_setMinRpcThreads(nullptr, 0));
+}
+
+TEST(NdkBinder, GetStability) {
+    ndk::SpAIBinder binder(AServiceManager_waitForService(kBinderNdkUnitTestService));
+    std::shared_ptr<aidl::IBinderNdkUnitTest> service =
+            aidl::IBinderNdkUnitTest::fromBinder(binder);
+    ASSERT_NE(service, nullptr);
+
+    EXPECT_TRUE(AIBinder_isSystemStable(binder.get()));
+    EXPECT_FALSE(AIBinder_isVendorStable(binder.get()));
+    EXPECT_FALSE(AIBinder_requiresVintfDeclaration(binder.get()));
 }
 
 static void addOne(int* to) {

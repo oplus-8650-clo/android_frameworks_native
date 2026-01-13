@@ -48,6 +48,18 @@ void AIBinder_markVintfStability(AIBinder* binder) {
     Stability::markVintf(binder->getBinder().get());
 }
 
+bool AIBinder_requiresVintfDeclaration(AIBinder* binder) {
+    return Stability::requiresVintfDeclaration(binder->getBinder().get());
+}
+
+bool AIBinder_isVendorStable(AIBinder* binder) {
+    return Stability::isVendorStable(binder->getBinder().get());
+}
+
+bool AIBinder_isSystemStable(AIBinder* binder) {
+    return Stability::isSystemStable(binder->getBinder().get());
+}
+
 // explicit extern because symbol is only declared in header when __ANDROID_VENDOR__
 extern "C" void AIBinder_forceDowngradeToVendorStability(AIBinder* binder) {
     Stability::forceDowngradeToVendorStability(binder->getBinder());

@@ -49,8 +49,11 @@ public:
         mCurrentBuffer = commandBuffer;
     }
 
+    uint64_t getFrameNumber() { return mSharedRegionRenderCommands->mFrameNumber; }
+
 private:
     int mFdCommandBuffer = -1;
+    IpcRenderRegion* mSharedRegionRenderCommands;
     LocklessTripleBuffer<RenderCommandBuffer>* mCommandBuffer;
     RenderCommandBuffer* mCurrentBuffer = nullptr;
 

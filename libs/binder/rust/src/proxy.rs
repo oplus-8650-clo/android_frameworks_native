@@ -128,6 +128,51 @@ impl SpIBinder {
     pub fn downgrade(&mut self) -> WpIBinder {
         WpIBinder::new(self)
     }
+
+    /// Returns true if this binder object requires a VINTF declaration.
+    #[cfg(not(android_ndk))]
+    pub fn requires_vintf_declaration(&self) -> bool {
+        #[cfg(feature = "android_ndk_compat_symbols")]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            binder_rs_ndk_compat::requires_vintf_declaration(self.as_raw())
+        }
+        #[cfg(not(feature = "android_ndk_compat_symbols"))]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            sys::AIBinder_requiresVintfDeclaration(self.as_raw())
+        }
+    }
+
+    /// Returns true if this binder object is vendor stable.
+    #[cfg(not(android_ndk))]
+    pub fn is_vendor_stable(&self) -> bool {
+        #[cfg(feature = "android_ndk_compat_symbols")]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            binder_rs_ndk_compat::is_vendor_stable(self.as_raw())
+        }
+        #[cfg(not(feature = "android_ndk_compat_symbols"))]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            sys::AIBinder_isVendorStable(self.as_raw())
+        }
+    }
+
+    /// Returns true if this binder object is system stable.
+    #[cfg(not(android_ndk))]
+    pub fn is_system_stable(&self) -> bool {
+        #[cfg(feature = "android_ndk_compat_symbols")]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            binder_rs_ndk_compat::is_system_stable(self.as_raw())
+        }
+        #[cfg(not(feature = "android_ndk_compat_symbols"))]
+        // Safety: `self.as_raw()` returns a valid `AIBinder` pointer.
+        unsafe {
+            sys::AIBinder_isSystemStable(self.as_raw())
+        }
+    }
 }
 
 pub mod unstable_api {

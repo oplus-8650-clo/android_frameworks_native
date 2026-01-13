@@ -1849,9 +1849,7 @@ TEST_F(BufferQueueUnlimitedTest, CanAcquireAndReleaseAll) {
 
         BufferItem buffer;
         EXPECT_EQ(OK, mConsumer->acquireBuffer(&buffer, 0));
-        EXPECT_EQ(OK,
-                  mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, EGL_NO_DISPLAY,
-                                           EGL_NO_SYNC, buffer.mFence));
+        EXPECT_EQ(OK, mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, buffer.mFence));
     }
 }
 
@@ -1890,9 +1888,7 @@ TEST_F(BufferQueueUnlimitedTest, GetReleasedBuffersExtended) {
 
         BufferItem buffer;
         EXPECT_EQ(OK, mConsumer->acquireBuffer(&buffer, 0));
-        EXPECT_EQ(OK,
-                  mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, EGL_NO_DISPLAY,
-                                           EGL_NO_SYNC_KHR, buffer.mFence));
+        EXPECT_EQ(OK, mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, buffer.mFence));
     }
 
     EXPECT_EQ(OK, mConsumer->getReleasedBuffersExtended(&releasedSlots));

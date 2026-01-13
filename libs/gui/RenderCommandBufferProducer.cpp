@@ -48,17 +48,20 @@ bool createSharedMemoryRegion(int* fd, void** sharedMemory, size_t size) {
 }
 
 RenderCommandBufferProducer::RenderCommandBufferProducer() {
-    if (!createSharedMemoryRegion(&mAshmemFdRenderCommands, &mSharedRegionRenderCommands,
-                                  sizeof(LocklessTripleBuffer<RenderCommandBuffer>))) {
+    if (!createSharedMemoryRegion(&mAshmemFdRenderCommands,
+                                  (void**)(&(mSharedRegionRenderCommands)),
+                                  sizeof(IpcRenderRegion))) {
         LOG_ALWAYS_FATAL("Failed to create shared memory region for RenderCommandBufferProducer");
     }
-    mCommandBuffer = new (mSharedRegionRenderCommands) LocklessTripleBuffer<RenderCommandBuffer>();
+    mSharedRegionRenderCommands = new ((void*)mSharedRegionRenderCommands) IpcRenderRegion();
+    mCommandBuffer = &(mSharedRegionRenderCommands->mCommandBuffers);
+    mSharedRegionRenderCommands->mFrameNumber = 0;
 
     // mHardwareBufferCacheToken = new BBinder();
 }
 
 RenderCommandBufferProducer::~RenderCommandBufferProducer() {
-    ::munmap(mSharedRegionRenderCommands, sizeof(LocklessTripleBuffer<RenderCommandBuffer>));
+    ::munmap(mSharedRegionRenderCommands, sizeof(IpcRenderRegion));
     close(mAshmemFdRenderCommands);
 }
 

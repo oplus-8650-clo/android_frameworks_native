@@ -67,6 +67,8 @@ public:
     static bool namesAnAidlComposerService(std::string_view serviceName);
 
     explicit AidlComposer(const std::string& serviceName);
+    explicit AidlComposer(
+        std::shared_ptr<aidl::android::hardware::graphics::composer3::IComposer> composer);
     ~AidlComposer() override;
 
     bool isSupported(OptionalFeature) const override;
@@ -237,6 +239,8 @@ public:
     Error getDisplayDecorationSupport(Display display,
                                       std::optional<DisplayDecorationSupport>* support) override;
     Error setIdleTimerEnabled(Display displayId, std::chrono::milliseconds timeout) override;
+
+    friend class AidlComposerHalTest;
 
     Error getPhysicalDisplayOrientation(Display displayId,
                                         AidlTransform* outDisplayOrientation) override;

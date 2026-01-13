@@ -380,11 +380,13 @@ void SkiaRenderEngine::finishRenderingAndAbandonContexts() {
 void SkiaRenderEngine::useProtectedContext(bool useProtectedContext) {
     if (useProtectedContext == mInProtectedContext ||
         (useProtectedContext && !supportsProtectedContent())) {
-        return;
+        return; // No context switch is required
     }
 
-    // release any scratch resources before switching into a new mode
-    if (getActiveContext()) {
+    // If the active context's cache management policy is to get rid of purgeable resources upon
+    // switching contexts, then handle doing so here.
+    if (getActiveContext() &&
+        activeContextCachePolicy() == CacheManagementPolicy::kUponContextSwitch) {
         getActiveContext()->purgeUnlockedScratchResources();
     }
 
@@ -403,6 +405,10 @@ void SkiaRenderEngine::useProtectedContext(bool useProtectedContext) {
 
 SkiaGpuContext* SkiaRenderEngine::getActiveContext() {
     return mInProtectedContext ? mProtectedContext.get() : mContext.get();
+}
+
+SkiaRenderEngine::CacheManagementPolicy SkiaRenderEngine::activeContextCachePolicy() const {
+    return mInProtectedContext ? mProtectedCachePolicy : mUnprotectedCachePolicy;
 }
 
 static float toDegrees(uint32_t transform) {
@@ -589,6 +595,24 @@ void SkiaRenderEngine::cleanupPostRender() {
     SFTRACE_CALL();
     std::lock_guard<std::mutex> lock(mRenderingMutex);
     mTextureCleanupMgr.cleanup();
+
+    // Check each context's cache management policy, cleaning up any cached resources that have not
+    // been used after a certain amount of time. The duration is chosen based upon how long we
+    // generally expect resources to remain useful for.
+    if (mUnprotectedCachePolicy == CacheManagementPolicy::kClearStaleResourcesPostRender) {
+        // TODO(b/471222157): Currently, no RenderEngine implementations will encounter this.
+        // Eventually, update RenderEngine to use kClearStaleResourcesPostRender for its unprotected
+        // cache and determine the expected/optimal time duration to use.
+        static constexpr std::chrono::milliseconds kUnusedDuration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(30));
+        mContext->purgeResourcesNotUsedIn(kUnusedDuration);
+    }
+    if (mProtectedContext &&
+        mProtectedCachePolicy == CacheManagementPolicy::kClearStaleResourcesPostRender) {
+        static constexpr std::chrono::milliseconds kProtectedUnusedDuration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(30));
+        mProtectedContext->purgeResourcesNotUsedIn(kProtectedUnusedDuration);
+    }
 }
 
 sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(

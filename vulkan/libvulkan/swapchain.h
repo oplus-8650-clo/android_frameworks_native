@@ -51,6 +51,7 @@ VKAPI_ATTR VkResult ReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSw
 VKAPI_ATTR VkResult GetSwapchainTimingPropertiesEXT(VkDevice, VkSwapchainKHR , VkSwapchainTimingPropertiesEXT*, uint64_t*);
 VKAPI_ATTR VkResult GetSwapchainTimeDomainPropertiesEXT(VkDevice , VkSwapchainKHR , VkSwapchainTimeDomainPropertiesEXT*, uint64_t*);
 VKAPI_ATTR VkResult SetSwapchainPresentTimingQueueSizeEXT(VkDevice , VkSwapchainKHR , uint32_t );
+VKAPI_ATTR VkResult WaitForPresent2KHR(VkDevice , VkSwapchainKHR , const VkPresentWait2InfoKHR*);
 
 // clang-format on
 

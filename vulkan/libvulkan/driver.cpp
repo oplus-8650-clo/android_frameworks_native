@@ -693,6 +693,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
+            case ProcHook::KHR_present_wait2:
             case ProcHook::KHR_external_fence_fd:
             case ProcHook::EXTENSION_CORE_1_0:
             case ProcHook::EXTENSION_CORE_1_1:
@@ -730,6 +731,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
+            case ProcHook::KHR_present_wait2:
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
@@ -1169,6 +1171,11 @@ VkResult EnumerateDeviceExtensionProperties(
     if (flags::present_id2_khr()) {
         loader_extensions.push_back(
             {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
+    }
+
+    if (flags::vk_khr_present_wait2()) {
+        loader_extensions.push_back({VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME,
+                                     VK_KHR_PRESENT_WAIT_2_SPEC_VERSION});
     }
 
     // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
@@ -1733,6 +1740,17 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
                             pFeats);
                     features->presentId2 = VK_TRUE;
                 }
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR: {
+                if (!flags::vk_khr_present_wait2()) {
+                    break;
+                }
+                auto features =
+                    reinterpret_cast<VkPhysicalDevicePresentWait2FeaturesKHR*>(
+                        pFeats);
+                features->presentWait2 = VK_TRUE;
                 break;
             }
 

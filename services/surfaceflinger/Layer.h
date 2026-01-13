@@ -127,9 +127,9 @@ public:
         sp<NativeHandle> sidebandStream;
         mat4 colorTransform;
 
-        // The deque of callback handles for this frame. The back of the deque contains the most
-        // recent callback handle.
-        std::deque<sp<CallbackHandle>> callbackHandles;
+        // The callback handles for this frame. The back of the vector contains the most recent
+        // callback handle.
+        std::vector<CallbackHandle> callbackHandles;
         nsecs_t desiredPresentTime = 0;
         bool isAutoTimestamp = true;
 
@@ -196,7 +196,7 @@ public:
     bool setSidebandStream(const sp<NativeHandle>& /*sidebandStream*/,
                            const FrameTimelineInfo& /* info*/, nsecs_t /* postTime */,
                            gui::GameMode gameMode, int32_t systemContentPriority);
-    bool setTransactionCompletedListeners(const std::vector<sp<CallbackHandle>>& /*handles*/,
+    bool setTransactionCompletedListeners(std::vector<CallbackHandle> /*handles*/,
                                           bool willPresent);
 
     sp<LayerFE> getCompositionEngineLayerFE(const frontend::LayerHierarchy::TraversalPath&);
@@ -269,9 +269,6 @@ public:
 
     bool fenceHasSignaled() const;
     void onPreComposition(nsecs_t refreshStartTime);
-
-    // Tracks mLastClientCompositionFence and gets the callback handle for this layer.
-    sp<CallbackHandle> findCallbackHandle();
 
     // Adds the future release fence to a list of fences that are used to release the
     // last presented buffer. Also keeps track of the layerstack in a list of previous
@@ -565,6 +562,9 @@ private:
     // the mStateLock.
     std::optional<ui::Transform::RotationFlags> mTransformHint = std::nullopt;
     std::optional<gui::CornerRadii> mCornerRadii = std::nullopt;
+
+    // Tracks mLastClientCompositionFence and gets the callback handle for this layer.
+    CallbackHandle* findCallbackHandle();
 
     ReleaseCallbackId mPreviousReleaseCallbackId = ReleaseCallbackId::INVALID_ID;
     sp<IBinder> mPreviousReleaseBufferEndpoint;
