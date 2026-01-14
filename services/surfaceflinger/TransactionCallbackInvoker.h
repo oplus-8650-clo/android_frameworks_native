@@ -34,7 +34,7 @@
 
 namespace android {
 
-class CallbackHandle : public RefBase {
+class CallbackHandle {
 public:
     CallbackHandle(const sp<IBinder>& transactionListener, const std::vector<CallbackId>& ids,
                    const sp<IBinder>& sc);
@@ -64,9 +64,8 @@ public:
 
 class TransactionCallbackInvoker {
 public:
-    status_t addCallbackHandles(const std::deque<sp<CallbackHandle>>& handles);
-    status_t addOnCommitCallbackHandles(const std::deque<sp<CallbackHandle>>& handles,
-                                             std::deque<sp<CallbackHandle>>& outRemainingHandles);
+    void addCallbackHandles(std::vector<CallbackHandle>&& handles);
+    void addOnCommitCallbackHandles(std::vector<CallbackHandle>& handles);
 
     void addEmptyTransaction(const ListenerCallbacks& listenerCallbacks);
 
@@ -77,12 +76,11 @@ public:
         mCompletedTransactions.clear();
     }
 
-    status_t addCallbackHandle(const sp<CallbackHandle>& handle);
+    void addCallbackHandle(CallbackHandle&& handle);
 
 private:
-    status_t findOrCreateTransactionStats(const sp<IBinder>& listener,
-                                          const std::vector<CallbackId>& callbackIds,
-                                          TransactionStats** outTransactionStats);
+    TransactionStats* findOrCreateTransactionStats(const sp<IBinder>& listener,
+                                                   const std::vector<CallbackId>& callbackIds);
 
     std::unordered_map<sp<IBinder>, std::deque<TransactionStats>, IListenerHash>
         mCompletedTransactions;

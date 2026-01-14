@@ -61,3 +61,10 @@ flag {
   bug: "370568136"
   is_fixed_read_only: true
 }
+
+flag {
+  name: "vk_khr_present_wait2"
+  namespace: "core_graphics"
+  description: "Enable support for the VK_KHR_present_wait2 vulkan extension"
+  bug: "441472170"
+}

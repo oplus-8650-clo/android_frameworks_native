@@ -69,6 +69,14 @@ bool Stability::requiresVintfDeclaration(const sp<IBinder>& binder) {
     return check(getRepr(binder.get()), Level::VINTF);
 }
 
+bool Stability::isVendorStable(const sp<IBinder>& binder) {
+    return check(getRepr(binder.get()), Level::VENDOR);
+}
+
+bool Stability::isSystemStable(const sp<IBinder>& binder) {
+    return check(getRepr(binder.get()), Level::SYSTEM);
+}
+
 void Stability::tryMarkCompilationUnit(IBinder* binder) {
     std::ignore = setRepr(binder, getLocalLevel(), REPR_NONE);
 }

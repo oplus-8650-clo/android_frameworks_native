@@ -25,7 +25,7 @@ namespace android {
 RenderCommandBufferConsumer::RenderCommandBufferConsumer() {}
 
 RenderCommandBufferConsumer::~RenderCommandBufferConsumer() {
-    munmap(mCommandBuffer, sizeof(LocklessTripleBuffer<RenderCommandBuffer>));
+    munmap(mCommandBuffer, sizeof(IpcRenderRegion));
     if (mFdCommandBuffer != -1) {
         close(mFdCommandBuffer);
     }
@@ -36,9 +36,10 @@ RenderCommandBufferConsumer::~RenderCommandBufferConsumer() {
 
 void RenderCommandBufferConsumer::adoptFdCommandBuffer(int fd) {
     mFdCommandBuffer = fd;
-    void* region = mmap(nullptr, sizeof(LocklessTripleBuffer<RenderCommandBuffer>),
-                        PROT_READ | PROT_WRITE, MAP_SHARED, mFdCommandBuffer, 0);
-    mCommandBuffer = (LocklessTripleBuffer<RenderCommandBuffer>*)region;
+    mSharedRegionRenderCommands =
+            (IpcRenderRegion*)mmap(nullptr, sizeof(IpcRenderRegion), PROT_READ | PROT_WRITE,
+                                   MAP_SHARED, mFdCommandBuffer, 0);
+    mCommandBuffer = &(mSharedRegionRenderCommands->mCommandBuffers);
 }
 
 RenderCommandBuffer* RenderCommandBufferConsumer::consumerAcquire() {

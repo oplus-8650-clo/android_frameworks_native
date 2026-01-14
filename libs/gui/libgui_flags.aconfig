@@ -122,6 +122,7 @@ flag {
   namespace: "core_graphics"
   description: "BufferQueueProducer API to control CPU throttling."
   bug: "359252619"
+  is_exported: true
 } # bq_producer_backpressure_control
 
 flag {
@@ -148,4 +149,3 @@ flag {
   description: "Enable out of process rendering"
   bug: "448153717"
 } # out_of_process_rendering
-

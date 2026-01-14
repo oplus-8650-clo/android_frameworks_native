@@ -60,10 +60,16 @@ inline void mergeFence(const char* debugName, sp<Fence>&& incomingFence, sp<Fenc
  */
 class FenceMerger {
 public:
-    FenceMerger();
-    explicit FenceMerger(sp<Fence> fence);
-    FenceMerger(FenceMerger&& other) noexcept;
-    ~FenceMerger();
+    FenceMerger() = default;
+    explicit FenceMerger(sp<Fence> fence) : mFence{std::move(fence)} {}
+
+    FenceMerger(const FenceMerger&) = delete;
+    FenceMerger& operator=(const FenceMerger&) = delete;
+
+    FenceMerger(FenceMerger&& other) = default;
+    FenceMerger& operator=(FenceMerger&& other) = default;
+
+    ~FenceMerger() = default;
 
     sp<Fence> waitAndGetFence(const char* name);
     void addFuture(ftl::Future<FenceResult>&& future);

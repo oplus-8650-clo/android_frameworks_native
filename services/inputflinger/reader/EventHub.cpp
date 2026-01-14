@@ -598,7 +598,7 @@ void EventHub::Device::close() {
 status_t EventHub::Device::enable() {
     fd = open(path.c_str(), O_RDWR | O_CLOEXEC | O_NONBLOCK);
     if (fd < 0) {
-        ALOGE("could not open %s, %s\n", path.c_str(), strerror(errno));
+        ALOGE("could not enable %s: %s\n", path.c_str(), strerror(errno));
         return -errno;
     }
     enabled = true;

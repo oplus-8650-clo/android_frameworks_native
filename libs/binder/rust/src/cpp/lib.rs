@@ -22,9 +22,10 @@ use core::ffi::c_char;
 
 use binder_ndk_compat_bindgen::{
     Compat_AIBinder_Class_getFunctionName,
-    Compat_AIBinder_Class_setTransactionCodeToFunctionNameMap,
+    Compat_AIBinder_Class_setTransactionCodeToFunctionNameMap, Compat_AIBinder_isSystemStable,
+    Compat_AIBinder_isVendorStable, Compat_AIBinder_requiresVintfDeclaration,
 };
-use binder_ndk_sys::AIBinder_Class;
+use binder_ndk_sys::{AIBinder, AIBinder_Class};
 
 /// Sets the transaction code to function name map for a binder class.
 ///
@@ -54,4 +55,34 @@ pub unsafe fn set_transaction_code_to_function_name_map(
 pub unsafe fn get_function_name(clazz: *const AIBinder_Class, code: u32) -> *const c_char {
     // SAFETY: The caller guarantees that the clazz and transaction code are valid
     unsafe { Compat_AIBinder_Class_getFunctionName(clazz, code) }
+}
+
+/// Returns true if the binder needs to be declared in the VINTF manifest.
+///
+/// # Safety
+///
+/// The caller must guarantee that the `binder` pointer is valid.
+pub unsafe fn requires_vintf_declaration(binder: *const AIBinder) -> bool {
+    // SAFETY: The caller guarantees that the binder pointer is valid.
+    unsafe { Compat_AIBinder_requiresVintfDeclaration(binder) }
+}
+
+/// Returns true if the binder is vendor stable.
+///
+/// # Safety
+///
+/// The caller must guarantee that the `binder` pointer is valid.
+pub unsafe fn is_vendor_stable(binder: *const AIBinder) -> bool {
+    // SAFETY: The caller guarantees that the binder pointer is valid.
+    unsafe { Compat_AIBinder_isVendorStable(binder) }
+}
+
+/// Returns true if the binder is system server only.
+///
+/// # Safety
+///
+/// The caller must guarantee that the `binder` pointer is valid.
+pub unsafe fn is_system_stable(binder: *const AIBinder) -> bool {
+    // SAFETY: The caller guarantees that the binder pointer is valid.
+    unsafe { Compat_AIBinder_isSystemStable(binder) }
 }

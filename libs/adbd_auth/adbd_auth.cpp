@@ -664,8 +664,10 @@ static bool validateMdnsNames(const char* instance_name, const char* service_typ
 //  Multicast DNS borrows heavily from the existing DNS protocol
 //  [RFC1034] [RFC1035] [RFC6195], using the existing DNS message
 //  structure, name syntax, and resource record types.
-RegisterResult adbd_auth_register_service(AdbdAuthContext* ctx, const char* instance_name,
-                               const char* service_type, uint16_t port) {
+AdbdauthRegisterResult adbd_auth_register_service(AdbdAuthContext* ctx,
+                                                  const char* instance_name,
+                                                  const char* service_type,
+                                                  uint16_t port) {
   if (!validateMdnsNames(instance_name, service_type)) {
     return ADBD_AUTH_REGISTER_BAD_NAME;
   }
@@ -674,8 +676,9 @@ RegisterResult adbd_auth_register_service(AdbdAuthContext* ctx, const char* inst
 }
 
 // See adbd_auth_register_service for name length restrictions.
-UnregisterResult adbd_auth_unregister_service(AdbdAuthContext* ctx, const char* instance_name,
-                                 const char* service_type) {
+AdbdauthUnregisterResult adbd_auth_unregister_service(AdbdAuthContext* ctx,
+                                                      const char* instance_name,
+                                                      const char* service_type) {
   if (!validateMdnsNames(instance_name, service_type)) {
     return ADBD_AUTH_UNREGISTER_BAD_NAME;
   }

@@ -29,4 +29,8 @@ extern "C" {
 
    const char* Compat_AIBinder_Class_getFunctionName(const AIBinder_Class* clazz,
                                                              uint32_t transactionCode);
+
+   bool Compat_AIBinder_requiresVintfDeclaration(const AIBinder* binder);
+   bool Compat_AIBinder_isVendorStable(const AIBinder* binder);
+   bool Compat_AIBinder_isSystemStable(const AIBinder* binder);
 } // extern "C"

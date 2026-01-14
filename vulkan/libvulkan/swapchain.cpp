@@ -35,6 +35,9 @@
 #include <utils/Trace.h>
 
 #include <algorithm>
+#include <condition_variable>
+#include <map>
+#include <mutex>
 #include <unordered_set>
 #include <vector>
 
@@ -49,6 +52,50 @@ namespace vulkan {
 namespace driver {
 
 namespace {
+
+class VulkanLoaderSurfaceListener {
+   public:
+    void associatePresentId(uint64_t frameId, uint64_t presentId) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mFrameIdToPresentId[frameId] = presentId;
+        mQueuedPresentIds.insert(presentId);
+    }
+
+    void onFramePresented(uint64_t frameId) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        auto it = mFrameIdToPresentId.find(frameId);
+        if (it != mFrameIdToPresentId.end()) {
+            mQueuedPresentIds.erase(it->second);
+            mFrameIdToPresentId.erase(it);
+            mCondition.notify_all();
+        }
+    }
+
+    VkResult waitForPresentId(uint64_t presentId, uint64_t timeout) {
+        // Because we don't want to keep an unbounded history of presentIds we
+        // only keep track of in-flight frames. Any other presentIds not being
+        // tracked in mQueuedPresentIds are consider to be already presented.
+        // As a result a random present id will return VK_SUCCESS
+        std::unique_lock<std::mutex> lock(mMutex);
+        if (mQueuedPresentIds.count(presentId) == 0) {
+            return VK_SUCCESS;
+        }
+
+        auto result =
+            mCondition.wait_for(lock, std::chrono::nanoseconds(timeout), [&] {
+                auto count = mQueuedPresentIds.count(presentId);
+                return count == 0;
+            });
+
+        return result ? VK_SUCCESS : VK_TIMEOUT;
+    }
+
+   private:
+    std::mutex mMutex;
+    std::condition_variable mCondition;
+    std::unordered_set<uint64_t> mQueuedPresentIds;
+    std::map<uint64_t, uint64_t> mFrameIdToPresentId;
+};
 
 enum class LibvulkanTimeDomain {
     kStageLocal = 1,  // VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT
@@ -264,6 +311,7 @@ struct Surface {
     android::sp<ANativeWindow> window;
     VkSwapchainKHR swapchain_handle;
     uint64_t consumer_usage;
+    VulkanLoaderSurfaceListener listener;
 
     // Indicate whether this surface has been used by a swapchain, no matter the
     // swapchain is still current or has been destroyed.
@@ -1167,6 +1215,17 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
                     reinterpret_cast<VkSurfaceCapabilitiesPresentId2KHR*>(
                         pNext);
                 present_id2->presentId2Supported = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_WAIT_2_KHR: {
+                if (!flags::vk_khr_present_wait2())
+                    break;
+
+                VkSurfaceCapabilitiesPresentWait2KHR* present_wait2 =
+                    reinterpret_cast<VkSurfaceCapabilitiesPresentWait2KHR*>(
+                        pNext);
+                present_wait2->presentWait2Supported = VK_TRUE;
                 break;
             }
 
@@ -2540,6 +2599,7 @@ static void SetSwapchainSurfaceDamage(ANativeWindow *window, const VkPresentRegi
 static VkResult SetSwapchainFrameTimestamp(
     Swapchain& swapchain,
     uint64_t presentId,
+    uint64_t nativeFrameId,
     uint64_t desiredPresentTime,
     VkPresentStageFlagsEXT presentStageQueries,
     bool returnErrorIfFull) {
@@ -2553,15 +2613,6 @@ static VkResult SetSwapchainFrameTimestamp(
         ALOGV("Calling native_window_enable_frame_timestamps(true)");
         native_window_enable_frame_timestamps(window, true);
         swapchain.frame_timestamps_enabled = true;
-    }
-
-    // Record the nativeFrameId so it can be later correlated to
-    // this present.
-    uint64_t nativeFrameId = 0;
-    int err = native_window_get_next_frame_id(
-            window, &nativeFrameId);
-    if (err != android::OK) {
-        ALOGE("Failed to get next native frame ID.");
     }
 
     // Add a new timing record with the user's presentID and
@@ -2661,14 +2712,20 @@ static VkResult PresentOneSwapchain(VkQueue queue,
             if (pRegion) {
                 SetSwapchainSurfaceDamage(window, pRegion);
             }
+            uint64_t nativeFrameId = 0;
+            int err = native_window_get_next_frame_id(window, &nativeFrameId);
+            if (err != android::OK) {
+                ALOGE("Failed to get next native frame ID.");
+            }
             if (pGenericTime) {
                 // If generic timestamps are used we don't use the GoogleTimings
                 // extension
                 if (pGenericTime->presentStageQueries) {
-                    if (VK_SUCCESS !=
-                        SetSwapchainFrameTimestamp(
-                            swapchain, presentId, pGenericTime->targetTime,
-                            pGenericTime->presentStageQueries, true)) {
+                    if (VK_SUCCESS != SetSwapchainFrameTimestamp(
+                                          swapchain, presentId, nativeFrameId,
+                                          pGenericTime->targetTime,
+                                          pGenericTime->presentStageQueries,
+                                          true)) {
                         // We're presenting faster than results are coming in.
                         // We can either wait to drain the results queue, grow
                         // the results queue, or present again without asking
@@ -2677,9 +2734,9 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                     }
                 }
             } else if (pGoogleTime) {
-                SetSwapchainFrameTimestamp(swapchain, pGoogleTime->presentID,
-                                           pGoogleTime->desiredPresentTime, 0,
-                                           false);
+                SetSwapchainFrameTimestamp(
+                    swapchain, pGoogleTime->presentID, nativeFrameId,
+                    pGoogleTime->desiredPresentTime, 0, false);
             }
             if (pPresentMode) {
                 if (!SetSwapchainPresentMode(window, *pPresentMode))
@@ -2751,6 +2808,28 @@ static VkResult PresentOneSwapchain(VkQueue queue,
     }
 
     return swapchain_result;
+}
+
+VKAPI_ATTR
+VkResult WaitForPresent2KHR(VkDevice,
+                            VkSwapchainKHR swapchain_handle,
+                            const VkPresentWait2InfoKHR* pPresentWait2Info) {
+    ATRACE_CALL();
+
+    Swapchain* swapchain = SwapchainFromHandle(swapchain_handle);
+    if (!swapchain) {
+        // Swapchain handle is not valid (e.g., already destroyed)
+        return VK_ERROR_OUT_OF_DATE_KHR;
+    }
+
+    Surface& surface = swapchain->surface;
+    if (surface.swapchain_handle != swapchain_handle) {
+        // This is an old, orphaned swapchain
+        return VK_ERROR_OUT_OF_DATE_KHR;
+    }
+
+    return surface.listener.waitForPresentId(pPresentWait2Info->presentId,
+                                             pPresentWait2Info->timeout);
 }
 
 VKAPI_ATTR
