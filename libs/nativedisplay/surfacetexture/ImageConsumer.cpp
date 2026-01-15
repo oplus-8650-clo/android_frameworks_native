@@ -146,10 +146,8 @@ sp<GraphicBuffer> ImageConsumer::dequeueBuffer(int* outSlotid, android_dataspace
         }
     }
 
-// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
     mQtiImageConsumerExtn->updateBufferDataSpace(buffer, item);
 
-// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
     // Update the state.
     st.mCurrentTexture = buffer;
     st.mCurrentCrop = item.mCrop;

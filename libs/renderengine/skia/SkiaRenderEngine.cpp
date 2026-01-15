@@ -645,7 +645,11 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           parameters.layer.sourceDataspace
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
                                           , toSkColorSpace(parameters.outputDataSpace)
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           , parameters.layer.lutSourceIsHwc
                                          );
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
