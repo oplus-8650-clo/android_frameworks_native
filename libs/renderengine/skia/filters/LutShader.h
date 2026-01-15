@@ -35,7 +35,11 @@ public:
     sk_sp<SkShader> lutShader(sk_sp<SkShader>& input, std::shared_ptr<gui::DisplayLuts> displayLuts,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                               ui::Dataspace srcDataspace
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
                               , sk_sp<SkColorSpace> outColorSpace, bool lutSourceIsHwc
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                              );
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 

@@ -296,7 +296,9 @@ AidlComposer::AidlComposer(std::shared_ptr<AidlIComposer> composer)
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #ifdef QTI_COMPOSER3_EXTENSIONS
     ndk::SpAIBinder qtiComposer3ClientBinder;
+// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     AIBinder_getExtension(mAidlComposer->asBinder().get(),
+// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
                           qtiComposer3ClientBinder.getR());
     if (qtiComposer3ClientBinder.get() != nullptr) {
         qtiComposer3Client = IQtiComposer3Client::fromBinder(qtiComposer3ClientBinder);
