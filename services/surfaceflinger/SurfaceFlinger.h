@@ -1782,8 +1782,7 @@ private:
             const compositionengine::CompositionRefreshArgs& refreshArgs,
             const scheduler::FrameTargeters& frameTargeters);
     std::future<void> offloadGpuCompositedDisplays(
-            compositionengine::CompositionRefreshArgs offloadedRefreshArgs,
-            std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers);
+            compositionengine::CompositionRefreshArgs offloadedRefreshArgs);
     void prepareLayersForComposition(compositionengine::CompositionRefreshArgs& refreshArgs,
                                      bool kCursorOnly,
                                      const std::vector<std::pair<Layer*, LayerFE*>>& layers);

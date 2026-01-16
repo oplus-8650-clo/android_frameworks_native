@@ -607,7 +607,7 @@ LayerRequirementPtrs filterLayersForOutput(
         const std::vector<RefreshRateSelector::LayerRequirement>& layers,
         LayerFilter outputFilter) {
     const bool allowArbitraryFollowerRates =
-            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
     LayerRequirementPtrs filteredLayers;
     for (const auto& layer : layers) {
         if (!allowArbitraryFollowerRates ||
@@ -631,7 +631,7 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
     const auto& activeMode = *getActiveModeLocked().modePtr;
 
     if (pacesetterFps.isValid() &&
-        !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+        !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         ALOGV("Follower display");
 
         const auto ranking = rankFrameRates(activeMode.getGroup(), RefreshRateOrder::Descending,

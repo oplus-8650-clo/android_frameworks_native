@@ -1,4 +1,4 @@
-// Copyright (C) 2017 The Android Open Source Project
+// Copyright (C) 2026 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 // limitations under the License.
 
 package {
+    default_team: "trendy_team_input_framework",
     // See: http://go/android-license-faq
     // A large-scale-change added 'default_applicable_licenses' to import
     // all of the 'license_kinds' from "frameworks_native_license"
@@ -21,46 +22,21 @@ package {
     default_applicable_licenses: ["frameworks_native_license"],
 }
 
-cc_library_shared {
-    name: "libgraphicsenv",
-
-    defaults: [
-        "aconfig_lib_cc_static_link.defaults",
-    ],
-
+cc_library {
+    name: "libattention_native",
+    defaults: ["inputflinger_defaults"],
     srcs: [
-        "FeatureOverrides.cpp",
-        "GpuStatsInfo.cpp",
-        "GraphicsEnv.cpp",
-        "IGpuService.cpp",
+        "InteractionProvider.cpp",
     ],
-
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-
-    static_libs: [
-        "libegl_flags",
-    ],
-
     shared_libs: [
-        "libbase",
-        "libbinder",
-        "libcutils",
-        "libdl_android",
-        "liblog",
-        "libutils",
+        "attentionmanager_native_aidl-cpp",
     ],
-
     export_include_dirs: ["include"],
-
-    product_variables: {
-        // `debuggable` is set for eng and userdebug builds
-        debuggable: {
-            cflags: [
-                "-DANDROID_DEBUGGABLE",
-            ],
-        },
-    },
+    visibility: [
+        "//frameworks/base/services",
+        "//frameworks/base/services/core/jni",
+        "//frameworks/native/services/inputflinger",
+        "//frameworks/native/services/inputflinger/tests",
+        "//frameworks/native/services/inputflinger/tests/fuzzers",
+    ],
 }

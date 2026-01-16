@@ -30,6 +30,7 @@
 #include <utils/CallStack.h>
 
 #include <malloc.h>
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <numeric>

@@ -51,13 +51,13 @@ DisplayEventReceiver::DisplayEventReceiver(gui::ISurfaceComposer::VsyncSource vs
             status = mEventConnection->stealReceiveChannel(mDataChannel.get());
             if (!status.isOk()) {
                 ALOGE("stealReceiveChannel failed: %s", status.toString8().c_str());
-                mInitError = std::make_optional<status_t>(status.transactionError());
+                mInitError = status.transactionError();
                 mDataChannel.reset();
                 mEventConnection.clear();
             }
         } else {
             ALOGE("DisplayEventConnection creation failed: status=%s", status.toString8().c_str());
-            mInitError = std::make_optional<status_t>(status.transactionError());
+            mInitError = status.transactionError();
         }
     }
 }
@@ -66,16 +66,17 @@ DisplayEventReceiver::~DisplayEventReceiver() {
 }
 
 status_t DisplayEventReceiver::initCheck() const {
-    if (mDataChannel != nullptr)
+    if (mDataChannel != nullptr) {
         return NO_ERROR;
-    if (mInitError.value() == NO_INIT && !mSurfaceflingerAlive) {
+    }
+    if (mInitError == NO_INIT && !mSurfaceflingerAlive) {
         LOG_ALWAYS_FATAL("Display event receiver failed to initialize due to dead surfaceflinger");
     }
-    return mInitError.has_value() ? mInitError.value() : NO_INIT;
+    return mInitError;
 }
 
 int DisplayEventReceiver::getFd() const {
-    if (mDataChannel == nullptr) return mInitError.has_value() ? mInitError.value() : NO_INIT;
+    if (mDataChannel == nullptr) return mInitError;
 
     return mDataChannel->getFd();
 }
@@ -88,7 +89,7 @@ status_t DisplayEventReceiver::setVsyncRate(uint32_t count) {
         mEventConnection->setVsyncRate(count);
         return NO_ERROR;
     }
-    return mInitError.has_value() ? mInitError.value() : NO_INIT;
+    return mInitError;
 }
 
 status_t DisplayEventReceiver::requestNextVsync() {
@@ -96,7 +97,7 @@ status_t DisplayEventReceiver::requestNextVsync() {
         mEventConnection->requestNextVsync();
         return NO_ERROR;
     }
-    return mInitError.has_value() ? mInitError.value() : NO_INIT;
+    return mInitError;
 }
 
 status_t DisplayEventReceiver::getLatestVsyncEventData(

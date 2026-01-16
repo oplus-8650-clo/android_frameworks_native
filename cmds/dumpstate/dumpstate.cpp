@@ -875,7 +875,8 @@ void Dumpstate::PrintHeader() const {
 
     printf("Kernel: ");
     DumpFileToFd(STDOUT_FILENO, "", "/proc/version");
-    printf("Command line: %s\n", strtok(cmdline_buf, "\n"));
+    char* saveptr;
+    printf("Command line: %s\n", strtok_r(cmdline_buf, "\n", &saveptr));
     printf("Bootconfig: ");
     DumpFileToFd(STDOUT_FILENO, "", "/proc/bootconfig");
     printf("Uptime: ");

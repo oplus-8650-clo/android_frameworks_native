@@ -19,6 +19,7 @@
 #include <log/log.h>
 #include <utils/Timers.h>
 #include <array>
+#include <atomic>
 #include "ftl/concat.h"
 #include "log/log_main.h"
 #include "ui/DisplayId.h"

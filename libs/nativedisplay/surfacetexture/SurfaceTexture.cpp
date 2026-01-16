@@ -17,6 +17,7 @@
 // #define LOG_NDEBUG 0
 
 #include <cutils/compiler.h>
+#include <ftl/small_vector.h>
 #include <gui/BufferItemConsumer.h>
 #include <gui/BufferQueue.h>
 #include <gui/Surface.h>
@@ -107,6 +108,8 @@ status_t SurfaceTexture::updateTexImage() {
         return NO_INIT;
     }
 
+    clearPendingFreedBuffersLocked();
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(SURFACE_TEXTURE_UPDATETEXIMAGE_STOP_EARLY)
     if (mOpMode != OpMode::attachedToGL) {
         SFT_LOGE("updateTexImage: SurfaceTexture is not attached!");
@@ -126,6 +129,8 @@ status_t SurfaceTexture::releaseTexImage() {
         SFT_LOGE("releaseTexImage: SurfaceTexture is abandoned!");
         return NO_INIT;
     }
+
+    clearPendingFreedBuffersLocked();
 
     return mEGLConsumer.releaseTexImage(*this);
 }
@@ -177,6 +182,8 @@ status_t SurfaceTexture::detachFromContext() {
         return NO_INIT;
     }
 
+    clearPendingFreedBuffersLocked();
+
     if (mOpMode != OpMode::attachedToGL) {
         SFT_LOGE("detachFromContext: SurfaceTexture is not attached to a GL context");
         return INVALID_OPERATION;
@@ -200,6 +207,8 @@ status_t SurfaceTexture::attachToContext(uint32_t tex) {
         return NO_INIT;
     }
 
+    clearPendingFreedBuffersLocked();
+
     if (mOpMode != OpMode::detached) {
         SFT_LOGE("attachToContext: SurfaceTexture is already attached to a "
                  "context");
@@ -216,6 +225,9 @@ void SurfaceTexture::takeConsumerOwnership() {
         SFT_LOGE("attachToView: abandoned SurfaceTexture");
         return;
     }
+
+    clearPendingFreedBuffersLocked();
+
     if (mOpMode == OpMode::detached) {
         mOpMode = OpMode::attachedToConsumer;
 
@@ -237,6 +249,8 @@ void SurfaceTexture::releaseConsumerOwnership() {
         SFT_LOGE("detachFromView: abandoned SurfaceTexture");
         return;
     }
+
+    clearPendingFreedBuffersLocked();
 
     if (mOpMode == OpMode::attachedToConsumer) {
         mOpMode = OpMode::detached;
@@ -446,8 +460,24 @@ std::shared_ptr<FenceTime> SurfaceTexture::getCurrentFenceTime() const {
 }
 
 void SurfaceTexture::onBufferFreed(const wp<GraphicBuffer>& maybeBuffer) {
-    std::scoped_lock _l(mMutex);
-    onBufferFreedLocked(maybeBuffer);
+    std::unique_lock lock(mMutex, std::try_to_lock);
+    if (lock.owns_lock()) {
+        onBufferFreedLocked(maybeBuffer);
+    } else {
+        std::scoped_lock _l(mPendingFreedBuffersLock);
+        mPendingFreedBuffers.push_back(maybeBuffer);
+    }
+}
+
+void SurfaceTexture::clearPendingFreedBuffersLocked() {
+    PendingFreedBuffers pendingFreedBuffers;
+    {
+        std::scoped_lock _l(mPendingFreedBuffersLock);
+        pendingFreedBuffers.swap(mPendingFreedBuffers);
+    }
+    for (const auto& buffer : pendingFreedBuffers) {
+        onBufferFreedLocked(buffer);
+    }
 }
 
 void SurfaceTexture::onBufferFreedLocked(const wp<GraphicBuffer>& maybeBuffer) {
@@ -468,9 +498,11 @@ void SurfaceTexture::onBufferFreedLocked(const wp<GraphicBuffer>& maybeBuffer) {
 }
 
 void SurfaceTexture::onFrameAvailable(const BufferItem& item) {
+    // NOTE: This can be called in a deadlock-y way, in certain circumstancs, from EGL. Do NOT take
+    // mMutex here.
     sp<SurfaceTextureListener> listener;
     {
-        std::scoped_lock _l(mMutex);
+        std::scoped_lock _l(mListenerMutex);
         listener = mSurfaceTextureListener;
     }
 
@@ -483,7 +515,7 @@ void SurfaceTexture::onSetFrameRate(float frameRate, int8_t compatibility,
                                     int8_t changeFrameRateStrategy) {
     sp<SurfaceTextureListener> listener;
     {
-        std::scoped_lock _l(mMutex);
+        std::scoped_lock _l(mListenerMutex);
         listener = mSurfaceTextureListener;
     }
 
@@ -539,7 +571,7 @@ void SurfaceTexture::setSurfaceTextureListener(
         const sp<android::SurfaceTexture::SurfaceTextureListener>& listener) {
     SFT_LOGV("setSurfaceTextureListener");
 
-    std::scoped_lock _l(mMutex);
+    std::scoped_lock _l(mListenerMutex);
     mSurfaceTextureListener = listener;
 }
 
@@ -563,6 +595,7 @@ void SurfaceTexture::abandon() {
     mConsumer->abandon([&](const sp<GraphicBuffer>& buffer) { onBufferFreedLocked(buffer); });
     mEGLConsumer.onAbandonLocked();
     mImageConsumer.onAbandonLocked();
+    clearPendingFreedBuffersLocked();
     mAbandoned = true;
 }
 

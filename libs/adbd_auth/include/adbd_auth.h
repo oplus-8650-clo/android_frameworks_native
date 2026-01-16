@@ -213,9 +213,9 @@ enum AdbdauthRegisterResult : uint32_t {
  *
  * @param ctx the AdbdAuthContext
  * @param instance_name the mDNS service instance name (a-z), (A-Z), (0-9), (_), and (-)
- *        and (uft-8, max 256 bytes including a required NUL byte)
+ *        and (UTF-8, max 256 bytes including a required NUL byte)
  * @param service_type the mDNS service name (a-z), (A-Z), (0-9), (_), and (-)
- *        and (uft-8, max 256 bytes including a required NUL byte)
+ *        and (UTF-8, max 256 bytes including a required NUL byte)
  * @param port the port number of the service
  * @return RegisterResult
  */
@@ -233,9 +233,9 @@ enum AdbdauthUnregisterResult : uint32_t {
  *
  * @param ctx the AdbdAuthContext
  * @param instance_name the mDNS service instance name (a-z), (A-Z), (0-9), (_), and (-)
- *        and (uft-8, max 256 bytes including a required NUL byte)
+ *        and (UTF-8, max 256 bytes including a required NUL byte)
  * @param service_type the mDNS service name (a-z), (A-Z), (0-9), (_), and (-)
- *        and (uft-8, max 256 bytes including a required NUL byte)
+ *        and (UTF-8, max 256 bytes including a required NUL byte)
  * @return UnregisterResult
  *
  * It is ok to call unregister on an service unknown to framework. Services are tracked there

@@ -18,13 +18,13 @@
 #define MAIN_FRAMEWORKS_BASE_PROTOLOGCONFIG_H
 
 #include <cinttypes>
-#include <unordered_map>
-#include "ProtoLogConfig.h"
-#include "ProtoLogTypes.h"
-
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <unordered_map>
+
+#include "ProtoLogConfig.h"
+#include "ProtoLogTypes.h"
 
 namespace android {
 namespace protolog {
@@ -32,7 +32,7 @@ namespace protolog {
 struct ProtoLogGroupConfig {
     bool collect_stacktrace = false;
     // To default to never log anything.
-    enum ProtoLogLevel log_from = (ProtoLogLevel)((uint)ProtoLogLevel::WTF + 1);
+    enum ProtoLogLevel log_from = (ProtoLogLevel)(static_cast<uint32_t>(ProtoLogLevel::WTF) + 1);
 };
 
 struct StringHash {

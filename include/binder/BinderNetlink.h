@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <netlink/netlink.h>
 #include <string>

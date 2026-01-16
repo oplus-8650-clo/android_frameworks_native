@@ -15,6 +15,7 @@
  */
 #define LOG_TAG "ExternalVibrationUtils"
 
+#include <cmath>
 #include <cstring>
 
 #include <android_os_vibrator.h>

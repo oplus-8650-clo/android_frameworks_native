@@ -673,7 +673,8 @@ static bool verifyKernelTraceFuncs(const char* funcs)
     // read from the kernel, except for wildcard inputs.
     bool ok = true;
     char* myFuncs = strdup(funcs);
-    char* func = strtok(myFuncs, ",");
+    char* saveptr;
+    char* func = strtok_r(myFuncs, ",", &saveptr);
     while (func) {
         if (!strchr(func, '*')) {
             String8 fancyFunc = String8::format("\n%s\n", func);
@@ -684,7 +685,7 @@ static bool verifyKernelTraceFuncs(const char* funcs)
                 ok = false;
             }
         }
-        func = strtok(nullptr, ",");
+        func = strtok_r(nullptr, ",", &saveptr);
     }
     free(myFuncs);
     return ok;
@@ -713,10 +714,11 @@ static bool setKernelTraceFuncs(const char* funcs)
         // Set the requested filter functions.
         ok &= truncateFile(k_ftraceFilterPath);
         char* myFuncs = strdup(funcs);
-        char* func = strtok(myFuncs, ",");
+        char* saveptr;
+        char* func = strtok_r(myFuncs, ",", &saveptr);
         while (func) {
             ok &= appendStr(k_ftraceFilterPath, func);
-            func = strtok(nullptr, ",");
+            func = strtok_r(nullptr, ",", &saveptr);
         }
         free(myFuncs);
 

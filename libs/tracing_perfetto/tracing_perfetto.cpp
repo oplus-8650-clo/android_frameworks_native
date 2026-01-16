@@ -20,8 +20,6 @@
 
 #include <cstdarg>
 
-#include "perfetto/public/te_category_macros.h"
-#include "trace_categories.h"
 #include "tracing_perfetto_internal.h"
 
 namespace tracing_perfetto {
@@ -202,17 +200,6 @@ bool isTagEnabled(uint64_t category) {
       internal::toPerfettoCategory(category);
   return internal::isPerfettoCategoryEnabled(perfettoTeCategory) ||
          atrace_is_tag_enabled(category);
-}
-
-PerfettoTeCategory* getPerfettoCategory(uint64_t category) {
-  struct PerfettoTeCategory* perfettoTeCategory =
-      internal::toPerfettoCategory(category);
-
-  if (internal::isPerfettoCategoryEnabled(perfettoTeCategory)) {
-    return perfettoTeCategory;
-  }
-
-  return nullptr;
 }
 
 }  // namespace tracing_perfetto

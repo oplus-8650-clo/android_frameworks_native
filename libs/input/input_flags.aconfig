@@ -198,6 +198,7 @@ flag {
 
 flag {
   name: "enable_attention_service_apis"
+  is_exported: true
   namespace: "input"
   description: "Enable AttentionService APIs"
   bug: "438159795"

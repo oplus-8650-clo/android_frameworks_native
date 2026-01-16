@@ -204,7 +204,7 @@ public:
 private:
     sp<IDisplayEventConnection> mEventConnection;
     std::unique_ptr<gui::BitTube> mDataChannel;
-    std::optional<status_t> mInitError;
+    status_t mInitError = NO_INIT;
     bool mSurfaceflingerAlive;
 };
 

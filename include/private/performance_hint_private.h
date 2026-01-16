@@ -23,11 +23,6 @@
 __BEGIN_DECLS
 
 /**
- * For testing only.
- */
-void APerformanceHint_setIHintManagerForTesting(void* iManager);
-
-/**
  * Hints for the session used to signal upcoming changes in the mode or workload.
  */
 enum SessionHint: int32_t {
@@ -142,32 +137,6 @@ APerformanceHintSession* APerformanceHint_createSessionFromJava(APerformanceHint
  * Special method for Java SDK implementation to kill sessions
  */
 void APerformanceHint_closeSessionFromJava(APerformanceHintSession* session);
-
-/**
- * Forces FMQ to be enabled or disabled, for testing only.
- */
-void APerformanceHint_setUseFMQForTesting(bool enabled);
-
-/**
- * Get the rate limiter properties for testing.
- */
-void APerformanceHint_getRateLimiterPropertiesForTesting(
-        int32_t* maxLoadHintsPerInterval, int64_t* loadHintInterval);
-
-/*
- * Forces the "new load hint" flag to be disabled for testing.
- */
-void APerformanceHint_setUseNewLoadHintBehaviorForTesting(bool newBehavior);
-
-/*
- * Forces the graphics pipeline flag to be enabled or disabled, for testing only.
- */
-void APerformanceHint_setUseGraphicsPipelineForTesting(bool enabled);
-
-/*
- * Set the reporting duration max batch size cap. Passing -1 removes the cap.
- */
-void APerformanceHint_setReportBatchSizeCapForTesting(int cap);
 
 __END_DECLS
 
