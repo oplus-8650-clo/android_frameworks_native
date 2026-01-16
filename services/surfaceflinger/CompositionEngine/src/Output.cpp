@@ -1792,7 +1792,7 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
     mRenderSurface->onPresentDisplayCompleted();
 
     const bool force_slower_follower_gpu_composition =
-            FlagManager::getInstance().force_slower_follower_gpu_composition();
+            FlagManager::getInstance().force_slower_follower_gpu_composition_combined();
     for (auto* layer : getOutputLayersOrderedByZ()) {
         // The layer buffer from the previous frame (if any) is released
         // by HWC only when the release fence from this frame (if any) is

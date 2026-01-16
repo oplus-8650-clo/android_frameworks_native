@@ -39,6 +39,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tracing::{span, Level};
 use ueventd::device_node::watcher::Watcher;
 
 use crate::device_events_handler::{DeviceEventCallback, DeviceEventsHandler};
@@ -136,6 +137,7 @@ fn write(file: &mut dyn Write, message: String) -> std::result::Result<(), binde
 #[async_trait]
 impl ISerialManagerAsyncServer for SerialManager {
     async fn getSerialPorts(&self) -> Result<Vec<SerialPortInfo>> {
+        let _entered = span!(Level::TRACE, "get_serial_ports").entered();
         let serial_ports_map = self.serial_ports.lock().unwrap();
         Ok(serial_ports_map.values().cloned().collect())
     }
@@ -180,6 +182,7 @@ impl ISerialManagerAsyncServer for SerialManager {
         flags: i32,
         exclusive: bool,
     ) -> Result<ParcelFileDescriptor> {
+        let _entered = span!(Level::TRACE, "request_open", port_name).entered();
         check_permissions()?;
         if !self.serial_ports.lock().unwrap().contains_key(port_name) {
             return Err(Status::new_exception_str(

@@ -249,6 +249,14 @@ class PersistableBundle {
             }
         }
     }
+
+    void putByteVector(const std::string& key, const std::vector<uint8_t>& vec) {
+        if (API_LEVEL_AT_LEAST(37)) {
+            int32_t num = vec.size();
+            APersistableBundle_putByteVector(mPBundle, key.c_str(), vec.data(), num);
+        }
+    }
+
     void putPersistableBundle(const std::string& key, const PersistableBundle& pBundle) {
         if (API_LEVEL_AT_LEAST(__ANDROID_API_V__)) {
             APersistableBundle_putPersistableBundle(mPBundle, key.c_str(), pBundle.mPBundle);
@@ -338,6 +346,15 @@ class PersistableBundle {
         }
         return false;
     }
+
+    bool getByteVector(const std::string& key, std::vector<uint8_t>* _Nonnull vec) const {
+        if (API_LEVEL_AT_LEAST(37)) {
+            return getVecInternal<uint8_t>(&APersistableBundle_getByteVector, mPBundle,
+                                          key.c_str(), vec);
+        }
+        return false;
+    }
+
     bool getIntVector(const std::string& key, std::vector<int32_t>* _Nonnull vec) const {
         if (API_LEVEL_AT_LEAST(__ANDROID_API_V__)) {
             return getVecInternal<int32_t>(&APersistableBundle_getIntVector, mPBundle, key.c_str(),
@@ -492,6 +509,13 @@ class PersistableBundle {
     std::set<std::string> getStringVectorKeys() const {
         if (API_LEVEL_AT_LEAST(__ANDROID_API_V__)) {
             return getKeys(&APersistableBundle_getStringVectorKeys, mPBundle);
+        } else {
+            return {};
+        }
+    }
+    std::set<std::string> getByteVectorKeys() const {
+        if (API_LEVEL_AT_LEAST(37)) {
+            return getKeys(&APersistableBundle_getByteVectorKeys, mPBundle);
         } else {
             return {};
         }

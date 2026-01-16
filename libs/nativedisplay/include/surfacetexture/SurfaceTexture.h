@@ -17,6 +17,7 @@
 #pragma once
 
 #include <android/hardware_buffer.h>
+#include <ftl/small_vector.h>
 #include <gui/BufferItemConsumer.h>
 #include <gui/BufferQueueDefs.h>
 #include <gui/ConsumerBase.h>
@@ -338,6 +339,7 @@ protected:
     // BufferItemConsumer::BufferFreedListener:
     virtual void onBufferFreed(const wp<GraphicBuffer>& graphicBuffer) override;
     void onBufferFreedLocked(const wp<GraphicBuffer>& graphicBuffer);
+    void clearPendingFreedBuffersLocked();
 
     // BufferItemConsumer::FrameAvailableListener:
     virtual void onFrameAvailable(const BufferItem& item) override;
@@ -359,6 +361,10 @@ protected:
      * consume buffers as hardware textures.
      */
     static const uint64_t DEFAULT_USAGE_FLAGS = GraphicBuffer::USAGE_HW_TEXTURE;
+
+    mutable std::mutex mPendingFreedBuffersLock;
+    typedef ftl::SmallVector<wp<GraphicBuffer>, 8> PendingFreedBuffers;
+    PendingFreedBuffers mPendingFreedBuffers GUARDED_BY(mPendingFreedBuffersLock);
 
     mutable std::mutex mMutex;
 
@@ -493,12 +499,13 @@ protected:
      */
     ImageConsumer mImageConsumer;
 
+    mutable std::mutex mListenerMutex;
     /**
      * mSurfaceTextureListener holds the registered SurfaceTextureListener.
      * Note that SurfaceTexture holds the lister with an sp<>, which means that the listener
      * must only hold a wp<> to SurfaceTexture and not an sp<>.
      */
-    sp<SurfaceTextureListener> mSurfaceTextureListener;
+    sp<SurfaceTextureListener> mSurfaceTextureListener GUARDED_BY(mListenerMutex);
 
     friend class ImageConsumer;
     friend class EGLConsumer;

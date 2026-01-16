@@ -92,10 +92,10 @@ Scheduler::~Scheduler() {
 
     // Stop idle timer and clear callbacks, as the RefreshRateSelector may outlive the Scheduler.
     demotePacesetterDisplay(
-            {.toggleIdleTimer =
-                     !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()});
+            {.toggleIdleTimer = !FlagManager::getInstance()
+                                         .follower_arbitrary_refresh_rate_selection_combined()});
 
-    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         std::scoped_lock lock(mDisplayLock);
         for (auto& [_, display] : mDisplays) {
             display.selectorPtr->stopIdleTimer();
@@ -125,7 +125,7 @@ void Scheduler::startTimers() {
         ftl::FakeGuard guard(mDisplayLock);
         mShouldStartPowerTimers = true;
         for (const auto& [id, _] : mDisplays) {
-            if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection() ||
+            if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined() ||
                 mPacesetterDisplayId == id) {
                 startPowerTimer(id);
             }
@@ -155,7 +155,7 @@ void Scheduler::startPowerTimer(PhysicalDisplayId displayId) {
 }
 
 void Scheduler::initializeIdleTimer(PhysicalDisplayId displayId) {
-    if (!FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (!FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         return;
     }
 
@@ -205,8 +205,8 @@ bool Scheduler::designatePacesetterDisplay() {
     }
 
     const PromotionParams kPromotionParams = {
-            .toggleIdleTimer =
-                    !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()};
+            .toggleIdleTimer = !FlagManager::getInstance()
+                                        .follower_arbitrary_refresh_rate_selection_combined()};
 
     demotePacesetterDisplay(kPromotionParams);
     promotePacesetterDisplay(kPromotionParams, pacesetterId);
@@ -345,7 +345,8 @@ void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
     // Start the idle timer for the first registered (i.e. primary) display.
     const PromotionParams promotionParams = {
             .toggleIdleTimer = isPrimary &&
-                    !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()};
+                    !FlagManager::getInstance()
+                             .follower_arbitrary_refresh_rate_selection_combined()};
 
     demotePacesetterDisplay(promotionParams);
 
@@ -360,7 +361,7 @@ void Scheduler::registerDisplayInternal(PhysicalDisplayId displayId,
 
     promotePacesetterDisplay(promotionParams);
 
-    if (isNew && FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (isNew && FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         initializeIdleTimer(displayId);
         selector.startIdleTimer();
         startPowerTimer(displayId);
@@ -378,14 +379,14 @@ void Scheduler::unregisterDisplay(PhysicalDisplayId displayId) {
     dispatchHotplug(displayId, Hotplug::Disconnected);
 
     const PromotionParams kPromotionParams = {
-            .toggleIdleTimer =
-                    !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()};
+            .toggleIdleTimer = !FlagManager::getInstance()
+                                        .follower_arbitrary_refresh_rate_selection_combined()};
     demotePacesetterDisplay(kPromotionParams);
 
     {
         std::scoped_lock lock(mDisplayLock);
 
-        if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+        if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
             mDisplays.get(displayId).transform(
                     ftl::unit_fn([](Display& display) { display.selectorPtr->stopIdleTimer(); }));
         }
@@ -444,7 +445,7 @@ void Scheduler::onFrameSignal(ICompositor& compositor, VsyncId vsyncId,
         targets.try_emplace(pacesetterPtr->displayId, &pacesetterPtr->targeterPtr->target());
 
         const bool followerDisplayBackpressure =
-                FlagManager::getInstance().follower_display_backpressure();
+                FlagManager::getInstance().follower_display_backpressure_combined();
         if (!followerDisplayBackpressure) {
             expectedVsyncTime = pacesetterPtr->targeterPtr->target().expectedPresentTime();
         }
@@ -702,7 +703,7 @@ bool Scheduler::updatePolicyContentRequirements(PhysicalDisplayId displayId,
                            (std::scoped_lock(mDisplayLock), displayId == mPacesetterDisplayId));
 
     const bool followerArbitraryRefreshRate =
-            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
     if (isPacesetter || followerArbitraryRefreshRate) {
         std::lock_guard<std::mutex> lock(mPolicyLock);
         mPolicy.emittedModeOpt[displayId] = mode;
@@ -1084,13 +1085,14 @@ bool Scheduler::canAnySelectorSwitch() const {
             return true;
         }
     }
-    return false;
+    return true;
 }
 
 void Scheduler::chooseRefreshRateForContent(
         const surfaceflinger::frontend::LayerHierarchy* hierarchy,
         bool updateAttachedChoreographer) {
-    const bool canSwitch = FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()
+    const bool canSwitch =
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()
             ? canAnySelectorSwitch()
             : pacesetterSelectorPtr()->canSwitch();
 
@@ -1149,7 +1151,8 @@ bool Scheduler::setDisplayPowerMode(PhysicalDisplayId id, hal::PowerMode powerMo
     const bool didPacesetterChange = designatePacesetterDisplay();
     const bool isPacesetter = (ftl::FakeGuard(mDisplayLock), mPacesetterDisplayId == id);
 
-    if (isPacesetter || FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (isPacesetter ||
+        FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         {
             std::scoped_lock lock(mPolicyLock);
             mPolicy.displayPowerModes.emplace_or_replace(id, powerMode);
@@ -1300,7 +1303,7 @@ void Scheduler::dump(utils::Dumper& dumper) const {
         display.selectorPtr->dump(dumper);
         display.targeterPtr->dump(dumper);
         dumper.dump("isModeChangePending"sv, display.isModeChangePending);
-        if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection() ||
+        if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined() ||
             isPacesetter) {
             dumper.dump("displayPowerTimer"sv,
                         mDisplayPowerTimers.get(id).transform(
@@ -1355,7 +1358,7 @@ bool Scheduler::updateFrameRateOverridesLocked(GlobalSignals consideredSignals,
 RefreshRateSelector* Scheduler::selectorPtrForLayerStack(ui::LayerStack stack) const {
     std::scoped_lock lock(mDisplayLock);
 
-    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         for (const auto& [_, display] : mDisplays) {
             RefreshRateSelector* selector = display.selectorPtr.get();
             if (selector && selector->getLayerFilter().layerStack == stack) {
@@ -1461,7 +1464,7 @@ void Scheduler::demotePacesetterDisplay(PromotionParams params) {
 
     // Clear state that depends on the pacesetter's RefreshRateSelector.
     std::scoped_lock lock(mPolicyLock);
-    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+    if (FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         mPolicy.contentRequirements = {};
         mPolicy.touch = TouchState::Inactive;
     } else {
@@ -1620,7 +1623,7 @@ auto Scheduler::applyPolicy(S Policy::* statePtr, T&& newState,
         }
 
         const bool followerRefreshRateSelection =
-                FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+                FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
         bool anyChosenModeDiffers = false;
         bool chosenModeDiffersForPacesetter = false;
         {
@@ -1722,7 +1725,7 @@ auto Scheduler::chooseDisplayModes() const -> DisplayModeChoiceMap {
         if (display.powerMode != hal::PowerMode::ON) continue;
 
         PhysicalDisplayId globalSignalsId =
-                FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()
+                FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()
                 ? id
                 : *mPacesetterDisplayId;
 

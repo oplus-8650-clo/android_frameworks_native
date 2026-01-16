@@ -51,14 +51,12 @@ sk_sp<SkSurface> IPCRecordingCanvas::onNewSurface(const SkImageInfo&, const SkSu
 
 void IPCRecordingCanvas::startRecording() {
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer != nullptr, "Already recording");
-    // ALOGE("IPCRecordingCanvas::startRecording");
     mCurrentRenderCommandBuffer = mRenderCommandBufferProducer->acquire();
     mCurrentRenderCommandBuffer->setFrameSize(mWidth, mHeight);
 }
 
 void IPCRecordingCanvas::endRecording() {
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    // ALOGE("IPCRecordingCanvas::endRecording");
     mRenderCommandBufferProducer->release();
     mCurrentRenderCommandBuffer = nullptr;
 }
@@ -270,9 +268,15 @@ void IPCRecordingCanvas::onDrawDRRect(const SkRRect&, const SkRRect&, const SkPa
     ALOGE("onDrawDRRect Not implemented");
 }
 
-void IPCRecordingCanvas::onDrawDrawable(SkDrawable*, const SkMatrix*) {
+void IPCRecordingCanvas::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matrix) {
     IPC_CANVAS_TRACE_CALL;
-    ALOGE("onDrawDrawable Not implemented");
+    if (matrix) {
+        SkAutoCanvasRestore acr(this, true);
+        this->concat(*matrix);
+        drawable->draw(this, nullptr);
+    } else {
+        drawable->draw(this, nullptr);
+    }
 }
 void IPCRecordingCanvas::onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) {
     IPC_CANVAS_TRACE_CALL;

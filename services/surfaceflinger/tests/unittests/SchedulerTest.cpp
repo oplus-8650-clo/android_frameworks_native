@@ -666,7 +666,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
     TestableScheduler::DisplayModeChoiceMap expectedChoices;
 
     const bool follower_arbitrary_refresh_rate =
-            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
     {
         const GlobalSignals globalSignals = {.idle = true};
         const GlobalSignals display2GlobalSignals = GlobalSignals{};

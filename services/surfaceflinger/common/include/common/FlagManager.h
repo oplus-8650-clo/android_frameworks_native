@@ -83,13 +83,11 @@ public:
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     bool cache_when_source_crop_layer_only_moved() const;
     bool connected_display_hdr_v2() const;
+    bool connected_display_hdr_v3() const;
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
     bool disable_synthetic_vsync_for_performance() const;
     bool display_command_modeset() const;
-    bool follower_arbitrary_refresh_rate_selection() const;
-    bool follower_display_backpressure() const;
-    bool force_slower_follower_gpu_composition() const;
     bool frame_rate_category_mrr() const;
     bool graphite_renderengine() const;
     bool hdcp_level_hal() const;
@@ -115,6 +113,10 @@ public:
     bool window_blur_kawase2_preallocate_buffers() const;
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
 
+    bool follower_arbitrary_refresh_rate_selection_combined() const;
+    bool follower_display_backpressure_combined() const;
+    bool force_slower_follower_gpu_composition_combined() const;
+
 protected:
     // overridden for unit tests
     virtual std::optional<bool> getBoolProperty(const char*) const;
@@ -125,6 +127,13 @@ private:
 
     FlagManager() = default;
     FlagManager(const FlagManager&) = delete;
+
+    bool follower_arbitrary_refresh_rate_selection() const;
+    bool follower_arbitrary_refresh_rate_selection_platform() const;
+    bool follower_display_backpressure() const;
+    bool follower_display_backpressure_platform() const;
+    bool force_slower_follower_gpu_composition() const;
+    bool force_slower_follower_gpu_composition_platform() const;
 
     void dumpFlag(std::string& result, bool readonly, const char* name,
                   std::function<bool()> getter) const;

@@ -35,7 +35,11 @@
 #include <surfacetexture/LegacySurfaceTexture.h>
 #include <surfacetexture/SurfaceTexture.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <future>
+#include <thread>
 #include <vector>
 
 namespace android {
@@ -235,7 +239,7 @@ public:
         return pixels;
     }
 
-private:
+protected:
     EGLint const* getConfigAttribs() {
         static EGLint sDefaultConfigAttribs[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
                                                  EGL_NONE};
@@ -641,4 +645,65 @@ TEST_F(SurfaceTextureTest, UnlimitedSlots_Allowed) {
     }
 }
 #endif
+
+TEST_F(SurfaceTextureTest, MultiThreaded_UpdateTexImage_vs_SwapBuffers) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId);
+
+    sp<SurfaceTextureType> surfaceTexture = createSurfaceTexture(textureId);
+    ASSERT_EQ(OK, surfaceTexture->setDefaultBufferSize(kTextureSize.width, kTextureSize.height));
+
+    sp<Surface> surface = surfaceTexture->getSurface();
+
+    std::promise<bool> setupSucceededPromise;
+    std::atomic<bool> stop{false};
+    std::thread producerThread([&]() {
+        EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        eglInitialize(display, nullptr, nullptr);
+
+        EGLConfig config = mEglConfig;
+        EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+        EGLContext producerContext =
+                eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttribs);
+
+        EGLSurface producerSurface =
+                eglCreateWindowSurface(display, config, surface.get(), nullptr);
+
+        if (producerSurface == EGL_NO_SURFACE || producerContext == EGL_NO_CONTEXT) {
+            setupSucceededPromise.set_value(false);
+            return;
+        }
+        setupSucceededPromise.set_value(true);
+
+        eglMakeCurrent(display, producerSurface, producerSurface, producerContext);
+
+        while (!stop) {
+            glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            eglSwapBuffers(display, producerSurface);
+        }
+
+        eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroySurface(display, producerSurface);
+        eglDestroyContext(display, producerContext);
+    });
+
+    ASSERT_TRUE(setupSucceededPromise.get_future().get());
+
+    // Try to update texture while producer is spamming frames.
+    // If deadlock exists, updateTexImage (holding A) will block on Driver (Lock B),
+    // and Producer (holding B) will block on onFrameAvailable (Lock A).
+
+    const auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
+        surfaceTexture->updateTexImage();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    stop = true;
+    if (producerThread.joinable()) {
+        producerThread.join();
+    }
+}
 } // namespace android

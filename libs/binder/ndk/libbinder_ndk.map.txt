@@ -235,6 +235,9 @@ LIBBINDER_NDK37 { # introduced=37
     AIBinder_requiresVintfDeclaration; # systemapi llndk
     AIBinder_isVendorStable; # systemapi llndk
     AIBinder_isSystemStable; # systemapi llndk
+    APersistableBundle_putByteVector;
+    APersistableBundle_getByteVector;
+    APersistableBundle_getByteVectorKeys;
 };
 
 LIBBINDER_NDK_PLATFORM {

@@ -22,6 +22,7 @@
 #include <android-base/result.h>
 #include <span>
 
+#include <deque>
 #include <vector>
 
 namespace android::vibrator {

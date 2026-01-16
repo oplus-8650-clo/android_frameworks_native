@@ -44,6 +44,7 @@ aconfig_declarations {
     name: "com.android.input.flags-aconfig",
     package: "com.android.input.flags",
     container: "system",
+    exportable: true,
     srcs: ["input_flags.aconfig"],
 }
 

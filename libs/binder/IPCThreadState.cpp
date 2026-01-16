@@ -20,16 +20,11 @@
 
 #include <binder/Binder.h>
 #include <binder/BpBinder.h>
-#include <binder/Functional.h>
 #include <binder/ProcessState.h>
 #include <binder/TextOutput.h>
 
 #include <utils/CallStack.h>
 #include <utils/SystemClock.h>
-
-#ifdef __BIONIC__
-#include <android/crash_detail.h>
-#endif
 
 #include <atomic>
 #include <errno.h>
@@ -1517,26 +1512,6 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
             mCallingPid = tr.sender_pid;
             mCallingSid = reinterpret_cast<const char*>(tr_secctx.secctx);
             mCallingUid = tr.sender_euid;
-
-#ifdef __BIONIC__
-            crash_detail_t* cd = nullptr;
-            char an[64] = {0};
-            const int snpResult = snprintf(an, sizeof(an) - 1,
-                                        "from pid %d uid %d", mCallingPid,
-                                        mCallingUid.value());
-            static const char kCrashDetailName[] = "binder_transaction";
-
-            if (snpResult > 0) {
-                cd = android_crash_detail_register(kCrashDetailName, sizeof(kCrashDetailName) - 1,
-                                                   an, strlen(an));
-            }
-            auto crash_detail_guard = binder::impl::make_scope_guard([cd]() {
-                if (cd) {
-                    android_crash_detail_unregister(cd);
-                }
-            });
-#endif
-
             mHasExplicitIdentity = false;
             mLastTransactionBinderFlags = tr.flags;
 

@@ -33,3 +33,13 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "update_angle_feature_overrides_in_loader_open"
+  namespace: "gpu"
+  description: "This flag controls moving the call to updateAngleFeatureOverrides() from GraphicsEnv::setAngleInfo() to Loader::open()."
+  bug: "461292354"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}

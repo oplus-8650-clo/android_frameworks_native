@@ -30,6 +30,7 @@
 #include <android/dlext.h>
 #include <binder/IServiceManager.h>
 #include <bionic/dlext_namespaces.h>
+#include <com_android_graphics_egl_flags.h>
 #include <graphicsenv/IGpuService.h>
 #include <log/log.h>
 #include <sys/prctl.h>
@@ -68,6 +69,8 @@ static bool isVndkEnabled() {
     return false;
 }
 } // namespace
+
+namespace egl_flags = com::android::graphics::egl::flags;
 
 namespace android {
 
@@ -197,6 +200,14 @@ static sp<IGpuService> getGpuService() {
     }
 
     return interface_cast<IGpuService>(binder);
+}
+
+GraphicsEnv::GraphicsEnv() : mZygoteDisableGlPreload(false) {
+    // RO properties cannot change at runtime, so it only needs to be queried once.
+    auto disableGlPreload = base::GetProperty("ro.zygote.disable_gl_preload", "");
+    if (!disableGlPreload.empty() && disableGlPreload == "true") {
+        mZygoteDisableGlPreload = true;
+    }
 }
 
 /*static*/ GraphicsEnv& GraphicsEnv::getInstance() {
@@ -617,8 +628,10 @@ void GraphicsEnv::setAngleInfo(const std::string& path, const bool shouldUseNati
     }
     mShouldUseNativeDriver = shouldUseNativeDriver;
 
-    if (mShouldUseAngle) {
-        updateAngleFeatureOverrides();
+    if (!egl_flags::update_angle_feature_overrides_in_loader_open()) {
+        if (mShouldUseAngle) {
+            updateAngleFeatureOverrides();
+        }
     }
 }
 
@@ -653,7 +666,7 @@ void GraphicsEnv::getAngleFeatureOverrides(std::vector<const char*>& enabled,
         }
     }
 
-    if (mFeatureOverrides.mPackageFeatures.count(mPackageName)) {
+    if (!mPackageName.empty() && mFeatureOverrides.mPackageFeatures.count(mPackageName)) {
         for (const FeatureConfig& feature : mFeatureOverrides.mPackageFeatures[mPackageName]) {
             if (feature.mEnabled) {
                 enabled.push_back(feature.mFeatureName.c_str());
@@ -748,6 +761,10 @@ bool GraphicsEnv::shouldUseSystemAngle() {
 
 bool GraphicsEnv::shouldUseNativeDriver() {
     return mShouldUseNativeDriver;
+}
+
+bool GraphicsEnv::isZygoteDisableGlPreload() {
+    return mZygoteDisableGlPreload;
 }
 
 /**
