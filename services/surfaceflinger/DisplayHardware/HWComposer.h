@@ -240,6 +240,9 @@ public:
             const Hwc2::Composer::DisplayBrightnessOptions&) = 0;
 
     virtual status_t setDisplayMode(PhysicalDisplayId, hal::HWConfigId, bool) = 0;
+    virtual status_t setDisplayModes(
+            const std::vector<std::pair<PhysicalDisplayId, hal::HWConfigId>>& requests,
+            bool seamless) = 0;
 
     // Get whether the display skipped validation on the latest present
     virtual bool getValidateSkipped(HalDisplayId displayId) const = 0;
@@ -458,6 +461,9 @@ public:
             const Hwc2::Composer::DisplayBrightnessOptions&) override;
 
     status_t setDisplayMode(PhysicalDisplayId, hal::HWConfigId, bool) override;
+    status_t setDisplayModes(
+            const std::vector<std::pair<PhysicalDisplayId, hal::HWConfigId>>& requests,
+            bool seamless) override;
 
     // Events handling ---------------------------------------------------------
 

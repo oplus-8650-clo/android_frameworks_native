@@ -135,6 +135,14 @@ void RuntimeEffectManager::createAndStoreKnownEffects() {
             .fakeOutputDataspace = static_cast<ui::Dataspace>(0x9010000),
             .type = shaders::LinearEffect::SkSLType::Shader,
     });
+
+    mKnownEffects[kBT2020_HLG__UNKNOWN__false__UNKNOWN__Shader] = getOrCreateLinearRuntimeEffect({
+            .inputDataspace = ui::Dataspace::BT2020_HLG,
+            .outputDataspace = ui::Dataspace::UNKNOWN,
+            .undoPremultipliedAlpha = false,
+            .fakeOutputDataspace = ui::Dataspace::UNKNOWN,
+            .type = shaders::LinearEffect::SkSLType::Shader,
+    });
 }
 
 void RuntimeEffectManager::dump(std::string& result) {

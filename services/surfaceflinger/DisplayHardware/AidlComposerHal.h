@@ -267,6 +267,8 @@ public:
     Error getDisplayKnownVsyncSample(Display display,
                                      composer3::VsyncSample* outVsyncSample) override;
     Error setDisplayMode(Display display, Config modeId, bool seamless) override;
+    Error setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                          bool seamless) override;
 
 private:
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client

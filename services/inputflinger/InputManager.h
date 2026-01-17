@@ -24,6 +24,7 @@
 #include "InputFilter.h"
 #include "InputProcessor.h"
 #include "InputReaderBase.h"
+#include "InteractionReporterInterface.h"
 #include "PointerChoreographer.h"
 #include "include/UnwantedInteractionBlockerInterface.h"
 
@@ -107,6 +108,9 @@ public:
     /* Gets the input filter */
     virtual InputFilterInterface& getInputFilter() = 0;
 
+    /* Gets the interaction reporter */
+    virtual InteractionReporterInterface& getInteractionReporter() = 0;
+
     /* Check that the input stages have not deadlocked. */
     virtual void monitor() = 0;
 
@@ -122,7 +126,8 @@ public:
     InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
                  InputDispatcherPolicyInterface& dispatcherPolicy,
                  PointerChoreographerPolicyInterface& choreographerPolicy,
-                 InputFilterPolicyInterface& inputFilterPolicy, JavaVM* vm);
+                 InputFilterPolicyInterface& inputFilterPolicy, JavaVM* vm,
+                 bool createInteractionReporter);
 
     status_t start() override;
     status_t stop() override;
@@ -133,6 +138,7 @@ public:
     InputDeviceMetricsCollectorInterface& getMetricsCollector() override;
     InputDispatcherInterface& getDispatcher() override;
     InputFilterInterface& getInputFilter() override;
+    InteractionReporterInterface& getInteractionReporter() override;
     void monitor() override;
     void dump(std::string& dump) override;
 
@@ -154,6 +160,8 @@ private:
     std::unique_ptr<InputProcessorInterface> mProcessor;
 
     std::unique_ptr<InputDeviceMetricsCollectorInterface> mCollector;
+
+    std::unique_ptr<InteractionReporterInterface> mInteractionReporter;
 
     std::unique_ptr<InputDispatcherInterface> mDispatcher;
 

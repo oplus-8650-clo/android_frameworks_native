@@ -23,11 +23,15 @@ package {
 
 cc_library_static {
     name: "libprocpartition",
+    whole_static_libs: [
+        "libtinyxml2",
+    ],
     shared_libs: [
         "libbase",
     ],
     srcs: [
         "procpartition.cpp",
+        "apexcache.cpp",
     ],
     cflags: [
         "-Wall",

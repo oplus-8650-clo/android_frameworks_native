@@ -991,7 +991,15 @@ void Scheduler::resync(ResyncCaller caller) {
 }
 
 bool Scheduler::addResyncSample(PhysicalDisplayId id, nsecs_t timestamp,
-                                std::optional<nsecs_t> hwcVsyncPeriodIn) {
+                                std::optional<nsecs_t> hwcVsyncPeriodIn,
+                                VSyncTracker::VsyncTimeSource source) {
+    if (source == VSyncTracker::VsyncTimeSource::PresentFence ||
+        source == VSyncTracker::VsyncTimeSource::Unknown) {
+        LOG_ALWAYS_FATAL("Invalid VsyncTimeSource for addResyncSample: %s",
+                         ftl::enum_string(source).c_str());
+        return false;
+    }
+
     const auto hwcVsyncPeriod = ftl::Optional(hwcVsyncPeriodIn).transform([](nsecs_t nanos) {
         return Period::fromNs(nanos);
     });
@@ -1000,7 +1008,7 @@ bool Scheduler::addResyncSample(PhysicalDisplayId id, nsecs_t timestamp,
         ALOGW("%s: Invalid display %s!", __func__, to_string(id).c_str());
         return false;
     }
-    return schedule->addResyncSample(TimePoint::fromNs(timestamp), hwcVsyncPeriod);
+    return schedule->addResyncSample(TimePoint::fromNs(timestamp), hwcVsyncPeriod, source);
 }
 
 void Scheduler::addPresentFence(PhysicalDisplayId id, std::shared_ptr<FenceTime> fence) {

@@ -68,7 +68,8 @@ public:
                                  const std::string& packageName, int32_t userId, int32_t flags,
                                  int32_t appId, int32_t previousAppId, const std::string& seInfo,
                                  int32_t targetSdkVersion, int64_t* ceDataInode,
-                                 int64_t* deDataInode, int32_t pccUid, int32_t previousPccUid);
+                                 int64_t* deDataInode, int64_t* pccCeDataInode,
+                                 int64_t* pccDeDataInode, int32_t pccUid, int32_t previousPccUid);
 
     binder::Status createAppData(
             const android::os::CreateAppDataArgs& args,
@@ -89,7 +90,9 @@ public:
             const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode);
     binder::Status destroyAppData(const std::optional<std::string>& uuid,
             const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode);
-
+    binder::Status destroyPccData(const std::optional<std::string>& uuid,
+                                  const std::string& packageName, int32_t userId, int32_t flags,
+                                  int64_t ceDataInode);
     binder::Status fixupAppData(const std::optional<std::string>& uuid, int32_t flags);
 
     binder::Status snapshotAppData(const std::optional<std::string>& volumeUuid,
@@ -240,8 +243,9 @@ private:
                                        const std::string& packageName, int32_t userId,
                                        int32_t flags, int32_t appId, int32_t previousAppId,
                                        const std::string& seInfo, int32_t targetSdkVersion,
-                                       int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
-                                       int32_t previousPccId);
+                                       int64_t* ceDataInode, int64_t* deDataInode,
+                                       int64_t* pccCeDataInode, int64_t* pccDeDataInode,
+                                       int32_t pccId, int32_t previousPccId);
     binder::Status restoreconAppDataLocked(const std::optional<std::string>& uuid,
                                            const std::string& packageName, int32_t userId,
                                            int32_t flags, int32_t appId, const std::string& seInfo);
@@ -274,7 +278,7 @@ private:
                                                     int32_t previousPccId, int32_t cacheGid,
                                                     const std::string& seInfo, mode_t targetMode,
                                                     long projectIdApp, long projectIdCache,
-                                                    bool isCeStorage);
+                                                    bool isCeStorage, int64_t* pccDataInode);
 };
 
 }  // namespace installd

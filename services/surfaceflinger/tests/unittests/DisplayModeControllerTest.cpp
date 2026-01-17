@@ -96,6 +96,38 @@ public:
     }
 
 protected:
+    PhysicalDisplayId initiateSecondaryDisplay() {
+        constexpr uint8_t kPort = 112;
+        EXPECT_CALL(*mComposerHal, getDisplayIdentificationData(kSecondaryHwcDisplayId, _, _, _))
+                .WillOnce(DoAll(SetArgPointee<1>(kPort), SetArgPointee<2>(getInternalEdid()),
+                                Return(hal::Error::NONE)));
+
+        EXPECT_CALL(*mComposerHal, getDisplayConnectionType(kSecondaryHwcDisplayId, _))
+                .WillOnce(DoAll(SetArgPointee<1>(
+                                        hal::IComposerClient::DisplayConnectionType::EXTERNAL),
+                                Return(hal::V2_4::Error::NONE)));
+
+        EXPECT_CALL(*mComposerHal, setClientTargetSlotCount(kSecondaryHwcDisplayId));
+        EXPECT_CALL(*mComposerHal,
+                    setVsyncEnabled(kSecondaryHwcDisplayId, hal::IComposerClient::Vsync::DISABLE));
+        EXPECT_CALL(*mComposerHal, onHotplugConnect(kSecondaryHwcDisplayId));
+
+        const auto infoOpt =
+                mComposer->onHotplug(kSecondaryHwcDisplayId, HWComposer::HotplugEvent::Connected);
+
+        auto displayId = infoOpt->id;
+        mSecondaryDisplaySnapshotOpt.emplace(displayId, infoOpt->port,
+                                             android::ScreenPartStatus::UNSUPPORTED,
+                                             ui::DisplayConnectionType::External,
+                                             makeModes(kMode60, kMode90, kMode120),
+                                             ui::ColorModes{}, std::nullopt);
+
+        ftl::FakeGuard guard(kMainThreadContext);
+        mDmc.registerDisplay(*mSecondaryDisplaySnapshotOpt, kModeId60,
+                             scheduler::RefreshRateSelector::Config{});
+        return displayId;
+    }
+
     hal::VsyncPeriodChangeConstraints expectModeSet(const DisplayModeRequest& request,
                                                     hal::VsyncPeriodChangeTimeline& timeline,
                                                     bool subsequent = false,
@@ -132,7 +164,21 @@ protected:
         return constraints;
     }
 
+    void finalizeModeSet(PhysicalDisplayId displayId) {
+        ftl::FakeGuard guard(kMainThreadContext);
+        EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getPendingMode(displayId));
+
+        EXPECT_CALL(mActiveModeListener, Call(displayId, 90_Hz, 90_Hz)).Times(1);
+
+        auto modeChange = mDmc.finalizeModeChange(displayId);
+
+        auto* changePtr = std::get_if<DisplayModeController::RefreshRateChange>(&modeChange);
+        ASSERT_TRUE(changePtr);
+        EXPECT_DISPLAY_MODE_REQUEST(kDesiredMode90, changePtr->activeMode);
+    }
+
     static constexpr hal::HWDisplayId kHwcDisplayId = 1234;
+    static constexpr hal::HWDisplayId kSecondaryHwcDisplayId = 5678;
 
     Hwc2::mock::Composer* mComposerHal = new testing::StrictMock<Hwc2::mock::Composer>();
     const std::unique_ptr<HWComposer> mComposer{
@@ -144,6 +190,7 @@ protected:
 
     PhysicalDisplayId mDisplayId;
     std::optional<DisplaySnapshot> mDisplaySnapshotOpt;
+    std::optional<DisplaySnapshot> mSecondaryDisplaySnapshotOpt;
 
     static constexpr DisplayModeId kModeId60{0};
     static constexpr DisplayModeId kModeId90{1};
@@ -295,15 +342,7 @@ TEST_F(DisplayModeControllerTest, initiateModeChange) REQUIRES(kMainThreadContex
 
     EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
               mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));
-    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getPendingMode(mDisplayId));
-
-    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 90_Hz, 90_Hz)).Times(1);
-
-    auto modeChange = mDmc.finalizeModeChange(mDisplayId);
-
-    auto* changePtr = std::get_if<DisplayModeController::RefreshRateChange>(&modeChange);
-    ASSERT_TRUE(changePtr);
-    EXPECT_DISPLAY_MODE_REQUEST(kDesiredMode90, changePtr->activeMode);
+    finalizeModeSet(mDisplayId);
 }
 
 TEST_F(DisplayModeControllerTest, rejectModeChange) REQUIRES(kMainThreadContext) {
@@ -353,15 +392,128 @@ TEST_F(DisplayModeControllerTest, initiateModeChangeDisplayCommand) REQUIRES(kMa
 
     EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
               mDmc.initiateModeChange(mDisplayId, std::move(modeRequest), constraints, timeline));
-    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getPendingMode(mDisplayId));
+    finalizeModeSet(mDisplayId);
+}
 
-    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 90_Hz, 90_Hz)).Times(1);
+TEST_F(DisplayModeControllerTest, initiateModeChangeMultiDisplayCommand)
+REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
+    SET_FLAG_FOR_TEST(flags::display_command_modeset, true);
+    SET_FLAG_FOR_TEST(flags::modeset_multi_display, true);
 
-    auto modeChange = mDmc.finalizeModeChange(mDisplayId);
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
 
-    auto* changePtr = std::get_if<DisplayModeController::RefreshRateChange>(&modeChange);
-    ASSERT_TRUE(changePtr);
-    EXPECT_DISPLAY_MODE_REQUEST(kDesiredMode90, changePtr->activeMode);
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+
+    const auto desiredModeOpt = mDmc.takeDesiredModeIfMatches(mDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, desiredModeOpt);
+    auto modeRequest = *desiredModeOpt;
+
+    std::vector<std::pair<hal::HWDisplayId, hal::HWConfigId>> displayModes(
+            {{kHwcDisplayId, modeRequest.mode.modePtr->getHwcId()}});
+
+    EXPECT_CALL(*mComposerHal, setDisplayModes(displayModes, false))
+            .WillOnce(Return(hal::Error::NONE));
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
+              mDmc.initiateModeChange(ftl::init::map(mDisplayId, std::move(modeRequest))));
+    finalizeModeSet(mDisplayId);
+}
+
+TEST_F(DisplayModeControllerTest, initiateMultiModeChangeMultiDisplayCommand)
+REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
+    SET_FLAG_FOR_TEST(flags::display_command_modeset, true);
+    SET_FLAG_FOR_TEST(flags::modeset_multi_display, true);
+
+    auto secondaryDisplayId = initiateSecondaryDisplay();
+
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
+    EXPECT_CALL(mActiveModeListener, Call(secondaryDisplayId, 60_Hz, 60_Hz)).Times(1);
+
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(secondaryDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(secondaryDisplayId));
+
+    const auto desiredModeOpt = mDmc.takeDesiredModeIfMatches(mDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, desiredModeOpt);
+    auto modeRequest = *desiredModeOpt;
+    const auto secondaryDesiredModeOpt =
+            mDmc.takeDesiredModeIfMatches(secondaryDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, secondaryDesiredModeOpt);
+    auto secondaryModeRequest = *secondaryDesiredModeOpt;
+
+    std::vector<std::pair<hal::HWDisplayId, hal::HWConfigId>> displayModes(
+            {{kHwcDisplayId, modeRequest.mode.modePtr->getHwcId()},
+             {kSecondaryHwcDisplayId, secondaryModeRequest.mode.modePtr->getHwcId()}});
+
+    EXPECT_CALL(*mComposerHal, setDisplayModes(displayModes, false))
+            .WillOnce(Return(hal::Error::NONE));
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Changed,
+              mDmc.initiateModeChange(
+                      ftl::init::map(mDisplayId,
+                                     std::move(modeRequest))(secondaryDisplayId,
+                                                             std::move(secondaryModeRequest))));
+    finalizeModeSet(mDisplayId);
+    finalizeModeSet(secondaryDisplayId);
+
+    mDmc.unregisterDisplay(secondaryDisplayId);
+}
+
+TEST_F(DisplayModeControllerTest, rejectMultiModeChange) REQUIRES(kMainThreadContext) {
+    SET_FLAG_FOR_TEST(flags::modeset_state_machine, true);
+    SET_FLAG_FOR_TEST(flags::display_command_modeset, true);
+    SET_FLAG_FOR_TEST(flags::modeset_multi_display, true);
+
+    auto secondaryDisplayId = initiateSecondaryDisplay();
+
+    // Called because setDesiredMode resets the render rate to the active refresh rate.
+    EXPECT_CALL(mActiveModeListener, Call(mDisplayId, 60_Hz, 60_Hz)).Times(1);
+    EXPECT_CALL(mActiveModeListener, Call(secondaryDisplayId, 60_Hz, 60_Hz)).Times(1);
+
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(mDisplayId, DisplayModeRequest(kDesiredMode90)));
+    EXPECT_EQ(Action::InitiateDisplayModeSwitch,
+              mDmc.setDesiredMode(secondaryDisplayId, DisplayModeRequest(kDesiredMode90)));
+
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(mDisplayId));
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, mDmc.getDesiredMode(secondaryDisplayId));
+
+    const auto desiredModeOpt = mDmc.takeDesiredModeIfMatches(mDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, desiredModeOpt);
+    auto modeRequest = *desiredModeOpt;
+    const auto secondaryDesiredModeOpt =
+            mDmc.takeDesiredModeIfMatches(secondaryDisplayId, mock::kResolution1080p);
+    EXPECT_DISPLAY_MODE_REQUEST_OPT(kDesiredMode90, secondaryDesiredModeOpt);
+    auto secondaryModeRequest = *secondaryDesiredModeOpt;
+
+    std::vector<std::pair<hal::HWDisplayId, hal::HWConfigId>> displayModes(
+            {{kHwcDisplayId, modeRequest.mode.modePtr->getHwcId()},
+             {kSecondaryHwcDisplayId, secondaryModeRequest.mode.modePtr->getHwcId()}});
+
+    EXPECT_CALL(*mComposerHal, setDisplayModes(displayModes, false))
+            .WillOnce(Return(hal::Error::CONFIG_FAILED));
+
+    EXPECT_EQ(DisplayModeController::ModeChangeResult::Rejected,
+              mDmc.initiateModeChange(
+                      ftl::init::map(mDisplayId,
+                                     std::move(modeRequest))(secondaryDisplayId,
+                                                             std::move(secondaryModeRequest))));
+    EXPECT_FALSE(mDmc.getPendingMode(mDisplayId));
+    EXPECT_FALSE(mDmc.getDesiredMode(mDisplayId));
+    EXPECT_FALSE(mDmc.getPendingMode(secondaryDisplayId));
+    EXPECT_FALSE(mDmc.getDesiredMode(secondaryDisplayId));
+    mDmc.unregisterDisplay(secondaryDisplayId);
 }
 
 TEST_F(DisplayModeControllerTest, initiateRenderRateSwitch) {

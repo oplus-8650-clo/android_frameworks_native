@@ -298,6 +298,48 @@ auto DisplayModeController::initiateModeChange(PhysicalDisplayId displayId,
     }
 }
 
+auto DisplayModeController::initiateModeChange(
+        ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayModeRequest>&& modeRequestMap)
+        -> ModeChangeResult {
+    std::lock_guard lock(mDisplayLock);
+    std::vector<std::pair<PhysicalDisplayId, hal::HWConfigId>> displayModes;
+    ui::PhysicalDisplayVector<Display*> displayPtrs;
+    bool seamlessRequired = true;
+    for (auto& [displayId, desiredMode] : modeRequestMap) {
+        const auto& displayPtr =
+                FTL_EXPECT(mDisplays.get(displayId).ok_or(ModeChangeResult::Aborted)).get();
+        displayPtrs.push_back(displayPtr.get());
+
+        ALOGD("%s %s", displayPtr->concatId(__func__).c_str(), to_string(desiredMode).c_str());
+        displayPtr->pendingModeOpt = std::move(desiredMode);
+
+        const auto& mode = *displayPtr->pendingModeOpt->mode.modePtr;
+        // Either all display(s) are seamless or none of them are.
+        seamlessRequired &= displayPtr->pendingModeOpt->seamless;
+        displayModes.push_back({displayId, mode.getHwcId()});
+    }
+
+    const auto error = mComposerPtr->setDisplayModes(displayModes, seamlessRequired);
+
+    for (auto displayPtr : displayPtrs) {
+        if (error != OK) {
+            displayPtr->pendingModeOpt.reset();
+        } else {
+            const auto& mode = *displayPtr->pendingModeOpt->mode.modePtr;
+            SFTRACE_INT(displayPtr->pendingModeFpsTrace.c_str(), mode.getVsyncRate().getIntValue());
+        }
+    }
+
+    switch (error) {
+        case FAILED_TRANSACTION:
+            return ModeChangeResult::Rejected;
+        case OK:
+            return ModeChangeResult::Changed;
+        default:
+            return ModeChangeResult::Aborted;
+    }
+}
+
 void DisplayModeController::finalizeModeChange(PhysicalDisplayId displayId, DisplayModeId modeId,
                                                Fps vsyncRate, Fps renderFps) {
     std::lock_guard lock(mDisplayLock);

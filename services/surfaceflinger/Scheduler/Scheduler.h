@@ -269,11 +269,11 @@ public:
         mLastResyncTimeOnTx = 0;
     }
 
-    // Passes a vsync sample to VsyncController. Returns true if
-    // VsyncController detected that the vsync period changed and false
-    // otherwise.
+    // Passes a vsync sample to VsyncController. Returns true if VsyncController detected that the
+    // vsync period changed and false otherwise.
     bool addResyncSample(PhysicalDisplayId, nsecs_t timestamp,
-                         std::optional<nsecs_t> hwcVsyncPeriod);
+                         std::optional<nsecs_t> hwcVsyncPeriod,
+                         VSyncTracker::VsyncTimeSource source);
     void addPresentFence(PhysicalDisplayId, std::shared_ptr<FenceTime>)
             REQUIRES(kMainThreadContext);
 

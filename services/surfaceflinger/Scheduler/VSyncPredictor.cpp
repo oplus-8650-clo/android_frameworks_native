@@ -142,7 +142,7 @@ Period VSyncPredictor::minFramePeriodLocked() const {
     return Period::fromNs(slope * mNumVsyncsForFrame);
 }
 
-bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
+bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp, VsyncTimeSource source) {
     SFTRACE_CALL();
 
     std::lock_guard lock(mMutex);
@@ -170,6 +170,11 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
                                (mClock->now() - *mKnownTimestamp) / 1e6f);
         return false;
     }
+
+    const nsecs_t modelErrorNs = getModelAccuracyInNsLocked(timestamp);
+    SFTRACE_FORMAT("VsyncPredictionError(ms): error= %.2f, actual= %.2f, VsyncTimeSource: %s",
+                   static_cast<float>(modelErrorNs) / 1e6f, static_cast<float>(timestamp) / 1e6f,
+                   ftl::enum_string(source).c_str());
 
     if (mTimestamps.size() != kHistorySize) {
         mTimestamps.push_back(timestamp);
@@ -416,6 +421,10 @@ nsecs_t VSyncPredictor::nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
 
 nsecs_t VSyncPredictor::getModelAccuracyInNs(nsecs_t knownVsync) const {
     std::lock_guard lock(mMutex);
+    return getModelAccuracyInNsLocked(knownVsync);
+}
+
+nsecs_t VSyncPredictor::getModelAccuracyInNsLocked(nsecs_t knownVsync) const {
     const nsecs_t predictedVsync = snapToVsync(knownVsync - idealPeriod() / 2);
     ALOGV("%s : knownVsync=%" PRId64 ", inputtime=%" PRId64 ", predictedVsync=%" PRId64
           ", period=%" PRId64 ", error=%" PRId64,

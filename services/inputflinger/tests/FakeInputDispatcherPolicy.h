@@ -66,6 +66,13 @@ public:
         }
     };
 
+    struct NoFocusedWindowAnrWarningResult {
+        std::shared_ptr<InputApplicationHandle> appHandle;
+        int32_t eventId;
+        std::chrono::milliseconds elapsedDuration;
+        std::chrono::milliseconds timeoutDuration;
+    };
+
     void assertFilterInputEventWasCalled(const NotifyKeyArgs& args);
     void assertFilterInputEventWasCalled(const NotifyMotionArgs& args, vec2 point);
     void assertFilterInputEventWasNotCalled();
@@ -84,6 +91,11 @@ public:
     void assertNotifyWindowUnresponsiveWasCalled(std::chrono::nanoseconds timeout,
                                                  const sp<IBinder>& expectedToken,
                                                  std::optional<gui::Pid> expectedPid);
+    void assertWarnNoFocusedWindowAnrWasCalled(
+            std::chrono::nanoseconds waitDuration,
+            std::chrono::milliseconds expectedTimeoutDuration,
+            const std::shared_ptr<InputApplicationHandle>& expectedApplication);
+    void assertWarnNoFocusedWindowAnrWasNotCalled();
     /** Wrap call with ASSERT_NO_FATAL_FAILURE() to ensure the return value is valid. */
     sp<IBinder> getUnresponsiveWindowToken(std::chrono::nanoseconds timeout);
     void assertNotifyWindowResponsiveWasCalled(const sp<IBinder>& expectedToken,
@@ -143,6 +155,10 @@ private:
     std::queue<sp<IBinder>> mBrokenInputChannels GUARDED_BY(mLock);
     std::condition_variable mNotifyInputChannelBroken;
 
+    // ANR warning handling
+    std::queue<NoFocusedWindowAnrWarningResult> mNoFocusedWindowAnrWarnings GUARDED_BY(mLock);
+    std::condition_variable mNotifyNoFocusedWindowAnrWarning;
+
     sp<IBinder> mDropTargetWindowToken GUARDED_BY(mLock);
     bool mNotifyDropWindowWasCalled GUARDED_BY(mLock) = false;
 
@@ -185,6 +201,10 @@ private:
     void notifyNoFocusedWindowAnr(const std::shared_ptr<InputApplicationHandle>& applicationHandle,
                                   int32_t eventId, nsecs_t eventTime,
                                   std::chrono::milliseconds timeoutDuration) override;
+    void warnNoFocusedWindowAnr(
+            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+            std::chrono::milliseconds elapsedDuration,
+            std::chrono::milliseconds timeoutDuration) override;
     void notifyInputChannelBroken(const sp<IBinder>& connectionToken) override;
     void notifyFocusChanged(const sp<IBinder>&, const sp<IBinder>&) override;
     void notifySensorEvent(DeviceId deviceId, InputDeviceSensorType sensorType,

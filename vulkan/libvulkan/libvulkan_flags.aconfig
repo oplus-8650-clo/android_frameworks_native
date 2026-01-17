@@ -75,3 +75,10 @@ flag {
   description: "Enable loader handling of EXT_private_data for swapchain objects"
   bug: "475049631"
 }
+
+flag {
+  name: "khr_swapchain_maintenance1"
+  namespace: "gpu"
+  description: "Expose the KHR_swapchain_maintenance1 and KHR_surface_maintenance1 extensions"
+  bug: "475589943"
+}

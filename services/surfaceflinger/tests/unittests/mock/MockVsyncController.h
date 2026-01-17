@@ -18,6 +18,7 @@
 
 #include <gmock/gmock.h>
 
+#include "Scheduler/VSyncTracker.h"
 #include "Scheduler/VsyncController.h"
 
 namespace android::mock {
@@ -28,7 +29,9 @@ public:
     ~VsyncController() override;
 
     MOCK_METHOD(bool, addPresentFence, (std::shared_ptr<FenceTime>), (override));
-    MOCK_METHOD(bool, addHwVsyncTimestamp, (nsecs_t, std::optional<nsecs_t>, bool*), (override));
+    MOCK_METHOD(bool, addHwVsyncTimestamp,
+                (nsecs_t, std::optional<nsecs_t>, bool*, scheduler::VSyncTracker::VsyncTimeSource),
+                (override));
     MOCK_METHOD(void, onDisplayModeChanged, (ftl::NonNull<DisplayModePtr>, bool), (override));
     MOCK_METHOD(void, setIgnorePresentFences, (bool), (override));
     MOCK_METHOD(void, setDisplayPowerMode, (hal::PowerMode), (override));

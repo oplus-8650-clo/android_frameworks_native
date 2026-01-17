@@ -448,6 +448,7 @@ public:
         uint64_t nextFrameNumber{0};
         FrameEventHistoryDelta frameTimestamps;
         bool bufferReplaced{false};
+        uint64_t bufferReplacedFrameId{0};
         int maxBufferCount{BufferQueueDefs::NUM_BUFFER_SLOTS};
         bool isSlotExpansionAllowed{false};
         status_t result{NO_ERROR};

@@ -34,6 +34,8 @@ interface IInstalld {
             int userId, int flags, long ceDataInode);
     void destroyAppData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
             int userId, int flags, long ceDataInode);
+    void destroyPccData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
+         int userId, int flags, long ceDataInode);
 
     void fixupAppData(@nullable @utf8InCpp String uuid, int flags);
 

@@ -238,6 +238,8 @@ LIBBINDER_NDK37 { # introduced=37
     APersistableBundle_putByteVector;
     APersistableBundle_getByteVector;
     APersistableBundle_getByteVectorKeys;
+    AParcel_getDataCapacity;
+    AParcel_setDataCapacity;
 };
 
 LIBBINDER_NDK_PLATFORM {

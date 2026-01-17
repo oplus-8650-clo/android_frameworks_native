@@ -39,6 +39,7 @@
 #include <utils/RefBase.h>
 #include <utils/String8.h>
 
+#include <optional>
 #include <shared_mutex>
 #include <unordered_set>
 
@@ -234,6 +235,9 @@ public:
     // See IGraphicBufferProducer::getNextFrameNumber
     uint64_t getNextFrameNumber() const;
 
+    // get the frame id of the last frame replaced by bufferQueueProducer::queueBuffer
+    std::optional<uint64_t> getLastReplacedFrameId() const;
+
     /* Set the scaling mode to be used with a Surface.
      * See NATIVE_WINDOW_SET_SCALING_MODE and its parameters
      * in <system/window.h>. */
@@ -382,6 +386,7 @@ private:
     int dispatchSetPresentMode(va_list args);
     int dispatchSetAutoRefresh(va_list args);
     int dispatchGetDisplayRefreshCycleDuration(va_list args);
+    int dispatchGetLastReplacedFrameId(va_list args);
     int dispatchGetNextFrameId(va_list args);
     int dispatchEnableFrameTimestamps(va_list args);
     int dispatchGetCompositorTiming(va_list args);
@@ -506,25 +511,21 @@ protected:
               : mParent(parent), mSurfaceListener(listener) {}
         virtual ~ProducerListenerProxy() {}
 
-        virtual void onBufferReleased() {
-            mSurfaceListener->onBufferReleased();
-        }
+        virtual void onBufferReleased() override { mSurfaceListener->onBufferReleased(); }
 
-        virtual bool needsReleaseNotify() {
+        virtual bool needsReleaseNotify() override {
             return mSurfaceListener->needsReleaseNotify();
         }
 
-        virtual void onBufferDetached(int slot) { mSurfaceListener->onBufferDetached(slot); }
+        virtual void onBufferDetached(int slot) override {
+            mSurfaceListener->onBufferDetached(slot);
+        }
 
-        virtual void onBuffersDiscarded(const std::vector<int32_t>& slots);
+        virtual void onBuffersDiscarded(const std::vector<int32_t>& slots) override;
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
-        virtual void onBufferAttached() {
-            mSurfaceListener->onBufferAttached();
-        }
+        virtual void onBufferAttached() override { mSurfaceListener->onBufferAttached(); }
 
-        virtual bool needsAttachNotify() {
-            return mSurfaceListener->needsAttachNotify();
-        }
+        virtual bool needsAttachNotify() override { return mSurfaceListener->needsAttachNotify(); }
 #endif
     private:
         wp<Surface> mParent;
@@ -816,6 +817,9 @@ protected:
     mutable std::mutex mDebugMutex;
     String8 mDebugName GUARDED_BY(mDebugMutex) = String8("not-connected");
     uint64_t mId GUARDED_BY(mDebugMutex) = 0;
+
+    // The frame id of the last frame replaced by bufferQueueProducer::queueBuffer
+    std::optional<uint64_t> mLastReplacedFrameId;
 };
 
 } // namespace android

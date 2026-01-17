@@ -39,6 +39,22 @@ public:
     virtual ~VSyncTracker();
 
     /*
+     * Enum to specify the origin of the VSYNC timestamp being reported.
+     */
+    enum class VsyncTimeSource {
+        /* Default VsyncTimeSource. */
+        Unknown,
+        /* Timestamp from a direct hardware VSYNC callback. */
+        HwVsyncCallback,
+        /* Timestamp from querying the last known hardware VSYNC time. */
+        HwVsyncQuery,
+        /* Timestamp derived from a present fence, indicating when a frame was actually presented.
+         */
+        PresentFence,
+        ftl_last = PresentFence,
+    };
+
+    /*
      * The threshold for a vsync timestamp to be too old to be used for prediction of
      * nextAnticipatedVSyncTimeFrom.
      */
@@ -48,16 +64,14 @@ public:
      * Adds a known timestamp from a vsync timing source to the model. This timestamp
      * is used to correct the model's internal phase and period.
      *
-     * The sources for this `timestamp` can include:
-     * 1. A direct hardware vsync callback.
-     * 2. A query via `getDisplayKnownVsyncSample` (which retrieves the last known hardware VSYNC).
-     * 3. A present fence (signaling when a frame was actually presented).
-     *
      * \param [in] timestamp    The timestamp (in nanoseconds) when the vsync signal occurred.
+     * \param [in] source       The origin of the timestamp, as defined by the `VsyncTimeSource`
+     * enum.
      * \return                  True if the timestamp was consistent with the internal model,
      *                          False otherwise.
      */
-    virtual bool addVsyncTimestamp(nsecs_t timestamp) = 0;
+    virtual bool addVsyncTimestamp(nsecs_t timestamp,
+                                   VsyncTimeSource source = VsyncTimeSource::Unknown) = 0;
 
     /*
      * Access the next anticipated vsync time such that the anticipated time >= timePoint.

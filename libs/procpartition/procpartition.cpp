@@ -15,11 +15,17 @@
  */
 
 #include <procpartition/procpartition.h>
+#include <procpartition/apexcache.h>
 
 #include <android-base/file.h>
+#include <android-base/strings.h>
+#include <android-base/logging.h>
+#include <filesystem>
 
 namespace android {
 namespace procpartition {
+
+using apexcache::ApexCache;
 
 std::ostream& operator<<(std::ostream& os, Partition p) {
     switch (p) {
@@ -44,6 +50,52 @@ std::string getExe(pid_t pid) {
         return "";
     }
     return real;
+}
+
+Partition getPartitionFromPreinstalledPath(const std::string& path) {
+    if (android::base::StartsWith(path, "/system/")) {
+        return Partition::SYSTEM;
+    }
+    if (android::base::StartsWith(path, "/system_ext/")) {
+        return Partition::SYSTEM_EXT;
+    }
+    if (android::base::StartsWith(path, "/product/")) {
+        return Partition::PRODUCT;
+    }
+    if (android::base::StartsWith(path, "/vendor/")) {
+        return Partition::VENDOR;
+    }
+    if (android::base::StartsWith(path, "/odm/")) {
+        return Partition::ODM;
+    }
+    return Partition::UNKNOWN;
+}
+
+Partition parseApex(const std::string& s) {
+    std::filesystem::path p(s);
+    auto it = p.begin();
+    // Expecting components: /, apex, <apexName>, ...
+    if (it == p.end() || *it != "/") return Partition::UNKNOWN;
+    ++it; // -> apex
+    if (it == p.end() || *it != "apex") return Partition::UNKNOWN;
+    ++it; // -> <apexName>
+    if (it == p.end()) return Partition::UNKNOWN;
+
+    std::string apexName = it->string();
+
+    size_t at = apexName.find('@');
+    if (at != std::string::npos) {
+        apexName = apexName.substr(0, at);
+    }
+
+    apexcache::ApexCache *instance = ApexCache::getInstance();
+    for (const auto& info: instance->getCache(false /*invalidate*/)) {
+        if (info.moduleName == apexName) {
+            return getPartitionFromPreinstalledPath(info.preinstalledModulePath);
+        }
+    }
+    LOG(INFO) << "parseApex did not find apexName: " << apexName;
+    return Partition::UNKNOWN;
 }
 
 std::string getCmdline(pid_t pid) {
@@ -82,6 +134,9 @@ Partition getPartitionFromRealpath(const std::string& path) {
     }
     size_t backslash = path.find_first_of('/', 1);
     std::string partition = (backslash != std::string::npos) ? path.substr(1, backslash - 1) : path;
+    if (partition == "apex") {
+        return parseApex(path);
+    }
 
     return parsePartition(partition);
 }
@@ -92,6 +147,7 @@ Partition getPartitionFromCmdline(pid_t pid) {
         return Partition::SYSTEM;
     }
     if (cmdline.empty() || cmdline.front() != '/') {
+        LOG(INFO) << "getPartitionFromCmdline empty or front not '/': " << cmdline;
         return Partition::UNKNOWN;
     }
     return getPartitionFromRealpath(cmdline);
@@ -100,6 +156,7 @@ Partition getPartitionFromCmdline(pid_t pid) {
 Partition getPartitionFromExe(pid_t pid) {
     const auto& real = getExe(pid);
     if (real.empty() || real.front() != '/') {
+        LOG(INFO) << "getPartitionFromExe empty or front not '/': " << real;
         return Partition::UNKNOWN;
     }
     return getPartitionFromRealpath(real);

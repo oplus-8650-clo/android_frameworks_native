@@ -263,6 +263,7 @@ enum {
     NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED = 51,
     NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED = 52,
     NATIVE_WINDOW_SET_PRESENT_MODE                = 53,
+    NATIVE_WINDOW_GET_LAST_REPLACED_FRAME_ID      = 54,
     // clang-format on
 };
 
@@ -978,6 +979,11 @@ static inline int native_window_get_refresh_cycle_duration(
 {
     return window->perform(window, NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION,
             outRefreshDuration);
+}
+
+static inline int native_window_get_last_replaced_frame_id(struct ANativeWindow* window,
+                                                           uint64_t* frameId) {
+    return window->perform(window, NATIVE_WINDOW_GET_LAST_REPLACED_FRAME_ID, frameId);
 }
 
 static inline int native_window_get_next_frame_id(

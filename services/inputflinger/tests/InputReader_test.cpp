@@ -9262,4 +9262,142 @@ TEST_F(LightControllerTest, PlayerIdLight) {
     ASSERT_EQ(controller.getLightPlayerId(lights[0].id).value_or(-1), LIGHT_PLAYER_ID);
 }
 
+/**
+ * Simulate a device that has both CURSOR and TOUCH_MT input classes. Check the resulting input
+ * stream. This test reproduces a crash observed in InputDispatcher whenever the verifier is
+ * enabled.
+ */
+TEST_F(InputReaderTest, MagicMouse_ConflictingEvents_legacy) {
+    SCOPED_FLAG_OVERRIDE(enable_inbound_event_verification, false);
+    constexpr int32_t deviceId = 1;
+    mFakePolicy->addDisplayViewport(
+            createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0, true,
+                           /*uniqueId=*/"local:0", NO_PORT, ViewportType::INTERNAL));
+    mFakePolicy->setDefaultPointerDisplayId(DISPLAY_ID);
+    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DISPLAY_INFO);
+
+    mFakeEventHub->addDevice(deviceId, "MagicMouse",
+                             InputDeviceClass::CURSOR | InputDeviceClass::TOUCH_MT |
+                                     InputDeviceClass::EXTERNAL);
+
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_SLOT, 0, 10, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_TRACKING_ID, 0, 10, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_POSITION_X, 0, 1000, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_POSITION_Y, 0, 1000, 0, 0, 0);
+    mFakeEventHub->addRelativeAxis(deviceId, REL_X);
+    mFakeEventHub->addRelativeAxis(deviceId, REL_Y);
+    mFakeEventHub->addKey(deviceId, 0, 0, BTN_MOUSE, 0);
+
+    // Provide initial values to satisfy MultiTouchInputMapper configuration
+    mFakeEventHub->setAbsoluteAxisValue(deviceId, ABS_MT_SLOT, 0);
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_TRACKING_ID, std::vector<int32_t>(11, -1));
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_POSITION_X, std::vector<int32_t>(11, 0));
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_POSITION_Y, std::vector<int32_t>(11, 0));
+
+    mReader->loopOnce();
+
+    // Get the logical device id
+    const std::vector<InputDeviceInfo>& inputDevices = mFakePolicy->getInputDevices();
+    ASSERT_EQ(1U, inputDevices.size());
+    const DeviceId logicalDeviceId = inputDevices[0].getId();
+
+    // 1. Simulate Touch Down (MultiTouch)
+    const nsecs_t downTime = 1000;
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_SLOT, 0);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_TRACKING_ID, 1);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_POSITION_X, 100);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_POSITION_Y, 100);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_SYN, SYN_REPORT, 0);
+
+    mReader->loopOnce();
+
+    // Verify ACTION_DOWN was received
+    mFakeListener->assertNotifyMotionWasCalled(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
+                                                     WithDeviceId(logicalDeviceId),
+                                                     WithDownTime(downTime)));
+
+    // 2. Simulate Mouse Move (Cursor)
+    const nsecs_t moveTime = 2000;
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_REL, REL_X, 10);
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_REL, REL_Y, 10);
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_SYN, SYN_REPORT, 0);
+
+    mReader->loopOnce();
+
+    // Verify HOVER_MOVE was received from the SAME device with downTime reset to 0.
+    // This highlights the inconsistent event stream that is produced:
+    // The device is supposedly DOWN (from touch), but we just received a HOVER_MOVE (from cursor)
+    // with downTime reset to 0 (which is < established downTime).
+    mFakeListener->assertNotifyMotionWasCalled(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE), WithDeviceId(logicalDeviceId),
+                  WithDownTime(0)));
+}
+
+/**
+ * Simulate a device that has both CURSOR and TOUCH_MT input classes. Check the resulting input
+ * stream. When InputDeviceClass::CURSOR is detected, TouchInputMappers should not be created.
+ *
+ * This is a regression test for b/465659130: whenever an Apple Magic Mouse is connected to Android,
+ * the InputDispatcher's verifier detects an inconsistent event stream, which causes a crash.
+ */
+TEST_F(InputReaderTest, MagicMouse_ConflictingEvents) {
+    SCOPED_FLAG_OVERRIDE(enable_inbound_event_verification, true);
+    constexpr int32_t deviceId = 1;
+    mFakePolicy->addDisplayViewport(
+            createViewport(DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0, true,
+                           /*uniqueId=*/"local:0", NO_PORT, ViewportType::INTERNAL));
+    mFakePolicy->setDefaultPointerDisplayId(DISPLAY_ID);
+    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DISPLAY_INFO);
+
+    mFakeEventHub->addDevice(deviceId, "MagicMouse",
+                             InputDeviceClass::CURSOR | InputDeviceClass::TOUCH_MT |
+                                     InputDeviceClass::EXTERNAL);
+
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_SLOT, 0, 10, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_TRACKING_ID, 0, 10, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_POSITION_X, 0, 1000, 0, 0, 0);
+    mFakeEventHub->addAbsoluteAxis(deviceId, ABS_MT_POSITION_Y, 0, 1000, 0, 0, 0);
+    mFakeEventHub->addRelativeAxis(deviceId, REL_X);
+    mFakeEventHub->addRelativeAxis(deviceId, REL_Y);
+    mFakeEventHub->addKey(deviceId, 0, 0, BTN_MOUSE, 0);
+
+    // Provide initial values to satisfy MultiTouchInputMapper configuration
+    mFakeEventHub->setAbsoluteAxisValue(deviceId, ABS_MT_SLOT, 0);
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_TRACKING_ID, std::vector<int32_t>(11, -1));
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_POSITION_X, std::vector<int32_t>(11, 0));
+    mFakeEventHub->setMtSlotValues(deviceId, ABS_MT_POSITION_Y, std::vector<int32_t>(11, 0));
+
+    mReader->loopOnce();
+
+    // Get the logical device id
+    const std::vector<InputDeviceInfo>& inputDevices = mFakePolicy->getInputDevices();
+    ASSERT_EQ(1U, inputDevices.size());
+    const DeviceId logicalDeviceId = inputDevices[0].getId();
+
+    // 1. Simulate Touch Down (MultiTouch)
+    const nsecs_t downTime = 1000;
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_SLOT, 0);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_TRACKING_ID, 1);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_POSITION_X, 100);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_ABS, ABS_MT_POSITION_Y, 100);
+    mFakeEventHub->enqueueEvent(downTime, downTime, deviceId, EV_SYN, SYN_REPORT, 0);
+
+    mReader->loopOnce();
+
+    // Verify ACTION_DOWN was NOT received, because MultiTouchInputMapper is suppressed
+    mFakeListener->assertNotifyMotionWasNotCalled();
+
+    // 2. Simulate Mouse Move (Cursor)
+    const nsecs_t moveTime = 2000;
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_REL, REL_X, 10);
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_REL, REL_Y, 10);
+    mFakeEventHub->enqueueEvent(moveTime, moveTime, deviceId, EV_SYN, SYN_REPORT, 0);
+
+    mReader->loopOnce();
+
+    mFakeListener->assertNotifyMotionWasCalled(
+            AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE), WithDeviceId(logicalDeviceId),
+                  WithDownTime(0)));
+}
+
 } // namespace android

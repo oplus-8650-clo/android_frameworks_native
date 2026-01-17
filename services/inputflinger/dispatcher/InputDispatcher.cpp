@@ -979,6 +979,13 @@ void InputDispatcher::dispatchOnce() {
             nextWakeupTime = LLONG_MIN;
         }
 
+        // Process ANR warning if we are close to ANR warning window.
+        const nsecs_t nextAnrWarningCheck =
+                com::android::input::flags::enable_anr_warning_callback_input_dispatcher()
+                ? processNoFocusedWindowAnrWarningLocked()
+                : LLONG_MAX;
+        nextWakeupTime = std::min(nextWakeupTime, nextAnrWarningCheck);
+
         // If we are still waiting for ack on some events,
         // we might have to wake up earlier to check if an app is anr'ing.
         const nsecs_t nextAnrCheck = processAnrsLocked();
@@ -1028,6 +1035,57 @@ void InputDispatcher::processNoFocusedWindowAnrLocked() {
         return; // We now have a focused window. No need for ANR.
     }
     onAnrLocked(mNoFocusedWindowAnrState->applicationHandle);
+}
+
+/**
+ * Processes a potential "No Focused Window" ANR and sends a warning if the timeout
+ * is approaching.
+ *
+ * This function checks if we are waiting for a focused window and if the ANR timeout
+ * is close. If the remaining time is within half of the total timeout duration, it
+ * triggers an ANR warning by calling warnNoFocusedWindowAnrLocked.
+ *
+ * Returns the time at which the next check for a "No Focused Window" ANR warning
+ *         should occur. Returns LLONG_MAX if there's no pending ANR state or if the warning has
+ * already been triggered.
+ */
+nsecs_t InputDispatcher::processNoFocusedWindowAnrWarningLocked() {
+    // We have a focused window target or ANR warning already triggered, nothing further to do.
+    if (!mNoFocusedWindowAnrState.has_value() || mNoFocusedWindowAnrState->anrWarningTriggered) {
+        return LLONG_MAX;
+    }
+
+    const nsecs_t currentTime = now();
+
+    // Notify apps at the 50% timeout window about imminent ANR.
+    const std::chrono::nanoseconds anrWarningWindow = mNoFocusedWindowAnrState->timeoutDuration / 2;
+    const std::chrono::nanoseconds timeoutDurationRemaining =
+            std::chrono::nanoseconds(mNoFocusedWindowAnrState->timeoutEndTime - currentTime);
+
+    // Warn apps if within the ANR warning window.
+    if (timeoutDurationRemaining <= anrWarningWindow) {
+        const auto elapsedDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                mNoFocusedWindowAnrState->timeoutDuration - timeoutDurationRemaining);
+        warnNoFocusedWindowAnrLocked(mNoFocusedWindowAnrState->applicationHandle,
+                                     mNoFocusedWindowAnrState->eventId, elapsedDuration,
+                                     mNoFocusedWindowAnrState->timeoutDuration);
+        mNoFocusedWindowAnrState->anrWarningTriggered = true;
+        return LLONG_MAX;
+    }
+
+    // return the earliest time we want to trigger ANR warning.
+    return mNoFocusedWindowAnrState->timeoutEndTime - anrWarningWindow.count();
+}
+
+void InputDispatcher::warnNoFocusedWindowAnrLocked(
+        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+        std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration) {
+    auto command = [this, app = inputApplicationHandle, eventId, elapsedDuration,
+                    timeoutDuration]() REQUIRES(mLock) {
+        scoped_unlock unlock(mLock);
+        mPolicy.warnNoFocusedWindowAnr(app, eventId, elapsedDuration, timeoutDuration);
+    };
+    postCommandLocked(std::move(command));
 }
 
 /**

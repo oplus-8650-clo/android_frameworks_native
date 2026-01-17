@@ -23,6 +23,7 @@
 #include "InputManager.h"
 #include "InputReader.h"
 #include "InputTracingThreadedBackend.h"
+#include "InteractionReporter.h"
 #include "UnwantedInteractionBlocker.h"
 #include "dispatcher/InputDispatcher.h"
 
@@ -125,12 +126,14 @@ std::shared_ptr<IInputFlingerRust> createInputFlingerRust() {
  *     -> PointerChoreographer
  *     -> InputProcessor
  *     -> InputDeviceMetricsCollector
+ *     -> InteractionReporter
  *     -> InputDispatcher
  */
 InputManager::InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
                            InputDispatcherPolicyInterface& dispatcherPolicy,
                            PointerChoreographerPolicyInterface& choreographerPolicy,
-                           InputFilterPolicyInterface& inputFilterPolicy, JavaVM* vm) {
+                           InputFilterPolicyInterface& inputFilterPolicy, JavaVM* vm,
+                           bool createInteractionReporter) {
     mInputFlingerRust = createInputFlingerRust();
 
     std::shared_ptr<input_trace::InputTracingBackendInterface> tracingBackend =
@@ -139,6 +142,13 @@ InputManager::InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
                                                                      tracingBackend, vm);
     mTracingStages.emplace_back(
             std::make_unique<TracedInputListener>("InputDispatcher", *mDispatcher));
+
+    if (createInteractionReporter) {
+        // On devices without the Attention service, we can skip the InteractionReporter stage.
+        mInteractionReporter = std::make_unique<InteractionReporter>(*mTracingStages.back());
+        mTracingStages.emplace_back(std::make_unique<TracedInputListener>("InteractionReporter",
+                                                                          *mInteractionReporter));
+    }
 
     mInputFilter = std::make_unique<InputFilter>(*mTracingStages.back(), *mInputFlingerRust,
                                                  inputFilterPolicy, vm);
@@ -230,6 +240,10 @@ InputDispatcherInterface& InputManager::getDispatcher() {
 
 InputFilterInterface& InputManager::getInputFilter() {
     return *mInputFilter;
+}
+
+InteractionReporterInterface& InputManager::getInteractionReporter() {
+    return *mInteractionReporter;
 }
 
 void InputManager::monitor() {
