@@ -1193,6 +1193,7 @@ status_t BufferQueueProducer::queueBuffer(int slot,
                         mCore->mActiveBuffers.erase(last.mSlot);
                         mCore->mFreeBuffers.push_back(last.mSlot);
                         output->bufferReplaced = true;
+                        output->bufferReplacedFrameId = mSlots[last.mSlot].mFrameNumber;
                     }
                 }
 

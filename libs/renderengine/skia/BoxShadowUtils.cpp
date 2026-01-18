@@ -1,59 +1,49 @@
 #include "BoxShadowUtils.h"
 
+#include <SkRegion.h>
+#include <SkVertices.h>
 #include <common/trace.h>
+#include <algorithm>
 
 namespace android::renderengine::skia {
 
 const SkString kEffectSource_BoxShadowEffect(R"(
-uniform half4  u_rectBounds;     // l, t, r, b
-uniform half u_cornerRadius;
+uniform half2  u_rectCenter;
+uniform half2  u_innerHalfDims;
+uniform half2  u_radii; // x=key, y=ambient
+uniform half2  u_invSigmas; // x=key, y=ambient
 
 uniform half4  u_keyShadowColor;
 uniform half2  u_keyOffset;
-uniform half u_keyBlurRadius;
-uniform half u_keySpreadRadius;
 
 uniform half4  u_ambientShadowColor;
 uniform half2  u_ambientOffset;
-uniform half u_ambientBlurRadius;
-uniform half u_ambientSpreadRadius;
 
-half sdRoundRect(half2 p, half2 b, half r) {
-    half2 q = abs(p) - b + r;
+half sdRoundRect(half2 p, half2 d, half r) {
+    half2 q = abs(p) - d;
     return min(max(q.x, q.y), half(0.0)) + length(max(q, half2(0.0))) - r;
 }
 
-// Accurate approximation of erf
-// This can be further approximated and probably
-// nooone would notice the reduced visual quality.
 half erf(half x) {
     return sign(x)*sqrt(half(1.0)-exp2(half(-1.78776)*x*x));
 }
 
 // Gaussian blur in 1D looks good enough.
-half shadow(half x, half blurRadius)
-{
-    half sigma = half(0.57735) * blurRadius + half(0.5);
-    return half(0.5)*(half(1.0) - erf(x/(sigma*half(1.414213))));
+half shadow(half dist, half invSigma) {
+    return half(0.5)*(half(1.0) - erf(dist * invSigma));
 }
 
 half4 main(float2 fragCoord) {
-    half2 rectSize = u_rectBounds.zw - u_rectBounds.xy;
-    half2 halfDims = rectSize * half(0.5);
-    half2 rectCenter = u_rectBounds.xy + halfDims;
-
     // Ambient Shadow Calculation
-    half2 ambientHalfDims = halfDims + u_ambientSpreadRadius;
-    half2 ambientP = fragCoord - rectCenter - u_ambientOffset;
-    half ambientDist = sdRoundRect(ambientP, ambientHalfDims, u_cornerRadius + u_ambientSpreadRadius);
-    half ambientIntensity = shadow(ambientDist, u_ambientBlurRadius);
+    half2 ambientP = fragCoord - u_rectCenter - u_ambientOffset;
+    half ambientDist = sdRoundRect(ambientP, u_innerHalfDims, u_radii.y);
+    half ambientIntensity = shadow(ambientDist, u_invSigmas.y);
     half4 ambientColor = u_ambientShadowColor * ambientIntensity;
 
     // Key Shadow Calculation
-    half2 keyHalfDims = halfDims + u_keySpreadRadius;
-    half2 keyP = fragCoord - rectCenter - u_keyOffset;
-    half keyDist = sdRoundRect(keyP, keyHalfDims, u_cornerRadius + u_keySpreadRadius);
-    half keyIntensity = shadow(keyDist, u_keyBlurRadius);
+    half2 keyP = fragCoord - u_rectCenter - u_keyOffset;
+    half keyDist = sdRoundRect(keyP, u_innerHalfDims, u_radii.x);
+    half keyIntensity = shadow(keyDist, u_invSigmas.x);
     half4 keyColor = u_keyShadowColor * keyIntensity;
 
     // Blend the two shadow colors (standard src-over)
@@ -61,11 +51,33 @@ half4 main(float2 fragCoord) {
 }
 )");
 
+static sk_sp<SkVertices> getShadowFrameVertices(const SkRect& outer, const SkRect& inner) {
+    SkPoint positions[8] = {{outer.fLeft, outer.fTop},     {outer.fRight, outer.fTop},
+                            {outer.fRight, outer.fBottom}, {outer.fLeft, outer.fBottom},
+                            {inner.fLeft, inner.fTop},     {inner.fRight, inner.fTop},
+                            {inner.fRight, inner.fBottom}, {inner.fLeft, inner.fBottom}};
+
+    static const uint16_t kIndices[24] = {
+            0, 1, 5, 0, 5, 4, // Top
+            1, 2, 6, 1, 6, 5, // Right
+            2, 3, 7, 2, 7, 6, // Bottom
+            3, 0, 4, 3, 4, 7  // Left
+    };
+
+    return SkVertices::MakeCopy(SkVertices::kTriangles_VertexMode, 8, positions, positions, nullptr,
+                                24, kIndices);
+}
+
 BoxShadowUtils::BoxShadowUtils(RuntimeEffectManager& manager) : mManager(manager) {}
+
+static float getInvSigma(float blurRadius) {
+    float sigma = 0.57735f * blurRadius + 0.5f;
+    return 1.0f / (sigma * 1.414213f);
+};
 
 void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
                                     const android::gui::BoxShadowSettings& settings,
-                                    bool shouldDrawFpkRect) {
+                                    bool supportsFpk, bool isInteriorOccluded) {
     SFTRACE_CALL();
 
     if (settings.boxShadows.size() == 0) {
@@ -98,47 +110,56 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
 
     // Set up the shader
     SkRuntimeShaderBuilder builder(effect);
-    builder.uniform("u_rectBounds") = SkV4{rect.fLeft, rect.fTop, rect.fRight, rect.fBottom};
-    builder.uniform("u_cornerRadius") = cornerRadius;
+
+    float halfWidth = rect.width() / 2.0f;
+    float halfHeight = rect.height() / 2.0f;
+    builder.uniform("u_rectCenter") = SkV2{rect.centerX(), rect.centerY()};
+    builder.uniform("u_innerHalfDims") = SkV2{halfWidth - cornerRadius, halfHeight - cornerRadius};
+    builder.uniform("u_radii") =
+            SkV2{cornerRadius + keyParams.spreadRadius, cornerRadius + ambientParams.spreadRadius};
+
+    builder.uniform("u_invSigmas") =
+            SkV2{getInvSigma(keyParams.blurRadius), getInvSigma(ambientParams.blurRadius)};
 
     builder.uniform("u_keyShadowColor") = SkColor4f::FromColor(keyParams.color);
     builder.uniform("u_keyOffset") = SkV2{keyParams.offsetX, keyParams.offsetY};
-    builder.uniform("u_keyBlurRadius") = keyParams.blurRadius;
-    builder.uniform("u_keySpreadRadius") = keyParams.spreadRadius;
 
     builder.uniform("u_ambientShadowColor") = SkColor4f::FromColor(ambientParams.color);
     builder.uniform("u_ambientOffset") = SkV2{ambientParams.offsetX, ambientParams.offsetY};
-    builder.uniform("u_ambientBlurRadius") = ambientParams.blurRadius;
-    builder.uniform("u_ambientSpreadRadius") = ambientParams.spreadRadius;
 
     SkPaint shadowPaint;
     shadowPaint.setAntiAlias(false);
     shadowPaint.setShader(builder.makeShader());
 
-    // Draw the combined shadow in a single draw call.
-    canvas->drawRect(unionDrawRect, shadowPaint);
-
-    if (shouldDrawFpkRect) {
-        SFTRACE_NAME("FPKOptimization");
-        // This optimization is just for Ganesh and can be removed once graphite is
-        // enabled.
-        // On a device with ARM Mali-G710 MP7 with 4 chrome windows open this
-        // reduces GPU work period from 16ms to 10ms.
+    if (isInteriorOccluded) {
         float kSin45Deg = 0.70710678118f;
-        SkRect killRect = rect;
         float inset = (1.0f - kSin45Deg) * cornerRadius;
-        killRect.inset(inset, inset);
+        SkRect killRect = rect.makeInset(inset, inset);
+
         // Must be pixel aligned to generate glClear
         killRect.fLeft = ceilf(killRect.fLeft);
         killRect.fTop = ceilf(killRect.fTop);
         killRect.fRight = floorf(killRect.fRight);
         killRect.fBottom = floorf(killRect.fBottom);
 
-        SkPaint paint;
-        paint.setAntiAlias(false);
-        paint.setColor(0);
-        paint.setBlendMode(SkBlendMode::kSrc);
-        canvas->drawRect(killRect, paint);
+        sk_sp<SkVertices> vertices = getShadowFrameVertices(unionDrawRect, killRect);
+        canvas->drawVertices(vertices, SkBlendMode::kSrcOver, shadowPaint);
+
+        if (supportsFpk) {
+            SFTRACE_NAME("FPKOptimization");
+            // This optimization is just for Ganesh and can be removed once graphite is
+            // enabled.
+            // E.g. on ARM Mali-G710 MP7 with 4 chrome windows open this
+            // reduces GPU work period from 16ms to 10ms.
+            SkPaint paint;
+            paint.setAntiAlias(false);
+            paint.setColor(0);
+            paint.setBlendMode(SkBlendMode::kSrc);
+            canvas->drawRect(killRect, paint);
+        }
+    } else {
+        // Draw the combined shadow in a single draw call.
+        canvas->drawRect(unionDrawRect, shadowPaint);
     }
 }
 

@@ -45,7 +45,9 @@ public:
                    size_t minimumSamplesForPrediction, uint32_t outlierTolerancePercent);
     ~VSyncPredictor();
 
-    bool addVsyncTimestamp(nsecs_t timestamp) final EXCLUDES(mMutex);
+    bool addVsyncTimestamp(nsecs_t timestamp,
+                           VsyncTimeSource source = VsyncTimeSource::Unknown) final
+            EXCLUDES(mMutex);
     nsecs_t nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
                                          std::optional<nsecs_t> lastVsyncOpt = {}) final
             EXCLUDES(mMutex);
@@ -144,6 +146,7 @@ private:
     size_t next(size_t i) const REQUIRES(mMutex);
     bool validate(nsecs_t timestamp) const REQUIRES(mMutex);
     Model getVSyncPredictionModelLocked() const REQUIRES(mMutex);
+    nsecs_t getModelAccuracyInNsLocked(nsecs_t knownVsync) const REQUIRES(mMutex);
     nsecs_t snapToVsync(nsecs_t timePoint) const REQUIRES(mMutex);
     Period minFramePeriodLocked() const REQUIRES(mMutex);
     Duration ensureMinFrameDurationIsKept(TimePoint, TimePoint) REQUIRES(mMutex);

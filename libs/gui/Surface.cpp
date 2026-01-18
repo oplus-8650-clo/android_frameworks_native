@@ -1490,6 +1490,9 @@ status_t Surface::queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& 
     {
         Mutex::Autolock lock(mMutex);
 
+        if (output.bufferReplaced) {
+            mLastReplacedFrameId = output.bufferReplacedFrameId;
+        }
         mLastQueueDuration = systemTime() - now;
         if (err != OK) {
             SURF_LOGE("queueBuffer: error queuing buffer, %d", err);
@@ -1564,6 +1567,10 @@ int Surface::queueBuffers(const std::vector<BatchQueuedBuffer>& buffers,
     err = mGraphicBufferProducer->queueBuffers(igbpQueueBufferInputs, &igbpQueueBufferOutputs);
     {
         Mutex::Autolock lock(mMutex);
+
+        if (!igbpQueueBufferOutputs.empty() && igbpQueueBufferOutputs.back().bufferReplaced) {
+            mLastReplacedFrameId = igbpQueueBufferOutputs.back().bufferReplacedFrameId;
+        }
         mLastQueueDuration = systemTime() - now;
         if (err != OK) {
             SURF_LOGE("%s: error queuing buffer, %d", __FUNCTION__, err);
@@ -1801,6 +1808,9 @@ int Surface::perform(int operation, va_list args)
     case NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION:
         res = dispatchGetDisplayRefreshCycleDuration(args);
         break;
+    case NATIVE_WINDOW_GET_LAST_REPLACED_FRAME_ID:
+        res = dispatchGetLastReplacedFrameId(args);
+        break;
     case NATIVE_WINDOW_GET_NEXT_FRAME_ID:
         res = dispatchGetNextFrameId(args);
         break;
@@ -2028,6 +2038,22 @@ int Surface::dispatchSetAutoRefresh(va_list args) {
 int Surface::dispatchGetDisplayRefreshCycleDuration(va_list args) {
     nsecs_t* outRefreshDuration = va_arg(args, int64_t*);
     return getDisplayRefreshCycleDuration(outRefreshDuration);
+}
+
+int Surface::dispatchGetLastReplacedFrameId(va_list args) {
+    uint64_t* outFrameId = va_arg(args, uint64_t*);
+    std::optional<uint64_t> frameId = getLastReplacedFrameId();
+    if (!frameId) {
+        return NOT_ENOUGH_DATA;
+    }
+
+    *outFrameId = *frameId;
+    return NO_ERROR;
+}
+
+std::optional<uint64_t> Surface::getLastReplacedFrameId() const {
+    Mutex::Autolock lock(mMutex);
+    return mLastReplacedFrameId;
 }
 
 int Surface::dispatchGetNextFrameId(va_list args) {
@@ -2397,6 +2423,7 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     mAutoPrerotation = false;
     mEnableFrameTimestamps = false;
     mMaxBufferCount = NUM_BUFFER_SLOTS;
+    mLastReplacedFrameId = {};
 
     if (api == NATIVE_WINDOW_API_CPU) {
         mConnectedToCpu = false;

@@ -31,6 +31,7 @@
 #include "api_gen.h"
 #include "driver_gen.h"
 #include "debug_report.h"
+#include "private_data.h"
 #include "swapchain.h"
 
 namespace vulkan {
@@ -100,6 +101,11 @@ struct DeviceData {
     VkDevice driver_device;
     DeviceDriverTable driver;
     VkPhysicalDevice driver_physical_device;
+
+    std::vector<PrivateDataSlot *> private_data_slots GUARDED_BY(private_data_mutex);
+    std::mutex private_data_mutex;
+    uint32_t num_preallocated_private_data_slots = 0;
+    uint32_t next_preallocated_private_data_slot GUARDED_BY(private_data_mutex) = 0;
 };
 
 bool OpenHAL();

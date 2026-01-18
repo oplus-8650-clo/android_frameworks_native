@@ -2991,6 +2991,59 @@ TEST_F(SurfaceTest, Detach_BufferIsNotLeaked) {
     ASSERT_EQ(nullptr, weakBuffer.promote());
 }
 
+TEST_F(SurfaceTest, ConsumerDetach_BufferIsNotLeaked) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+    struct DetachingListener : public StubSurfaceListener {
+    public:
+        virtual void onBufferDetached(int slot) override { mDetachedSlots.push_back(slot); }
+        virtual bool needsReleaseNotify() override { return true; }
+
+        std::vector<int> mDetachedSlots;
+    };
+
+    sp<DetachingListener> listener = sp<DetachingListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->detachBuffer(item.mGraphicBuffer));
+    }
+
+    ASSERT_EQ(1u, listener->mDetachedSlots.size());
+    wp<GraphicBuffer> weakBuffer = buffer;
+    buffer = nullptr;
+    EXPECT_EQ(nullptr, weakBuffer.promote());
+}
+
+TEST_F(SurfaceTest, ConsumerDetach_BufferIsNotLeaked_WithoutNotifyRelease) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+    sp<StubSurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    {
+        BufferItem item;
+        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+        ASSERT_EQ(OK, consumer->detachBuffer(item.mGraphicBuffer));
+    }
+
+    wp<GraphicBuffer> weakBuffer = buffer;
+    buffer = nullptr;
+    EXPECT_EQ(nullptr, weakBuffer.promote());
+}
+
 // TEST_F(SurfaceTest, DiscardDetach_DoesNotDeadlock) {
 //     constexpr size_t kLotsOfBuffers = 512;
 //     auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
@@ -3218,4 +3271,161 @@ TEST_F(SurfaceTest, LegacyBufferDrop_AppOwned) {
     EXPECT_NE(bufferB, bufferD);
     EXPECT_NE(bufferC, bufferD);
 }
+
+// Test for native_window_get_last_replaced_frame_id, which is used by Vulkan's
+// vkWaitForPresent2KHR to know when a frame has been replaced in the queue.
+TEST_F(SurfaceTest, PresentWaitANWGetLastReplacedFrameIdIsCorrect) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<ANativeWindow> window(surface);
+
+    // Async mode is required for buffers to be dropped.
+    ASSERT_EQ(OK, surface->setAsyncMode(true));
+
+    // We don't need a listener for this test.
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false));
+
+    uint64_t lastReplacedFrameId = 0;
+    // Before any buffers are queued, the last replaced frame ID should be NOT_ENOUGH_DATA
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(0u, lastReplacedFrameId);
+
+    sp<GraphicBuffer> buffer1;
+    sp<Fence> fence1;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer1, &fence1));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer1, fence1)); // frame 1
+
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(0u, lastReplacedFrameId);
+
+    sp<GraphicBuffer> buffer2;
+    sp<Fence> fence2;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer2, &fence2));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer2, fence2)); // frame 2, replaces frame 1
+
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(1u, lastReplacedFrameId);
+
+    sp<GraphicBuffer> buffer3;
+    sp<Fence> fence3;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer3, &fence3));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer3, fence3)); // frame 3, replaces frame 2
+
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(2u, lastReplacedFrameId);
+
+    // Acquire the buffer to make sure the queue is not empty.
+    BufferItem item;
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    // The acquired buffer should be buffer3, with frame number 3.
+    ASSERT_EQ(item.mFrameNumber, 3u);
+
+    // The last replaced frame ID should not change after acquiring a buffer.
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(2u, lastReplacedFrameId);
+
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
+TEST_F(SurfaceTest, FrameNumberIsResetAfterReconnect) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<ANativeWindow> window(surface);
+
+    // Async mode is required for buffers to be dropped.
+    ASSERT_EQ(OK, surface->setAsyncMode(true));
+
+    // We don't need a listener for this test.
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false));
+
+    uint64_t lastReplacedFrameId = 0;
+    // Before any buffers are queued, the last replaced frame ID should be 0.
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(0u, lastReplacedFrameId);
+
+    sp<GraphicBuffer> buffer1;
+    sp<Fence> fence1;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer1, &fence1));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer1, fence1)); // frame 1
+
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(0u, lastReplacedFrameId);
+
+    sp<GraphicBuffer> buffer2;
+    sp<Fence> fence2;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer2, &fence2));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer2, fence2)); // frame 2, replaces frame 1
+
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(1u, lastReplacedFrameId);
+
+    // Disconnect and reconnect
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false));
+
+    // Check value resets
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(1u, lastReplacedFrameId);
+}
+
+// Test for native_window_get_last_replaced_frame_id, which is used by Vulkan's
+// vkWaitForPresent2KHR to know when a frame has been replaced in the queue.
+TEST_F(SurfaceTest, PresentWaitANWGetLastReplacedFrameIdIsCorrect_Plural) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<ANativeWindow> window(surface);
+
+    // Async mode is required for buffers to be dropped.
+    ASSERT_EQ(OK, surface->setAsyncMode(true));
+
+    // We don't need a listener for this test.
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false));
+    ASSERT_EQ(OK, surface->setMaxDequeuedBufferCount(2));
+
+    uint64_t lastReplacedFrameId = 0;
+    // Before any buffers are queued, the last replaced frame ID should be NOT_ENOUGH_DATA
+    ASSERT_EQ(NOT_ENOUGH_DATA,
+              native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(0u, lastReplacedFrameId);
+
+    std::vector<Surface::BatchBuffer> buffers(2);
+    std::vector<Surface::BatchQueuedBuffer> queuedBuffers;
+
+    ASSERT_EQ(OK, surface->dequeueBuffers(&buffers));
+    for (const auto& b : buffers) {
+        queuedBuffers.push_back({b.buffer, b.fenceFd, NATIVE_WINDOW_TIMESTAMP_AUTO});
+    }
+    ASSERT_EQ(OK, surface->queueBuffers(queuedBuffers)); // frames 1 and 2. frame 2 replaces 1.
+
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(1u, lastReplacedFrameId);
+
+    queuedBuffers.clear();
+    ASSERT_EQ(OK, surface->dequeueBuffers(&buffers));
+    for (const auto& b : buffers) {
+        queuedBuffers.push_back({b.buffer, b.fenceFd, NATIVE_WINDOW_TIMESTAMP_AUTO});
+    }
+    // frames 3 and 4. frame 3 replaces 2, frame 4 replaces 3.
+    ASSERT_EQ(OK, surface->queueBuffers(queuedBuffers));
+
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(3u, lastReplacedFrameId);
+
+    // Acquire the buffer to make sure the queue is not empty.
+    BufferItem item;
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    // The acquired buffer should be buffer with frame number 4.
+    ASSERT_EQ(4u, item.mFrameNumber);
+
+    // The last replaced frame ID should not change after acquiring a buffer.
+    ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
+    ASSERT_EQ(3u, lastReplacedFrameId);
+
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
 } // namespace android

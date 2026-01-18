@@ -1265,7 +1265,7 @@ Error AidlComposer::execute(Display display) {
     Error error = Error::NONE;
     for (const auto& cmdErr : commandErrors) {
         const auto index = static_cast<size_t>(cmdErr.commandIndex);
-        if (index < 0 || index >= commands.size()) {
+        if (cmdErr.commandIndex < 0 || index >= commands.size()) {
             ALOGE("invalid command index %zu", index);
             return Error::BAD_PARAMETER;
         }
@@ -1479,6 +1479,46 @@ Error AidlComposer::setDisplayMode(Display display, Config modeId, bool seamless
         error = execute(display);
     } else {
         error = Error::BAD_DISPLAY;
+    }
+    mMutex.unlock_shared();
+    return error;
+}
+
+Error AidlComposer::setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                                    bool seamless) {
+    Error error = Error::NONE;
+    std::vector<DisplayCommand> commands;
+    mMutex.lock_shared();
+    for (const auto& [display, modeId] : requests) {
+        DisplayCommand command;
+        command.display = translate<int64_t>(display);
+        command.activeConfig = {.configId = translate<int32_t>(modeId),
+                                .seamlessRequired = seamless};
+        commands.push_back(std::move(command));
+    }
+    std::vector<CommandError> commandErrors;
+
+    std::vector<CommandResultPayload> results;
+    auto status = mAidlComposerClient->executeCommands(commands, &results);
+    if (status.isOk()) {
+        for (auto& result : results) {
+            commandErrors.push_back(std::move(result.get<CommandResultPayload::Tag::error>()));
+        }
+    } else {
+        ALOGE("executeCommands failed %s", status.getDescription().c_str());
+        error = static_cast<Error>(status.getServiceSpecificError());
+    }
+
+    if (error == Error::NONE && !commandErrors.empty()) {
+        // return the first error
+        const auto& cmdErr = commandErrors.front();
+        const auto index = static_cast<size_t>(cmdErr.commandIndex);
+        if (cmdErr.commandIndex < 0 || index >= commands.size()) {
+            ALOGE("invalid command index %zu", index);
+            error = Error::BAD_PARAMETER;
+        } else {
+            error = translate<Error>(cmdErr.errorCode);
+        }
     }
     mMutex.unlock_shared();
     return error;

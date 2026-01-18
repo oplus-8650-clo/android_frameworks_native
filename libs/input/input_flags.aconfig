@@ -223,3 +223,10 @@ flag {
     purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+    name: "enable_anr_warning_callback_input_dispatcher"
+    namespace: "system_performance"
+    description: "Enables a callback that warns an application when it is at risk of an ANR for input dispatcher."
+    bug: "459887078"
+}

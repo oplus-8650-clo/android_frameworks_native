@@ -519,72 +519,6 @@ cc_library_shared {
     ],
 }
 
-soong_config_module_type {
-    name: "libbinder_remove_cache_static_list_config",
-    module_type: "cc_defaults",
-    config_namespace: "libbinder",
-    bool_variables: ["release_libbinder_remove_cache_static_list"],
-    properties: [
-        "cflags",
-    ],
-}
-
-libbinder_remove_cache_static_list_config {
-    name: "libbinder_remove_cache_static_list_flag",
-    soong_config_variables: {
-        release_libbinder_remove_cache_static_list: {
-            cflags: ["-DLIBBINDER_REMOVE_CACHE_STATIC_LIST"],
-            conditions_default: {
-                cflags: ["-DNO_LIBBINDER_REMOVE_CACHE_STATIC_LIST"],
-            },
-        },
-    },
-}
-
-soong_config_module_type {
-    name: "libbinder_client_cache_config",
-    module_type: "cc_defaults",
-    config_namespace: "libbinder",
-    bool_variables: ["release_libbinder_client_cache"],
-    properties: [
-        "cflags",
-    ],
-}
-
-libbinder_client_cache_config {
-    name: "libbinder_client_cache_flag",
-    soong_config_variables: {
-        release_libbinder_client_cache: {
-            cflags: ["-DLIBBINDER_CLIENT_CACHE"],
-            conditions_default: {
-                cflags: ["-DNO_LIBBINDER_CLIENT_CACHE"],
-            },
-        },
-    },
-}
-
-soong_config_module_type {
-    name: "libbinder_addservice_cache_config",
-    module_type: "cc_defaults",
-    config_namespace: "libbinder",
-    bool_variables: ["release_libbinder_addservice_cache"],
-    properties: [
-        "cflags",
-    ],
-}
-
-libbinder_addservice_cache_config {
-    name: "libbinder_addservice_cache_flag",
-    soong_config_variables: {
-        release_libbinder_addservice_cache: {
-            cflags: ["-DLIBBINDER_ADDSERVICE_CACHE"],
-            conditions_default: {
-                cflags: ["-DNO_LIBBINDER_ADDSERVICE_CACHE"],
-            },
-        },
-    },
-}
-
 cc_defaults {
     name: "libbinder_bpbinder_decstrong_last_flag_default",
     cflags: select(release_flag("RELEASE_LIBBINDER_BPBINDER_DECSTRONG_LAST"), {
@@ -612,10 +546,7 @@ cc_defaults {
 cc_defaults {
     name: "libbinder_kernel_defaults",
     defaults: [
-        "libbinder_client_cache_flag",
         "libbinder_defer_bc_request_freeze_notification_flag_default",
-        "libbinder_addservice_cache_flag",
-        "libbinder_remove_cache_static_list_flag",
         "libbinder_freeze_use_flush_eagerly_flag_default",
     ],
     srcs: [

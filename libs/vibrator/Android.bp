@@ -103,5 +103,6 @@ cc_library {
         "//frameworks/native/libs/vibrator",
         "//frameworks/native/libs/vibrator/tests",
         "//frameworks/av/media/libeffects/hapticgenerator",
+        "//vendor:__subpackages__",
     ],
 }

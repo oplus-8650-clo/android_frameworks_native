@@ -20,7 +20,9 @@
 
 #include <string>
 
+#include <android-base/logging.h>
 #include <android/sysprop/InputProperties.sysprop.h>
+#include <com_android_input_flags.h>
 #include <ftl/flags.h>
 #include <input/Input.h>
 
@@ -39,6 +41,8 @@
 #include "VibratorInputMapper.h"
 
 namespace android {
+
+namespace input_flags = com::android::input::flags;
 
 InputDevice::InputDevice(InputReaderContext* context, DeviceId id, int32_t generation,
                          const InputDeviceIdentifier& identifier)
@@ -632,9 +636,21 @@ std::vector<std::unique_ptr<InputMapper>> InputDevice::createMappers(
     if (classes.test(InputDeviceClass::TOUCHPAD) && classes.test(InputDeviceClass::TOUCH_MT)) {
         mappers.push_back(createInputMapper<TouchpadInputMapper>(contextPtr, readerConfig));
     } else if (classes.test(InputDeviceClass::TOUCH_MT)) {
-        mappers.push_back(createInputMapper<MultiTouchInputMapper>(contextPtr, readerConfig));
+        if (classes.test(InputDeviceClass::CURSOR) &&
+            input_flags::enable_inbound_event_verification()) {
+            LOG(INFO) << "Skipping MultiTouchInputMapper for device " << contextPtr.getName()
+                      << " because InputDeviceClass::CURSOR is set";
+        } else {
+            mappers.push_back(createInputMapper<MultiTouchInputMapper>(contextPtr, readerConfig));
+        }
     } else if (classes.test(InputDeviceClass::TOUCH)) {
-        mappers.push_back(createInputMapper<SingleTouchInputMapper>(contextPtr, readerConfig));
+        if (classes.test(InputDeviceClass::CURSOR) &&
+            input_flags::enable_inbound_event_verification()) {
+            LOG(INFO) << "Skipping SingleTouchInputMapper for device " << contextPtr.getName()
+                      << " because InputDeviceClass::CURSOR is set";
+        } else {
+            mappers.push_back(createInputMapper<SingleTouchInputMapper>(contextPtr, readerConfig));
+        }
     }
 
     // Joystick-like devices.

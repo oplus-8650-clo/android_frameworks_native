@@ -49,7 +49,7 @@ public:
     void onDisplayModeChanged(ftl::NonNull<DisplayModePtr>, bool force) final;
 
     bool addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t> hwcVsyncPeriod,
-                             bool* periodFlushed) final;
+                             bool* periodFlushed, VSyncTracker::VsyncTimeSource source) final;
 
     void setDisplayPowerMode(hal::PowerMode powerMode) final;
 

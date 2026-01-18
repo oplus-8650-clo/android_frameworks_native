@@ -241,6 +241,7 @@ using gui::SecureLayerMode;
 using gui::WindowInfo;
 using gui::aidl_utils::binderStatusFromStatusT;
 using scheduler::VsyncModulator;
+using scheduler::VSyncTracker;
 using ui::Dataspace;
 using ui::DisplayPrimaries;
 using ui::RenderIntent;
@@ -905,6 +906,8 @@ bool shouldUseGraphiteIfSupported() {
     return FlagManager::getInstance().graphite_renderengine() ||
             (FlagManager::getInstance().graphite_renderengine_preview_rollout() &&
              base::GetBoolProperty(PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_PREVIEW_OPTIN, false)) ||
+            (FlagManager::getInstance().graphite_renderengine_preview2_rollout() &&
+             base::GetBoolProperty(PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_PREVIEW2_OPTIN, false)) ||
             (FlagManager::getInstance().graphite_renderengine_desktop_rollout() &&
              base::GetBoolProperty(PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_DESKTOP_OPTIN, false));
 }
@@ -976,7 +979,7 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
                            .setImageCacheSize(maxFrameBufferAcquiredBuffers)
                            .setEnableProtectedContext(enable_protected_contents(false))
                            .setPrecacheToneMapperShaderOnly(false)
-                           .setBlurAlgorithm(chooseBlurAlgorithm(mSupportsBlur))
+                           .setBlurAlgorithm(chooseBlurAlgorithm(true))
                            .setContextPriority(
                                    useContextPriority
                                            ? renderengine::RenderEngine::ContextPriority::Realtime
@@ -1580,35 +1583,29 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
 
     const auto pendingModeOpt = mDisplayModeController.getPendingMode(displayId);
     if (!pendingModeOpt) {
-        // There is no pending mode change. This can happen if the active
-        // display changed and the mode change happened on a different display.
+        // TODO: b/434757601 - Merge this redundant check with the caller's isModeSetPending.
         return true;
     }
 
-    const auto& activeMode = pendingModeOpt->mode;
-    const bool resolutionMatch = !FlagManager::getInstance().synced_resolution_switch() ||
-            activeMode.matchesResolution(mDisplayModeController.getActiveMode(displayId));
+    const auto& pendingMode = pendingModeOpt->mode;
+    const bool resolutionMatch =
+            pendingMode.matchesResolution(mDisplayModeController.getActiveMode(displayId));
 
-    if (!FlagManager::getInstance().synced_resolution_switch()) {
-        if (const auto oldResolution =
-                    mDisplayModeController.getActiveMode(displayId).modePtr->getResolution();
-            oldResolution != activeMode.modePtr->getResolution()) {
-            auto& state =
-                    mCurrentState.displays.get(getPhysicalDisplayTokenLocked(displayId))->get();
-            // We need to generate new sequenceId in order to recreate the display (and this
-            // way the framebuffer).
-            state.sequenceId = DisplayDeviceState::getNextSequenceId();
-            state.getPhysical().activeMode = activeMode.modePtr.get();
-            processDisplayChangesLocked();
+    if (!FlagManager::getInstance().synced_resolution_switch() && !resolutionMatch) {
+        auto& state = mCurrentState.displays.get(getPhysicalDisplayTokenLocked(displayId))->get();
 
-            if (FlagManager::getInstance().modeset_state_machine()) {
-                mDisplayModeController.finalizeModeChange(displayId);
-            }
+        // We need to generate new sequenceId in order to recreate the display (and this
+        // way the framebuffer).
+        state.sequenceId = DisplayDeviceState::getNextSequenceId();
+        state.getPhysical().activeMode = pendingMode.modePtr.get();
+        processDisplayChangesLocked();
 
-            // The DisplayDevice has been destroyed, so abort the commit for the now dead
-            // FrameTargeter.
-            return false;
+        if (FlagManager::getInstance().modeset_state_machine()) {
+            mDisplayModeController.finalizeModeChange(displayId);
         }
+
+        // The DisplayDevice has been destroyed, so abort the commit for the now dead FrameTargeter.
+        return false;
     }
 
     if (FlagManager::getInstance().modeset_state_machine()) {
@@ -1633,9 +1630,9 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
                     ALOGE("A mode change was initiated but not finalized: %s", noChange.reason);
                 });
     } else {
-        mDisplayModeController.finalizeModeChange(displayId, activeMode.modePtr->getId(),
-                                                  activeMode.modePtr->getVsyncRate(),
-                                                  activeMode.fps);
+        mDisplayModeController.finalizeModeChange(displayId, pendingMode.modePtr->getId(),
+                                                  pendingMode.modePtr->getVsyncRate(),
+                                                  pendingMode.fps);
     }
 
     if (mScheduler->designatePacesetterDisplay()) {
@@ -1643,12 +1640,13 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
     }
 
     if (!FlagManager::getInstance().modeset_state_machine()) {
-        mScheduler->updatePhaseConfiguration(displayId, activeMode.fps);
+        mScheduler->updatePhaseConfiguration(displayId, pendingMode.fps);
 
         // Skip for resolution changes, since the event was already emitted on setting the desired
         // mode.
-        if (resolutionMatch && pendingModeOpt->emitEvent) {
-            mScheduler->onDisplayModeChanged(displayId, activeMode,
+        if ((!FlagManager::getInstance().synced_resolution_switch() || resolutionMatch) &&
+            pendingModeOpt->emitEvent) {
+            mScheduler->onDisplayModeChanged(displayId, pendingMode,
                                              /*clearContentRequirements*/ true);
         }
     }
@@ -2536,7 +2534,8 @@ void SurfaceFlinger::onComposerHalVsync(hal::HWDisplayId hwcDisplayId, int64_t t
 
     Mutex::Autolock lock(mStateLock);
     if (const auto displayIdOpt = getHwComposer().onVsync(hwcDisplayId, timestamp)) {
-        if (mScheduler->addResyncSample(*displayIdOpt, timestamp, vsyncPeriod)) {
+        if (mScheduler->addResyncSample(*displayIdOpt, timestamp, vsyncPeriod,
+                                        VSyncTracker::VsyncTimeSource::HwVsyncCallback)) {
             // period flushed
             mScheduler->modulateVsync(displayIdOpt, &VsyncModulator::onRefreshRateChangeCompleted);
         }
@@ -5107,18 +5106,8 @@ void SurfaceFlinger::requestHardwareVsync(PhysicalDisplayId displayId, bool enab
     // Query HWC for the actual Vsync time and provide it to the scheduler when enabled.
     if (enable && FlagManager::getInstance().get_display_known_vsync_sample_enabled()) {
         if (auto sample = getHwComposer().getDisplayKnownVsyncSample(displayId)) {
-            const nsecs_t actualVsyncTime = sample->timestampNs;
-            const auto vsyncSchedule = mScheduler->getVsyncSchedule(displayId);
-            LOG_ALWAYS_FATAL_IF(!vsyncSchedule);
-
-            const nsecs_t modelErrorNs = vsyncSchedule->getModelAccuracyInNs(actualVsyncTime);
-            SFTRACE_FORMAT("VsyncPredictionError(ms): error= %.2f, actual= %.2f, vsyncPeriod= "
-                           "%.2f",
-                           static_cast<float>(modelErrorNs) / 1.0e6f,
-                           static_cast<float>(actualVsyncTime) / 1.0e6f,
-                           static_cast<float>(sample->vsyncPeriodNs) / 1.0e6f);
-
-            mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs);
+            mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs,
+                                        VSyncTracker::VsyncTimeSource::HwVsyncQuery);
         }
     }
 }

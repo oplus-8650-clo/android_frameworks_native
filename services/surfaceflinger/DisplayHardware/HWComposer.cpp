@@ -974,6 +974,39 @@ status_t HWComposer::setDisplayMode(PhysicalDisplayId displayId, hal::HWConfigId
     return NO_ERROR;
 }
 
+status_t HWComposer::setDisplayModes(
+        const std::vector<std::pair<PhysicalDisplayId, hal::HWConfigId>>& requests, bool seamless) {
+    std::vector<std::pair<hal::HWDisplayId, hal::HWConfigId>> displayConfigPairs;
+    for (const auto& [displayId, modeId] : requests) {
+        RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
+        auto& display = mDisplayData[displayId].hwcDisplay;
+        displayConfigPairs.emplace_back(display->getId(), modeId);
+    }
+    const auto error = mComposer->setDisplayModes(displayConfigPairs, seamless);
+    if (error == hal::Error::UNSUPPORTED) {
+        for (const auto& [displayId, _] : requests) {
+            LOG_HWC_ERROR(__FUNCTION__, error, displayId);
+        }
+        return INVALID_OPERATION;
+    } else if (error == hal::Error::BAD_PARAMETER) {
+        for (const auto& [displayId, _] : requests) {
+            LOG_HWC_ERROR(__FUNCTION__, error, displayId);
+        }
+        return BAD_VALUE;
+    } else if (error == hal::Error::CONFIG_FAILED) {
+        for (const auto& [displayId, _] : requests) {
+            LOG_HWC_ERROR(__FUNCTION__, error, displayId);
+        }
+        return FAILED_TRANSACTION;
+    } else if (error != hal::Error::NONE) {
+        for (const auto& [displayId, _] : requests) {
+            LOG_HWC_ERROR(__FUNCTION__, error, displayId);
+        }
+        return UNKNOWN_ERROR;
+    }
+    return NO_ERROR;
+}
+
 bool HWComposer::getValidateSkipped(HalDisplayId displayId) const {
     if (mDisplayData.count(displayId) == 0) {
         return false;

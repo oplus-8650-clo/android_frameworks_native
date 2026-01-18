@@ -1175,8 +1175,8 @@ void SkiaRenderEngine::drawLayersInternal(
                         (!layer.source.buffer.buffer || layer.source.buffer.isOpaque) &&
                         layer.alpha == 1.0f;
                 mBoxShadowUtils.drawBoxShadows(canvas, preferredOriginalBounds.rect(), cornerRadius,
-                                               layer.boxShadowSettings,
-                                               opaqueContent && supportsForwardPixelKill());
+                                               layer.boxShadowSettings, supportsForwardPixelKill(),
+                                               opaqueContent);
             }
 
             // Similar to shadows, do the rendering before the clip is applied because even when the

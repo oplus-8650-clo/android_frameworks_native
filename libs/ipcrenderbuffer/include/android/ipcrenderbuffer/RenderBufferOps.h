@@ -77,7 +77,9 @@
 namespace android {
 
 struct IPCClientBitmap {
-    uint64_t id;
+    uint64_t id = 0;
+    bool registeredWithServer = false;
+    sp<GraphicBuffer> buffer;
 };
 
 struct IPCClientResourceCache {

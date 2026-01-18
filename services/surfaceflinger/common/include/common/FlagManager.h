@@ -66,6 +66,7 @@ public:
     bool frontend_caching_v0() const;
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;
+    bool graphite_renderengine_preview2_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
     bool jank_classification_v2() const;
     bool md_degrade_hdr() const;

@@ -59,7 +59,8 @@ bool VSyncReactor::updateTrackerWithSignaledFences() {
         } else if (time == Fence::SIGNAL_TIME_INVALID) {
             it = mUnfiredFences.erase(it);
         } else {
-            timestampAccepted &= mTracker.addVsyncTimestamp(time);
+            timestampAccepted &=
+                    mTracker.addVsyncTimestamp(time, VSyncTracker::VsyncTimeSource::PresentFence);
 
             it = mUnfiredFences.erase(it);
         }
@@ -93,7 +94,8 @@ bool VSyncReactor::addPresentFence(std::shared_ptr<FenceTime> fence) {
         }
         mUnfiredFences.push_back(std::move(fence));
     } else {
-        timestampAccepted &= mTracker.addVsyncTimestamp(signalTime);
+        timestampAccepted &=
+                mTracker.addVsyncTimestamp(signalTime, VSyncTracker::VsyncTimeSource::PresentFence);
     }
 
     if (!timestampAccepted) {
@@ -191,7 +193,7 @@ bool VSyncReactor::periodConfirmed(nsecs_t vsync_timestamp, std::optional<nsecs_
 }
 
 bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t> hwcVsyncPeriod,
-                                       bool* periodFlushed) {
+                                       bool* periodFlushed, VSyncTracker::VsyncTimeSource source) {
     assert(periodFlushed);
 
     std::lock_guard lock(mMutex);
@@ -203,9 +205,9 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
         }
 
         if (mLastHwVsync.get() &&!mLastHwVsync.isFirst()) {
-            mTracker.addVsyncTimestamp(*mLastHwVsync.get());
+            mTracker.addVsyncTimestamp(*mLastHwVsync.get(), source);
         }
-        mTracker.addVsyncTimestamp(timestamp);
+        mTracker.addVsyncTimestamp(timestamp, source);
 
         endPeriodTransition();
         mMoreSamplesNeeded = mTracker.needsMoreSamples();
@@ -214,14 +216,14 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
         mLastHwVsync.set(timestamp);
         // Add the first vsync callback to the tracker to be based on a fresh vsync
         if (mLastHwVsync.isFirst()) {
-            mTracker.addVsyncTimestamp(*mLastHwVsync.get());
+            mTracker.addVsyncTimestamp(*mLastHwVsync.get(), source);
         }
         mMoreSamplesNeeded = true;
         *periodFlushed = false;
     } else {
         SFTRACE_FORMAT("VSR %" PRIu64 ": adding sample", mId.value);
         *periodFlushed = false;
-        mTracker.addVsyncTimestamp(timestamp);
+        mTracker.addVsyncTimestamp(timestamp, source);
         mMoreSamplesNeeded = mTracker.needsMoreSamples();
     }
 

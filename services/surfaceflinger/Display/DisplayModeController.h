@@ -101,6 +101,10 @@ public:
                                         hal::VsyncPeriodChangeTimeline& outTimeline)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
+    ModeChangeResult initiateModeChange(
+            ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayModeRequest>&&)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+
     // TODO: Remove once `modeset_state_machine` flag is cleaned up.
     void finalizeModeChange(PhysicalDisplayId, DisplayModeId, Fps vsyncRate, Fps renderFps)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);

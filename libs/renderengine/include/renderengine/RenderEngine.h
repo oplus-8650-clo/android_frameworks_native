@@ -39,12 +39,20 @@
 #define PROPERTY_DEBUG_RENDERENGINE_BACKEND "debug.renderengine.backend"
 
 /**
- * Allows opting particular devices into an initial preview rollout of RenderEngine on Graphite.
+ * Allows opting particular devices into an INITIAL preview rollout of RenderEngine on Graphite.
  *
  * Only applicable within SurfaceFlinger, and if relevant aconfig flags are enabled.
  */
 #define PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_PREVIEW_OPTIN \
     "debug.renderengine.graphite_preview_optin"
+
+/**
+ * Allows opting particular devices into a SECOND WAVE preview rollout of RenderEngine on Graphite.
+ *
+ * Only applicable within SurfaceFlinger, and if relevant aconfig flags are enabled.
+ */
+#define PROPERTY_DEBUG_RENDERENGINE_GRAPHITE_PREVIEW2_OPTIN \
+    "debug.renderengine.graphite_preview2_optin"
 
 /**
  * Allows opting desktop devices into a rollout of RenderEngine on Graphite.

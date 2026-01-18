@@ -48,10 +48,15 @@ VKAPI_ATTR VkResult GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physica
 VKAPI_ATTR VkResult BindImageMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos);
 VKAPI_ATTR VkResult BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos);
 VKAPI_ATTR VkResult ReleaseSwapchainImagesEXT(VkDevice device, const VkReleaseSwapchainImagesInfoEXT* pReleaseInfo);
+VKAPI_ATTR VkResult ReleaseSwapchainImagesKHR(VkDevice device, const VkReleaseSwapchainImagesInfoKHR* pReleaseInfo);
 VKAPI_ATTR VkResult GetSwapchainTimingPropertiesEXT(VkDevice, VkSwapchainKHR , VkSwapchainTimingPropertiesEXT*, uint64_t*);
 VKAPI_ATTR VkResult GetSwapchainTimeDomainPropertiesEXT(VkDevice , VkSwapchainKHR , VkSwapchainTimeDomainPropertiesEXT*, uint64_t*);
 VKAPI_ATTR VkResult SetSwapchainPresentTimingQueueSizeEXT(VkDevice , VkSwapchainKHR , uint32_t );
 VKAPI_ATTR VkResult WaitForPresent2KHR(VkDevice , VkSwapchainKHR , const VkPresentWait2InfoKHR*);
+
+// Swapchain struct is private to swapchain.cpp so expose accessors to rest of libvulkan
+uint64_t GetSwapchainPreallocatedDataSlot(VkSwapchainKHR swapchain, int index);
+void SetSwapchainPreallocatedDataSlot(VkSwapchainKHR swapchain, int index, uint64_t value);
 
 // clang-format on
 

@@ -198,6 +198,8 @@ protected:
 
     int64_t ce_data_inode_;
     int64_t de_data_inode_;
+    int64_t pcc_ce_data_inode_;
+    int64_t pcc_de_data_inode_;
 
     std::string secondary_dex_ce_;
     std::string secondary_dex_ce_link_;
@@ -265,7 +267,8 @@ protected:
         binder::Status status =
                 service_->createAppData(volume_uuid_, package_name_, kTestUserId, kAppDataFlags,
                                         kTestAppUid, 0 /* previousAppId */, se_info_, kOSdkVersion,
-                                        &ce_data_inode_, &de_data_inode_, /*pccUid= */ -1,
+                                        &ce_data_inode_, &de_data_inode_, &pcc_ce_data_inode_,
+                                        &pcc_de_data_inode_, /*pccUid= */ -1,
                                         /*previousPccUid=*/0);
         if (!status.isOk()) {
             return ::testing::AssertionFailure() << "Could not create app data: "
@@ -1349,7 +1352,8 @@ TEST_F(ProfileTest, ProfileDirOkAfterFixup) {
     ASSERT_BINDER_SUCCESS(service_->createAppData(volume_uuid_, package_name_, kTestUserId,
                                                   kAppDataFlags, kTestAppUid, 0 /* previousAppId */,
                                                   se_info_, kOSdkVersion, &ce_data_inode_,
-                                                  &de_data_inode_, /*pccUid= */ -1,
+                                                  &de_data_inode_, &pcc_ce_data_inode_,
+                                                  &pcc_de_data_inode_, /*pccUid= */ -1,
                                                   /*previousPccUid=*/0));
 
     // Check the file access.
@@ -1490,6 +1494,7 @@ class BootProfileTest : public ProfileTest {
                     service_->createAppData(volume_uuid_, package_name, kTestUserId, kAppDataFlags,
                                             kTestAppUid, 0 /* previousAppId */, se_info_,
                                             kOSdkVersion, &ce_data_inode, &de_data_inode,
+                                            &pcc_ce_data_inode_, &pcc_de_data_inode_,
                                             /*pccUid= */ -1, /*previousPccUid=*/0));
             extra_apps_.push_back(package_name);
             extra_ce_data_inodes_.push_back(ce_data_inode);

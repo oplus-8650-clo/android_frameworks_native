@@ -386,6 +386,8 @@ public:
                                      composer3::VsyncSample* outVsyncSample) override;
 
     Error setDisplayMode(Display display, Config modeId, bool seamless) override;
+    Error setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                          bool seamless) override;
 
 private:
 // QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime

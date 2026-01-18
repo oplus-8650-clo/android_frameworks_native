@@ -939,6 +939,8 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         snapshot.backgroundBlurScale = args.supportsBlur
                 ? requested.backgroundBlurScale
                 : 1.0f;
+        // args.supportsBlur can't be used here to remove blur region requests, because otherwise
+        // apps will break.
         snapshot.blurRegions = requested.blurRegions;
         for (auto& region : snapshot.blurRegions) {
             region.alpha = region.alpha * snapshot.color.a;

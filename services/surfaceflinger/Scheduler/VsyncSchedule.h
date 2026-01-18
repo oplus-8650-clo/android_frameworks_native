@@ -75,11 +75,11 @@ public:
     //                      change.
     void onDisplayModeChanged(ftl::NonNull<DisplayModePtr>, bool force);
 
-    // Pass a VSYNC sample to VsyncController. Return true if
-    // VsyncController detected that the VSYNC period changed. Enable or disable
-    // hardware VSYNCs depending on whether more samples are needed.
-    bool addResyncSample(TimePoint timestamp, ftl::Optional<Period> hwcVsyncPeriod);
-    nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const;
+    // Pass a VSYNC sample to VsyncController. Return true if VsyncController detected that the
+    // VSYNC period changed. Enable or disable hardware VSYNCs depending on whether more samples are
+    // needed.
+    bool addResyncSample(TimePoint timestamp, ftl::Optional<Period> hwcVsyncPeriod,
+                         VSyncTracker::VsyncTimeSource source);
 
     // TODO(b/185535769): Hide behind API.
     VsyncTracker& getTracker() const { return *mTracker; }

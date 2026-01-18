@@ -225,9 +225,16 @@ flag {
 flag {
   name: "graphite_renderengine_preview_rollout"
   namespace: "core_graphics"
-  description: "R/W flag to enable Skia's Graphite Vulkan backend in RenderEngine, IF it is already compiled with force_compile_graphite_renderengine, AND the debug.renderengine.graphite_preview_optin sysprop is set to true."
+  description: "R/W flag to enable Skia's Graphite Vulkan backend in RenderEngine, if the device-specific debug.renderengine.graphite_preview_optin sysprop also is set to true."
   bug: "293371537"
 } # graphite_renderengine_preview_rollout
+
+flag {
+  name: "graphite_renderengine_preview2_rollout"
+  namespace: "core_graphics"
+  description: "Second wave R/W flag to enable Skia's Graphite Vulkan backend in RenderEngine, if the device-specific debug.renderengine.graphite_preview2_optin sysprop also is set to true."
+  bug: "293371537"
+} # graphite_renderengine_preview2_rollout
 
 flag {
   name: "graphite_renderengine_desktop_rollout"

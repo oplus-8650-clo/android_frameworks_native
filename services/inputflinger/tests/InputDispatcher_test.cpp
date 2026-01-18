@@ -10800,6 +10800,66 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow) {
     ASSERT_TRUE(mDispatcher->waitForIdle());
 }
 
+// We have a focused application, but no focused window, ANR warning flag is disabled.
+TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWarningDisabled) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, false);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // taps on the window work as normal
+    const auto touchingPointer =
+            PointerBuilder(/*id=*/0, ToolType::FINGER).x(WINDOW_LOCATION.x).y(WINDOW_LOCATION.y);
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(touchingPointer)
+                                      .build());
+    ASSERT_NO_FATAL_FAILURE(mWindow->consumeMotionDown());
+    mDispatcher->waitForIdle();
+    mFakePolicy->assertNotifyAnrWasNotCalled();
+
+    // Once a focused event arrives, we get an ANR for this application
+    // Send the key event but the event would not be processed as there is no focused window
+    // triggering ANR.
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    const std::chrono::duration timeout = mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
+    mFakePolicy->assertWarnNoFocusedWindowAnrWasNotCalled();
+}
+
+// We have a focused application, but no focused window, ANR warning flag is enabled
+TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWarningTriggered) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // taps on the window work as normal
+    const auto touchingPointer =
+            PointerBuilder(/*id=*/0, ToolType::FINGER).x(WINDOW_LOCATION.x).y(WINDOW_LOCATION.y);
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(touchingPointer)
+                                      .build());
+
+    ASSERT_NO_FATAL_FAILURE(mWindow->consumeMotionDown());
+    mDispatcher->waitForIdle();
+    mFakePolicy->assertNotifyAnrWasNotCalled();
+
+    // Once a focused event arrives, we get an ANR for this application
+    // Send the key event but the event would not be processed as there is no focused window
+    // triggering ANR.
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    const std::chrono::nanoseconds timeout =
+            mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
+    const std::chrono::milliseconds timeoutMillis =
+            std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
+    mFakePolicy->assertWarnNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
+}
+
 /**
  * Make sure the stale key is dropped before causing an ANR. So even if there's no focused window,
  * there will not be an ANR.
