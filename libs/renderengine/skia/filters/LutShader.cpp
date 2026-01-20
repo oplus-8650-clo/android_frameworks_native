@@ -116,14 +116,16 @@ const SkString kEffectSource_LutEffect(R"(
                 // get indices
                 // this follows 3d flatten policy described in API/AIDL interface
                 // i.e., `FLAT[z + DEPTH * (y + HEIGHT * x)] = ORIGINAL[x][y][z]`
-/* QTI_BEGIN */
+// QTI_BEGIN: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
              /* float i000 = z0 + (y0 * float(size)) + (x0 * float(size) * float(size));
+// QTI_END: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
                 float i001 = z1 + (y0 * float(size)) + (x0 * float(size) * float(size));
                 float i010 = z0 + (y1 * float(size)) + (x0 * float(size) * float(size));
                 float i011 = z1 + (y1 * float(size)) + (x0 * float(size) * float(size));
                 float i100 = z0 + (y0 * float(size)) + (x1 * float(size) * float(size));
                 float i101 = z1 + (y0 * float(size)) + (x1 * float(size) * float(size));
                 float i110 = z0 + (y1 * float(size)) + (x1 * float(size) * float(size));
+// QTI_BEGIN: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
                 float i111 = z1 + (y1 * float(size)) + (x1 * float(size) * float(size)); */
 
                 // luts are sent in the order of RGB and index must be calculated as such
@@ -135,7 +137,7 @@ const SkString kEffectSource_LutEffect(R"(
                 float i101 = x1 + (y0 * float(size)) + (z1 * float(size) * float(size));
                 float i110 = x1 + (y1 * float(size)) + (z0 * float(size) * float(size));
                 float i111 = x1 + (y1 * float(size)) + (z1 * float(size) * float(size));
-/* QTI_END */
+// QTI_END: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
 
                 // TODO(b/377984618): support Tetrahedral interpolation
                 // perform trilinear interpolation
