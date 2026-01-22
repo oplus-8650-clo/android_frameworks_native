@@ -881,10 +881,11 @@ SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
     return SkData::MakeWithoutCopy(sTmpTypefaceStorage.data(), sTmpTypefaceStorage.size());
 }
 
-sk_sp<SkTypeface> deserializeTypeFace(const void* data, size_t length, void* ctx) {
+sk_sp<SkTypeface> deserializeTypeFace(SkStream& stream, void* ctx) {
     auto* fontManager = reinterpret_cast<SkFontMgr*>(ctx);
 
-    const auto* info = reinterpret_cast<const ShmemTypeface*>(data);
+    const auto* info = reinterpret_cast<const ShmemTypeface*>(stream.getMemoryBase());
+    LOG_ALWAYS_FATAL_IF(info == nullptr, "TextBlob deserial stream not memory based");
 
     SkFontStyle style(info->weight, info->width, info->slant);
     sk_sp<SkTypeface> tf = fontManager->matchFamilyStyle(info->name.data.get(), style);
@@ -921,7 +922,7 @@ DrawTextBlobOp* DrawTextBlobOp::Create(RenderCommandBuffer* commandBuffer, const
 void DrawTextBlobOp::draw(SkCanvas* c, const SkMatrix&, sk_sp<SkFontMgr> fontMgr) {
     SkDeserialProcs procs;
     procs.fTypefaceCtx = fontMgr.get();
-    procs.fTypefaceProc = deserializeTypeFace;
+    procs.fTypefaceStreamProc = deserializeTypeFace;
     sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(blobData.data.get(), blobData.size, procs);
     if (blob) {
         c->drawTextBlob(blob, x, y, fromShmemPaint(paint));

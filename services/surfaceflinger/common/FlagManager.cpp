@@ -336,8 +336,9 @@ FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);
 
 bool FlagManager::follower_arbitrary_refresh_rate_selection_combined() const {
-    return follower_arbitrary_refresh_rate_selection() ||
-            follower_arbitrary_refresh_rate_selection_platform();
+    return (follower_arbitrary_refresh_rate_selection() ||
+            follower_arbitrary_refresh_rate_selection_platform()) &&
+            modeset_state_machine();
 }
 
 bool FlagManager::follower_display_backpressure_combined() const {

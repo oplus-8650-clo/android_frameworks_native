@@ -969,6 +969,8 @@ status_t HWComposer::setDisplayMode(PhysicalDisplayId displayId, hal::HWConfigId
         RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
     } else if (error == hal::Error::BAD_PARAMETER) {
         RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
+    } else if (error == hal::Error::CONFIG_FAILED) {
+        RETURN_IF_HWC_ERROR(error, displayId, FAILED_TRANSACTION);
     }
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
     return NO_ERROR;

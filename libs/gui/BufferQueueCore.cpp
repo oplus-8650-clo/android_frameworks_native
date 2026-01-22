@@ -99,6 +99,8 @@ BufferQueueCore::BufferQueueCore()
         mConnectedProducerListener(),
         mBufferReleasedCbEnabled(false),
         mBufferAttachedCbEnabled(false),
+        mBufferAcquiredCbEnabled(false),
+        mBufferDroppedCbEnabled(false),
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
 #else

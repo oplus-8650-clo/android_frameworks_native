@@ -841,7 +841,7 @@ private:
     AutoBackendTexture::CleanupManager& mMgr;
 };
 
-void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
+void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {\
     // If the fence is already signaled, we can skip waiting on it.
     if (fenceFd.get() >= 0) {
         if (sync_wait(fenceFd.get(), 0) >= 0) {
@@ -855,7 +855,8 @@ void SkiaRenderEngine::drawLayersInternal(
         const std::shared_ptr<std::promise<FenceResult>>&& resultPromise,
         const DisplaySettings& display, const std::vector<LayerSettings>& layers,
         const std::shared_ptr<ExternalTexture>& buffer, base::unique_fd&& bufferFence) {
-    SFTRACE_FORMAT("%s for %s", __func__, display.namePlusId.c_str());
+    SFTRACE_FORMAT("%s%s for %s", __func__, mInProtectedContext ? " (PROTECTED)" : "",
+                   display.namePlusId.empty() ? "<unknown>" : display.namePlusId.c_str());
 
     auto slice = panopticon::slice(panopticon::SliceType::CG_Re_drawLayers);
 

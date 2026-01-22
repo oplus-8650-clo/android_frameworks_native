@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <common/FlagManager.h>
+#include <gui/PidUid.h>
 #include <ui/LayerStack.h>
 
 namespace android {
@@ -33,18 +35,31 @@ struct LayerFilter {
     // means the layer has requested to be skipped in screenshots.
     bool skipScreenshot = false;
 
+    // When filterUid is set, only the layers from the same uid get included in the output.
+    gui::Uid filterUid = gui::Uid::INVALID;
+
     // Returns true if the input filter can be output to this filter.
     bool includes(LayerFilter other) const {
         // The layer stacks must match.
         if (other.layerStack == ui::UNASSIGNED_LAYER_STACK || other.layerStack != layerStack) {
             return false;
         }
+
+        if (filterUid != gui::Uid::INVALID && other.filterUid != gui::Uid::INVALID &&
+            other.filterUid != filterUid) {
+            return false;
+        }
+
         return !(skipScreenshot && other.skipScreenshot);
+
+        // The output must be to an internal display if the input filter has that constraint.
+        return !other.toInternalDisplay || toInternalDisplay;
     }
 };
 
 inline bool operator==(LayerFilter lhs, LayerFilter rhs) {
-    return lhs.layerStack == rhs.layerStack && lhs.toInternalDisplay == rhs.toInternalDisplay;
+    return lhs.layerStack == rhs.layerStack && lhs.toInternalDisplay == rhs.toInternalDisplay &&
+            lhs.filterUid == rhs.filterUid;
 }
 
 } // namespace android

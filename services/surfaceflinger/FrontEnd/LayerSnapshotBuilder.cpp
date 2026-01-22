@@ -595,6 +595,7 @@ LayerSnapshot* LayerSnapshotBuilder::createSnapshot(const LayerHierarchy::Traver
                                                     const LayerSnapshot& parentSnapshot) {
     mSnapshots.emplace_back(std::make_unique<LayerSnapshot>(layer, path));
     LayerSnapshot* snapshot = mSnapshots.back().get();
+    snapshot->outputFilter.filterUid = snapshot->uid;
     snapshot->globalZ = static_cast<size_t>(mSnapshots.size()) - 1;
     if (path.isClone() && !LayerHierarchy::isMirror(path.variant)) {
         snapshot->mirrorRootPath = parentSnapshot.mirrorRootPath;
@@ -1240,13 +1241,15 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
                                    t.dsdx(), t.dsdy(), t.dtdx(), t.dtdy(), requestedT.dsdx(),
                                    requestedT.dsdy(), requestedT.dtdx(), requestedT.dtdy());
         std::string bufferDebug;
-        if (requested.externalTexture) {
+        if (requested.externalTexture || requested.renderCommandBufferConsumer) {
             auto unRotBuffer = requested.getUnrotatedBufferSize(primaryDisplayRotationFlags);
             auto& destFrame = requested.destinationFrame;
+            uint32_t bufferWidth, bufferHeight;
+            requested.getBufferDimensions(bufferWidth, bufferHeight);
             bufferDebug = base::StringPrintf(" buffer={%d,%d}  displayRot=%d"
                                              " destFrame={%d,%d,%d,%d} unRotBuffer={%d,%d}",
-                                             requested.externalTexture->getWidth(),
-                                             requested.externalTexture->getHeight(),
+                                             static_cast<int>(bufferWidth),
+                                             static_cast<int>(bufferHeight),
                                              primaryDisplayRotationFlags, destFrame.left,
                                              destFrame.top, destFrame.right, destFrame.bottom,
                                              unRotBuffer.getHeight(), unRotBuffer.getWidth());
@@ -1264,7 +1267,7 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
     FloatRect parentBounds = parentSnapshot.geomLayerBounds;
     parentBounds = snapshot.localTransform.inverse().transform(parentBounds);
     snapshot.geomLayerBounds =
-            requested.externalTexture ? snapshot.bufferSize.toFloatRect() : parentBounds;
+            requested.externalTexture || requested.renderCommandBufferConsumer ? snapshot.bufferSize.toFloatRect() : parentBounds;
     snapshot.geomLayerCrop = parentBounds;
     if (!requested.crop.isEmpty()) {
         snapshot.geomLayerCrop = snapshot.geomLayerCrop.intersect(requested.crop);

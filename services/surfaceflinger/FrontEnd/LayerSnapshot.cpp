@@ -128,6 +128,7 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     inputInfo.ownerPid = gui::Pid{state.ownerPid};
     uid = state.ownerUid;
     pid = state.ownerPid;
+    outputFilter.filterUid = uid;
     permissions = state.ownerPermissions;
     changes = RequestedLayerState::Changes::Created;
     clientChanges = 0;
@@ -165,7 +166,7 @@ bool LayerSnapshot::isOpaqueFormat(PixelFormat format) {
 }
 
 bool LayerSnapshot::hasBufferOrSidebandStream() const {
-    return ((sidebandStream != nullptr) || (externalTexture != nullptr));
+    return ((sidebandStream != nullptr) || (externalTexture != nullptr)) || (renderCommandBufferConsumer != nullptr);
 }
 
 bool LayerSnapshot::drawShadows() const {
@@ -262,6 +263,7 @@ std::string LayerSnapshot::getIsVisibleReason() const {
     if (sidebandStream != nullptr) reason << " sidebandStream";
     if (externalTexture != nullptr)
         reason << " buffer=" << externalTexture->getId() << " frame=" << frameNumber;
+    if (renderCommandBufferConsumer != nullptr) reason << " renderCommandBufferConsumer";
     if (fillsColor()) reason << " color{" << color << "}";
     if (color.a < 1.0f) reason << " alpha=" << color.a;
     if (drawShadows()) reason << " shadowSettings.length=" << shadowSettings.length;
@@ -369,7 +371,7 @@ std::ostream& operator<<(std::ostream& out, const LayerSnapshot& obj) {
 }
 
 FloatRect LayerSnapshot::sourceBounds() const {
-    if (!externalTexture) {
+    if (!externalTexture && !renderCommandBufferConsumer) {
         return geomLayerBounds;
     }
     return geomBufferSize.toFloatRect();
@@ -525,7 +527,8 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
         requested.what &
                 (layer_state_t::eCropChanged | layer_state_t::eBufferCropChanged |
                  layer_state_t::eBufferTransformChanged |
-                 layer_state_t::eTransformToDisplayInverseChanged) ||
+                 layer_state_t::eTransformToDisplayInverseChanged |
+                 layer_state_t::eRenderCommandBufferFrameIdChanged) ||
         requested.changes.test(RequestedLayerState::Changes::BufferSize) || displayChanges) {
         bufferSize = requested.getBufferSize(displayRotationFlags);
         geomBufferSize = bufferSize;
@@ -581,6 +584,7 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
 
     if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferChanged) {
         renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+        geomUsesSourceCrop = hasBufferOrSidebandStream();
     }
     if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferFrameIdChanged) {
         renderCommandBufferFrameId = requested.renderCommandBufferFrameId;

@@ -216,6 +216,14 @@ private:
     // callback is registered by the listener. When set to false,
     // mConnectedProducerListener will not trigger onBufferAttached() callback.
     bool mBufferAttachedCbEnabled;
+    //  mBufferAcquiredCbEnabled is used indicate whether onBufferAcquired()
+    //  callback is registered by the listener. When set to false,
+    //  mConnectedProducerListener will not trigger onBufferAcquired() callback.
+    bool mBufferAcquiredCbEnabled;
+    //  mBufferDroppedCbEnabled is used indicate whether onBufferDropped()
+    //  callback is registered by the listener. When set to false,
+    //  mConnectedProducerListener will not trigger onBufferDropped() callback.
+    bool mBufferDroppedCbEnabled;
 
     // mSlots is a collection of buffer slots that must be mirrored on the producer
     // side. This allows buffer ownership to be transferred between the producer

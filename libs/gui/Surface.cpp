@@ -1778,6 +1778,9 @@ int Surface::perform(int operation, va_list args)
     case NATIVE_WINDOW_API_CONNECT:
         res = dispatchConnect(args);
         break;
+    case NATIVE_WINDOW_API_CONNECT_WITH_LISTENER:
+        res = dispatchConnectWithListener(args);
+        break;
     case NATIVE_WINDOW_API_DISCONNECT:
         res = dispatchDisconnect(args);
         break;
@@ -1831,6 +1834,12 @@ int Surface::perform(int operation, va_list args)
         break;
     case NATIVE_WINDOW_SET_USAGE64:
         res = dispatchSetUsage64(args);
+        break;
+    case NATIVE_WINDOW_API_SET_ON_DROPPED_CALLBACK:
+        res = dispatchSetOnDroppedCallback(args);
+        break;
+    case NATIVE_WINDOW_API_SET_ON_ACQUIRED_CALLBACK:
+        res = dispatchSetOnAcquiredCallback(args);
         break;
     case NATIVE_WINDOW_GET_CONSUMER_USAGE64:
         res = dispatchGetConsumerUsage64(args);
@@ -1905,6 +1914,15 @@ int Surface::dispatchConnect(va_list args) {
     return connect(api);
 }
 
+int Surface::dispatchConnectWithListener(va_list args) {
+    int api = va_arg(args, int);
+    bool needsReleaseNotify = va_arg(args, int);
+    bool needsAcquiredNotify = va_arg(args, int);
+    bool needsDroppedNotify = va_arg(args, int);
+    static sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    return connect(api, listener, needsReleaseNotify, needsAcquiredNotify, needsDroppedNotify);
+}
+
 int Surface::dispatchDisconnect(va_list args) {
     int api = va_arg(args, int);
     return disconnect(api);
@@ -1918,6 +1936,26 @@ int Surface::dispatchSetUsage(va_list args) {
 int Surface::dispatchSetUsage64(va_list args) {
     uint64_t usage = va_arg(args, uint64_t);
     return setUsage(usage);
+}
+
+int Surface::dispatchSetOnDroppedCallback(va_list args) {
+    ANativeWindow_OnDroppedCallback callback = va_arg(args, ANativeWindow_OnDroppedCallback);
+    void* data = va_arg(args, void*);
+    if (mListenerProxy) {
+        mListenerProxy->setOnDroppedCallback(callback, data);
+    }
+
+    return NO_ERROR;
+}
+
+int Surface::dispatchSetOnAcquiredCallback(va_list args) {
+    ANativeWindow_OnAcquiredCallback callback = va_arg(args, ANativeWindow_OnAcquiredCallback);
+    void* data = va_arg(args, void*);
+    if (mListenerProxy) {
+        mListenerProxy->setOnAcquiredCallback(callback, data);
+    }
+
+    return NO_ERROR;
 }
 
 int Surface::dispatchSetCrop(va_list args) {
@@ -2317,7 +2355,8 @@ int Surface::connect(int api) {
     return connect(api, listener);
 }
 
-int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBufferRemoval) {
+int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBufferRemoval,
+                     bool needsAcquiredNotify, bool needsDroppedNotify) {
     ATRACE_CALL();
     SURF_LOGV("Surface::connect");
     Mutex::Autolock lock(mMutex);
@@ -2331,7 +2370,8 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
 
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     if (listener != nullptr) {
-        mListenerProxy = sp<ProducerListenerProxy>::make(wp<Surface>::fromExisting(this), listener);
+        mListenerProxy = sp<ProducerListenerProxy>::make(wp<Surface>::fromExisting(this), listener,
+                                                         needsAcquiredNotify, needsDroppedNotify);
     }
 
     int err =
@@ -3306,6 +3346,52 @@ bool Surface::IsCursorPlaneCompatibilitySupported() {
     const bool ret = AHardwareBuffer_isSupported(&testDesc);
     ALOGW_IF(!ret, "Required cursor plane buffer format not supported");
     return ret;
+}
+
+void Surface::ProducerListenerProxy::onBufferDropped(uint64_t bufferId, uint64_t frameNumber) {
+    ANativeWindow_OnDroppedCallback onDroppedCallback;
+    void* data;
+    {
+        std::scoped_lock _l(mMutex);
+        if (!mOnDroppedCallback) {
+            return;
+        }
+
+        onDroppedCallback = mOnDroppedCallback;
+        data = mOnDroppedCallbackData;
+    }
+
+    onDroppedCallback(bufferId, frameNumber, data);
+}
+
+void Surface::ProducerListenerProxy::onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) {
+    ANativeWindow_OnAcquiredCallback onAcquireCallback;
+    void* data;
+    {
+        std::scoped_lock _l(mMutex);
+        if (!mOnAcquiredCallback) {
+            return;
+        }
+
+        onAcquireCallback = mOnAcquiredCallback;
+        data = mOnAcquiredCallbackData;
+    }
+
+    onAcquireCallback(bufferId, frameNumber, data);
+}
+
+void Surface::ProducerListenerProxy::setOnAcquiredCallback(
+        ANativeWindow_OnAcquiredCallback onAcquiredCallback, void* data) {
+    std::scoped_lock _l(mMutex);
+    mOnAcquiredCallback = onAcquiredCallback;
+    mOnAcquiredCallbackData = data;
+}
+
+void Surface::ProducerListenerProxy::setOnDroppedCallback(
+        ANativeWindow_OnDroppedCallback onDroppedCallback, void* data) {
+    std::scoped_lock _l(mMutex);
+    mOnDroppedCallback = onDroppedCallback;
+    mOnDroppedCallbackData = data;
 }
 
 }; // namespace android

@@ -211,15 +211,15 @@ LIBBINDER_NDK36 { # introduced=36
   global:
     AIBinder_Class_setTransactionCodeToFunctionNameMap;
     AIBinder_Class_getFunctionName;
-    ABinderRpc_registerAccessorProvider; # systemapi
-    ABinderRpc_unregisterAccessorProvider; # systemapi
-    ABinderRpc_Accessor_new; # systemapi
-    ABinderRpc_Accessor_delegateAccessor; #systemapi
-    ABinderRpc_Accessor_delete; # systemapi
-    ABinderRpc_Accessor_asBinder; # systemapi
-    ABinderRpc_Accessor_fromBinder; # systemapi
-    ABinderRpc_ConnectionInfo_new; # systemapi
-    ABinderRpc_ConnectionInfo_delete; # systemapi
+    ABinderRpc_registerAccessorProvider; # systemapi llndk
+    ABinderRpc_unregisterAccessorProvider; # systemapi llndk
+    ABinderRpc_Accessor_new; # systemapi llndk
+    ABinderRpc_Accessor_delegateAccessor; #systemapi llndk
+    ABinderRpc_Accessor_delete; # systemapi llndk
+    ABinderRpc_Accessor_asBinder; # systemapi llndk
+    ABinderRpc_Accessor_fromBinder; # systemapi llndk
+    ABinderRpc_ConnectionInfo_new; # systemapi llndk
+    ABinderRpc_ConnectionInfo_delete; # systemapi llndk
 };
 
 LIBBINDER_NDK37 { # introduced=37
