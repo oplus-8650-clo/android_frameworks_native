@@ -93,6 +93,8 @@
 //! }
 //! ```
 
+#[cfg(not(any(android_ndk, trusty)))]
+mod accessor;
 #[macro_use]
 mod binder;
 mod binder_async;
@@ -106,8 +108,6 @@ mod proxy;
 mod service;
 #[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 mod state;
-#[cfg(not(any(android_vendor, android_ndk, android_vndk, trusty)))]
-mod system_only;
 #[macro_use]
 mod sync_utils;
 mod write_to;
@@ -115,6 +115,8 @@ mod write_to;
 use binder_ndk_sys as sys;
 
 pub use crate::binder_async::{BinderAsyncPool, BoxFuture};
+#[cfg(not(any(android_ndk, trusty)))]
+pub use accessor::{delegate_accessor, Accessor, AccessorProvider, ConnectionInfo};
 pub use binder::{BinderFeatures, FromIBinder, IBinder, Interface, Strong, Weak};
 pub use error::{ExceptionCode, IntoBinderResult, Status, StatusCode};
 pub use parcel::{ParcelFileDescriptor, Parcelable, ParcelableHolder};
@@ -140,8 +142,6 @@ pub use service::{
 pub use service::{get_interface, get_service};
 #[cfg(all(feature = "kernel_ipc", not(android_ndk)))]
 pub use state::{ProcessState, ThreadState};
-#[cfg(not(any(android_vendor, android_vndk, android_ndk, trusty)))]
-pub use system_only::{delegate_accessor, Accessor, AccessorProvider, ConnectionInfo};
 
 pub use write_to::WriteTo;
 

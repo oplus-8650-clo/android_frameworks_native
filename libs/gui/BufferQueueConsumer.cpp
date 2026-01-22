@@ -86,8 +86,12 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
         nsecs_t expectedPresent, uint64_t maxFrameNumber) {
     ATRACE_CALL();
 
+    std::vector<std::pair<uint64_t, uint64_t>> droppedFrameNumbersAndBufferIds;
     int numDroppedBuffers = 0;
-    sp<IProducerListener> listener;
+    sp<IProducerListener> bufferAcquireListener;
+    sp<IProducerListener> bufferReleaseListener;
+    sp<IProducerListener> bufferDroppedListener;
+    uint64_t acquiredBufferId = 0;
     {
         std::unique_lock<std::mutex> lock(mCore->mMutex);
 
@@ -203,9 +207,15 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
                     }
 
                     if (mCore->mBufferReleasedCbEnabled) {
-                        listener = mCore->mConnectedProducerListener;
+                        bufferReleaseListener = mCore->mConnectedProducerListener;
                     }
                     ++numDroppedBuffers;
+                }
+
+                if (mCore->mBufferDroppedCbEnabled) {
+                    bufferDroppedListener = mCore->mConnectedProducerListener;
+                    droppedFrameNumbersAndBufferIds.push_back(
+                            {front->mGraphicBuffer->getId(), front->mFrameNumber});
                 }
 
                 mCore->mQueue.erase(front);
@@ -292,6 +302,10 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
             mSlots[slot].mFence = Fence::NO_FENCE;
         }
 
+        if (outBuffer->mGraphicBuffer != nullptr) {
+            acquiredBufferId = outBuffer->mGraphicBuffer->getId();
+        }
+
         // If the buffer has previously been acquired by the consumer, set
         // mGraphicBuffer to NULL to avoid unnecessarily remapping this buffer
         // on the consumer side
@@ -306,6 +320,10 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
         // decrease.
         mCore->notifyBufferReleased();
 
+        if (mCore->mBufferAcquiredCbEnabled) {
+            bufferAcquireListener = mCore->mConnectedProducerListener;
+        }
+
         ATRACE_INT(mCore->mConsumerName.c_str(), static_cast<int32_t>(mCore->mQueue.size()));
 #ifndef NO_BINDER
         mCore->mOccupancyTracker.registerOccupancyChange(mCore->mQueue.size());
@@ -313,9 +331,17 @@ status_t BufferQueueConsumer::acquireBuffer(BufferItem* outBuffer,
         VALIDATE_CONSISTENCY();
     }
 
-    if (listener != nullptr) {
+    if (bufferReleaseListener != nullptr) {
         for (int i = 0; i < numDroppedBuffers; ++i) {
-            listener->onBufferReleased();
+            bufferReleaseListener->onBufferReleased();
+        }
+    }
+    if (bufferAcquireListener != nullptr) {
+        bufferAcquireListener->onBufferAcquired(acquiredBufferId, outBuffer->mFrameNumber);
+    }
+    if (bufferDroppedListener != nullptr) {
+        for (const auto& [bufferId, frameNumber] : droppedFrameNumbersAndBufferIds) {
+            bufferDroppedListener->onBufferDropped(bufferId, frameNumber);
         }
     }
 

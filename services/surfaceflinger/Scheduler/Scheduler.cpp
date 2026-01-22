@@ -905,7 +905,27 @@ void Scheduler::onHardwareVsyncRequest(PhysicalDisplayId id, bool enabled) {
             }));
 }
 
-void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderFrameRate, bool applyImmediately) {
+void Scheduler::resyncToMode(const FrameRateMode& mode, ResyncToModeOpts opts) {
+    const auto displayId = mode.modePtr->getPhysicalDisplayId();
+
+    constexpr bool kAllowToEnable = true;
+    resyncToHardwareVsync(displayId, kAllowToEnable, mode.modePtr.get());
+
+    const Fps renderRate = [&]() {
+        if (opts == ResyncToModeOpts::PeakRenderRate) {
+            std::scoped_lock lock(mDisplayLock);
+            return selectorPtrLocked(displayId)->getActiveMode().fps;
+        } else {
+            return mode.fps;
+        }
+    }();
+
+    constexpr bool kApplyImmediately = true;
+    setRenderRate(displayId, renderRate, kApplyImmediately);
+    updatePhaseConfiguration(displayId, mode.fps);
+}
+
+void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderRate, bool applyImmediately) {
     std::scoped_lock lock(mDisplayLock);
     ftl::FakeGuard guard(kMainThreadContext);
 
@@ -915,19 +935,20 @@ void Scheduler::setRenderRate(PhysicalDisplayId id, Fps renderFrameRate, bool ap
         return;
     }
     const Display& display = *displayOpt;
-    const auto mode = display.selectorPtr->getActiveMode();
+    const auto activeMode = display.selectorPtr->getActiveMode();
 
     using fps_approx_ops::operator!=;
-    LOG_ALWAYS_FATAL_IF(renderFrameRate != mode.fps,
+    LOG_ALWAYS_FATAL_IF(renderRate != activeMode.fps,
                         "Mismatch in render frame rates. Selector: %s, Scheduler: %s, Display: "
                         "%" PRIu64,
-                        to_string(mode.fps).c_str(), to_string(renderFrameRate).c_str(), id.value);
+                        to_string(activeMode.fps).c_str(), to_string(renderRate).c_str(), id.value);
 
-    ALOGV("%s %s (%s)", __func__, to_string(mode.fps).c_str(),
-          to_string(mode.modePtr->getVsyncRate()).c_str());
+    ALOGV("%s %s (%s)", __func__, to_string(renderRate).c_str(),
+          to_string(activeMode.modePtr->getVsyncRate()).c_str());
+
     std::vector<FrameRateOverride> overrides = mFrameRateOverrideMappings.getAllFrameRateOverrides(
             display.selectorPtr->supportsAppFrameRateOverrideByContent());
-    display.schedulePtr->getTracker().setRenderRate(renderFrameRate, applyImmediately, overrides);
+    display.schedulePtr->getTracker().setRenderRate(renderRate, applyImmediately, overrides);
 }
 
 bool Scheduler::isLockstepFollower(PhysicalDisplayId id) const {

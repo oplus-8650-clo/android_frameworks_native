@@ -654,17 +654,29 @@ void SurfaceFlinger::run() {
 
 sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        uid_t ownerUid, float requestedRefreshRate) {
-    (void)ownerUid;
-
+        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy,
+        gui::ISurfaceComposer::EmbeddedContentPolicy embeddedContentPolicy,
+        const std::string& uniqueId, uid_t ownerUid, float requestedRefreshRate) {
     // SurfaceComposerAIDL checks for some permissions, but adding an additional check here.
     // This is to ensure that only root, system, and graphics can request to create a secure
     // display. Secure displays can show secure content so we add an additional restriction on it.
     const uid_t uid = IPCThreadState::self()->getCallingUid();
-    if (isSecure && uid != AID_ROOT && uid != AID_GRAPHICS && uid != AID_SYSTEM) {
-        ALOGE("Only privileged processes can create a secure display");
-        return nullptr;
+    const bool isPrivileged = uid == AID_ROOT || uid == AID_GRAPHICS || uid == AID_SYSTEM;
+
+    if (!isPrivileged) {
+        if (isSecure) {
+            ALOGE("Only privileged processes can create a secure display");
+            return nullptr;
+        }
+        if (embeddedContentPolicy == gui::ISurfaceComposer::EmbeddedContentPolicy::Include) {
+            ALOGE("Only privileged processes can create a virtual display that includes embedded "
+                  "content.");
+            return nullptr;
+        }
+        if (ownerUid != uid) {
+            ALOGW("Only privileged processes can create a virtual display for another UID.");
+            ownerUid = uid;
+        }
     }
 
     ALOGD("Creating virtual display: %s", displayName.c_str());
@@ -697,6 +709,8 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
     state.displayName = displayName;
     state.uniqueId = uniqueId;
     state.requestedRefreshRate = Fps::fromValue(requestedRefreshRate);
+    state.ownerUid = gui::Uid{static_cast<unsigned int>(ownerUid)};
+    state.embeddedContentPolicy = embeddedContentPolicy;
     mCurrentState.displays.emplace_or_replace(token, state);
     return token;
 }
@@ -1037,9 +1051,9 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     LOG_ALWAYS_FATAL_IF(!getHwComposer().isConnected(display->getPhysicalId()),
                         "Primary display is disconnected");
 
-    // TODO(b/241285876): The Scheduler needlessly depends on creating the CompositionEngine part of
-    // the DisplayDevice, hence the above commit of the primary display. Remove that special case by
-    // initializing the Scheduler after configureLocked, once decoupled from DisplayDevice.
+    // TODO: b/355424160 - The Scheduler needlessly depends on creating the CompositionEngine part
+    // of the DisplayDevice, hence the above commit of the primary display. Remove that special case
+    // by initializing the Scheduler after configureLocked, once decoupled from DisplayDevice.
     initScheduler(display);
 
     // Start listening after creating the Scheduler, since the listener calls into it.
@@ -1473,43 +1487,41 @@ void SurfaceFlinger::setDesiredMode(display::DisplayModeRequest desiredMode) {
         return;
     }
     using DesiredModeAction = display::DisplayModeController::DesiredModeAction;
+    using ResyncToModeOpts = scheduler::Scheduler::ResyncToModeOpts;
 
     switch (mDisplayModeController.setDesiredMode(displayId, std::move(desiredMode))) {
         case DesiredModeAction::InitiateDisplayModeSwitch: {
-            const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId);
-            if (!selectorPtr) break;
-
-            const auto activeMode = selectorPtr->getActiveMode();
-            const Fps renderRate = activeMode.fps;
-
-            // DisplayModeController::setDesiredMode updated the render rate, so inform Scheduler.
-            mScheduler->setRenderRate(displayId, renderRate, true /* applyImmediately */);
-
             // Schedule a new frame to initiate the display mode switch.
             scheduleComposite(FrameHint::kNone);
 
-            // Start receiving vsync samples now, so that we can detect a period
-            // switch.
-            mScheduler->resyncToHardwareVsync(displayId, true /* allowToEnable */,
-                                              mode.modePtr.get());
+            // Resync to hardware VSYNC now to detect a period switch, and restore render
+            // rate to schedule the next frame as soon as possible.
+            mScheduler->resyncToMode(mode, ResyncToModeOpts::PeakRenderRate);
 
             // As we called to set period, we will call to onRefreshRateChangeCompleted once
             // VsyncController model is locked.
             mScheduler->modulateVsync(displayId, &VsyncModulator::onRefreshRateChangeInitiated);
-
-            mScheduler->updatePhaseConfiguration(displayId, mode.fps);
             mScheduler->setModeChangePending(displayId, true);
 
             // The mode set to switch resolution is not initiated until the display transaction that
             // resizes the display. DM sends this transaction in response to a mode change event, so
             // emit the event now, not when finalizing the mode change as for a refresh rate switch.
-            if (FlagManager::getInstance().synced_resolution_switch() &&
-                !mode.matchesResolution(activeMode)) {
-                mScheduler->onDisplayModeChanged(displayId, mode,
-                                                 /*clearContentRequirements*/ true);
+            if (FlagManager::getInstance().synced_resolution_switch()) {
+                if (const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId)) {
+                    const auto activeMode = selectorPtr->getActiveMode();
+                    if (!mode.matchesResolution(activeMode)) {
+                        mScheduler->onDisplayModeChanged(displayId, mode,
+                                                         /*clearContentRequirements*/ true);
+                    }
+                }
             }
             break;
         }
+        case DesiredModeAction::MergeDisplayModeSwitch:
+            if (FlagManager::getInstance().modeset_state_machine()) {
+                mScheduler->resyncToMode(mode, ResyncToModeOpts::PeakRenderRate);
+            }
+            break;
         case DesiredModeAction::InitiateRenderRateSwitch:
             mScheduler->setRenderRate(displayId, mode.fps, /*applyImmediately*/ false);
             mScheduler->updatePhaseConfiguration(displayId, mode.fps);
@@ -1665,31 +1677,13 @@ void SurfaceFlinger::dropModeRequest(display::DisplayModeRequest&& request) {
 }
 
 void SurfaceFlinger::applyActiveMode(PhysicalDisplayId displayId) {
-    const auto activeModeOpt = mDisplayModeController.getDesiredMode(displayId);
-    auto activeModePtr = activeModeOpt->mode.modePtr;
-    const auto renderFps = activeModeOpt->mode.fps;
-
+    mScheduler->resyncToMode(mDisplayModeController.getDesiredMode(displayId)->mode);
     dropModeRequest(displayId);
-
-    constexpr bool kAllowToEnable = true;
-    mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable, std::move(activeModePtr).take());
-
-    mScheduler->setRenderRate(displayId, renderFps, /*applyImmediately*/ true);
-    mScheduler->updatePhaseConfiguration(displayId, renderFps);
 }
 
 void SurfaceFlinger::applyActiveMode(display::DisplayModeRequest&& activeMode) {
-    auto activeModePtr = activeMode.mode.modePtr;
-    const auto displayId = activeModePtr->getPhysicalDisplayId();
-    const auto renderFps = activeMode.mode.fps;
-
+    mScheduler->resyncToMode(activeMode.mode);
     dropModeRequest(std::move(activeMode));
-
-    constexpr bool kAllowToEnable = true;
-    mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable, std::move(activeModePtr).take());
-
-    mScheduler->setRenderRate(displayId, renderFps, /*applyImmediately*/ true);
-    mScheduler->updatePhaseConfiguration(displayId, renderFps);
 }
 
 void SurfaceFlinger::initiateDisplayModeChanges() {
@@ -4501,15 +4495,13 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
             compositionengine::Output::ColorProfile{defaultColorMode, defaultDataSpace,
                                                     RenderIntent::COLORIMETRIC});
 
-    if (state.isPhysical()) {
-        const auto& physical = state.getPhysical();
-        const auto& mode = *physical.activeMode;
-        mDisplayModeController.setActiveMode(physical.id, mode.getId(), mode.getVsyncRate(),
-                                             mode.getPeakFps());
-    }
-
     display->setLayerFilter(
-            makeLayerFilterForDisplay(display->getDisplayIdVariant(), state.layerStack));
+            makeLayerFilterForDisplay(display->getDisplayIdVariant(), state.layerStack,
+                                      state.embeddedContentPolicy ==
+                                                      gui::ISurfaceComposer::EmbeddedContentPolicy::
+                                                              Exclude
+                                              ? state.ownerUid
+                                              : gui::Uid::INVALID));
     display->setProjection(state.orientation, state.layerStackSpaceRect,
                            state.orientedDisplaySpaceRect);
     display->setDisplayName(state.displayName);
@@ -4661,7 +4653,11 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     mQtiSFExtnIntf->qtiSetPowerModeOverrideConfig(display);
 
 // QTI_END: 2023-01-25: Display: sf: Add SF Binder calls for QTI Extensions
-    if (!display->isVirtual()) {
+    if (state.isPhysical()) {
+        const auto& physical = state.getPhysical();
+        const auto& mode = *physical.activeMode;
+        mDisplayModeController.setActiveMode(physical.id, mode.getId(), mode.getVsyncRate(),
+                                             mode.getPeakFps());
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         mQtiSFExtnIntf->qtiSetPowerModeOverrideConfig(display);
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -4672,17 +4668,21 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         mQtiSFExtnIntf->qtiTryDrawMethod(display);
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
+        // When the primary display is added during boot, the Scheduler does not exist yet.
+        // TODO: b/355424160 - Dedupe with initScheduler. See TODO for that function call.
         if (mScheduler) {
-            // For hotplug reconnect, renew the registration since display modes have been reloaded.
+            // If the display is being re-added through hotplug reconnect, renew the registration
+            // since the display modes have been reloaded.
             const auto displayId = display->getPhysicalId();
-            const auto connectionType = mPhysicalDisplays.get(displayId)
-                                                .transform(&PhysicalDisplay::snapshotRef)
-                                                .transform(&display::DisplaySnapshot::connectionType)
-                                                .value_or(ui::DisplayConnectionType::External);
+            const auto connectionType =
+                    mPhysicalDisplays.get(displayId)
+                            .transform(&PhysicalDisplay::snapshotRef)
+                            .transform(&display::DisplaySnapshot::connectionType)
+                            .value_or(ui::DisplayConnectionType::External);
+
             mScheduler->registerDisplay(displayId, connectionType,
                                         display->holdRefreshRateSelector());
         }
-
     }
 
     if (display->isVirtual()) {
@@ -4836,8 +4836,14 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
 
 // QTI_END: 2024-04-09: Display: sf: extensions: Add support for fb scaling
         if (currentState.layerStack != drawingState.layerStack) {
-            display->setLayerFilter(makeLayerFilterForDisplay(display->getDisplayIdVariant(),
-                                                              currentState.layerStack));
+            display->setLayerFilter(
+                    makeLayerFilterForDisplay(display->getDisplayIdVariant(),
+                                              currentState.layerStack,
+                                              currentState.embeddedContentPolicy ==
+                                                              gui::ISurfaceComposer::
+                                                                      EmbeddedContentPolicy::Exclude
+                                                      ? currentState.ownerUid
+                                                      : gui::Uid::INVALID));
             if (currentState.isPhysical()) {
                 mQtiSFExtnIntf->qtiUpdateSmomoLayerStackId(currentState.getPhysical().hwcDisplayId,
                                                            currentState.layerStack.id,
@@ -10151,14 +10157,17 @@ binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerCli
 
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
-        int32_t ownerUid, float requestedRefreshRate, sp<IBinder>* outDisplay) {
+        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy,
+        gui::ISurfaceComposer::EmbeddedContentPolicy embeddedContentPolicy,
+        const std::string& uniqueId, int32_t ownerUid, float requestedRefreshRate,
+        sp<IBinder>* outDisplay) {
     status_t status = checkAccessPermission();
     if (status != OK) {
         return binderStatusFromStatusT(status);
     }
     *outDisplay = mFlinger->createVirtualDisplay(displayName, isSecure, optimizationPolicy,
-                                                 uniqueId, ownerUid, requestedRefreshRate);
+                                                 embeddedContentPolicy, uniqueId, ownerUid,
+                                                 requestedRefreshRate);
     return binder::Status::ok();
 }
 

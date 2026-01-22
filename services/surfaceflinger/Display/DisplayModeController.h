@@ -70,7 +70,13 @@ public:
     // Returns `nullptr` if the display is no longer registered (or never was).
     RefreshRateSelectorPtr selectorPtrFor(PhysicalDisplayId) const EXCLUDES(mDisplayLock);
 
-    enum class DesiredModeAction { None, InitiateDisplayModeSwitch, InitiateRenderRateSwitch };
+    enum class DesiredModeAction {
+        None,
+        InitiateDisplayModeSwitch,
+        MergeDisplayModeSwitch,
+        InitiateRenderRateSwitch
+    };
+
     enum class ModeChangeResult { Changed, Rejected, Aborted };
 
     DesiredModeAction setDesiredMode(PhysicalDisplayId, DisplayModeRequest&&)

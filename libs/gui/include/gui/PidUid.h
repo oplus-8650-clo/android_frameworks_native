@@ -51,6 +51,6 @@ struct Uid : ftl::Constructible<Uid, uid_t>, ftl::Equatable<Uid>, ftl::Orderable
     std::string toString() const { return std::to_string(val()); }
 };
 
-const inline Uid Uid::INVALID{static_cast<uid_t>(-1)};
+inline constexpr Uid Uid::INVALID{static_cast<uid_t>(-1)};
 
 } // namespace android::gui

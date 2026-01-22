@@ -714,6 +714,7 @@ public:
     binder::Status createVirtualDisplay(
             const std::string& /*displayName*/, bool /*isSecure*/,
             gui::ISurfaceComposer::OptimizationPolicy /*optimizationPolicy*/,
+            gui::ISurfaceComposer::EmbeddedContentPolicy /*embeddedContentPolicy*/,
             const std::string& /*uniqueId*/, int32_t /*ownerUid*/, float /*requestedRefreshRate*/,
             sp<IBinder>* /*outDisplay*/) override {
         return binder::Status::ok();
@@ -3423,6 +3424,129 @@ TEST_F(SurfaceTest, PresentWaitANWGetLastReplacedFrameIdIsCorrect_Plural) {
     // The last replaced frame ID should not change after acquiring a buffer.
     ASSERT_EQ(OK, native_window_get_last_replaced_frame_id(window.get(), &lastReplacedFrameId));
     ASSERT_EQ(3u, lastReplacedFrameId);
+
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
+namespace {
+
+struct OnAcquiredCallbackState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool called = false;
+    uint64_t bufferId = 0;
+    uint64_t frameId = 0;
+};
+
+void onAcquiredCallback(uint64_t bufferId, uint64_t frameId, void* data) {
+    OnAcquiredCallbackState* state = static_cast<OnAcquiredCallbackState*>(data);
+    std::unique_lock<std::mutex> lock(state->mutex);
+    state->called = true;
+    state->bufferId = bufferId;
+    state->frameId = frameId;
+    state->cv.notify_one();
+}
+
+} // namespace
+
+class OnAcquiredListener : public StubSurfaceListener {};
+
+//  Test for ANativeWindow_OnAcquiredCallback, which is used by Vulkan's
+//  vkWaitForPresent2KHR to know when a frame has been presented.
+TEST_F(SurfaceTest, PresentWaitANWOnBufferAcquiredCallbackIsCalled) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<ANativeWindow> window(surface);
+
+    sp<OnAcquiredListener> listener = sp<OnAcquiredListener>::make();
+    native_window_api_connect_with_listener(window.get(), NATIVE_WINDOW_API_CPU, false, true, true);
+
+    OnAcquiredCallbackState state;
+    native_window_set_on_acquired_callback(window.get(), onAcquiredCallback, &state);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    BufferItem item;
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+
+    // Wait for callback
+    {
+        using namespace std::chrono_literals;
+        std::unique_lock<std::mutex> lock(state.mutex);
+        ASSERT_TRUE(state.cv.wait_for(lock, 1s, [&state] { return state.called; }));
+        ASSERT_TRUE(state.called);
+        ASSERT_EQ(state.bufferId, buffer->getId());
+        // frame number should be 1 for the first buffer
+        ASSERT_EQ(state.frameId, 1u);
+    }
+
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+    ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
+namespace {
+
+struct OnDroppedCallbackState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool called = false;
+    uint64_t bufferId = 0;
+    uint64_t frameId = 0;
+};
+
+void onDroppedCallback(uint64_t bufferId, uint64_t frameId, void* data) {
+    OnDroppedCallbackState* state = static_cast<OnDroppedCallbackState*>(data);
+    std::unique_lock<std::mutex> lock(state->mutex);
+    state->called = true;
+    state->bufferId = bufferId;
+    state->frameId = frameId;
+    state->cv.notify_one();
+}
+
+} // namespace
+
+class OnDroppedListener : public StubSurfaceListener {};
+
+// Test for ANativeWindow_OnDroppedCallback, which is used by Vulkan's
+// vkWaitForPresent2KHR to know when a frame has been dropped.
+TEST_F(SurfaceTest, PresentWaitANWOnBufferDroppedCallbackIsCalled) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    sp<ANativeWindow> window(surface);
+
+    sp<OnDroppedListener> listener = sp<OnDroppedListener>::make();
+    native_window_api_connect_with_listener(window.get(), NATIVE_WINDOW_API_CPU, false, true, true);
+
+    OnDroppedCallbackState state;
+    native_window_set_on_dropped_callback(window.get(), onDroppedCallback, &state);
+    native_window_set_present_mode(window.get(), ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY);
+    sp<GraphicBuffer> bufferToDrop;
+    sp<Fence> fenceToDrop;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&bufferToDrop, &fenceToDrop));
+    ASSERT_EQ(OK, surface->queueBuffer(bufferToDrop, fenceToDrop));
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    BufferItem item;
+    // The dropped buffer is gone, so acquire should get the second buffer.
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(item.mGraphicBuffer->getId(), buffer->getId());
+
+    // Wait for callback
+    {
+        using namespace std::chrono_literals;
+        std::unique_lock<std::mutex> lock(state.mutex);
+        ASSERT_TRUE(state.cv.wait_for(lock, 1s, [&state] { return state.called; }));
+        ASSERT_TRUE(state.called);
+        ASSERT_EQ(state.bufferId, bufferToDrop->getId());
+        // frame number should be 1 for the first buffer
+        ASSERT_EQ(state.frameId, 1u);
+    }
 
     ASSERT_EQ(OK, consumer->releaseBuffer(item));
     ASSERT_EQ(OK, surface->disconnect(NATIVE_WINDOW_API_CPU));

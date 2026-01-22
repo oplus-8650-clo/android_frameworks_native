@@ -113,7 +113,7 @@ auto DisplayModeController::setDesiredMode(PhysicalDisplayId displayId,
                 desiredModeOpt = std::move(desiredMode);
                 desiredModeOpt->emitEvent |= emitEvent;
                 desiredModeOpt->force |= force;
-                return DesiredModeAction::None;
+                return DesiredModeAction::MergeDisplayModeSwitch;
             }
         }
 
