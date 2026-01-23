@@ -67,6 +67,9 @@ public:
                                                       void* cookie = nullptr, uint32_t flags = 0,
                                                       wp<DeathRecipient>* outRecipient = nullptr);
 
+    // Register a callback to be notified of frozen state changes of the
+    // service. Be sure to have a binder threadpool set up before calling this
+    // in order to receive the callbacks.
     [[nodiscard]] status_t addFrozenStateChangeCallback(
             const wp<FrozenStateChangeCallback>& recipient);
 

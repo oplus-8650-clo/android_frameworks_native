@@ -453,17 +453,13 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
         updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
-        if (FlagManager::getInstance().stop_layer()) {
-            applyStopLayers(args.root, childPath);
-        }
+        applyStopLayers(args.root, childPath);
     } else {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
             updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
-            if (FlagManager::getInstance().stop_layer()) {
-                applyStopLayers(*childHierarchy, childPath);
-            }
+            applyStopLayers(*childHierarchy, childPath);
         }
     }
 
@@ -809,8 +805,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         // field is used to hide mirrored layers with the flag set.
         snapshot.handleSkipScreenshotFlag = parentSnapshot.handleSkipScreenshotFlag ||
                 (requested.layerStackToMirror != ui::UNASSIGNED_LAYER_STACK) ||
-                (FlagManager::getInstance().connected_displays_cursor() &&
-                 requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
+                (requested.layerIdToMirror != UNASSIGNED_LAYER_ID);
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eAlphaChanged) {
@@ -822,16 +817,10 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eFlagsChanged) {
         snapshot.isSecure =
                 parentSnapshot.isSecure || (requested.flags & layer_state_t::eLayerSecure);
-        if (FlagManager::getInstance().connected_displays_cursor()) {
-            snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
-                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
-            // This may cause a layer to become invisible, removing it from the hierarchy
-            mResortSnapshots = true;
-        } else {
-            snapshot.outputFilter.toInternalDisplay =
-                    parentSnapshot.outputFilter.toInternalDisplay ||
-                    (requested.flags & layer_state_t::eLayerSkipScreenshot);
-        }
+        snapshot.outputFilter.skipScreenshot = parentSnapshot.outputFilter.skipScreenshot ||
+                (requested.flags & layer_state_t::eLayerSkipScreenshot);
+        // This may cause a layer to become invisible, removing it from the hierarchy
+        mResortSnapshots = true;
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eStretchChanged) {
@@ -1025,12 +1014,20 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
+    bool hasSmpte2094_50 = false;
+    // For now we don't check LUT support so guard by a debug sysprop
+    if (FlagManager::getInstance().force_agtm_without_luts() && snapshot.buffer) {
+        std::optional<std::vector<uint8_t>> smpte2094_50;
+        status_t err = snapshot.buffer->getSmpte2094_50(&smpte2094_50);
+        hasSmpte2094_50 = err == OK && smpte2094_50;
+    }
+
     // computed snapshot properties
     snapshot.forceClientComposition = snapshot.shadowSettings.length > 0 ||
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
             snapshot.borderSettings.strokeWidth > 0 ||
             !snapshot.boxShadowSettings.boxShadows.empty() ||
-            snapshot.renderCommandBufferConsumer != nullptr;
+            snapshot.renderCommandBufferConsumer != nullptr || hasSmpte2094_50;
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
     snapshot.isOpaque = snapshot.contentOpaque &&

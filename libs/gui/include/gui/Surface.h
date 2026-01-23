@@ -459,7 +459,8 @@ public:
 
     ui::Dataspace getBuffersDataSpace();
 
-    static status_t attachAndQueueBufferWithDataspace(Surface* surface, sp<GraphicBuffer> buffer,
+    static status_t attachAndQueueBufferWithDataspace(Surface* surface,
+                                                      const sp<GraphicBuffer>& buffer,
                                                       ui::Dataspace dataspace);
 
     // Dequeues a buffer and its outFence, which must be signalled before the buffer can be used.
@@ -501,8 +502,8 @@ protected:
 
     class ProducerListenerProxy : public BnProducerListener {
     public:
-        ProducerListenerProxy(wp<Surface> parent, sp<SurfaceListener> listener)
-               : mParent(parent), mSurfaceListener(listener) {}
+        ProducerListenerProxy(const wp<Surface>& parent, const sp<SurfaceListener>& listener)
+              : mParent(parent), mSurfaceListener(listener) {}
         virtual ~ProducerListenerProxy() {}
 
         virtual void onBufferReleased() {
@@ -532,7 +533,7 @@ protected:
 
     class ProducerDeathListenerProxy : public IBinder::DeathRecipient {
     public:
-        ProducerDeathListenerProxy(wp<SurfaceListener> surfaceListener);
+        ProducerDeathListenerProxy(const wp<SurfaceListener>& surfaceListener);
         ProducerDeathListenerProxy(ProducerDeathListenerProxy&) = delete;
 
         // IBinder::DeathRecipient

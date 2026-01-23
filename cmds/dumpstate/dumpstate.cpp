@@ -71,6 +71,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/capability.h>
+#include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/klog.h>
 #include <sys/mount.h>
@@ -1353,10 +1354,11 @@ static Dumpstate::RunStatus RunDumpsysTextByPriority(const std::string& title, i
              dumpsys.writeDumpHeader(STDOUT_FILENO, service, priority);
              dumpsys.writeDumpFooter(STDOUT_FILENO, service, std::chrono::milliseconds(1));
         } else {
-             status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP | Dumpsys::TYPE_PID |
-                                                       Dumpsys::TYPE_CLIENTS | Dumpsys::TYPE_THREAD,
-                                                       service, args);
-             if (status == OK) {
+            status_t status =
+                dumpsys.startDumpThread(Dumpsys::TYPE_DUMP | Dumpsys::TYPE_PID |
+                                            Dumpsys::TYPE_CLIENTS | Dumpsys::TYPE_THREAD,
+                                        service, args, Dumpsys::ServiceBehavior::DUMP_IF_STARTED);
+            if (status == OK) {
                 dumpsys.writeDumpHeader(STDOUT_FILENO, service, priority);
                 std::chrono::duration<double> elapsed_seconds;
                 if (priority == IServiceManager::DUMP_FLAG_PRIORITY_HIGH &&
@@ -1438,7 +1440,8 @@ static Dumpstate::RunStatus RunDumpsysProto(const std::string& title, int priori
             path.append("_HIGH");
         }
         path.append(kProtoExt);
-        status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP, service, args);
+        status_t status = dumpsys.startDumpThread(Dumpsys::TYPE_DUMP, service, args,
+                                                  Dumpsys::ServiceBehavior::DUMP_IF_STARTED);
         if (status == OK) {
             status = ds.AddZipEntryFromFd(path, dumpsys.getDumpFd(), service_timeout);
             bool dumpTerminated = (status == OK);
@@ -2942,20 +2945,11 @@ static void Vibrate(int duration_ms) {
     // clang-format on
 }
 
-static void MaybeResolveSymlink(std::string* path) {
-    std::string resolved_path;
-    if (android::base::Readlink(*path, &resolved_path)) {
-        *path = resolved_path;
-    }
-}
-
 /*
  * Prepares state like filename, screenshot path, etc in Dumpstate. Also initializes ZipWriter
  * and adds the version file. Return false if zip_file could not be open to write.
  */
 static bool PrepareToWriteToFile() {
-    MaybeResolveSymlink(&ds.bugreport_internal_dir_);
-
     std::string build_id = android::base::GetProperty("ro.build.id", "UNKNOWN_BUILD");
     std::string device_name = android::base::GetProperty("ro.product.name", "UNKNOWN_DEVICE");
     ds.base_name_ = StringPrintf("bugreport-%s-%s", device_name.c_str(), build_id.c_str());
@@ -3221,7 +3215,22 @@ void Dumpstate::SetOptions(std::unique_ptr<DumpOptions> options) {
     options_ = std::move(options);
 }
 
-void Dumpstate::Initialize() {
+static void MaybeResolveSymlink(std::string* path) {
+    std::string resolved_path;
+    if (android::base::Readlink(*path, &resolved_path)) {
+        *path = resolved_path;
+    }
+}
+
+Dumpstate::InitializeStatus Dumpstate::Initialize() {
+    // resolve the actual bugreport directory
+    MaybeResolveSymlink(&bugreport_internal_dir_);
+
+    auto lock_result = TryAcquireBugreportLock();
+    if (lock_result != Dumpstate::InitializeStatus::INIT_OK) {
+        return lock_result;
+    }
+
     /* gets the sequential id */
     uint32_t last_id = android::base::GetIntProperty(PROPERTY_LAST_ID, 0);
 // QTI_BEGIN: 2023-09-13: Frameworks: Disabled critical CPU related information from bugreport.
@@ -3231,11 +3240,52 @@ void Dumpstate::Initialize() {
 // QTI_END: 2023-09-13: Frameworks: Disabled critical CPU related information from bugreport.
     id_ = ++last_id;
     android::base::SetProperty(PROPERTY_LAST_ID, std::to_string(last_id));
+
+    return Dumpstate::InitializeStatus::INIT_OK;
+}
+
+Dumpstate::InitializeStatus Dumpstate::TryAcquireBugreportLock() {
+    assert(global_bugreport_lock_.ok() &&
+           "We already hold bugreport-lock, Initialize() invoked twice?");
+
+    std::string bugreport_lock_pathname =
+        android::base::StringPrintf("%s/%s", bugreport_internal_dir_.c_str(), ".bugreport_lock");
+    create_parent_dirs(bugreport_lock_pathname.c_str());
+
+    MYLOGD("Acquiring bugreport-lock under: %s\n", bugreport_lock_pathname.c_str());
+    android::base::unique_fd bugreport_lock_fd(android::os::OpenForWrite(bugreport_lock_pathname));
+    if (bugreport_lock_fd.get() < 0) {
+        MYLOGE("Failed to create bugreport-lock : %s\n", strerror(errno));
+        return Dumpstate::InitializeStatus::INIT_ERROR;
+    }
+
+    if (flock(bugreport_lock_fd.get(), LOCK_EX | LOCK_NB) == -1) {
+        int reason = errno;
+
+        Dumpstate::InitializeStatus error_type;
+        if (reason == EWOULDBLOCK) {
+            MYLOGW("Failed to acquire bugreport-lock, another bugreport is already in-progress\n");
+            error_type = Dumpstate::InitializeStatus::LOCK_OCCUPIED;
+        } else {
+            MYLOGE("Lock bugreport-lock failed with error: %s\n", strerror(reason));
+            error_type = Dumpstate::InitializeStatus::INIT_ERROR;
+        }
+
+        return error_type;
+    }
+
+    // move the fd lock
+    global_bugreport_lock_.reset(bugreport_lock_fd.release());
+
+    return Dumpstate::InitializeStatus::INIT_OK;
 }
 
 Dumpstate::RunStatus Dumpstate::Run(int32_t calling_uid, const std::string& calling_package) {
+    assert(global_dump_lock_.ok() && "Initialize() was not invoked before invoking Run()");
+
     Dumpstate::RunStatus status = RunInternal(calling_uid, calling_package);
     HandleRunStatus(status);
+
     return status;
 }
 
@@ -3966,7 +4016,21 @@ Dumpstate::RunStatus Dumpstate::ParseCommandlineAndRun(int argc, char* argv[]) {
         // calling_uid and calling_package are for user consent to share the bugreport with
         // an app; they are irrelevant here because bugreport is triggered via command line.
         // Update Last ID before calling Run().
-        Initialize();
+        switch (Initialize()) {
+            case Dumpstate::InitializeStatus::INIT_OK:
+                break;
+            case Dumpstate::InitializeStatus::INIT_ERROR:
+                MYLOGE(
+                    "ParseCommandlineAndRun(): Unexpected error when initializing a new bugreport "
+                    "session\n");
+                return Dumpstate::RunStatus::ERROR;
+            case Dumpstate::InitializeStatus::LOCK_OCCUPIED:
+                MYLOGE(
+                    "ParseCommandlineAndRun(): A bugreport is undergoing somewhere else on the "
+                    "system. Aborting.\n");
+                return Dumpstate::RunStatus::ERROR;
+        }
+
         status = Run(0 /* calling_uid */, "" /* calling_package */);
     }
     return status;

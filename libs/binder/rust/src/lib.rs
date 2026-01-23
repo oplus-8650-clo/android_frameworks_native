@@ -110,7 +110,6 @@ mod state;
 mod system_only;
 #[macro_use]
 mod sync_utils;
-#[cfg(not(trusty))]
 mod write_to;
 
 use binder_ndk_sys as sys;
@@ -144,7 +143,6 @@ pub use state::{ProcessState, ThreadState};
 #[cfg(not(any(android_vendor, android_vndk, android_ndk, trusty)))]
 pub use system_only::{delegate_accessor, Accessor, AccessorProvider, ConnectionInfo};
 
-#[cfg(not(trusty))]
 pub use write_to::WriteTo;
 
 /// Binder result containing a [`Status`] on error.

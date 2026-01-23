@@ -17,7 +17,6 @@
 #define LOG_TAG "InputVerifier"
 
 #include <android-base/logging.h>
-#include <com_android_input_flags.h>
 #include <input/Input.h>
 #include <input/InputVerifier.h>
 #include <input/PrintTools.h>
@@ -30,16 +29,12 @@ using android::input::RustPointerProperties;
 
 using DeviceId = int32_t;
 
-namespace input_flags = com::android::input::flags;
-
 namespace android {
 
 // --- InputVerifier ---
 
 InputVerifier::InputVerifier(const std::string& name)
-      : mVerifier(android::input::verifier::create(rust::String::lossy(name),
-                                                   input_flags::enable_button_state_verification(),
-                                                   input_flags::enable_down_time_verification())) {}
+      : mVerifier(android::input::verifier::create(rust::String::lossy(name))) {}
 
 Result<void> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime, int32_t source,
                                             int32_t action, int32_t actionButton,

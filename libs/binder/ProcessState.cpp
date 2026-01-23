@@ -28,10 +28,10 @@
 #include <utils/String8.h>
 #include <utils/Thread.h>
 
-#include "BinderObserver.h"
 #include "Static.h"
 #include "Utils.h"
 #include "binder_module.h"
+#include "observer/BinderObserver.h"
 
 #include <errno.h>
 #include <fcntl.h>

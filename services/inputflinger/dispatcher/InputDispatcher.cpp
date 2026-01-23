@@ -31,9 +31,9 @@
 #include <gui/SurfaceComposerClient.h>
 #endif
 #include <input/InputDevice.h>
-#include <input/InputFlags.h>
 #include <input/PrintTools.h>
 #include <input/TraceTools.h>
+#include <jni.h>
 #include <openssl/mem.h>
 #include <private/android_filesystem_config.h>
 #include <unistd.h>
@@ -879,13 +879,13 @@ std::string dumpWindowForTouchOcclusion(const WindowInfo& info, bool isTouchedWi
 
 // --- InputDispatcher ---
 
-InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JNIEnv* env)
-      : InputDispatcher(policy, input_trace::impl::createInputTracingBackendIfEnabled(env), env) {}
+InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JavaVM* vm)
+      : InputDispatcher(policy, input_trace::impl::createInputTracingBackendIfEnabled(vm), vm) {}
 
 InputDispatcher::InputDispatcher(
         InputDispatcherPolicyInterface& policy,
-        std::shared_ptr<input_trace::InputTracingBackendInterface> traceBackend, JNIEnv* env)
-      : mJniEnv(env),
+        std::shared_ptr<input_trace::InputTracingBackendInterface> traceBackend, JavaVM* vm)
+      : mVm(vm),
         mPolicy(policy),
 
         mLooper(sp<Looper>::make(false)),
@@ -948,7 +948,7 @@ status_t InputDispatcher::start() {
     protolog::Initialize();
     mThread = std::make_unique<InputThread>(
             "InputDispatcher", [this]() { dispatchOnce(); }, [this]() { mLooper->wake(); },
-            /*isInCriticalPath=*/true, mJniEnv);
+            /*isInCriticalPath=*/true, mVm);
     return OK;
 }
 
@@ -1008,12 +1008,14 @@ void InputDispatcher::dispatchOnce() {
  * 2. Ensure we still don't have a focused window.
  */
 void InputDispatcher::processNoFocusedWindowAnrLocked() {
+    LOG_IF(FATAL, !mNoFocusedWindowAnrState.has_value()) << "Must have a valid ANR state";
+
     // Check if the application that we are waiting for is still focused.
     std::shared_ptr<InputApplicationHandle> focusedApplication =
             getValueByKey(mFocusedApplicationHandlesByDisplay, mAwaitedApplicationDisplayId);
     if (focusedApplication == nullptr ||
         focusedApplication->getApplicationToken() !=
-                mAwaitedFocusedApplication->getApplicationToken()) {
+                mNoFocusedWindowAnrState->applicationHandle->getApplicationToken()) {
         // Unexpected because we should have reset the ANR timer when focused application changed
         ALOGE("Waited for a focused window, but focused application has already changed to %s",
               focusedApplication->getName().c_str());
@@ -1025,7 +1027,7 @@ void InputDispatcher::processNoFocusedWindowAnrLocked() {
     if (focusedWindowHandle != nullptr) {
         return; // We now have a focused window. No need for ANR.
     }
-    onAnrLocked(mAwaitedFocusedApplication);
+    onAnrLocked(mNoFocusedWindowAnrState->applicationHandle);
 }
 
 /**
@@ -1037,15 +1039,15 @@ nsecs_t InputDispatcher::processAnrsLocked() {
     const nsecs_t currentTime = now();
     nsecs_t nextAnrCheck = LLONG_MAX;
     // Check if we are waiting for a focused window to appear. Raise ANR if waited too long
-    if (mNoFocusedWindowTimeoutTime.has_value() && mAwaitedFocusedApplication != nullptr) {
-        if (currentTime >= *mNoFocusedWindowTimeoutTime) {
+    if (mNoFocusedWindowAnrState.has_value()) {
+        if (currentTime >= mNoFocusedWindowAnrState->timeoutEndTime) {
             processNoFocusedWindowAnrLocked();
-            mAwaitedFocusedApplication.reset();
-            mNoFocusedWindowTimeoutTime = std::nullopt;
+            resetNoFocusedWindowTimeoutLocked();
             return LLONG_MIN;
         } else {
-            // Keep waiting. We will drop the event when mNoFocusedWindowTimeoutTime comes.
-            nextAnrCheck = *mNoFocusedWindowTimeoutTime;
+            // Keep waiting. We will drop the event when mNoFocusedWindowAnrState->timeoutEndTime
+            // comes.
+            nextAnrCheck = mNoFocusedWindowAnrState->timeoutEndTime;
         }
     }
 
@@ -1283,7 +1285,7 @@ bool InputDispatcher::shouldPruneInboundQueueLocked(const MotionEntry& motionEnt
     // decides to touch a window in a different application.
     // If the application takes too long to catch up then we drop all events preceding
     // the touch into the other window.
-    if (isPointerDownEvent && mAwaitedFocusedApplication != nullptr) {
+    if (isPointerDownEvent && mNoFocusedWindowAnrState.has_value()) {
         const ui::LogicalDisplayId displayId = motionEntry.displayId;
         const auto [x, y] = resolveTouchedPosition(motionEntry);
         const bool isStylus = isPointerFromStylus(motionEntry, /*pointerIndex=*/0);
@@ -1291,11 +1293,11 @@ bool InputDispatcher::shouldPruneInboundQueueLocked(const MotionEntry& motionEnt
                 mWindowInfos.findTouchedWindowAt(displayId, x, y, isStylus);
         if (touchedWindowHandle != nullptr &&
             touchedWindowHandle->getApplicationToken() !=
-                    mAwaitedFocusedApplication->getApplicationToken()) {
+                    mNoFocusedWindowAnrState->applicationHandle->getApplicationToken()) {
             // User touched a different application than the one we are waiting on.
             ALOGI("Pruning input queue because user touched a different application while waiting "
                   "for %s",
-                  mAwaitedFocusedApplication->getName().c_str());
+                  mNoFocusedWindowAnrState->applicationHandle->getName().c_str());
             return true;
         }
 
@@ -1311,7 +1313,7 @@ bool InputDispatcher::shouldPruneInboundQueueLocked(const MotionEntry& motionEnt
                 // event, so that the spy window can get a chance to receive the stream.
                 ALOGW("Pruning the input queue because %s is unresponsive, but we have a "
                       "responsive spy window that may handle the event.",
-                      mAwaitedFocusedApplication->getName().c_str());
+                      mNoFocusedWindowAnrState->applicationHandle->getName().c_str());
                 return true;
             }
         }
@@ -2086,7 +2088,7 @@ bool InputDispatcher::dispatchMotionLocked(nsecs_t currentTime,
                                                                   this),
                                                   std::bind_front(&InputDispatcher::
                                                                           logDispatchStateLocked,
-                                                                  this));
+                                                                  this, /*delay=*/0ms));
 
         if (result.ok()) {
             inputTargets = std::move(*result);
@@ -2244,10 +2246,7 @@ void InputDispatcher::cancelEventsForAnrLocked(const std::shared_ptr<Connection>
 
 void InputDispatcher::resetNoFocusedWindowTimeoutLocked() {
     LOG_IF(INFO, DEBUG_FOCUS) << "Resetting ANR timeouts.";
-
-    // Reset input target wait timeout.
-    mNoFocusedWindowTimeoutTime = std::nullopt;
-    mAwaitedFocusedApplication.reset();
+    mNoFocusedWindowAnrState.reset();
 }
 
 /**
@@ -2341,19 +2340,23 @@ InputDispatcher::findFocusedWindowTargetLocked(nsecs_t currentTime, const EventE
     // if the "no focused window ANR" is moved to the policy. Input doesn't know whether
     // an app is expected to have a focused window.
     if (focusedWindowHandle == nullptr && focusedApplicationHandle != nullptr) {
-        if (!mNoFocusedWindowTimeoutTime.has_value()) {
+        if (!mNoFocusedWindowAnrState.has_value()) {
             // We just discovered that there's no focused window. Start the ANR timer
             std::chrono::nanoseconds timeout = focusedApplicationHandle->getDispatchingTimeout(
                     DEFAULT_INPUT_DISPATCHING_TIMEOUT);
-            mNoFocusedWindowTimeoutTime = currentTime + timeout.count();
-            mAwaitedFocusedApplication = focusedApplicationHandle;
+            const nsecs_t noFocusedWindowEndTime = currentTime + timeout.count();
+            mNoFocusedWindowAnrState =
+                    NoFocusedWindowAnrState(entry.eventTime, noFocusedWindowEndTime,
+                                            focusedApplicationHandle, entry.id,
+                                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                    timeout));
             mAwaitedApplicationDisplayId = displayId;
             ALOGW("Waiting because no window has focus but %s may eventually add a "
                   "window when it finishes starting up. Will wait for %" PRId64 "ms",
-                  mAwaitedFocusedApplication->getName().c_str(), millis(timeout));
-            nextWakeupTime = std::min(nextWakeupTime, *mNoFocusedWindowTimeoutTime);
+                  focusedApplicationHandle->getName().c_str(), millis(timeout));
+            nextWakeupTime = std::min(nextWakeupTime, mNoFocusedWindowAnrState->timeoutEndTime);
             return injectionError(InputEventInjectionResult::PENDING);
-        } else if (currentTime > *mNoFocusedWindowTimeoutTime) {
+        } else if (currentTime > mNoFocusedWindowAnrState->timeoutEndTime) {
             // Already raised ANR. Drop the event
             ALOGE("Dropping %s event because there is no focused window",
                   ftl::enum_string(entry.type).c_str());
@@ -4239,7 +4242,7 @@ void InputDispatcher::synthesizeCancellationEventsForConnectionLocked(
                                                     /*pointerDisplayId=*/std::nullopt,
                                                     std::bind_front(&InputDispatcher::
                                                                             logDispatchStateLocked,
-                                                                    this),
+                                                                    this, /*delay=*/1ms),
                                                     targets);
                 } else {
                     targets.emplace_back(fallbackTarget);
@@ -4325,7 +4328,7 @@ void InputDispatcher::synthesizePointerDownEventsForConnectionLocked(
                                                     /*pointerDisplayId=*/std::nullopt,
                                                     std::bind_front(&InputDispatcher::
                                                                             logDispatchStateLocked,
-                                                                    this),
+                                                                    this, /*delay=*/1ms),
                                                     targets);
                 } else {
                     targets.emplace_back(connection, targetFlags);
@@ -4575,7 +4578,7 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
     if (DEBUG_VERIFY_EVENTS) {
         std::scoped_lock _l(mLock);
         ui::LogicalDisplayId resolvedDisplayId = args.displayId;
-        if (InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(args.source)) {
+        if (isMouseOrTouchpad(args.source)) {
             resolvedDisplayId = mWindowInfos.getPrimaryDisplayId(args.displayId);
         }
 
@@ -4786,7 +4789,7 @@ bool InputDispatcher::shouldRejectInjectedMotionLocked(const MotionEvent& motion
                                      motionEvent.getSamplePointerCoords(), flags.get(),
                                      motionEvent.getButtonState(), motionEvent.getDownTime());
     if (!result.ok()) {
-        logDispatchStateLocked();
+        logDispatchStateLocked(/*delay=*/0ms);
         LOG(ERROR) << "Inconsistent event: " << motionEvent << ", reason: " << result.error();
         return true;
     }
@@ -5269,8 +5272,7 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
         std::optional<ui::LogicalDisplayId> pointerDisplayId) const {
     // TODO(b/383092013): Handle TOPOLOGY_AWARE window flag.
     // For now, we assume all windows are topology-aware and can handle cross-display streams.
-    if (InputFlags::connectedDisplaysCursorEnabled() && pointerDisplayId.has_value() &&
-        *pointerDisplayId != windowInfo.displayId) {
+    if (pointerDisplayId.has_value() && *pointerDisplayId != windowInfo.displayId) {
         // Sending pointer to a different display than the window. This is a
         // cross-display drag gesture, use the new display's transform if window is topology aware.
         // Otherwise use the window's display coordinate space.
@@ -6127,7 +6129,7 @@ void InputDispatcher::resetAndDropEverythingLocked(const char* reason) {
     mTouchStates.clear();
 }
 
-void InputDispatcher::logDispatchStateLocked() const {
+void InputDispatcher::logDispatchStateLocked(std::chrono::milliseconds delay) const {
     std::string dump;
     dumpDispatchStateLocked(dump);
 
@@ -6136,7 +6138,7 @@ void InputDispatcher::logDispatchStateLocked() const {
 
     while (std::getline(stream, line, '\n')) {
         // Add a small delay to avoid overwhelming the logcat fd buffer
-        std::this_thread::sleep_for(1ms);
+        std::this_thread::sleep_for(delay);
         ALOGI("%s", line.c_str());
     }
 }
@@ -6668,7 +6670,11 @@ void InputDispatcher::onAnrLocked(const std::shared_ptr<Connection>& connection)
     sp<IBinder> connectionToken = connection->getToken();
     updateLastAnrStateLocked(mWindowInfos.findWindowHandle(connectionToken), reason);
 
-    processConnectionUnresponsiveLocked(*connection, std::move(reason));
+    const int32_t eventId = oldestEntry.eventEntry->id;
+    const nsecs_t eventTime = oldestEntry.eventEntry->eventTime;
+    const std::chrono::milliseconds timeoutDuration = std::chrono::milliseconds(ns2ms(currentWait));
+    processConnectionUnresponsiveLocked(*connection, std::move(reason), eventId, eventTime,
+                                        timeoutDuration);
 
     // Stop waking up for events on this connection, it is already unresponsive
     cancelEventsForAnrLocked(connection);
@@ -6679,9 +6685,11 @@ void InputDispatcher::onAnrLocked(std::shared_ptr<InputApplicationHandle> applic
             StringPrintf("%s does not have a focused window", application->getName().c_str());
     updateLastAnrStateLocked(*application, reason);
 
-    auto command = [this, app = std::move(application)]() REQUIRES(mLock) {
+    auto command = [this, app = std::move(application), eventId = mNoFocusedWindowAnrState->eventId,
+                    eventTime = mNoFocusedWindowAnrState->eventTime,
+                    duration = mNoFocusedWindowAnrState->timeoutDuration]() REQUIRES(mLock) {
         scoped_unlock unlock(mLock);
-        mPolicy.notifyNoFocusedWindowAnr(app);
+        mPolicy.notifyNoFocusedWindowAnr(app, eventId, eventTime, duration);
     };
     postCommandLocked(std::move(command));
 }
@@ -6742,12 +6750,13 @@ void InputDispatcher::doInterceptKeyBeforeDispatchingCommand(const sp<IBinder>& 
     }
 }
 
-void InputDispatcher::sendWindowUnresponsiveCommandLocked(const sp<IBinder>& token,
-                                                          std::optional<gui::Pid> pid,
-                                                          std::string reason) {
-    auto command = [this, token, pid, r = std::move(reason)]() REQUIRES(mLock) {
+void InputDispatcher::sendWindowUnresponsiveCommandLocked(
+        const sp<IBinder>& token, std::optional<gui::Pid> pid, std::string reason, int32_t eventId,
+        nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) {
+    auto command = [this, token, pid, r = std::move(reason), eventId, eventTime,
+                    timeoutDuration]() REQUIRES(mLock) {
         scoped_unlock unlock(mLock);
-        mPolicy.notifyWindowUnresponsive(token, pid, r);
+        mPolicy.notifyWindowUnresponsive(token, pid, r, eventId, eventTime, timeoutDuration);
     };
     postCommandLocked(std::move(command));
 }
@@ -6766,8 +6775,9 @@ void InputDispatcher::sendWindowResponsiveCommandLocked(const sp<IBinder>& token
  * Check whether the connection of interest is a monitor or a window, and add the corresponding
  * command entry to the command queue.
  */
-void InputDispatcher::processConnectionUnresponsiveLocked(const Connection& connection,
-                                                          std::string reason) {
+void InputDispatcher::processConnectionUnresponsiveLocked(
+        const Connection& connection, std::string reason, int32_t eventId, nsecs_t eventTime,
+        std::chrono::milliseconds timeoutDuration) {
     const sp<IBinder>& connectionToken = connection.getToken();
     std::optional<gui::Pid> pid;
     if (connection.isFocusMonitor) {
@@ -6783,7 +6793,8 @@ void InputDispatcher::processConnectionUnresponsiveLocked(const Connection& conn
             pid = handle->getInfo()->ownerPid;
         }
     }
-    sendWindowUnresponsiveCommandLocked(connectionToken, pid, std::move(reason));
+    sendWindowUnresponsiveCommandLocked(connectionToken, pid, std::move(reason), eventId, eventTime,
+                                        timeoutDuration);
 }
 
 /**
@@ -7703,7 +7714,7 @@ void InputDispatcher::DispatcherTouchState::saveTouchStateForMotionEntry(
         return;
     }
 
-    if (InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(entry.source)) {
+    if (isMouseOrTouchpad(entry.source)) {
         mCursorStateByDisplay[mWindowInfos.getPrimaryDisplayId(entry.displayId)] =
                 std::move(touchState);
     } else {
@@ -7713,7 +7724,7 @@ void InputDispatcher::DispatcherTouchState::saveTouchStateForMotionEntry(
 
 void InputDispatcher::DispatcherTouchState::eraseTouchStateForMotionEntry(
         const android::inputdispatcher::MotionEntry& entry) {
-    if (InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(entry.source)) {
+    if (isMouseOrTouchpad(entry.source)) {
         mCursorStateByDisplay.erase(mWindowInfos.getPrimaryDisplayId(entry.displayId));
     } else {
         mTouchStatesByDisplay.erase(entry.displayId);
@@ -7722,7 +7733,7 @@ void InputDispatcher::DispatcherTouchState::eraseTouchStateForMotionEntry(
 
 const TouchState* InputDispatcher::DispatcherTouchState::getTouchStateForMotionEntry(
         const android::inputdispatcher::MotionEntry& entry) const {
-    if (InputFlags::connectedDisplaysCursorEnabled() && isMouseOrTouchpad(entry.source)) {
+    if (isMouseOrTouchpad(entry.source)) {
         auto touchStateIt =
                 mCursorStateByDisplay.find(mWindowInfos.getPrimaryDisplayId(entry.displayId));
         if (touchStateIt != mCursorStateByDisplay.end()) {

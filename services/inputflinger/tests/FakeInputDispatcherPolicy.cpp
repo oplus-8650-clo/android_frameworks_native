@@ -159,15 +159,17 @@ PointerCaptureRequest FakeInputDispatcherPolicy::assertSetPointerCaptureCalled(
 
     if (!mPointerCaptureChangedCondition.wait_for(lock, EVENT_SHOULD_OCCUR_TIMEOUT,
                                                   [this, mode, window]() REQUIRES(mLock) {
+                                                      // Guard against spurious wakeups.
+                                                      if (!mPointerCaptureRequest) {
+                                                          return false;
+                                                      }
                                                       if (mode != PointerCaptureMode::UNCAPTURED) {
                                                           return mPointerCaptureRequest->mode ==
                                                                   mode &&
                                                                   mPointerCaptureRequest->window ==
                                                                   window->getToken();
-                                                      } else {
-                                                          return mPointerCaptureRequest->mode ==
-                                                                  mode;
                                                       }
+                                                      return mPointerCaptureRequest->mode == mode;
                                                   })) {
         ADD_FAILURE() << "Timed out waiting for setPointerCapture({" << window->getName() << ", "
                       << ftl::enum_string(mode) << "}) to be called.";
@@ -350,9 +352,9 @@ std::optional<T> FakeInputDispatcherPolicy::getItemFromStorageLockedInterruptibl
     return std::make_optional(item);
 }
 
-void FakeInputDispatcherPolicy::notifyWindowUnresponsive(const sp<IBinder>& connectionToken,
-                                                         std::optional<gui::Pid> pid,
-                                                         const std::string&) {
+void FakeInputDispatcherPolicy::notifyWindowUnresponsive(
+        const sp<IBinder>& connectionToken, std::optional<gui::Pid> pid, const std::string&,
+        int32_t eventId, nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) {
     std::scoped_lock lock(mLock);
     mAnrWindows.push({connectionToken, pid});
     mNotifyAnr.notify_all();
@@ -366,7 +368,8 @@ void FakeInputDispatcherPolicy::notifyWindowResponsive(const sp<IBinder>& connec
 }
 
 void FakeInputDispatcherPolicy::notifyNoFocusedWindowAnr(
-        const std::shared_ptr<InputApplicationHandle>& applicationHandle) {
+        const std::shared_ptr<InputApplicationHandle>& applicationHandle, int32_t eventId,
+        nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) {
     std::scoped_lock lock(mLock);
     mAnrApplications.push(applicationHandle);
     mNotifyAnr.notify_all();

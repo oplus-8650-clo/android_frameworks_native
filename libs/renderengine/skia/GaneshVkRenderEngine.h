@@ -32,6 +32,8 @@ protected:
 
 private:
     GaneshVkRenderEngine(const RenderEngineCreationArgs& args) : SkiaVkRenderEngine(args) {}
+
+    SkiaBackend backend() const override { return SkiaBackend::Ganesh; }
 };
 
 } // namespace android::renderengine::skia

@@ -30,6 +30,8 @@
 #include <ui/Fence.h>
 #include <ui/FenceResult.h>
 
+#include "Utils/FenceUtils.h"
+
 namespace android {
 
 class CallbackHandle : public RefBase {
@@ -43,8 +45,6 @@ public:
 
     bool releasePreviousBuffer = false;
     std::string name;
-    sp<Fence> previousReleaseFence;
-    std::vector<ftl::Future<FenceResult>> previousReleaseFences;
     std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence = -1;
     nsecs_t latchTime = -1;
     std::optional<uint32_t> transformHint = std::nullopt;
@@ -59,6 +59,7 @@ public:
     ReleaseCallbackId previousReleaseCallbackId = ReleaseCallbackId::INVALID_ID;
     std::shared_ptr<gui::BufferReleaseChannel::ProducerEndpoint> bufferReleaseChannel;
     std::weak_ptr<renderengine::ExternalTexture> previousBuffer;
+    FenceMerger fenceMerger;
 };
 
 class TransactionCallbackInvoker {

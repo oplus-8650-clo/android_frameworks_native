@@ -62,7 +62,7 @@ public:
     // from the perspective of the the ConsumerBase, if there are additional
     // references on the buffers (e.g. if a buffer is referenced by a client
     // or by OpenGL ES as a texture) then those buffer will remain allocated.
-    void abandon();
+    virtual void abandon();
 
     // Returns true if the ConsumerBase is in the 'abandoned' state
     bool isAbandoned();
@@ -90,13 +90,13 @@ public:
     void setFrameAvailableListener(const wp<FrameAvailableListener>& listener);
 
     // See IGraphicBufferConsumer::detachBuffer
-    status_t detachBuffer(int slot) __attribute((
+    virtual status_t detachBuffer(int slot) __attribute((
             deprecated("Please use the GraphicBuffer variant--slots are deprecated.")));
 
     // See IGraphicBufferConsumer::detachBuffer
-    status_t detachBuffer(const sp<GraphicBuffer>& buffer);
+    virtual status_t detachBuffer(const sp<GraphicBuffer>& buffer);
 
-    status_t addReleaseFence(const sp<GraphicBuffer> buffer, const sp<Fence>& fence);
+    status_t addReleaseFence(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence);
 
     // See IGraphicBufferConsumer::setDefaultBufferSize
     status_t setDefaultBufferSize(uint32_t width, uint32_t height);
@@ -117,7 +117,7 @@ public:
     status_t setMaxBufferCount(int bufferCount);
 
     // See IGraphicBufferConsumer::setMaxAcquiredBufferCount
-    status_t setMaxAcquiredBufferCount(int maxAcquiredBuffers);
+    virtual status_t setMaxAcquiredBufferCount(int maxAcquiredBuffers);
 
     status_t setConsumerIsProtected(bool isProtected);
 
@@ -129,7 +129,7 @@ public:
             std::vector<OccupancyTracker::Segment>* outHistory);
 
     // See IGraphicBufferConsumer::discardFreeBuffers
-    status_t discardFreeBuffers();
+    virtual status_t discardFreeBuffers();
 
 private:
     ConsumerBase(const ConsumerBase&);
@@ -149,6 +149,8 @@ protected:
     explicit ConsumerBase(const sp<IGraphicBufferConsumer>& consumer, bool controlledByApp = false)
             __attribute((deprecated("ConsumerBase should own its own producer, and constructing it "
                                     "without one is fragile! This method is going away soon.")));
+
+    typedef std::function<void(const sp<GraphicBuffer>&)> BufferFreedCallback;
 
     // onLastStrongRef gets called by RefBase just before the dtor of the most
     // derived class.  It is used to clean up the buffers so that ConsumerBase
@@ -184,9 +186,16 @@ protected:
 #endif
     virtual int getSlotForBufferLocked(const sp<GraphicBuffer>& buffer);
 
-    virtual void onBuffersReleasedLocked();
+    status_t setMaxAcquiredBufferCountLocked(int maxAcquiredBuffers,
+                                             BufferFreedCallback bufferFreedCallback);
 
-    virtual status_t detachBufferLocked(int slotIndex);
+    status_t discardFreeBuffersLocked(BufferFreedCallback onBufferFreed);
+
+    virtual void onBuffersReleasedLocked(BufferFreedCallback bufferFreedCallback);
+
+    virtual status_t detachBufferLocked(const sp<GraphicBuffer>& buffer,
+                                        BufferFreedCallback onBufferFreed);
+    virtual status_t detachBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed);
 
     // freeBufferLocked frees up the given buffer slot.  If the slot has been
     // initialized this will release the reference to the GraphicBuffer in that
@@ -197,7 +206,7 @@ protected:
     // must call ConsumerBase::freeBufferLocked.
     //
     // This method must be called with mMutex locked.
-    virtual void freeBufferLocked(int slotIndex);
+    virtual void freeBufferLocked(int slotIndex, BufferFreedCallback bufferFreedCallback);
 
     // abandonLocked puts the BufferQueue into the abandoned state, causing
     // all future operations on it to fail. This method rather than the public
@@ -209,7 +218,7 @@ protected:
     // the derived class's implementation must call ConsumerBase::abandonLocked.
     //
     // This method must be called with mMutex locked.
-    virtual void abandonLocked();
+    virtual void abandonLocked(BufferFreedCallback bufferFreedCallback);
 
     // dumpLocked dumps the current state of the ConsumerBase object to the
     // result string.  Each line is prefixed with the string pointed to by the
@@ -231,8 +240,9 @@ protected:
     // initialization that must take place the first time a buffer is assigned
     // to a slot.  If it is overridden the derived class's implementation must
     // call ConsumerBase::acquireBufferLocked.
-    virtual status_t acquireBufferLocked(BufferItem *item, nsecs_t presentWhen,
-            uint64_t maxFrameNumber = 0);
+    virtual status_t acquireBufferLocked(
+            BufferItem* item, nsecs_t presentWhen, uint64_t maxFrameNumber = 0,
+            BufferFreedCallback onBufferFreed = [](auto&) {});
 
     // releaseBufferLocked relinquishes control over a buffer, returning that
     // control to the BufferQueue.
@@ -242,24 +252,26 @@ protected:
     // it is overridden the derived class's implementation must call
     // ConsumerBase::releaseBufferLocked.
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer);
+    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                         BufferFreedCallback onBufferFreed);
 #else
-    virtual status_t releaseBufferLocked(int slot,
-            const sp<GraphicBuffer> graphicBuffer,
-            EGLDisplay display = EGL_NO_DISPLAY, EGLSyncKHR eglFence = EGL_NO_SYNC_KHR);
+    virtual status_t releaseBufferLocked(
+            int slot, const sp<GraphicBuffer>& graphicBuffer, EGLDisplay display = EGL_NO_DISPLAY,
+            EGLSyncKHR eglFence = EGL_NO_SYNC_KHR,
+            BufferFreedCallback onBufferFreed = [](auto&) {});
 #endif
     // returns true iff the slot still has the graphicBuffer in it.
-    bool stillTracking(int slot, const sp<GraphicBuffer> graphicBuffer);
+    bool stillTracking(int slot, const sp<GraphicBuffer>& graphicBuffer);
 
     // addReleaseFence* adds the sync points associated with a fence to the set
     // of sync points that must be reached before the buffer in the given slot
     // may be used after the slot has been released.  This should be called by
     // derived classes each time some asynchronous work is kicked off that
     // references the buffer.
-    status_t addReleaseFence(int slot,
-            const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence);
-    status_t addReleaseFenceLocked(int slot,
-            const sp<GraphicBuffer> graphicBuffer, const sp<Fence>& fence);
+    status_t addReleaseFence(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                             const sp<Fence>& fence);
+    status_t addReleaseFenceLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                   const sp<Fence>& fence);
 
     // Slot contains the information and object references that
     // ConsumerBase maintains about a BufferQueue buffer slot.

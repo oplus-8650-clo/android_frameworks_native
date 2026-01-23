@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
@@ -120,7 +120,7 @@ public:
                                     uint32_t drawLayerStackId) override;
     uint32_t qtiGetLayerClass(std::string mName) override;
     void qtiSetVisibleLayerInfo(DisplayId displayId,
-                                    const char* name, int32_t sequence) override;
+                                    const char* name, int32_t sequence, Rect displayFrame) override;
     bool qtiIsSmomoOptimalRefreshActive() override;
 
     /*
@@ -134,9 +134,9 @@ public:
      */
     void qtiDolphinUnblockPendingBuffer();
     void qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod);
-    void qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
+    void qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp, uint32_t flags,
                                         nsecs_t desiredPresentTime);
-    void qtiDolphinTrackBufferDecrement(const char *name, int count);
+    void qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height);
     void qtiDolphinTrackVsyncSignal();
     bool qtiDolphinIsTargetFpsActive() override;
 

@@ -81,7 +81,7 @@ VKAPI_ATTR VkResult checkedBindImageMemory2(VkDevice device, uint32_t bindInfoCo
     if (GetData(device).hook_extensions[ProcHook::EXTENSION_CORE_1_1]) {
         return BindImageMemory2(device, bindInfoCount, pBindInfos);
     } else {
-        Logger(device).Err(device, "VK_VERSION_1_1 not enabled. vkBindImageMemory2 not executed.");
+        Logger(device).Err(device, "VK_BASE_VERSION_1_1 not enabled. vkBindImageMemory2 not executed.");
         return VK_SUCCESS;
     }
 }
@@ -161,7 +161,7 @@ VKAPI_ATTR void checkedGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2
     if (GetData(device).hook_extensions[ProcHook::EXTENSION_CORE_1_1]) {
         GetDeviceQueue2(device, pQueueInfo, pQueue);
     } else {
-        Logger(device).Err(device, "VK_VERSION_1_1 not enabled. vkGetDeviceQueue2 not executed.");
+        Logger(device).Err(device, "VK_BASE_VERSION_1_1 not enabled. vkGetDeviceQueue2 not executed.");
     }
 }
 
@@ -170,6 +170,42 @@ VKAPI_ATTR VkResult checkedReleaseSwapchainImagesEXT(VkDevice device, const VkRe
         return ReleaseSwapchainImagesEXT(device, pReleaseInfo);
     } else {
         Logger(device).Err(device, "VK_EXT_swapchain_maintenance1 not enabled. vkReleaseSwapchainImagesEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedSetSwapchainPresentTimingQueueSizeEXT(VkDevice device, VkSwapchainKHR swapchain, uint32_t size) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return SetSwapchainPresentTimingQueueSizeEXT(device, swapchain, size);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkSetSwapchainPresentTimingQueueSizeEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetSwapchainTimingPropertiesEXT(VkDevice device, VkSwapchainKHR swapchain, VkSwapchainTimingPropertiesEXT* pSwapchainTimingProperties, uint64_t* pSwapchainTimingPropertiesCounter) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetSwapchainTimingPropertiesEXT(device, swapchain, pSwapchainTimingProperties, pSwapchainTimingPropertiesCounter);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetSwapchainTimingPropertiesEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetSwapchainTimeDomainPropertiesEXT(VkDevice device, VkSwapchainKHR swapchain, VkSwapchainTimeDomainPropertiesEXT* pSwapchainTimeDomainProperties, uint64_t* pTimeDomainsCounter) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetSwapchainTimeDomainPropertiesEXT(device, swapchain, pSwapchainTimeDomainProperties, pTimeDomainsCounter);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetSwapchainTimeDomainPropertiesEXT not executed.");
+        return VK_SUCCESS;
+    }
+}
+
+VKAPI_ATTR VkResult checkedGetPastPresentationTimingEXT(VkDevice device, const VkPastPresentationTimingInfoEXT* pPastPresentationTimingInfo, VkPastPresentationTimingPropertiesEXT* pPastPresentationTimingProperties) {
+    if (GetData(device).hook_extensions[ProcHook::EXT_present_timing]) {
+        return GetPastPresentationTimingEXT(device, pPastPresentationTimingInfo, pPastPresentationTimingProperties);
+    } else {
+        Logger(device).Err(device, "VK_EXT_present_timing not enabled. vkGetPastPresentationTimingEXT not executed.");
         return VK_SUCCESS;
     }
 }
@@ -368,6 +404,13 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPastPresentationTimingEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPastPresentationTimingEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetPastPresentationTimingEXT),
+    },
+    {
         "vkGetPastPresentationTimingGOOGLE",
         ProcHook::DEVICE,
         ProcHook::GOOGLE_display_timing,
@@ -403,10 +446,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceFeatures2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFeatures2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceFormatProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFormatProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceFormatProperties2KHR),
         nullptr,
     },
     {
@@ -417,10 +474,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceImageFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceImageFormatProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceMemoryProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceMemoryProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceMemoryProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceMemoryProperties2KHR),
         nullptr,
     },
     {
@@ -438,6 +509,13 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceQueueFamilyProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
@@ -445,10 +523,24 @@ const ProcHook g_proc_hooks[] = {
         nullptr,
     },
     {
+        "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceQueueFamilyProperties2KHR),
+        nullptr,
+    },
+    {
         "vkGetPhysicalDeviceSparseImageFormatProperties2",
         ProcHook::INSTANCE,
         ProcHook::EXTENSION_CORE_1_1,
         reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceSparseImageFormatProperties2),
+        nullptr,
+    },
+    {
+        "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+        ProcHook::INSTANCE,
+        ProcHook::KHR_get_physical_device_properties2,
+        reinterpret_cast<PFN_vkVoidFunction>(GetPhysicalDeviceSparseImageFormatProperties2KHR),
         nullptr,
     },
     {
@@ -543,6 +635,20 @@ const ProcHook g_proc_hooks[] = {
         reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainStatusKHR),
     },
     {
+        "vkGetSwapchainTimeDomainPropertiesEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetSwapchainTimeDomainPropertiesEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainTimeDomainPropertiesEXT),
+    },
+    {
+        "vkGetSwapchainTimingPropertiesEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(GetSwapchainTimingPropertiesEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedGetSwapchainTimingPropertiesEXT),
+    },
+    {
         "vkQueuePresentKHR",
         ProcHook::DEVICE,
         ProcHook::KHR_swapchain,
@@ -577,6 +683,13 @@ const ProcHook g_proc_hooks[] = {
         reinterpret_cast<PFN_vkVoidFunction>(SetHdrMetadataEXT),
         reinterpret_cast<PFN_vkVoidFunction>(checkedSetHdrMetadataEXT),
     },
+    {
+        "vkSetSwapchainPresentTimingQueueSizeEXT",
+        ProcHook::DEVICE,
+        ProcHook::EXT_present_timing,
+        reinterpret_cast<PFN_vkVoidFunction>(SetSwapchainPresentTimingQueueSizeEXT),
+        reinterpret_cast<PFN_vkVoidFunction>(checkedSetSwapchainPresentTimingQueueSizeEXT),
+    },
     // clang-format on
 };
 
@@ -602,6 +715,7 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_KHR_android_surface") == 0) return ProcHook::KHR_android_surface;
     if (strcmp(name, "VK_KHR_get_surface_capabilities2") == 0) return ProcHook::KHR_get_surface_capabilities2;
     if (strcmp(name, "VK_KHR_incremental_present") == 0) return ProcHook::KHR_incremental_present;
+    if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;
     if (strcmp(name, "VK_KHR_shared_presentable_image") == 0) return ProcHook::KHR_shared_presentable_image;
     if (strcmp(name, "VK_KHR_surface") == 0) return ProcHook::KHR_surface;
     if (strcmp(name, "VK_KHR_surface_protected_capabilities") == 0) return ProcHook::KHR_surface_protected_capabilities;
@@ -610,9 +724,9 @@ ProcHook::Extension GetProcHookExtension(const char* name) {
     if (strcmp(name, "VK_EXT_surface_maintenance1") == 0) return ProcHook::EXT_surface_maintenance1;
     if (strcmp(name, "VK_KHR_present_id") == 0) return ProcHook::KHR_present_id;
     if (strcmp(name, "VK_KHR_present_id2") == 0) return ProcHook::KHR_present_id2;
+    if (strcmp(name, "VK_EXT_present_timing") == 0) return ProcHook::EXT_present_timing;
     if (strcmp(name, "VK_ANDROID_external_memory_android_hardware_buffer") == 0) return ProcHook::ANDROID_external_memory_android_hardware_buffer;
     if (strcmp(name, "VK_KHR_bind_memory2") == 0) return ProcHook::KHR_bind_memory2;
-    if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0) return ProcHook::KHR_get_physical_device_properties2;
     if (strcmp(name, "VK_KHR_device_group_creation") == 0) return ProcHook::KHR_device_group_creation;
     if (strcmp(name, "VK_KHR_external_memory_capabilities") == 0) return ProcHook::KHR_external_memory_capabilities;
     if (strcmp(name, "VK_KHR_external_semaphore_capabilities") == 0) return ProcHook::KHR_external_semaphore_capabilities;

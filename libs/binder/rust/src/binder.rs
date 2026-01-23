@@ -36,7 +36,7 @@ use std::os::fd::AsRawFd;
 use std::os::raw::c_char;
 use std::ptr;
 
-#[cfg(all(not(trusty), feature = "std"))]
+#[cfg(feature = "android_ndk_compat_symbols")]
 use binder_rs_ndk_compat::set_transaction_code_to_function_name_map;
 
 /// Binder action to perform.
@@ -465,7 +465,7 @@ impl InterfaceClass {
         if LEN > 0 {
             // SAFETY: The caller guarantees that the pointers in `function_names`
             // have a 'static lifetime. The `class` pointer is valid and non-null.
-            #[cfg(all(not(trusty), feature = "std"))]
+            #[cfg(feature = "android_ndk_compat_symbols")]
             unsafe {
                 set_transaction_code_to_function_name_map(class, _function_names.arr.as_ptr(), LEN);
             }
@@ -1376,7 +1376,7 @@ macro_rules! declare_binder_enum {
         }
     } => {
         $( #[$attr] )*
-        #[derive(Default, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+        #[derive(Default, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, zerocopy::Immutable)]
         #[allow(missing_docs)]
         pub struct $enum(pub $backing);
         impl $enum {
@@ -1432,6 +1432,27 @@ macro_rules! declare_binder_enum {
                 let v: Option<Vec<$backing>> =
                     <$backing as $crate::binder_impl::DeserializeArray>::deserialize_array(parcel)?;
                 Ok(v.map(|v| v.into_iter().map(Self).collect()))
+            }
+        }
+
+        // Write an AIDL enum by forwarding to the backing type
+        // which should be a primitive, and they all implement IntoBytes.
+        impl $crate::WriteTo for $enum {
+            #[inline]
+            unsafe fn write_to(&self, target: *mut Self) {
+                // SAFETY: The source and target both have the same type
+                // which contains a valid value of the inner backing type.
+                // Since `write_to` itself is unsafe, we depend on the
+                // caller passing in a valid value to `target`.
+                unsafe { self.0.write_to(&raw mut (*target).0); }
+            }
+            #[inline]
+            unsafe fn write_to_volatile(&self, target: *mut Self) {
+                // SAFETY: The source and target both have the same type
+                // which contains a valid value of the inner backing type.
+                // Since `write_to` itself is unsafe, we depend on the
+                // caller passing in a valid value to `target`.
+                unsafe { self.0.write_to_volatile(&raw mut (*target).0); }
             }
         }
 

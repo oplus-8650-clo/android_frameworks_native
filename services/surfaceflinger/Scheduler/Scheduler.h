@@ -311,13 +311,11 @@ public:
         return std::const_pointer_cast<VsyncSchedule>(std::as_const(*this).getVsyncSchedule(idOpt));
     }
 
-    TimePoint expectedPresentTimeForPacesetter() const EXCLUDES(mDisplayLock) {
+    const FrameTarget* pacesetterFrameTarget() const EXCLUDES(mDisplayLock) {
         std::scoped_lock lock(mDisplayLock);
         return pacesetterDisplayLocked()
-                .transform([](const Display& display) {
-                    return display.targeterPtr->target().expectedPresentTime();
-                })
-                .value_or(TimePoint());
+                .transform([](const Display& display) { return &display.targeterPtr->target(); })
+                .value_or(nullptr);
     }
 
     // Returns true if a given vsync timestamp is considered valid vsync

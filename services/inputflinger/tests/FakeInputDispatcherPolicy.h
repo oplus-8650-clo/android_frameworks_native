@@ -178,11 +178,13 @@ private:
             REQUIRES(mLock);
 
     void notifyWindowUnresponsive(const sp<IBinder>& connectionToken, std::optional<gui::Pid> pid,
-                                  const std::string&) override;
+                                  const std::string&, int32_t eventId, nsecs_t eventTime,
+                                  std::chrono::milliseconds timeoutDuration) override;
     void notifyWindowResponsive(const sp<IBinder>& connectionToken,
                                 std::optional<gui::Pid> pid) override;
-    void notifyNoFocusedWindowAnr(
-            const std::shared_ptr<InputApplicationHandle>& applicationHandle) override;
+    void notifyNoFocusedWindowAnr(const std::shared_ptr<InputApplicationHandle>& applicationHandle,
+                                  int32_t eventId, nsecs_t eventTime,
+                                  std::chrono::milliseconds timeoutDuration) override;
     void notifyInputChannelBroken(const sp<IBinder>& connectionToken) override;
     void notifyFocusChanged(const sp<IBinder>&, const sp<IBinder>&) override;
     void notifySensorEvent(DeviceId deviceId, InputDeviceSensorType sensorType,

@@ -210,7 +210,7 @@ std::vector<unsigned> getModeDivisors(const DisplayMode& mode, FpsRange range,
         return {1};
     }
 
-    if (FlagManager::getInstance().anchor_list() && mode.getVrrConfig().has_value()) {
+    if (mode.getVrrConfig().has_value()) {
         return getModeDivisorsFromAnchorList(mode, range, anchorList, numFrameRates);
     }
 
@@ -292,9 +292,8 @@ auto RefreshRateSelector::createFrameRateModes(
         for (auto divisor : divisors) {
             const auto fps = vsyncRate / divisor;
             using fps_approx_ops::operator<;
-            const bool usingAnchorList =
-                    mode->getVrrConfig().has_value() && FlagManager::getInstance().anchor_list();
-            if (divisor > 1 && (!usingAnchorList && fps < kMinSupportedFrameRate)) {
+            if (divisor > 1 &&
+                (!mode->getVrrConfig().has_value() && fps < kMinSupportedFrameRate)) {
                 break;
             }
 
@@ -1093,9 +1092,8 @@ auto RefreshRateSelector::getFrameRateOverrides(const std::vector<LayerRequireme
 
     ALOGV("%s: %zu allLayers, %zu layers", __func__, allLayers.size(), layers.size());
 
-    const bool useAnchorList = FlagManager::getInstance().anchor_list() && mIsVrrDisplay;
     std::vector<std::pair<Fps, float>> scoredFrameRates;
-    if (!useAnchorList) {
+    if (!mIsVrrDisplay) {
         // We don't want to run lower than 30fps
         const auto* policyPtr = getCurrentPolicyLocked();
         const Fps minFrameRate =
@@ -1682,8 +1680,7 @@ Fps RefreshRateSelector::findClosestKnownFrameRate(Fps frameRate) const {
 
 std::vector<float> RefreshRateSelector::getSupportedFrameRates() const {
     std::scoped_lock lock(mLock);
-    const size_t frameRatesSize = FlagManager::getInstance().anchor_list() && mIsVrrDisplay
-            ? mAllFrameRates.size()
+    const size_t frameRatesSize = mIsVrrDisplay ? mAllFrameRates.size()
             : std::min<size_t>(11, mAllFrameRates.size());
     std::vector<float> supportedFrameRates;
     supportedFrameRates.reserve(frameRatesSize);

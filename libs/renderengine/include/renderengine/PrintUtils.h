@@ -17,6 +17,7 @@
 #pragma once
 
 #include <math/mat4.h>
+#include <cstdint>
 #include <iosfwd>
 
 namespace android::renderengine {
@@ -31,6 +32,11 @@ inline void PrintMatrix(const mat4& matrix, ::std::ostream* os) {
         // are aligned.
         *os << "\n" << matrix;
     }
+}
+
+// A newline character followed by N*4 spaces.
+inline constexpr std::string IndentedNewline(uint8_t indent) {
+    return "\n" + std::string(static_cast<size_t>(indent * 4), ' ');
 }
 
 } // namespace android::renderengine

@@ -506,6 +506,12 @@ typedef enum APerformanceHintFeature : int32_t {
      * {@link ASessionCreationConfig_setUseAutoTiming}.
      */
     APERF_HINT_AUTO_GPU,
+
+    /**
+     * This value represents the "audio performance" mode, as exposed by
+     * {@link ASessionCreationConfig_setAudioPerformance}.
+     */
+    APERF_HINT_AUDIO_PERFORMANCE,
 } APerformanceHintFeature;
 
 /**
@@ -737,6 +743,29 @@ void ASessionCreationConfig_setNativeSurfaces(
  */
 void ASessionCreationConfig_setUseAutoTiming(
         ASessionCreationConfig* _Nonnull config, bool cpu, bool gpu) __INTRODUCED_IN(36);
+
+/**
+ * Sets whether the threads associated with this session require sustained
+ * audio performance to handle variable workloads within strict time windows.
+ *
+ * <p>This setting addresses the underrun problem in real-time audio applications.
+ * By default, the system may aggressively lower CPU frequency when a thread
+ * completes its work early. However, for applications like Pro Audio, a light
+ * workload in one frame may be followed immediately by a heavy workload in the
+ * next (e.g., a new note triggering a synthesizer). If the CPU has down-clocked,
+ * the ramp-up time can cause a deadline miss (glitch).
+ *
+ * <p><b>Note:</b> This mode effectively disables certain power-saving features.
+ *
+ * This function and {@link ASessionCreationConfig_setGraphicsPipeline} are mutually
+ * exclusive.
+ *
+ * @param config The {@link ASessionCreationConfig} created by calling
+ * {@link ASessionCreationConfig_create()}.
+ * @param enabled  Whether to enable audio performance optimizations;
+ */
+void ASessionCreationConfig_setAudioPerformance(
+        ASessionCreationConfig* _Nonnull config, bool enabled)  __INTRODUCED_IN(37);
 
 __END_DECLS
 

@@ -71,6 +71,7 @@ private:
     SkiaGLRenderEngine(const RenderEngineCreationArgs& args, EGLDisplay display, EGLContext ctxt,
                        EGLSurface placeholder, EGLContext protectedContext,
                        EGLSurface protectedPlaceholder);
+    SkiaBackend backend() const override { return SkiaBackend::Ganesh; }
     bool waitGpuFence(base::borrowed_fd fenceFd);
     base::unique_fd flushGL();
     static EGLConfig chooseEglConfig(EGLDisplay display, int format, bool logConfig);

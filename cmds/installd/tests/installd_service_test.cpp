@@ -759,8 +759,8 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot) {
 
   // Request a snapshot of the CE content but not the DE content.
   int64_t ce_snapshot_inode;
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 37, FLAG_STORAGE_CE, &ce_snapshot_inode));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 37, FLAG_STORAGE_CE, &ce_snapshot_inode));
   struct stat buf;
   memset(&buf, 0, sizeof(buf));
   ASSERT_EQ(0, stat((rollback_ce_dir + "/com.foo").c_str(), &buf));
@@ -781,8 +781,8 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot) {
           0700, 10000, 20000, false /* follow_symlinks */));
 
   // Request a snapshot of the DE content but not the CE content.
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 37, FLAG_STORAGE_DE, &ce_snapshot_inode));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 37, FLAG_STORAGE_DE, &ce_snapshot_inode));
   // Only DE content snapshot was requested.
   ASSERT_EQ(ce_snapshot_inode, 0);
 
@@ -802,8 +802,9 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot) {
           0700, 10000, 20000, false /* follow_symlinks */));
 
   // Request a snapshot of both the CE as well as the DE content.
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 37, FLAG_STORAGE_DE | FLAG_STORAGE_CE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 37, FLAG_STORAGE_DE | FLAG_STORAGE_CE,
+                                                 nullptr));
 
   ASSERT_TRUE(android::base::ReadFileToString(
       rollback_ce_dir + "/com.foo/file1", &ce_content, false /* follow_symlinks */));
@@ -844,11 +845,13 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_TwoSnapshotsWithTheSameId) {
           0700, 10000, 20000, false /* follow_symlinks */));
 
   // Request snapshot for the package com.foo.
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 67, FLAG_STORAGE_DE | FLAG_STORAGE_CE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 67, FLAG_STORAGE_DE | FLAG_STORAGE_CE,
+                                                 nullptr));
   // Now request snapshot with the same id for the package com.bar
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.bar", 0, 67, FLAG_STORAGE_DE | FLAG_STORAGE_CE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.bar",
+                                                 0, 67, FLAG_STORAGE_DE | FLAG_STORAGE_CE,
+                                                 nullptr));
 
   // Check that both snapshots have correct data in them.
   std::string com_foo_ce_content, com_foo_de_content;
@@ -876,10 +879,10 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_AppDataAbsent) {
   ASSERT_EQ(0, delete_dir_contents_and_dir(fake_package_de_path, true));
 
   int64_t ce_snapshot_inode;
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 73, FLAG_STORAGE_CE, &ce_snapshot_inode));
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 73, FLAG_STORAGE_DE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 73, FLAG_STORAGE_CE, &ce_snapshot_inode));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 73, FLAG_STORAGE_DE, nullptr));
   // No CE content snapshot was performed.
   ASSERT_EQ(ce_snapshot_inode, 0);
 
@@ -913,8 +916,9 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_ClearsExistingSnapshot) {
           "TEST_CONTENT_2_DE", fake_package_de_path + "/file2",
           0700, 10000, 20000, false /* follow_symlinks */));
 
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 13, FLAG_STORAGE_DE | FLAG_STORAGE_CE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 13, FLAG_STORAGE_DE | FLAG_STORAGE_CE,
+                                                 nullptr));
 
   // Previous snapshot (with data for file1) must be cleared.
   struct stat sb;
@@ -934,8 +938,8 @@ TEST_F(AppDataSnapshotTest, SnapshotAppData_WrongVolumeUuid) {
   ASSERT_TRUE(mkdirs(rollback_ce_dir, 0700));
   ASSERT_TRUE(mkdirs(rollback_de_dir, 0700));
 
-  EXPECT_BINDER_FAIL(service->snapshotAppData(std::make_optional<std::string>("FOO"),
-          "com.foo", 0, 17, FLAG_STORAGE_DE, nullptr));
+  EXPECT_BINDER_FAIL(service->snapshotAppData(std::make_optional<std::string>("FOO"), "com.foo", 0,
+                                              17, FLAG_STORAGE_DE, nullptr));
 }
 
 TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_ClearsCache) {
@@ -961,8 +965,9 @@ TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_ClearsCache) {
   ASSERT_TRUE(android::base::WriteStringToFile(
           "TEST_CONTENT_DE", fake_package_de_code_cache_path + "/file1",
           0700, 10000, 20000, false /* follow_symlinks */));
-  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 23, FLAG_STORAGE_CE | FLAG_STORAGE_DE, nullptr));
+  ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo",
+                                                 0, 23, FLAG_STORAGE_CE | FLAG_STORAGE_DE,
+                                                 nullptr));
   // The snapshot call must clear cache.
   struct stat sb;
   ASSERT_EQ(-1, stat((fake_package_ce_cache_path + "/file1").c_str(), &sb));
@@ -996,7 +1001,8 @@ TEST_F(AppDataSnapshotTest, RestoreAppDataSnapshot) {
           0700, 10000, 20000, false /* follow_symlinks */));
 
   ASSERT_BINDER_SUCCESS(service->restoreAppDataSnapshot(std::make_optional<std::string>("TEST"),
-          "com.foo", 10000, "", 0, 239, FLAG_STORAGE_DE | FLAG_STORAGE_CE));
+                                                        "com.foo", 10000, -1, "", 0, 239,
+                                                        FLAG_STORAGE_DE | FLAG_STORAGE_CE));
 
   std::string ce_content, de_content;
   ASSERT_TRUE(android::base::ReadFileToString(
@@ -1021,8 +1027,9 @@ TEST_F(AppDataSnapshotTest, CreateSnapshotThenDestroyIt) {
 
   int64_t ce_snapshot_inode;
   // Request a snapshot of both the CE as well as the DE content.
-  ASSERT_TRUE(service->snapshotAppData(std::make_optional<std::string>("TEST"),
-          "com.foo", 0, 57, FLAG_STORAGE_DE | FLAG_STORAGE_CE, &ce_snapshot_inode).isOk());
+  ASSERT_TRUE(service->snapshotAppData(std::make_optional<std::string>("TEST"), "com.foo", 0, 57,
+                                       FLAG_STORAGE_DE | FLAG_STORAGE_CE, &ce_snapshot_inode)
+                      .isOk());
   // Because CE data snapshot was requested, ce_snapshot_inode can't be null.
   ASSERT_NE(0, ce_snapshot_inode);
   // Check snapshot is there.
@@ -1128,7 +1135,122 @@ TEST_F(AppDataSnapshotTest, RestoreAppDataSnapshot_WrongVolumeUuid) {
   ASSERT_TRUE(mkdirs(rollback_de_dir, 0700));
 
   EXPECT_BINDER_FAIL(service->restoreAppDataSnapshot(std::make_optional<std::string>("BAR"),
-          "com.foo", 10000, "", 0, 41, FLAG_STORAGE_DE));
+                                                     "com.foo", 10000, -1, "", 0, 41,
+                                                     FLAG_STORAGE_DE));
+}
+
+TEST_F(AppDataSnapshotTest, CreateAppDataSnapshot_WithPcc) {
+    auto rollback_ce_dir = create_data_misc_ce_rollback_path("TEST", 0, 37);
+    auto rollback_de_dir = create_data_misc_de_rollback_path("TEST", 0, 37);
+
+    auto fake_package_pcc_ce_path = fake_package_ce_path + "-pcc";
+    auto fake_package_pcc_de_path = fake_package_de_path + "-pcc";
+    ASSERT_TRUE(mkdirs(fake_package_pcc_ce_path, 0700));
+    ASSERT_TRUE(mkdirs(fake_package_pcc_de_path, 0700));
+
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_CE", fake_package_ce_path + "/file1",
+                                                 0700, 10000, 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_DE", fake_package_de_path + "/file1",
+                                                 0700, 10000, 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_PCC_CE",
+                                                 fake_package_pcc_ce_path + "/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_PCC_DE",
+                                                 fake_package_pcc_de_path + "/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+
+    ASSERT_BINDER_SUCCESS(service->snapshotAppData(std::make_optional<std::string>("TEST"),
+                                                   "com.foo", 0, 37,
+                                                   FLAG_STORAGE_CE | FLAG_STORAGE_DE, nullptr));
+
+    std::string ce_content, de_content, pcc_ce_content, pcc_de_content;
+    ASSERT_TRUE(android::base::ReadFileToString(rollback_ce_dir + "/com.foo/file1", &ce_content,
+                                                false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(rollback_de_dir + "/com.foo/file1", &de_content,
+                                                false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(rollback_ce_dir + "/com.foo-pcc/file1",
+                                                &pcc_ce_content, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(rollback_de_dir + "/com.foo-pcc/file1",
+                                                &pcc_de_content, false /* follow_symlinks */));
+    ASSERT_EQ("TEST_CONTENT_CE", ce_content);
+    ASSERT_EQ("TEST_CONTENT_DE", de_content);
+    ASSERT_EQ("TEST_CONTENT_PCC_CE", pcc_ce_content);
+    ASSERT_EQ("TEST_CONTENT_PCC_DE", pcc_de_content);
+}
+
+TEST_F(AppDataSnapshotTest, RestoreAppDataSnapshot_WithPcc) {
+    auto rollback_ce_dir = create_data_misc_ce_rollback_path("TEST", 0, 239);
+    auto rollback_de_dir = create_data_misc_de_rollback_path("TEST", 0, 239);
+
+    ASSERT_TRUE(mkdirs(rollback_ce_dir + "/com.foo/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_de_dir + "/com.foo/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_ce_dir + "/com.foo-pcc/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_de_dir + "/com.foo-pcc/", 0700));
+
+    ASSERT_TRUE(android::base::WriteStringToFile("CE_RESTORE_CONTENT",
+                                                 rollback_ce_dir + "/com.foo/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("DE_RESTORE_CONTENT",
+                                                 rollback_de_dir + "/com.foo/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("PCC_CE_RESTORE_CONTENT",
+                                                 rollback_ce_dir + "/com.foo-pcc/file1", 0700,
+                                                 10000, 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("PCC_DE_RESTORE_CONTENT",
+                                                 rollback_de_dir + "/com.foo-pcc/file1", 0700,
+                                                 10000, 20000, false /* follow_symlinks */));
+
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_CE", fake_package_ce_path + "/file1",
+                                                 0700, 10000, 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_CONTENT_DE", fake_package_de_path + "/file1",
+                                                 0700, 10000, 20000, false /* follow_symlinks */));
+    auto fake_package_pcc_ce_path = fake_package_ce_path + "-pcc";
+    auto fake_package_pcc_de_path = fake_package_de_path + "-pcc";
+    ASSERT_TRUE(mkdirs(fake_package_pcc_ce_path, 0700));
+    ASSERT_TRUE(mkdirs(fake_package_pcc_de_path, 0700));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_PCC_CONTENT_CE",
+                                                 fake_package_pcc_ce_path + "/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::WriteStringToFile("TEST_PCC_CONTENT_DE",
+                                                 fake_package_pcc_de_path + "/file1", 0700, 10000,
+                                                 20000, false /* follow_symlinks */));
+
+    ASSERT_BINDER_SUCCESS(service->restoreAppDataSnapshot(std::make_optional<std::string>("TEST"),
+                                                          "com.foo", 10000, 30000, "", 0, 239,
+                                                          FLAG_STORAGE_DE | FLAG_STORAGE_CE));
+
+    std::string ce_content, de_content, pcc_ce_content, pcc_de_content;
+    ASSERT_TRUE(android::base::ReadFileToString(fake_package_ce_path + "/file1", &ce_content,
+                                                false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(fake_package_de_path + "/file1", &de_content,
+                                                false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(fake_package_pcc_ce_path + "/file1",
+                                                &pcc_ce_content, false /* follow_symlinks */));
+    ASSERT_TRUE(android::base::ReadFileToString(fake_package_pcc_de_path + "/file1",
+                                                &pcc_de_content, false /* follow_symlinks */));
+    ASSERT_EQ("CE_RESTORE_CONTENT", ce_content);
+    ASSERT_EQ("DE_RESTORE_CONTENT", de_content);
+    ASSERT_EQ("PCC_CE_RESTORE_CONTENT", pcc_ce_content);
+    ASSERT_EQ("PCC_DE_RESTORE_CONTENT", pcc_de_content);
+}
+
+TEST_F(AppDataSnapshotTest, DestroyAppDataSnapshot_WithPcc) {
+    auto rollback_ce_dir = create_data_misc_ce_rollback_path("TEST", 0, 57);
+    auto rollback_de_dir = create_data_misc_de_rollback_path("TEST", 0, 57);
+    ASSERT_TRUE(mkdirs(rollback_ce_dir + "/com.foo/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_de_dir + "/com.foo/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_ce_dir + "/com.foo-pcc/", 0700));
+    ASSERT_TRUE(mkdirs(rollback_de_dir + "/com.foo-pcc/", 0700));
+
+    ASSERT_BINDER_SUCCESS(service->destroyAppDataSnapshot(std::make_optional<std::string>("TEST"),
+                                                          "com.foo", 0, 0, 57,
+                                                          FLAG_STORAGE_DE | FLAG_STORAGE_CE));
+
+    struct stat sb;
+    ASSERT_EQ(-1, stat((rollback_ce_dir + "/com.foo").c_str(), &sb));
+    ASSERT_EQ(-1, stat((rollback_de_dir + "/com.foo").c_str(), &sb));
+    ASSERT_EQ(-1, stat((rollback_ce_dir + "/com.foo-pcc").c_str(), &sb));
+    ASSERT_EQ(-1, stat((rollback_de_dir + "/com.foo-pcc").c_str(), &sb));
 }
 
 class SdkSandboxDataTest : public testing::Test {
@@ -1627,6 +1749,207 @@ TEST_F(ServiceTest, DestroyAppData_WithPcc) {
     EXPECT_FALSE(exists("user_de/0/com.foo"));
     EXPECT_FALSE(exists("user/0/com.foo-pcc"));
     EXPECT_FALSE(exists("user_de/0/com.foo-pcc"));
+}
+
+class MoveCompleteAppTest : public ServiceTest {
+protected:
+    // Identifiers
+    std::string fromUuid;
+    std::string toUuid;
+    std::string packageName;
+    int32_t pccId;
+
+    // Base Paths
+    std::string sourceBase;
+    std::string destBase;
+
+    // Source Paths
+    std::string fromCodePath;
+    std::string fromCePath;
+    std::string fromDePath;
+    // Source PCC Paths
+    std::string fromPccCePath;
+    std::string fromPccDePath;
+
+    // Destination Paths
+    std::string toCodePath;
+    std::string toCePath;
+    std::string toDePath;
+    // Destination PCC Paths
+    std::string toPccCePath;
+    std::string toPccDePath;
+
+    void SetUp() override {
+        ServiceTest::SetUp();
+
+        // 1. Initialize Constants
+        fromUuid = "TEST"; // Maps to /data/local/tmp
+        toUuid = "TEST_2"; // Maps to /data/local/tmp/test_2
+        packageName = "com.example.move";
+        pccId = kTestPccAppId;
+
+        sourceBase = "/data/local/tmp";
+        destBase = "/data/local/tmp/test_2";
+
+        // 2. Initialize Paths
+        fromCodePath = sourceBase + "/from_code/com.example.move";
+        fromCePath = create_data_user_ce_package_path(fromUuid.c_str(), kTestUserId,
+                                                      packageName.c_str());
+        fromDePath = create_data_user_de_package_path(fromUuid.c_str(), kTestUserId,
+                                                      packageName.c_str());
+
+        // Initialize Source PCC Paths (suffix "-pcc")
+        std::string pccPackageName = packageName + "-pcc";
+        fromPccCePath = create_data_user_ce_package_path(fromUuid.c_str(), kTestUserId,
+                                                         pccPackageName.c_str());
+        fromPccDePath = create_data_user_de_package_path(fromUuid.c_str(), kTestUserId,
+                                                         pccPackageName.c_str());
+
+        // Destination paths
+        std::string toCodePathParent = create_data_app_path(toUuid.c_str());
+        toCodePath = toCodePathParent + "/com.example.move";
+        toCePath =
+                create_data_user_ce_package_path(toUuid.c_str(), kTestUserId, packageName.c_str());
+        toDePath =
+                create_data_user_de_package_path(toUuid.c_str(), kTestUserId, packageName.c_str());
+
+        // Initialize Destination PCC Paths
+        toPccCePath = create_data_user_ce_package_path(toUuid.c_str(), kTestUserId,
+                                                       pccPackageName.c_str());
+        toPccDePath = create_data_user_de_package_path(toUuid.c_str(), kTestUserId,
+                                                       pccPackageName.c_str());
+
+        // 3. Create Volume Skeletons
+        ASSERT_TRUE(mkdirs(destBase + "/user/0", 0711));
+        ASSERT_TRUE(mkdirs(destBase + "/user_de/0", 0711));
+        ASSERT_TRUE(mkdirs(destBase + "/app", 0711));
+    }
+
+    void TearDown() override {
+        CleanupPaths();
+        ServiceTest::TearDown();
+    }
+
+    void CleanupPaths() {
+        delete_dir_contents_and_dir(fromCodePath, true);
+        delete_dir_contents_and_dir(fromCePath, true);
+        delete_dir_contents_and_dir(fromDePath, true);
+        delete_dir_contents_and_dir(fromPccCePath, true);
+        delete_dir_contents_and_dir(fromPccDePath, true);
+        delete_dir_contents_and_dir(destBase, true); // Wipes entire Volume 2
+    }
+
+    void TouchAbsolute(const std::string& path, uid_t owner, gid_t group, mode_t mode) {
+        int fd = ::open(path.c_str(), O_RDWR | O_CREAT, mode);
+        ASSERT_NE(fd, -1) << "Failed to create " << path << ": " << strerror(errno);
+        EXPECT_EQ(::fchown(fd, owner, group), 0);
+        EXPECT_EQ(::fchmod(fd, mode), 0);
+        close(fd);
+    }
+
+    bool ExistsAbsolute(const std::string& path) { return ::access(path.c_str(), F_OK) == 0; }
+};
+
+TEST_F(MoveCompleteAppTest, Move_Success) {
+    // 1. Create Source Data
+    ASSERT_TRUE(mkdirs(fromCodePath, 0755));
+    TouchAbsolute(fromCodePath + "/base.apk", kSystemUid, kSystemUid, 0644);
+
+    ASSERT_TRUE(mkdirs(fromCePath, 0700));
+    TouchAbsolute(fromCePath + "/ce_file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    ASSERT_TRUE(mkdirs(fromDePath, 0700));
+    TouchAbsolute(fromDePath + "/de_file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // 2. Perform Move (No PCC)
+    auto status = service->moveCompleteApp(std::make_optional(fromUuid), std::make_optional(toUuid),
+                                           packageName, kTestAppId,
+                                           0, // pccId = 0 (No PCC)
+                                           "default", 30, fromCodePath);
+
+    ASSERT_TRUE(status.isOk()) << "moveCompleteApp failed: " << status.toString8().c_str();
+
+    // 3. Verify Destination
+    EXPECT_TRUE(ExistsAbsolute(toCodePath + "/base.apk"));
+    EXPECT_TRUE(ExistsAbsolute(toCePath + "/ce_file.txt"));
+    EXPECT_TRUE(ExistsAbsolute(toDePath + "/de_file.txt"));
+}
+
+TEST_F(MoveCompleteAppTest, Fail_SourceMissing) {
+    // We intentionally do NOT create the source files here.
+    auto status = service->moveCompleteApp(std::make_optional(fromUuid), std::make_optional(toUuid),
+                                           packageName, kTestAppId,
+                                           0, // pccId
+                                           "default", 30, fromCodePath);
+
+    EXPECT_FALSE(status.isOk());
+}
+
+TEST_F(MoveCompleteAppTest, Move_Success_WithPcc) {
+    LOG(INFO) << "MoveCompleteAppTest_Move_Success_WithPcc";
+
+    // 1. Create Source Code & App Data
+    ASSERT_TRUE(mkdirs(fromCodePath, 0755));
+    TouchAbsolute(fromCodePath + "/base.apk", kSystemUid, kSystemUid, 0644);
+
+    ASSERT_TRUE(mkdirs(fromCePath, 0700));
+    TouchAbsolute(fromCePath + "/app_ce.txt", kTestAppUid, kTestAppUid, 0600);
+    ASSERT_TRUE(mkdirs(fromDePath, 0700));
+    TouchAbsolute(fromDePath + "/app_de.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // 2. Create Source PCC Data
+    ASSERT_TRUE(mkdirs(fromPccCePath, 0700));
+    TouchAbsolute(fromPccCePath + "/pcc_ce.txt", kTestPccAppUid, kTestPccAppUid, 0600);
+
+    ASSERT_TRUE(mkdirs(fromPccDePath, 0700));
+    TouchAbsolute(fromPccDePath + "/pcc_de.txt", kTestPccAppUid, kTestPccAppUid, 0600);
+
+    // 3. Perform Move with PCC ID
+    auto status = service->moveCompleteApp(std::make_optional(fromUuid), std::make_optional(toUuid),
+                                           packageName, kTestAppId,
+                                           pccId, // Valid PCC ID
+                                           "default", 30, fromCodePath);
+
+    ASSERT_TRUE(status.isOk()) << "moveCompleteApp failed: " << status.toString8().c_str();
+
+    // 4. Verify Destination App Data
+    EXPECT_TRUE(ExistsAbsolute(toCodePath + "/base.apk"));
+    EXPECT_TRUE(ExistsAbsolute(toCePath + "/app_ce.txt"));
+    EXPECT_TRUE(ExistsAbsolute(toDePath + "/app_de.txt"));
+
+    // 5. Verify Destination PCC Data
+    EXPECT_TRUE(ExistsAbsolute(toPccCePath + "/pcc_ce.txt"));
+    EXPECT_TRUE(ExistsAbsolute(toPccDePath + "/pcc_de.txt"));
+
+    // 6. Verify Ownership of PCC Data (Should be owned by PCC UID)
+    struct stat st;
+    ASSERT_EQ(0, ::stat((toPccCePath + "/pcc_ce.txt").c_str(), &st));
+    EXPECT_EQ(kTestPccAppUid, st.st_uid);
+}
+
+TEST_F(MoveCompleteAppTest, Move_Fail_RollsBackPreCreatedPcc) {
+    // 1. Setup: Pre-create the Destination PCC directory manually.
+    // Hacky but this allows us to verify that the cleanup/rollback logic actually runs.
+    // If the rollback logic fails to run, this directory will remain.
+    ASSERT_TRUE(mkdirs(toPccCePath, 0700));
+    TouchAbsolute(toPccCePath + "/garbage.txt", kTestPccAppUid, kTestPccAppUid, 0600);
+
+    // 2. Setup: Ensure Source APK is MISSING.
+    // This guarantees that moveCompleteApp fails at the very first step (copying code),
+    // forcing a jump to the 'fail' label immediately.
+    delete_dir_contents_and_dir(fromCodePath, true);
+
+    // 3. Perform Move
+    auto status =
+            service->moveCompleteApp(std::make_optional(fromUuid), std::make_optional(toUuid),
+                                     packageName, kTestAppId, pccId, "default", 30, fromCodePath);
+
+    // 4. Expect Failure (because APK was missing)
+    EXPECT_FALSE(status.isOk());
+
+    // 5. Verify Rollback
+    // The directory we manually created must be gone.
+    EXPECT_FALSE(ExistsAbsolute(toPccCePath));
 }
 
 }  // namespace installd

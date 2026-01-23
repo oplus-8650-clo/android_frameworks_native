@@ -57,11 +57,7 @@ mod ffi {
         /// ```
         type InputVerifier;
         #[cxx_name = create]
-        fn create_input_verifier(
-            name: String,
-            verify_buttons: bool,
-            verify_down_time: bool,
-        ) -> Box<InputVerifier>;
+        fn create_input_verifier(name: String) -> Box<InputVerifier>;
         #[allow(clippy::too_many_arguments)]
         fn process_movement(
             verifier: &mut InputVerifier,
@@ -125,16 +121,13 @@ mod ffi {
 
 use crate::ffi::{RustInputDeviceIdentifier, RustPointerProperties};
 
-fn create_input_verifier(
-    name: String,
-    verify_buttons: bool,
-    verify_down_time: bool,
-) -> Box<InputVerifier> {
+fn create_input_verifier(name: String) -> Box<InputVerifier> {
     Box::new(InputVerifier::new(
         &name,
         ffi::shouldLog("InputVerifierLogEvents"),
-        verify_buttons,
-        verify_down_time,
+        input_flags::enable_button_state_verification(),
+        input_flags::enable_down_time_verification(),
+        input_flags::enable_captured_verification(),
     ))
 }
 
@@ -272,19 +265,18 @@ fn process_key(
 
 #[cfg(test)]
 mod tests {
-    use crate::create_input_verifier;
     use crate::process_movement;
+    use crate::InputVerifier;
     use crate::RustPointerProperties;
 
     const BASE_POINTER_PROPERTIES: [RustPointerProperties; 1] = [RustPointerProperties { id: 0 }];
 
     #[test]
     fn verify_nonbutton_action_with_action_button() {
-        let mut verifier = create_input_verifier(
-            "Test".to_string(),
-            /*verify_buttons*/ true,
-            /*verify_down_times*/ true,
-        );
+        let mut verifier = Box::new(InputVerifier::new(
+            "Test", /*should_log=*/ false, /*verify_buttons=*/ true,
+            /*verify_down_time=*/ true, /*verify_captured_events=*/ true,
+        ));
         assert!(process_movement(
             &mut verifier,
             1,
@@ -302,11 +294,10 @@ mod tests {
 
     #[test]
     fn verify_nonbutton_action_with_action_button_and_button_state() {
-        let mut verifier = create_input_verifier(
-            "Test".to_string(),
-            /*verify_buttons*/ true,
-            /*verify_down_times*/ true,
-        );
+        let mut verifier = Box::new(InputVerifier::new(
+            "Test", /*should_log=*/ false, /*verify_buttons=*/ true,
+            /*verify_down_time=*/ true, /*verify_captured_events=*/ true,
+        ));
         assert!(process_movement(
             &mut verifier,
             1,

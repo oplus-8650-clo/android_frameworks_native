@@ -51,7 +51,6 @@
 #include <android/hardware/configstore/1.1/types.h>
 #include <android/native_window.h>
 #include <android/os/IInputFlinger.h>
-#include <android_os.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
@@ -832,9 +831,7 @@ void SurfaceFlinger::bootFinished() {
     mBootFinished = true;
     FlagManager::getMutableInstance().markBootCompleted();
 
-    if (android::os::perfetto_sdk_tracing()) {
-        ::tracing_perfetto::registerWithPerfetto();
-    }
+    ::tracing_perfetto::registerWithPerfetto();
 
     mInitBootPropsFuture.wait();
     mRenderEnginePrimeCacheFuture.wait();
@@ -2899,14 +2896,16 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         }
         it->second->latchBufferImpl(unused, latchTime, expectedPresentTimeNs, bgColorOnly);
         newDataLatched = true;
-// QTI_BEGIN: 2024-06-10: Performance: sf: correct dolphin hook due to improper keystone update
-        mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
-                *it->second->getPendingBufferCounter());
-// QTI_END: 2024-06-10: Performance: sf: correct dolphin hook due to improper keystone update
 
         frontend::LayerSnapshot* snapshot = mLayerSnapshotBuilder.getSnapshot(it->second->sequence);
         gui::GameMode gameMode = (snapshot) ? snapshot->gameMode : gui::GameMode::Unsupported;
         mLayersWithQueuedFrames.emplace(it->second, gameMode);
+
+        if (snapshot && snapshot->isVisible) {
+            Rect& bounds = snapshot->transformedBoundsWithoutTransparentRegion;
+            mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
+                    *it->second->getPendingBufferCounter(), bounds.getWidth(), bounds.getHeight());
+        }
     }
 
     updateLayerHistory(latchTime);
@@ -2970,9 +2969,9 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     panopticon::make(ids, panopticon::Source::CG_FrameSignal);
     auto commitTokens = panopticon::slice(panopticon::SliceType::CG_Sf_Commit);
 
-    const scheduler::FrameTarget& pacesetterFrameTarget = *frameTargets.get(pacesetterId)->get();
+    const scheduler::FrameTarget* pacesetterFrameTargetPtr = frameTargets.get(pacesetterId)->get();
 
-    const VsyncId vsyncId = pacesetterFrameTarget.vsyncId();
+    const VsyncId vsyncId = pacesetterFrameTargetPtr->vsyncId();
     SFTRACE_NAME(ftl::Concat(__func__, ' ', ftl::to_underlying(vsyncId)).c_str());
 
 // QTI_BEGIN: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
@@ -3050,7 +3049,7 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     //                                                     mCompositionCoverage.test(
     //                                                             CompositionCoverage::Gpu)};
 
-    if (pacesetterFrameTarget.didMissFrame()) {
+    if (pacesetterFrameTargetPtr->didMissFrame()) {
         mTimeStats->incrementMissedFrames();
     }
 
@@ -3091,11 +3090,11 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         }
     }
 
-    if (pacesetterFrameTarget.wouldBackpressureHwc()) {
-        if (mBackpressureGpuComposition || pacesetterFrameTarget.didMissHwcFrame()) {
+    if (pacesetterFrameTargetPtr->wouldBackpressureHwc()) {
+        if (mBackpressureGpuComposition || pacesetterFrameTargetPtr->didMissHwcFrame()) {
             mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
-                    pacesetterFrameTarget.expectedPresentTime());
-            const Duration slack = TimePoint::now() - pacesetterFrameTarget.frameBeginTime();
+                    pacesetterFrameTargetPtr->expectedPresentTime());
+            const Duration slack = TimePoint::now() - pacesetterFrameTargetPtr->frameBeginTime();
             scheduleCommit(FrameHint::kNone, slack);
             return false;
         }
@@ -3113,14 +3112,14 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // Save this once per commit + composite to ensure consistency.
     mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && hasDisplayWithPowerModeOn;
     if (mPowerHintSessionEnabled) {
-        mPowerAdvisor->setCommitStart(pacesetterFrameTarget.frameBeginTime());
-        mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTarget.expectedPresentTime());
+        mPowerAdvisor->setCommitStart(pacesetterFrameTargetPtr->frameBeginTime());
+        mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTargetPtr->expectedPresentTime());
 
         // Frame delay is how long we should have minus how long we actually have.
         const Duration idealSfWorkDuration =
                 mScheduler->vsyncModulator().getVsyncConfig().sfWorkDuration;
         const Duration frameDelay =
-                idealSfWorkDuration - pacesetterFrameTarget.expectedFrameDuration();
+                idealSfWorkDuration - pacesetterFrameTargetPtr->expectedFrameDuration();
 
         mPowerAdvisor->setFrameDelay(frameDelay);
         mPowerAdvisor->setTotalFrameTargetWorkDuration(idealSfWorkDuration);
@@ -3154,15 +3153,19 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                 FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->getPowerMode()
                     == hal::PowerMode::ON;
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
-                                    pacesetterFrameTarget.frameBeginTime().ns(),
+                                    pacesetterFrameTargetPtr->frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
                                     mScheduler->getPacesetterRefreshRate(), pacesetterPoweredOn);
 
         const bool flushTransactions = clearTransactionFlags(eTransactionFlushNeeded);
         bool transactionsAreEmpty = false;
-        mustComposite |= updateLayerSnapshots(vsyncId, pacesetterFrameTarget.frameBeginTime().ns(),
-                                              pacesetterFrameTarget.expectedPresentTime().ns(),
-                                              flushTransactions, transactionsAreEmpty);
+        mustComposite |=
+                updateLayerSnapshots(vsyncId, pacesetterFrameTargetPtr->frameBeginTime().ns(),
+                                     pacesetterFrameTargetPtr->expectedPresentTime().ns(),
+                                     flushTransactions, transactionsAreEmpty);
+
+        // A display transaction for hotplug reconnect may have just destroyed the original.
+        pacesetterFrameTargetPtr = mScheduler->pacesetterFrameTarget();
 
         // Tell VsyncTracker that we are going to present this frame before scheduling
         // setTransactionFlags which will schedule another SF frame. This was if the tracker
@@ -3170,8 +3173,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         if (mustComposite) {
             mScheduler->getVsyncSchedule()
                     ->getTracker()
-                    .onFrameBegin(pacesetterFrameTarget.expectedPresentTime(),
-                                  pacesetterFrameTarget.lastSignaledFrameTime());
+                    .onFrameBegin(pacesetterFrameTargetPtr->expectedPresentTime(),
+                                  pacesetterFrameTargetPtr->lastSignaledFrameTime());
         }
         if (transactionFlushNeeded()) {
             setTransactionFlags(eTransactionFlushNeeded);
@@ -3202,14 +3205,19 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                                                 updateAttachedChoreographer);
 
         initiateDisplayModeChanges();
+
+        // A resolution change without refresh required may have just destroyed the original.
+        if (!FlagManager::getInstance().synced_resolution_switch()) {
+            pacesetterFrameTargetPtr = mScheduler->pacesetterFrameTarget();
+        }
     }
 
     updateCursorAsync();
     if (!mustComposite) {
-        updateInputFlinger(vsyncId, pacesetterFrameTarget.frameBeginTime());
+        updateInputFlinger(vsyncId, pacesetterFrameTargetPtr->frameBeginTime());
     }
     doActiveLayersTracingIfNeeded(false, mVisibleRegionsDirty,
-                                  pacesetterFrameTarget.frameBeginTime(), vsyncId);
+                                  pacesetterFrameTargetPtr->frameBeginTime(), vsyncId);
 
     mLastCommittedVsyncId = vsyncId;
 
@@ -3478,74 +3486,77 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Display Changes");
     }
 
-    ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
-    auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
+        auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
 
-    uint64_t prevOverrideBufferId = 0;
-    for (auto& [layer, layerFE] : layers) {
-        CompositionResult compositionResult{layerFE->stealCompositionResult()};
-        if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
-            if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
-                // add a space to separate displays
-                compositionSummary.push_back(' ');
+        uint64_t prevOverrideBufferId = 0;
+        for (auto& [layer, layerFE] : layers) {
+            CompositionResult compositionResult{layerFE->stealCompositionResult()};
+            if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
+                if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
+                    // add a space to separate displays
+                    compositionSummary.push_back(' ');
+                }
+                lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
             }
-            lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
-        }
 
-        // If there are N layers in a cached set they should all share the same buffer id.
-        // The first layer in the cached set will be not skipped and layers 1..N-1 will be skipped.
-        // We expect all layers in the cached set to be marked as composited by HWC.
-        // Here is a made up example of how it is visualized
-        //
-        //      [b:rrc][s:cc]
-        //
-        // This should be interpreted to mean that there are 2 cached sets.
-        // So there are only 2 non skipped layers -- b and s.
-        // The layers rrc and cc are flattened into layers b and s respectively.
-        const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
-        if (hwcState.overrideBufferId != prevOverrideBufferId) {
-            // End the existing run.
-            if (prevOverrideBufferId) {
-                compositionSummary.push_back(']');
+            // If there are N layers in a cached set they should all share the same buffer id.
+            // The first layer in the cached set will be not skipped and layers 1..N-1 will be
+            // skipped. We expect all layers in the cached set to be marked as composited by HWC.
+            // Here is a made up example of how it is visualized
+            //
+            //      [b:rrc][s:cc]
+            //
+            // This should be interpreted to mean that there are 2 cached sets.
+            // So there are only 2 non skipped layers -- b and s.
+            // The layers rrc and cc are flattened into layers b and s respectively.
+            const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
+            if (hwcState.overrideBufferId != prevOverrideBufferId) {
+                // End the existing run.
+                if (prevOverrideBufferId) {
+                    compositionSummary.push_back(']');
+                }
+                // Start a new run.
+                if (hwcState.overrideBufferId) {
+                    compositionSummary.push_back('[');
+                }
             }
-            // Start a new run.
-            if (hwcState.overrideBufferId) {
-                compositionSummary.push_back('[');
+
+            compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
+
+            if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
+                compositionSummary.push_back(':');
+            }
+            prevOverrideBufferId = hwcState.overrideBufferId;
+
+            if (layerFE->mSnapshot->hasEffect()) {
+                compositedWorkload |= adpf::Workload::EFFECTS;
+            }
+
+            if (compositionResult.lastClientCompositionFence) {
+                layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
+            }
+            if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
+                mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
             }
         }
-
-        compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
-
-        if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
-            compositionSummary.push_back(':');
-        }
-        prevOverrideBufferId = hwcState.overrideBufferId;
-
-        if (layerFE->mSnapshot->hasEffect()) {
-            compositedWorkload |= adpf::Workload::EFFECTS;
+        // End the last run.
+        if (prevOverrideBufferId) {
+            compositionSummary.push_back(']');
         }
 
-        if (compositionResult.lastClientCompositionFence) {
-            layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
-        }
-        if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
-            mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
-        }
+        // Concisely describe the layers composited this frame using single chars. GPU composited
+        // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
+        // shadow, etc.). This provides a snapshot of the compositing workload.
+        SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
+                                  ftl::Concat("Layers: ", layers.size(), " ",
+                                              ftl::truncated<
+                                                      WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
+                                                      std::string_view(compositionSummary.begin(),
+                                                                       compositionSummary.size())))
+                                          .c_str());
     }
-    // End the last run.
-    if (prevOverrideBufferId) {
-        compositionSummary.push_back(']');
-    }
-
-    // Concisely describe the layers composited this frame using single chars. GPU composited layers
-    // are uppercase, DPU composited are lowercase. Special chars denote effects (blur, shadow,
-    // etc.). This provides a snapshot of the compositing workload.
-    SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
-                              ftl::Concat("Layers: ", layers.size(), " ",
-                                          ftl::truncated<WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
-                                                  std::string_view(compositionSummary.begin(),
-                                                                   compositionSummary.size())))
-                                      .c_str());
 
     mPowerAdvisor->setCompositedWorkload(compositedWorkload);
     SFTRACE_ASYNC_FOR_TRACK_END(WorkloadTracer::TRACK_NAME,
@@ -5476,7 +5487,8 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyTimelin
     const auto& transaction = *flushState.transaction;
 
     const TimePoint desiredPresentTime = TimePoint::fromNs(transaction.desiredPresentTime);
-    const TimePoint expectedPresentTime = mScheduler->expectedPresentTimeForPacesetter();
+    const TimePoint expectedPresentTime =
+            mScheduler->pacesetterFrameTarget()->expectedPresentTime();
 
     using TransactionReadiness = TransactionHandler::TransactionReadiness;
 
@@ -5865,15 +5877,11 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
             }
 
 // QTI_END: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
-            if (!(flags & eOneWay)) {
-// QTI_BEGIN: 2025-04-10: Performance: Add dolphin required hook back
-                mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
-// QTI_END: 2025-04-10: Performance: Add dolphin required hook back
-                    transactionState.mIsAutoTimestamp, transactionState.mDesiredPresentTime);
-// QTI_BEGIN: 2025-04-10: Performance: Add dolphin required hook back
-            }
+            mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
+                                                           transactionState.mIsAutoTimestamp,
+                                                           transactionState.mFlags,
+                                                           transactionState.mDesiredPresentTime);
 
-// QTI_END: 2025-04-10: Performance: Add dolphin required hook back
             mQtiSFExtnIntf->qtiUpdateSmomoLayerInfo(layer, transactionState.mDesiredPresentTime,
                                                     transactionState.mIsAutoTimestamp,
 // QTI_BEGIN: 2023-06-07: Display: sfext: Fix compilation error for FRC Frame Pacing Feature
@@ -5950,7 +5958,7 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
     // If there are frame rate changes, and SF is scheduled to wake up far away in the future due
     // to low rendering rate, we wake up SF immediately to process the frame rate change as this
     // might be a request to boost.
-    if (hasFrameRateChanges && FlagManager::getInstance().anchor_list()) {
+    if (hasFrameRateChanges) {
         const auto scheduledFrameResultOpt = mScheduler->getScheduledFrameResult();
         if (scheduledFrameResultOpt.has_value()) {
             const auto timeToWake = scheduledFrameResultOpt->callbackTime - TimePoint::now();
@@ -8510,6 +8518,8 @@ void SurfaceFlinger::captureDisplay(DisplayId displayId, const CaptureArgs& args
                                   .isSecure = args.secureLayerMode == SecureLayerMode::Capture,
                                   .includeProtected = false,
                                   .preserveDisplayColors = args.preserveDisplayColors,
+                                  .requireDpuReadback =
+                                          args.captureMode == CaptureMode::RequireOptimized,
                                   .debugName = "ScreenCapture"};
 
     captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(args.pixelFormat),
@@ -8698,8 +8708,10 @@ SurfaceFlinger::setScreenshotSnapshotsAndDisplayState(ScreenshotArgs& args,
 
                 if (!canDpuReadback && args.requireDpuReadback) {
                     if (hasProtectedOrDisallowedSecureLayers) {
+                        ALOGE("Failed to readback disallowed layers");
                         return base::unexpected<status_t>(PERMISSION_DENIED);
                     } else {
+                        ALOGE("Failed to set up DPU readback");
                         return base::unexpected<status_t>(INVALID_OPERATION);
                     }
                 }
@@ -8934,8 +8946,13 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         args.isSecure &= display->isSecure();
         args.snapshotRequest.layerStack = display->getLayerStack();
         args.sourceCrop = layerStackSpaceRect;
-        args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
-        args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+
+        if (args.requireDpuReadback) {
+            args.size = display->getSize();
+        } else {
+            args.size.width = args.frameScaleX * layerStackSpaceRect.getWidth();
+            args.size.height = args.frameScaleY * layerStackSpaceRect.getHeight();
+        }
 
         // We could query a real value for this but it'll be a long, long time until we support
         // displays that need upwards of 1GB per buffer so...
@@ -8965,7 +8982,11 @@ status_t SurfaceFlinger::setScreenshotDisplayState(ScreenshotArgs& args) {
         // Set the requested width/height to the logical display layer stack rect size by
         // default
         if (args.size.width == 0 || args.size.height == 0) {
-            args.size = layerStackSpaceRect.getSize();
+            if (args.requireDpuReadback) {
+                args.size = display->getSize();
+            } else {
+                args.size = layerStackSpaceRect.getSize();
+            }
         }
 
         // Screenshot initiated for region sampling
@@ -11148,6 +11169,7 @@ void SurfaceFlinger::validateForReadback(LayerFE* layer) {
                     // screenshot request on the floor and erroring out. BUT: for clients that
                     // don't explicitly want DPU readback we can be nicer and bounce over to
                     // renderScreenImpl() to hit the GPU path.
+                    ALOGD("Dropping invalid screen readback for %" PRIu64, request.id.value);
                     invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
                     mReadbackRequests.erase(it);
                     break;
@@ -11183,6 +11205,7 @@ void SurfaceFlinger::finalizeReadback(
 
     for (auto& request : mReadbackRequests) {
         if (request.buffer) {
+            ALOGD("Screen readback not finalized for %" PRIu64, request.id.value);
             invokeScreenCaptureError(NAME_NOT_FOUND, request.captureListener);
         }
     }

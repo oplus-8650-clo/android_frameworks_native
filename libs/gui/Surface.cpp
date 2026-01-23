@@ -121,7 +121,8 @@ bool isInterceptorRegistrationOp(int op) {
 
 } // namespace
 
-Surface::ProducerDeathListenerProxy::ProducerDeathListenerProxy(wp<SurfaceListener> surfaceListener)
+Surface::ProducerDeathListenerProxy::ProducerDeathListenerProxy(
+        const wp<SurfaceListener>& surfaceListener)
       : mSurfaceListener(surfaceListener) {}
 
 void Surface::ProducerDeathListenerProxy::binderDied(const wp<IBinder>&) {
@@ -3145,7 +3146,8 @@ status_t Surface::getAndFlushRemovedBuffers(std::vector<sp<GraphicBuffer>>* out)
     return OK;
 }
 
-status_t Surface::attachAndQueueBufferWithDataspace(Surface* surface, sp<GraphicBuffer> buffer,
+status_t Surface::attachAndQueueBufferWithDataspace(Surface* surface,
+                                                    const sp<GraphicBuffer>& buffer,
                                                     Dataspace dataspace) {
     if (buffer == nullptr) {
         return BAD_VALUE;

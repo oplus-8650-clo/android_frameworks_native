@@ -20,19 +20,22 @@
 
 #include <binder/IServiceManager.h>
 #include <utils/SystemClock.h>
+#include "../BuildFlags.h"
 #include "BinderStatsUtils.h"
 
 namespace android {
 constexpr int kSendIntervalSec = 5;
-constexpr int64_t nanoSecondsPerSec = 1000'000'000LL;
+constexpr int64_t kNanoSecondsPerSec = 1000'000'000LL;
 
-// Returns zero if clock isn't available.
+/**
+ * Returns the CPU time in nanoseconds, or zero if the clock is not available.
+ */
 static int64_t getCpuTimeNanos() {
     timespec now;
     if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) == -1) {
         return 0;
     }
-    return now.tv_sec * nanoSecondsPerSec + now.tv_nsec;
+    return now.tv_sec * kNanoSecondsPerSec + now.tv_nsec;
 }
 
 BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uint32_t code,
@@ -101,7 +104,7 @@ bool BinderObserver::isFlushRequired(int64_t nowSec) {
 void BinderObserver::addStatMaybeFlush(const std::shared_ptr<BinderStatsSpscQueue>& queue,
                                        const BinderCallData& stat) {
     // If write fails, then buffer is full.
-    int64_t nowSec = stat.endTimeNanos / nanoSecondsPerSec;
+    int64_t nowSec = stat.endTimeNanos / kNanoSecondsPerSec;
     if (!queue->push(stat)) {
         flushStats(nowSec);
         // If write fails again, we drop the stat.
@@ -122,7 +125,7 @@ void BinderObserver::flushStats(int64_t nowSec) {
     }
     // flush
     mLastFlushTimeSec = nowSec;
-    std::vector<BinderCallData> data = mBinderStatsCollector.consumeData();
-    mPusher.pushLocked(data, nowSec);
+    mBinderStatsCollector.consumeData(mPusher.getAddCallDataToBufferLockedFunction());
+    mPusher.pushLocked(nowSec);
 }
 } // namespace android

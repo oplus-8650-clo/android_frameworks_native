@@ -31,6 +31,7 @@ _INTERCEPTED_EXTENSIONS = [
     'VK_KHR_android_surface',
     'VK_KHR_get_surface_capabilities2',
     'VK_KHR_incremental_present',
+    'VK_KHR_get_physical_device_properties2',
     'VK_KHR_shared_presentable_image',
     'VK_KHR_surface',
     'VK_KHR_surface_protected_capabilities',
@@ -39,13 +40,13 @@ _INTERCEPTED_EXTENSIONS = [
     'VK_EXT_surface_maintenance1',
     'VK_KHR_present_id',
     'VK_KHR_present_id2',
+    'VK_EXT_present_timing',
 ]
 
 # Extensions known to vulkan::driver level.
 _KNOWN_EXTENSIONS = _INTERCEPTED_EXTENSIONS + [
     'VK_ANDROID_external_memory_android_hardware_buffer',
     'VK_KHR_bind_memory2',
-    'VK_KHR_get_physical_device_properties2',
     'VK_KHR_device_group_creation',
     'VK_KHR_external_memory_capabilities',
     'VK_KHR_external_semaphore_capabilities',
@@ -159,6 +160,17 @@ _INTERCEPTED_COMMANDS = [
     'vkGetPhysicalDeviceQueueFamilyProperties2',
     'vkGetPhysicalDeviceMemoryProperties2',
     'vkGetPhysicalDeviceSparseImageFormatProperties2',
+
+    # Original KHR version of same, since we must intercept
+    # to fill properties and features structures of loader-implementated
+    # extensions.
+    'vkGetPhysicalDeviceFeatures2KHR',
+    'vkGetPhysicalDeviceProperties2KHR',
+    'vkGetPhysicalDeviceFormatProperties2KHR',
+    'vkGetPhysicalDeviceImageFormatProperties2KHR',
+    'vkGetPhysicalDeviceQueueFamilyProperties2KHR',
+    'vkGetPhysicalDeviceMemoryProperties2KHR',
+    'vkGetPhysicalDeviceSparseImageFormatProperties2KHR',
 
     # For promoted VK_KHR_external_memory_capabilities
     'vkGetPhysicalDeviceExternalBufferProperties',
@@ -336,7 +348,7 @@ def _get_proc_hook_enum(cmd):
   """
   assert cmd in gencom.version_dict
   for version in gencom.version_code_list:
-    if gencom.version_dict[cmd] == 'VK_VERSION_' + version:
+    if gencom.version_dict[cmd].endswith("_" + version):
       return 'ProcHook::EXTENSION_CORE_' + version
 
 
@@ -350,7 +362,7 @@ def _need_proc_hook_stub(cmd):
     if cmd in gencom.extension_dict:
       if not gencom.is_extension_internal(gencom.extension_dict[cmd]):
         return True
-    elif gencom.version_dict[cmd] != 'VK_VERSION_1_0':
+    elif not gencom.version_dict[cmd].endswith("_1_0"):
       return True
   return False
 
@@ -460,7 +472,7 @@ def _define_device_proc_hook(cmd, f):
   f.write(gencom.indent(2) + 'ProcHook::DEVICE,\n')
 
   if (cmd in gencom.extension_dict or
-      gencom.version_dict[cmd] != 'VK_VERSION_1_0'):
+      not gencom.version_dict[cmd].endswith("_1_0")):
     ext_name = ''
     ext_hook = ''
     if cmd in gencom.extension_dict:

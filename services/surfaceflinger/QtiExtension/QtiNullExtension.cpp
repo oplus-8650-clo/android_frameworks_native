@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #include "QtiNullExtension.h"
@@ -170,7 +170,9 @@ uint32_t QtiNullExtension::qtiGetLayerClass(std::string mName) {
     return 0;
 }
 void QtiNullExtension::qtiSetVisibleLayerInfo(DisplayId displayId,
-                                                  const char* name, int32_t sequence) {}
+                                                  const char* name,
+                                                  int32_t sequence,
+                                                  Rect displayFrame) {}
 bool QtiNullExtension::qtiIsSmomoOptimalRefreshActive() {
     return false;
 }
@@ -186,8 +188,8 @@ void QtiNullExtension::qtiTryDrawMethod(sp<DisplayDevice> display) {}
  */
 void QtiNullExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {}
 void QtiNullExtension::qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                      nsecs_t desiredPresentTime) {}
-void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int count) {}
+                                                      uint32_t flags, nsecs_t desiredPresentTime) {}
+void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height) {}
 void QtiNullExtension::qtiDolphinUnblockPendingBuffer() {}
 void QtiNullExtension::qtiDolphinTrackVsyncSignal() {}
 bool QtiNullExtension::qtiDolphinIsTargetFpsActive() {

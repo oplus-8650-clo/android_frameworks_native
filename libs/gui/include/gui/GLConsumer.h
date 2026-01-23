@@ -251,7 +251,7 @@ protected:
 
     // abandonLocked overrides the ConsumerBase method to clear
     // mCurrentTextureImage in addition to the ConsumerBase behavior.
-    virtual void abandonLocked();
+    virtual void abandonLocked(BufferFreedCallback onBufferFreed = [](auto&) {}) override;
 
     // dumpLocked overrides the ConsumerBase method to dump GLConsumer-
     // specific info in addition to the ConsumerBase behavior.
@@ -259,8 +259,9 @@ protected:
 
     // acquireBufferLocked overrides the ConsumerBase method to update the
     // mEglSlots array in addition to the ConsumerBase behavior.
-    virtual status_t acquireBufferLocked(BufferItem *item, nsecs_t presentWhen,
-            uint64_t maxFrameNumber = 0) override;
+    virtual status_t acquireBufferLocked(
+            BufferItem* item, nsecs_t presentWhen, uint64_t maxFrameNumber = 0,
+            BufferFreedCallback onBufferFreed = [](auto&) {}) override;
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     virtual void onSlotCountChanged(int slotCount) override;
@@ -268,13 +269,14 @@ protected:
     // releaseBufferLocked overrides the ConsumerBase method to update the
     // mEglSlots array in addition to the ConsumerBase.
 #if !COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer,
+    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
                                          EGLDisplay display = EGL_NO_DISPLAY,
-                                         EGLSyncKHR eglFence = EGL_NO_SYNC_KHR) override;
+                                         EGLSyncKHR eglFence = EGL_NO_SYNC_KHR,
+                                         BufferFreedCallback onBufferFreed = [](auto&){}) override;
 
-    status_t releaseBufferLocked(int slot,
-            const sp<GraphicBuffer> graphicBuffer, EGLSyncKHR eglFence) {
-        return releaseBufferLocked(slot, graphicBuffer, mEglDisplay, eglFence);
+    status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer,
+                                 EGLSyncKHR eglFence) {
+        return releaseBufferLocked(slot, graphicBuffer, mEglDisplay, eglFence, [](auto&){});
     }
 #endif
 
@@ -381,7 +383,7 @@ private:
     // slot and destroy the EGLImage in that slot.  Otherwise it has no effect.
     //
     // This method must be called with mMutex locked.
-    virtual void freeBufferLocked(int slotIndex);
+    virtual void freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) override;
 
     // computeCurrentTransformMatrixLocked computes the transform matrix for the
     // current texture.  It uses mCurrentTransform and the current GraphicBuffer

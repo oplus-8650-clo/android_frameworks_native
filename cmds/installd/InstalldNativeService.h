@@ -93,11 +93,15 @@ public:
     binder::Status fixupAppData(const std::optional<std::string>& uuid, int32_t flags);
 
     binder::Status snapshotAppData(const std::optional<std::string>& volumeUuid,
-            const std::string& packageName, const int32_t user, const int32_t snapshotId,
-            int32_t storageFlags, int64_t* _aidl_return);
+                                   const std::string& packageName, const int32_t user,
+                                   const int32_t snapshotId, int32_t storageFlags,
+                                   int64_t* _aidl_return);
+
     binder::Status restoreAppDataSnapshot(const std::optional<std::string>& volumeUuid,
-            const std::string& packageName, const int32_t appId, const std::string& seInfo,
-            const int32_t user, const int32_t snapshotId, int32_t storageFlags);
+                                          const std::string& packageName, const int32_t appId,
+                                          const int32_t pccId, const std::string& seInfo,
+                                          const int32_t user, const int32_t snapshotId,
+                                          int32_t storageFlags);
     binder::Status destroyAppDataSnapshot(const std::optional<std::string> &volumeUuid,
             const std::string& packageName, const int32_t user, const int64_t ceSnapshotInode,
             const int32_t snapshotId, int32_t storageFlags);
@@ -129,9 +133,10 @@ public:
             int32_t userId, int32_t appId, int64_t cacheQuota);
 
     binder::Status moveCompleteApp(const std::optional<std::string>& fromUuid,
-            const std::optional<std::string>& toUuid, const std::string& packageName,
-            int32_t appId, const std::string& seInfo,
-            int32_t targetSdkVersion, const std::string& fromCodePath);
+                                   const std::optional<std::string>& toUuid,
+                                   const std::string& packageName, int32_t appId, int32_t pccId,
+                                   const std::string& seInfo, int32_t targetSdkVersion,
+                                   const std::string& fromCodePath);
 
     binder::Status dexopt(const std::string& apkPath, int32_t uid, const std::string& packageName,
                           const std::string& instructionSet, int32_t dexoptNeeded,

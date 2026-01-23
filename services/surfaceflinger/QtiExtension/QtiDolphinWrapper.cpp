@@ -12,17 +12,17 @@
 
 namespace android::surfaceflingerextension {
 
-QtiDolphinWrapper::QtiDolphinWrapper() {
+QtiDolphinWrapper::QtiDolphinWrapper(int width, int height) {
     mQtiDolphinHandle = dlopen("libdolphin.so", RTLD_NOW);
     if (!mQtiDolphinHandle) {
         ALOGW("Unable to open libdolphin.so: %s.", dlerror());
     } else {
-        qtiDolphinInit = (bool (*) ())dlsym(mQtiDolphinHandle, "dolphinInit");
+        qtiDolphinInit = (bool (*) (int, int))dlsym(mQtiDolphinHandle, "dolphinInit");
         qtiDolphinSetVsyncPeriod = (void (*) (nsecs_t)) dlsym(mQtiDolphinHandle,
                 "dolphinSetVsyncPeriod");
-        qtiDolphinTrackBufferIncrement = (void (*) (const char*, bool, nsecs_t))dlsym(
+        qtiDolphinTrackBufferIncrement = (void (*) (const char*, bool, uint32_t, nsecs_t))dlsym(
                  mQtiDolphinHandle, "dolphinTrackBufferIncrement");
-        qtiDolphinTrackBufferDecrement = (void (*) (const char*, int))dlsym(mQtiDolphinHandle,
+        qtiDolphinTrackBufferDecrement = (void (*) (const char*, int, int, int))dlsym(mQtiDolphinHandle,
                 "dolphinTrackBufferDecrement");
         qtiDolphinTrackVsyncSignal = (void (*) ())dlsym(mQtiDolphinHandle,
                 "dolphinTrackVsyncSignal");
@@ -35,7 +35,7 @@ QtiDolphinWrapper::QtiDolphinWrapper() {
                               qtiDolphinTrackVsyncSignal && qtiDolphinUnblockPendingBuffer &&
                               qtiDolphinIsTargetFpsActive;
         if (functionsFound) {
-            qtiDolphinInit();
+            qtiDolphinInit(width, height);
         } else {
             ALOGW("Unable to find dolphin functions!");
             dlclose(mQtiDolphinHandle);

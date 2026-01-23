@@ -48,11 +48,7 @@ struct RpcWireHeader;
 #define LOG_RPC_DETAIL(...) ALOGV(__VA_ARGS__) // for type checking
 #endif
 
-// DO NOT ENABLE IN PRODUCTION
-#define RPC_FLAKE_PRONE false
-// DO NOT ENABLE IN PRODUCTION
-
-#if RPC_FLAKE_PRONE
+#ifdef RPC_FLAKE_PRONE
 LIBBINDER_INTERNAL_EXPORTED bool rpcMaybeFlake();
 LIBBINDER_INTERNAL_EXPORTED void rpcMaybeWaitToFlake();
 #define MAYBE_TRUE_IN_FLAKE_MODE rpcMaybeFlake()

@@ -15,6 +15,7 @@ rust_test {
         "libselinux_bindgen",
         "libbinder_tokio_rs",
         "libtokio",
+        "libzerocopy",
     ],
     shared_libs: [
         "libselinux",
@@ -31,6 +32,7 @@ rust_test {
     rustlibs: [
         "libbinder_rs",
         "liblibc",
+        "libzerocopy",
     ],
     test_harness: false,
     auto_gen_config: false,

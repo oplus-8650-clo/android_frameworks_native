@@ -20,7 +20,6 @@
 
 #include <android-base/result-gmock.h>
 #include <android-base/result.h>
-#include <com_android_input_flags.h>
 #include <flag_macros.h>
 #include <gestures/UncapturedGestureConverter.h>
 #include <gtest/gtest.h>
@@ -39,14 +38,7 @@
 
 namespace android {
 
-namespace input_flags = com::android::input::flags;
-
 namespace {
-
-const auto TOUCHPAD_PALM_REJECTION_V2 =
-        ACONFIG_FLAG(input_flags, enable_v2_touchpad_typing_palm_rejection);
-
-const auto TOUCHPAD_DOWN_TIME_FIX = ACONFIG_FLAG(input_flags, touchpad_down_time_fix);
 
 constexpr stime_t GESTURE_TIME = 1.2;
 
@@ -285,8 +277,7 @@ TEST_F(UncapturedGestureConverterTest, DragWithButton) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, DownTime,
-                  REQUIRES_FLAGS_ENABLED(TOUCHPAD_DOWN_TIME_FIX)) {
+TEST_F(UncapturedGestureConverterTest, DownTime) {
     InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
     UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
     converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
@@ -1476,8 +1467,7 @@ TEST_F(UncapturedGestureConverterTest, Click) {
                               WithDisplayId(ui::LogicalDisplayId::DEFAULT)))));
 }
 
-TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, TapWithTapToClickDisabled,
-                  REQUIRES_FLAGS_DISABLED(TOUCHPAD_PALM_REJECTION_V2)) {
+TEST_F(UncapturedGestureConverterTest, TapWithTapToClickDisabled) {
     nsecs_t currentTime = GESTURE_TIME;
 
     // Tap should be ignored when disabled
@@ -1502,89 +1492,6 @@ TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, TapWithTapToClickDisabled,
 
     // Future taps should be re-enabled
     ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
-}
-
-TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, TapWithTapToClickDisabledWithDelay,
-                  REQUIRES_FLAGS_ENABLED(TOUCHPAD_PALM_REJECTION_V2)) {
-    nsecs_t currentTime = GESTURE_TIME;
-
-    // Tap should be ignored when disabled
-    mReader->getContext()->setPreventingTouchpadTaps(true);
-
-    InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
-    converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
-
-    Gesture flingGesture(kGestureFling, currentTime, currentTime, /*vx=*/0, /*vy=*/0,
-                         GESTURES_FLING_TAP_DOWN);
-    std::list<NotifyArgs> args =
-            converter.handleGesture(currentTime, currentTime, currentTime, flingGesture);
-    // We don't need to check args here, since it's covered by the FlingTapDown test.
-
-    Gesture tapGesture(kGestureButtonsChange, currentTime, currentTime,
-                       /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_LEFT, /*is_tap=*/true);
-    args = converter.handleGesture(currentTime, currentTime, currentTime, tapGesture);
-
-    // no events should be generated
-    ASSERT_EQ(0u, args.size());
-
-    // Future taps should be re-enabled
-    ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
-
-    // taps before the threshold should still be ignored
-    currentTime += TAP_ENABLE_DELAY_NANOS.count();
-    flingGesture = Gesture(kGestureFling, currentTime, currentTime, /*vx=*/0, /*vy=*/0,
-                           GESTURES_FLING_TAP_DOWN);
-    args = converter.handleGesture(currentTime, currentTime, currentTime, flingGesture);
-
-    ASSERT_EQ(1u, args.size());
-    ASSERT_THAT(std::get<NotifyMotionArgs>(args.front()),
-                AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE), WithRelativeMotion(0, 0)));
-
-    tapGesture = Gesture(kGestureButtonsChange, currentTime, currentTime,
-                         /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_LEFT,
-                         /*is_tap=*/true);
-    args = converter.handleGesture(currentTime, currentTime, currentTime, tapGesture);
-
-    // no events should be generated
-    ASSERT_EQ(0u, args.size());
-
-    // taps after the threshold should be recognised
-    currentTime += 1;
-    flingGesture = Gesture(kGestureFling, currentTime, currentTime, /*vx=*/0, /*vy=*/0,
-                           GESTURES_FLING_TAP_DOWN);
-    args = converter.handleGesture(currentTime, currentTime, currentTime, flingGesture);
-
-    ASSERT_EQ(1u, args.size());
-    ASSERT_THAT(std::get<NotifyMotionArgs>(args.front()),
-                AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE), WithRelativeMotion(0, 0)));
-
-    tapGesture = Gesture(kGestureButtonsChange, currentTime, currentTime,
-                         /*down=*/GESTURES_BUTTON_LEFT, /*up=*/GESTURES_BUTTON_LEFT,
-                         /*is_tap=*/true);
-    args = converter.handleGesture(currentTime, currentTime, currentTime, tapGesture);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT),
-                                          WithButtonState(0))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
-                                          WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
-                                          WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY),
-                                          WithButtonState(AMOTION_EVENT_BUTTON_PRIMARY))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
-                                          WithActionButton(AMOTION_EVENT_BUTTON_PRIMARY),
-                                          WithButtonState(0))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_UP),
-                                          WithButtonState(0))),
-                            VariantWith<NotifyMotionArgs>(
-                                    AllOf(WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER),
-                                          WithButtonState(0)))));
-    ASSERT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithRelativeMotion(0.f, 0.f))));
 }
 
 TEST_F(UncapturedGestureConverterTest, ClickWithTapToClickDisabled) {
@@ -1671,49 +1578,6 @@ TEST_F(UncapturedGestureConverterTest, MoveEnablesTapToClick) {
 
     // Future taps should be re-enabled
     ASSERT_FALSE(mReader->getContext()->isPreventingTouchpadTaps());
-}
-
-TEST_F_WITH_FLAGS(UncapturedGestureConverterTest, KeypressCancelsHoverMove,
-                  REQUIRES_FLAGS_ENABLED(TOUCHPAD_PALM_REJECTION_V2)) {
-    const nsecs_t gestureStartTime = 1000;
-    InputDeviceContext deviceContext(*mDevice, EVENTHUB_ID);
-    UncapturedGestureConverter converter(*mReader->getContext(), deviceContext, DEVICE_ID);
-    converter.setDisplayId(ui::LogicalDisplayId::DEFAULT);
-
-    // Start a move gesture at gestureStartTime
-    Gesture moveGesture(kGestureMove, gestureStartTime, gestureStartTime, -5, 10);
-    std::list<NotifyArgs> args =
-            converter.handleGesture(gestureStartTime, READ_TIME, gestureStartTime, moveGesture);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER)),
-                            VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE))));
-
-    // Key presses with IME connection should cancel ongoing move gesture
-    nsecs_t currentTime = gestureStartTime + 100;
-    mFakePolicy->setIsInputMethodConnectionActive(true);
-    mReader->getContext()->setLastKeyDownTimestamp(currentTime);
-    moveGesture = Gesture(kGestureMove, currentTime, currentTime, -5, 10);
-    args = converter.handleGesture(currentTime, READ_TIME, gestureStartTime, moveGesture);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                        WithMotionAction(AMOTION_EVENT_ACTION_HOVER_EXIT))));
-
-    // any updates in existing move gesture should be ignored
-    moveGesture = Gesture(kGestureMove, currentTime, currentTime, -5, 10);
-    args = converter.handleGesture(currentTime, READ_TIME, gestureStartTime, moveGesture);
-    ASSERT_EQ(0u, args.size());
-
-    // New gesture should not be affected
-    currentTime += 100;
-    moveGesture = Gesture(kGestureMove, currentTime, currentTime, -5, 10);
-    args = converter.handleGesture(currentTime, READ_TIME, currentTime, moveGesture);
-    ASSERT_THAT(args,
-                ElementsAre(VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_HOVER_ENTER)),
-                            VariantWith<NotifyMotionArgs>(
-                                    WithMotionAction(AMOTION_EVENT_ACTION_HOVER_MOVE))));
 }
 
 class UncapturedGestureConverterConsistencyTest : public UncapturedGestureConverterTest {

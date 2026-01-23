@@ -12,13 +12,13 @@ namespace surfaceflingerextension {
 
 class QtiDolphinWrapper {
 public:
-    QtiDolphinWrapper();
+    QtiDolphinWrapper(int width, int height);
     ~QtiDolphinWrapper();
-    bool (*qtiDolphinInit)() = nullptr;
+    bool (*qtiDolphinInit)(int width, int height) = nullptr;
     void (*qtiDolphinSetVsyncPeriod)(nsecs_t vsyncPeriod) = nullptr;
     void (*qtiDolphinTrackBufferIncrement)(const char* name, bool isAutoTimestamp,
-                                           nsecs_t desiredPresentTime) = nullptr;
-    void (*qtiDolphinTrackBufferDecrement)(const char* name, int counter) = nullptr;
+                                           uint32_t flags, nsecs_t desiredPresentTime) = nullptr;
+    void (*qtiDolphinTrackBufferDecrement)(const char* name, int counter, int width, int height) = nullptr;
     void (*qtiDolphinTrackVsyncSignal)() = nullptr;
     void (*qtiDolphinUnblockPendingBuffer)() = nullptr;
     bool (*qtiDolphinIsTargetFpsActive)() = nullptr;

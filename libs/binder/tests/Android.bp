@@ -166,6 +166,7 @@ cc_test {
         "binderRecordedTransactionTest.cpp",
         "binderPersistableBundleTest.cpp",
         "binderStatsSpscQueueTest.cpp",
+        "BinderCallsAggregationUnitTest.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -649,6 +650,37 @@ cc_test {
     ],
     shared_libs: [
         "libbinder_ndk",
+    ],
+}
+
+cc_binary {
+    name: "binder_rpc_test_service_flake_prone",
+    defaults: [
+        "binderRpcTest_service_defaults",
+        "binderRpcTest_static_defaults",
+    ],
+    cflags: [
+        "-DRPC_FLAKE_PRONE=1",
+    ],
+    static_libs: [
+        "libbinder_flake_prone",
+    ],
+}
+
+cc_test {
+    name: "binderRpcTest_flake_prone",
+    defaults: [
+        "binderRpcTest_defaults",
+        "binderRpcTest_static_defaults",
+    ],
+    cflags: [
+        "-DRPC_FLAKE_PRONE=1",
+    ],
+    static_libs: [
+        "libbinder_flake_prone",
+    ],
+    data_bins: [
+        "binder_rpc_test_service_flake_prone",
     ],
 }
 

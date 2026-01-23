@@ -52,6 +52,7 @@ cc_test {
         "CursorInputMapper_test.cpp",
         "DisplayTopologyGraph_test.cpp",
         "EventHub_test.cpp",
+        "TestInputQueue.cpp",
         "FakeEventHub.cpp",
         "FakeInputReaderPolicy.cpp",
         "FakeInputTracingBackend.cpp",

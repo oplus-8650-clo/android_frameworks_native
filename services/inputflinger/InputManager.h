@@ -36,6 +36,7 @@
 
 #include <aidl/com/android/server/inputflinger/IInputFlingerRust.h>
 #include <android/os/BnInputFlinger.h>
+#include <jni.h>
 #include <utils/Errors.h>
 #include <utils/RefBase.h>
 #include <utils/Timers.h>
@@ -121,7 +122,7 @@ public:
     InputManager(const sp<InputReaderPolicyInterface>& readerPolicy,
                  InputDispatcherPolicyInterface& dispatcherPolicy,
                  PointerChoreographerPolicyInterface& choreographerPolicy,
-                 InputFilterPolicyInterface& inputFilterPolicy, JNIEnv* env);
+                 InputFilterPolicyInterface& inputFilterPolicy, JavaVM* vm);
 
     status_t start() override;
     status_t stop() override;

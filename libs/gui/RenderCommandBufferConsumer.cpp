@@ -68,7 +68,7 @@ status_t RenderCommandBufferConsumer::readFromParcel(const Parcel& parcel,
 
 void RenderCommandBufferConsumer::setContext(void* context,
                                              std::function<void(void*)> contextFreeCallback) {
-    mContextFreeCallback = contextFreeCallback;
+    mContextFreeCallback = std::move(contextFreeCallback);
     mContext = context;
 }
 

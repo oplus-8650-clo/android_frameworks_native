@@ -90,8 +90,6 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
         ALOGW("Couldn't set SCHED_FIFO");
     }
 
-    skia::Cache::initializeDiskCache();
-
     mRenderEngine = factory();
 
     pthread_setname_np(pthread_self(), mThreadName);

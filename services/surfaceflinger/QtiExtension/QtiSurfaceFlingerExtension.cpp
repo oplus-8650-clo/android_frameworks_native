@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // #define LOG_NDEBUG 0
@@ -106,8 +106,6 @@ void QtiSurfaceFlingerExtension::qtiInit(SurfaceFlinger* flinger) {
             ALOGI("Layer extension is enabled");
         }
     }
-
-    mQtiDolphinWrapper = new QtiDolphinWrapper();
 
     if (mQtiComposerExtnIntf) {
         if (mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kAdvanceSfOffset)) {
@@ -225,6 +223,8 @@ QtiSurfaceFlingerExtensionIntf* QtiSurfaceFlingerExtension::qtiPostInit(
     }
 
 #endif
+
+    mQtiDolphinWrapper = new QtiDolphinWrapper(displayDevice->getWidth(), displayDevice->getHeight());
 
     return this;
 }
@@ -1695,10 +1695,12 @@ bool QtiSurfaceFlingerExtension::qtiIsFrameEarly(uint32_t layerStackId, int sequ
 }
 
 void QtiSurfaceFlingerExtension::qtiSetVisibleLayerInfo(DisplayId displayId, const char* name,
-                                                        int32_t sequence) {
+                                                        int32_t sequence, Rect displayFrame) {
     auto& visibleLayerInfo = mQtiVisibleLayerInfoMap[displayId];
     visibleLayerInfo.layerName.push_back(name);
     visibleLayerInfo.layerSequence.push_back(sequence);
+    visibleLayerInfo.layerDispFrame[name] = std::make_pair(displayFrame.getWidth(),
+                                                        displayFrame.getHeight());
 }
 
 void QtiSurfaceFlingerExtension::qtiUpdateLayerState(int numLayers) {
@@ -1709,13 +1711,17 @@ void QtiSurfaceFlingerExtension::qtiUpdateLayerState(int numLayers) {
     for (const auto& [token, displayDevice] : mQtiFlinger->mDisplays) {
         auto& VisibleLayerInfo = mQtiVisibleLayerInfoMap[displayDevice->getId()];
 
+#ifdef CONCURRENCY_DETECTION_CONFIG
         if (mSplitLayerExt && mQtiLayerExt) {
             if (VisibleLayerInfo.layerName.size() != 0) {
-                mQtiLayerExt->UpdateLayerState(VisibleLayerInfo.layerName, numLayers);
+                mQtiLayerExt->UpdateLayerState(VisibleLayerInfo.layerDispFrame);
             }
         }
+#endif
+
         VisibleLayerInfo.layerName.clear();
         VisibleLayerInfo.layerSequence.clear();
+        VisibleLayerInfo.layerDispFrame.clear();
     }
 }
 
@@ -1792,16 +1798,16 @@ void QtiSurfaceFlingerExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {
 }
 
 void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferIncrement(const char *name,
-            bool isAutoTimestamp, nsecs_t desiredPresentTime) {
+            bool isAutoTimestamp, uint32_t flags, nsecs_t desiredPresentTime) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, isAutoTimestamp,
+        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, isAutoTimestamp, flags,
                                                            desiredPresentTime);
     }
 }
 
-void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int count) {
+void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int count, int width, int height) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, count);
+        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, count, width, height);
     }
 }
 

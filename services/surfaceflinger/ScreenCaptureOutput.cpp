@@ -95,13 +95,14 @@ renderengine::DisplaySettings ScreenCaptureOutput::generateClientCompositionDisp
     if (mEnableLocalTonemapping) {
         clientCompositionDisplay.tonemapStrategy =
                 renderengine::DisplaySettings::TonemapStrategy::Local;
+    }
+
         if (static_cast<ui::PixelFormat>(buffer->getPixelFormat()) == ui::PixelFormat::RGBA_FP16) {
             clientCompositionDisplay.targetHdrSdrRatio =
                     getState().displayBrightnessNits / getState().sdrWhitePointNits;
         } else {
             clientCompositionDisplay.targetHdrSdrRatio = 1.f;
         }
-    }
 
     return clientCompositionDisplay;
 }

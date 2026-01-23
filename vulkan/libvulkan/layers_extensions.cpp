@@ -40,8 +40,10 @@
 #include <ziparchive/zip_archive.h>
 
 #include <com_android_graphics_libvulkan_flags.h>
-
 using namespace com::android::graphics::libvulkan;
+
+#include <VulkanProperties.sysprop.h>
+using namespace android::sysprop;
 
 // TODO(b/143296676): This file currently builds up global data structures as it
 // loads, and never cleans them up. This means we're doing heap allocations
@@ -78,8 +80,13 @@ struct Layer {
 namespace {
 
 const char kSystemDebugLayerLibraryDir[] = "/data/local/debug/vulkan";
+#if defined(__LP64__)
 const char kSystemPlatformLayerLibraryDir[] = "/system/lib64/vulkan";
 const char kSystemOEMLayerLibraryDir[] = "/product/lib64/vulkan";
+#else
+const char kSystemPlatformLayerLibraryDir[] = "/system/lib/vulkan";
+const char kSystemOEMLayerLibraryDir[] = "/product/lib/vulkan";
+#endif
 
 class LayerLibrary {
    public:
@@ -479,6 +486,34 @@ void DiscoverLayersInPathList(const std::string& pathstr, LayerType type) {
     }
 }
 
+void DiscoverLayersFromProperty(const std::string& path,
+                                const std::string& librariesprop,
+                                LayerType type) {
+    ATRACE_CALL();
+
+    std::vector<std::string> libraries =
+        android::base::Split(librariesprop, ":");
+    for (const auto& filename : libraries) {
+        if (android::base::StartsWith(filename, "libVkLayer") &&
+            android::base::EndsWith(filename, ".so")) {
+            // Check to ensure we haven't seen this layer already
+            // (e.g. an IMPLICIT or EXPLICIT layer)
+
+            bool duplicate = false;
+            for (auto& layer : g_layer_libraries) {
+                if (layer.GetFilename() == filename) {
+                    ALOGV("Skipping duplicate layer %s in %s", filename.c_str(),
+                          path.c_str());
+                    duplicate = true;
+                }
+            }
+
+            if (!duplicate)
+                AddLayerLibrary(path, filename, type);
+        }
+    }
+}
+
 const VkExtensionProperties* FindExtension(
     const std::vector<VkExtensionProperties>& extensions,
     const char* name) {
@@ -547,14 +582,24 @@ void DiscoverLayers() {
         DiscoverLayersInPathList(
             android::GraphicsEnv::getInstance().getLayerPaths(),
             LayerType::EXPLICIT);
-    // TODO: We'll need a different method because: 1) we need to look at system
-    // properties; 2) longer term, we may want to load/Open() OPLs in Zygote and
+    // TODO: longer term, we may want to load/Open() OPLs in Zygote and
     // inherit them into this process (i.e. not Open() and Close() them for each
     // process).
     if (flags::oem_and_platform_layers()) {
-        DiscoverLayersInPathList(kSystemPlatformLayerLibraryDir,
-                                 LayerType::PLATFORM);
-        DiscoverLayersInPathList(kSystemOEMLayerLibraryDir, LayerType::OEM);
+        // The layer properties are colon-separated lists of layer filenames
+        std::string platformLayerLibraryNames =
+            VulkanProperties::platform_layers().value_or("");
+        if (!platformLayerLibraryNames.empty()) {
+            DiscoverLayersFromProperty(kSystemPlatformLayerLibraryDir,
+                                       platformLayerLibraryNames,
+                                       LayerType::PLATFORM);
+        }
+        std::string oemLayerLibraryNames =
+            VulkanProperties::oem_layers().value_or("");
+        if (!oemLayerLibraryNames.empty()) {
+            DiscoverLayersFromProperty(kSystemOEMLayerLibraryDir,
+                                       oemLayerLibraryNames, LayerType::OEM);
+        }
     }
 }
 

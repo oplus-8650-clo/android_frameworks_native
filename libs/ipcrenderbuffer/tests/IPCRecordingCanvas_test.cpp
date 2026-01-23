@@ -40,6 +40,8 @@
 #include <SkFontScanner.h>
 #include <SkFontScanner_FreeType.h>
 #include <SkImage.h>
+#include <SkPath.h>
+#include <SkPathBuilder.h>
 #include <SkPngEncoder.h>
 #include <SkStream.h>
 #include <SkSurface.h>
@@ -287,10 +289,11 @@ TEST_F(IPCRecordingCanvasTest, DrawPath) {
         paint.setColor(SK_ColorRED);
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(10);
-        SkPath path;
-        path.moveTo(10, 10);
-        path.lineTo(100, 100);
-        path.quadTo(150, 10, 200, 100);
+        const SkPath path = SkPathBuilder()
+            .moveTo(10, 10)
+            .lineTo(100, 100)
+            .quadTo(150, 10, 200, 100)
+            .detach();
         c->drawPath(path, paint);
     };
     ASSERT_TRUE(compareRendering(drawPath, "DrawPath"));
@@ -361,10 +364,11 @@ TEST_F(IPCRecordingCanvasTest, StrokeMiter) {
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(20);
         paint.setStrokeMiter(1.0f);
-        SkPath path;
-        path.moveTo(50, 200);
-        path.lineTo(150, 50);
-        path.lineTo(250, 200);
+        const SkPath path = SkPathBuilder()
+            .moveTo(50, 200)
+            .lineTo(150, 50)
+            .lineTo(250, 200)
+            .detach();
         c->drawPath(path, paint);
     };
     ASSERT_TRUE(compareRendering(drawStrokeMiter, "StrokeMiter"));
@@ -395,21 +399,21 @@ TEST_F(IPCRecordingCanvasTest, StrokeJoin) {
         paint.setColor(SK_ColorGREEN);
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(20);
-        SkPath path;
+        SkPathBuilder path;
         path.moveTo(50, 250);
         path.lineTo(100, 200);
         path.lineTo(150, 250);
 
         paint.setStrokeJoin(SkPaint::kMiter_Join);
-        c->drawPath(path, paint);
+        c->drawPath(path.snapshot(), paint);
 
         path.offset(150, 0);
         paint.setStrokeJoin(SkPaint::kRound_Join);
-        c->drawPath(path, paint);
+        c->drawPath(path.snapshot(), paint);
 
         path.offset(150, 0);
         paint.setStrokeJoin(SkPaint::kBevel_Join);
-        c->drawPath(path, paint);
+        c->drawPath(path.snapshot(), paint);
     };
     ASSERT_TRUE(compareRendering(drawStrokeJoin, "StrokeJoin"));
 }

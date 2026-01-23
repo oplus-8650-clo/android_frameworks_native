@@ -30,7 +30,6 @@
 #include <android/dlext.h>
 #include <binder/IServiceManager.h>
 #include <bionic/dlext_namespaces.h>
-#include <com_android_graphics_graphicsenv_flags.h>
 #include <graphicsenv/IGpuService.h>
 #include <log/log.h>
 #include <sys/prctl.h>
@@ -69,8 +68,6 @@ static bool isVndkEnabled() {
     return false;
 }
 } // namespace
-
-namespace graphicsenv_flags = com::android::graphics::graphicsenv::flags;
 
 namespace android {
 
@@ -737,9 +734,6 @@ void GraphicsEnv::nativeToggleAngleAsSystemDriver(bool enabled) {
 }
 
 std::string GraphicsEnv::nativeGetPersistGraphicsEgl() {
-    if (!graphicsenv_flags::query_persist_graphics_egl()) {
-        return "";
-    }
     const sp<IGpuService> gpuService = getGpuService();
     if (!gpuService) {
         ALOGE("No GPU service");

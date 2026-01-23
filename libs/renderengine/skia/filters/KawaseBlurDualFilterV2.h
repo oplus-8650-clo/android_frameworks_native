@@ -24,6 +24,7 @@
 
 #include "../AutoBackendTexture.h"
 #include "RuntimeEffectManager.h"
+#include "ui/Size.h"
 
 namespace android {
 namespace renderengine {
@@ -54,11 +55,13 @@ public:
                             const SkRect& blurRect) const override;
 
     void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) override;
-    bool isBufferPreallocated() const override { return mProtectedTextures[0] != nullptr; }
+    bool isBufferPreallocated(ui::Size displaySize) const override {
+        return mProtectedTextures[0] != nullptr && displaySize == mPreallocatedDisplaySize;
+    }
 
 private:
-    static constexpr int64_t kProtectedUsageFlags = BufferUsage::PROTECTED |
-            BufferUsage::GPU_RENDER_TARGET | BufferUsage::GPU_TEXTURE;
+    static constexpr uint64_t kProtectedUsageFlags =
+            BufferUsage::PROTECTED | BufferUsage::GPU_RENDER_TARGET | BufferUsage::GPU_TEXTURE;
 
     sk_sp<SkRuntimeEffect> mQuarterResDownSampleBlurEffect;
     sk_sp<SkRuntimeEffect> mHalfResDownSampleBlurEffect;
@@ -69,6 +72,7 @@ private:
     // rendering that is potentially modified by multiple threads is guaranteed thread-safe.
     mutable std::mutex mRenderingMutex;
     std::shared_ptr<AutoBackendTexture::LocalRef> mProtectedTextures[kMaxSurfaces];
+    ui::Size mPreallocatedDisplaySize;
 
     void blurInto(const sk_sp<SkSurface>& drawSurface, const int destWidth,
                   const sk_sp<SkImage>& readImage, const float radius, const float alpha,

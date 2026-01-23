@@ -68,6 +68,7 @@ class HdrCapabilities;
 class IGraphicBufferProducer;
 class ITunnelModeEnabledListener;
 class Region;
+class Surface;
 class TransactionCompletedListener;
 
 using gui::DisplayCaptureArgs;
@@ -82,14 +83,14 @@ struct SurfaceControlStats {
                         const sp<Fence>& presentFence, const sp<Fence>& prevReleaseFence,
                         std::optional<uint32_t> hint, FrameEventHistoryStats eventStats,
                         uint32_t currentMaxAcquiredBufferCount,
-                        std::optional<gui::CornerRadii> cornerRadii)
+                        const std::optional<gui::CornerRadii>& cornerRadii)
           : surfaceControl(sc),
             latchTime(latchTime),
             acquireTimeOrFence(std::move(acquireTimeOrFence)),
             presentFence(presentFence),
             previousReleaseFence(prevReleaseFence),
             transformHint(hint),
-            frameEventStats(eventStats),
+            frameEventStats(std::move(eventStats)),
             currentMaxAcquiredBufferCount(currentMaxAcquiredBufferCount),
             cornerRadii(cornerRadii) {}
 
@@ -126,7 +127,7 @@ using TrustedPresentationCallback = std::function<void(void*, bool)>;
 
 class ReleaseCallbackThread {
 public:
-    void addReleaseCallback(const ReleaseCallbackId, sp<Fence>, bool removeFromCache);
+    void addReleaseCallback(const ReleaseCallbackId&, sp<Fence>, bool removeFromCache);
     void threadMain();
 
 private:
@@ -206,8 +207,9 @@ public:
     static status_t getHdrConversionCapabilities(std::vector<gui::HdrConversionCapability>*);
     // Sets the HDR conversion strategy for the device. in case when HdrConversionStrategy has
     // autoAllowedHdrTypes set. Returns Hdr::INVALID in other cases.
-    static status_t setHdrConversionStrategy(gui::HdrConversionStrategy hdrConversionStrategy,
-                                             ui::Hdr* outPreferredHdrOutputType);
+    static status_t setHdrConversionStrategy(
+            const gui::HdrConversionStrategy& hdrConversionStrategy,
+            ui::Hdr* outPreferredHdrOutputType);
     // Returns whether HDR conversion is supported by the device.
     static status_t getHdrOutputConversionSupport(bool* isSupported);
 
@@ -373,7 +375,7 @@ public:
                                      PixelFormat format,  // pixel-format desired
                                      int32_t flags = 0,   // usage flags
                                      const sp<IBinder>& parentHandle = nullptr, // parentHandle
-                                     LayerMetadata metadata = LayerMetadata(),  // metadata
+                                     const LayerMetadata& metadata = LayerMetadata(), // metadata
                                      uint32_t* outTransformHint = nullptr);
 
     status_t createSurfaceChecked(const String8& name, // name of the surface
@@ -381,9 +383,9 @@ public:
                                   uint32_t h,          // height in pixel
                                   PixelFormat format,  // pixel-format desired
                                   sp<SurfaceControl>* outSurface,
-                                  int32_t flags = 0,                         // usage flags
-                                  const sp<IBinder>& parentHandle = nullptr, // parentHandle
-                                  LayerMetadata metadata = LayerMetadata(),  // metadata
+                                  int32_t flags = 0,                               // usage flags
+                                  const sp<IBinder>& parentHandle = nullptr,       // parentHandle
+                                  const LayerMetadata& metadata = LayerMetadata(), // metadata
                                   uint32_t* outTransformHint = nullptr);
 
     // Creates a mirrored hierarchy for the mirrorFromSurface. This returns a SurfaceControl
@@ -506,7 +508,7 @@ public:
 
         void cacheBuffers();
         void registerSurfaceControlForCallback(const sp<SurfaceControl>& sc);
-        void setReleaseBufferCallback(BufferData*, ReleaseBufferCallback);
+        void setReleaseBufferCallback(BufferData*, const ReleaseBufferCallback&);
 
     public:
         Transaction();
@@ -596,7 +598,8 @@ public:
         Transaction& setBuffer(const sp<SurfaceControl>& sc, const sp<GraphicBuffer>& buffer,
                                const std::optional<sp<Fence>>& fence = std::nullopt,
                                const std::optional<uint64_t>& frameNumber = std::nullopt,
-                               uint32_t producerId = 0, ReleaseBufferCallback callback = nullptr,
+                               uint32_t producerId = 0,
+                               const ReleaseBufferCallback& callback = nullptr,
                                nsecs_t dequeueTime = -1);
         Transaction& unsetBuffer(const sp<SurfaceControl>& sc);
         std::shared_ptr<BufferData> getAndClearBuffer(const sp<SurfaceControl>& sc);
@@ -697,7 +700,7 @@ public:
          * in SurfaceComposerClient will be unregistered.
          */
         Transaction& setTrustedPresentationCallback(const sp<SurfaceControl>& sc,
-                                                    TrustedPresentationCallback callback,
+                                                    const TrustedPresentationCallback& callback,
                                                     const TrustedPresentationThresholds& thresholds,
                                                     void* context,
                                                     sp<PresentationCallbackRAII>& outCallbackOwner);
@@ -709,11 +712,11 @@ public:
         Transaction& notifyProducerDisconnect(const sp<SurfaceControl>& sc);
 
         Transaction& setInputWindowInfo(const sp<SurfaceControl>& sc,
-                                        sp<gui::WindowInfoHandle> info);
+                                        const sp<gui::WindowInfoHandle>& info);
         Transaction& setFocusedWindow(const gui::FocusRequest& request);
 
         Transaction& addWindowInfosReportedListener(
-                sp<gui::IWindowInfosReportedListener> windowInfosReportedListener);
+                const sp<gui::IWindowInfosReportedListener>& windowInfosReportedListener);
 
         // Set a color transform matrix on the given layer on the built-in display.
         Transaction& setColorTransform(const sp<SurfaceControl>& sc, const mat3& matrix,
@@ -892,8 +895,12 @@ public:
          */
         Transaction& setRenderCommandBufferFrameId(const sp<SurfaceControl>& sc, uint64_t frameId);
 
+        status_t setDisplaySurface(const sp<IBinder>& token, const sp<Surface>& surface);
+
         status_t setDisplaySurface(const sp<IBinder>& token,
-                const sp<IGraphicBufferProducer>& bufferProducer);
+                                   const sp<IGraphicBufferProducer>& bufferProducer)
+                __attribute__((deprecated(
+                        "Use setDisplaySurface(const sp<IBinder>&, const sp<Surface>&) instead.")));
 
         void setDisplayLayerStack(const sp<IBinder>& token, ui::LayerStack);
 
@@ -1028,8 +1035,8 @@ public:
 
     binder::Status onJankData(const std::vector<gui::JankData>& jankData) override;
 
-    static status_t addListener(sp<SurfaceControl> sc, sp<JankDataListener> listener);
-    static status_t removeListener(sp<JankDataListener> listener);
+    static status_t addListener(const sp<SurfaceControl>& sc, const sp<JankDataListener>& listener);
+    static status_t removeListener(const sp<JankDataListener>& listener);
 
 private:
     std::vector<sp<JankDataListener>> getActiveListeners();
@@ -1061,7 +1068,7 @@ public:
 
     virtual bool onJankDataAvailable(const std::vector<gui::JankData>& jankData) = 0;
 
-    status_t addListener(sp<SurfaceControl> sc) {
+    status_t addListener(const sp<SurfaceControl>& sc) {
         if (mLayerId != -1) {
             removeListener(0);
             mLayerId = -1;
@@ -1069,8 +1076,7 @@ public:
 
         int32_t layerId = sc->getLayerId();
         status_t status =
-                JankDataListenerFanOut::addListener(std::move(sc),
-                                                    sp<JankDataListener>::fromExisting(this));
+                JankDataListenerFanOut::addListener(sc, sp<JankDataListener>::fromExisting(this));
         if (status == OK) {
             mLayerId = layerId;
         }
@@ -1116,9 +1122,7 @@ protected:
 
     struct SurfaceStatsCallbackEntry {
         SurfaceStatsCallbackEntry(void* context, void* cookie, SurfaceStatsCallback callback)
-                : context(context),
-                cookie(cookie),
-                callback(callback) {}
+              : context(context), cookie(cookie), callback(std::move(callback)) {}
 
         void* context;
         void* cookie;
@@ -1158,11 +1162,12 @@ public:
     void removeQueueStallListener(void *id);
 
     sp<SurfaceComposerClient::PresentationCallbackRAII> addTrustedPresentationCallback(
-            TrustedPresentationCallback tpc, int id, void* context);
+            const TrustedPresentationCallback& tpc, int id, void* context);
     void clearTrustedPresentationCallback(int id);
 
-    void addSurfaceStatsListener(void* context, void* cookie, sp<SurfaceControl> surfaceControl,
-                SurfaceStatsCallback listener);
+    void addSurfaceStatsListener(void* context, void* cookie,
+                                 const sp<SurfaceControl>& surfaceControl,
+                                 SurfaceStatsCallback listener);
     void removeSurfaceStatsListener(void* context, void* cookie);
 
     void setReleaseBufferCallback(const ReleaseCallbackId&, ReleaseBufferCallback);

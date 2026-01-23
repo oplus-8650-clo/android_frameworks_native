@@ -436,7 +436,7 @@ void OutputLayer::updateCompositionState(
         // already be adapted to remap 1.0 to the SDR white point in the panel's luminance
         // space.
         if (hdrRenderType == HdrRenderType::DISPLAY_HDR) {
-            if (!FlagManager::getInstance().fp16_client_target() || !isLayerFp16) {
+            if (!isLayerFp16) {
                 layerBrightnessNits *= layerFEState->currentHdrSdrRatio;
             }
         }

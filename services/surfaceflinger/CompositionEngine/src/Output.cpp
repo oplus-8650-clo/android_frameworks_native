@@ -471,28 +471,30 @@ ftl::Future<std::monostate> Output::present(
         *exclusive = panopticon::exclusive(std::to_string(displayId->value));
     }
 
-    const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
-        return getDisplayIdVariant()
-                .and_then(asPhysicalDisplayId)
-                .and_then([&refreshArgs](PhysicalDisplayId id) {
-                    return refreshArgs.frameTargets.get(id);
-                })
-                .transform([](const auto& frameTargetPtr) {
-                    return frameTargetPtr.get()->expectedPresentTime();
-                })
-                .transform([](TimePoint expectedPresentTime) {
-                    return base::StringPrintf(" vsyncIn %.2fms",
-                                              ticks<std::milli, float>(expectedPresentTime -
-                                                                       TimePoint::now()));
-                })
-                .or_else([] {
-                    // There is no vsync for this output.
-                    return std::make_optional(std::string());
-                })
-                .value();
-    };
-    SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
-                   stringifyExpectedPresentTime().c_str());
+    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+        const auto stringifyExpectedPresentTime = [this, &refreshArgs]() -> std::string {
+            return getDisplayIdVariant()
+                    .and_then(asPhysicalDisplayId)
+                    .and_then([&refreshArgs](PhysicalDisplayId id) {
+                        return refreshArgs.frameTargets.get(id);
+                    })
+                    .transform([](const auto& frameTargetPtr) {
+                        return frameTargetPtr.get()->expectedPresentTime();
+                    })
+                    .transform([](TimePoint expectedPresentTime) {
+                        return base::StringPrintf(" vsyncIn %.2fms",
+                                                  ticks<std::milli, float>(expectedPresentTime -
+                                                                           TimePoint::now()));
+                    })
+                    .or_else([] {
+                        // There is no vsync for this output.
+                        return std::make_optional(std::string());
+                    })
+                    .value();
+        };
+        SFTRACE_FORMAT("%s for %s%s", __func__, mNamePlusId.c_str(),
+                       stringifyExpectedPresentTime().c_str());
+    }
     ALOGV(__FUNCTION__);
     updateColorProfile(refreshArgs);
     updateCompositionState(refreshArgs);
@@ -608,15 +610,8 @@ void Output::ensureOutputLayerIfVisible(sp<compositionengine::LayerFE>& layerFE,
         return;
     }
 
-    bool computeAboveCoveredExcludingOverlays = [&]() {
-        if (FlagManager::getInstance().connected_displays_cursor()) {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.skipScreenshot;
-        } else {
-            return coverage.aboveCoveredLayersExcludingOverlays &&
-                    !layerFEState->outputFilter.toInternalDisplay;
-        }
-    }();
+    const bool computeAboveCoveredExcludingOverlays =
+        coverage.aboveCoveredLayersExcludingOverlays && !layerFEState->outputFilter.skipScreenshot;
 
     /*
      * opaqueRegion: area of a surface that is fully opaque.
@@ -1452,9 +1447,11 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     ALOGV(__FUNCTION__);
 
     const auto& outputState = getState();
-    const TracedOrdinal<bool> hasClientComposition = {
-        base::StringPrintf("hasClientComposition %s", mNamePlusId.c_str()),
-        outputState.usesClientComposition};
+    const TracedOrdinal<bool> hasClientComposition =
+            {CC_UNLIKELY(SFTRACE_ENABLED())
+                     ? base::StringPrintf("hasClientComposition %s", mNamePlusId.c_str())
+                     : "",
+             outputState.usesClientComposition};
     if (!hasClientComposition) {
         setExpensiveRenderingExpected(false);
         return base::unique_fd();
@@ -1606,6 +1603,11 @@ renderengine::DisplaySettings Output::generateClientCompositionDisplaySettings(
     clientCompositionDisplay.colorTransform = outputState.colorTransformMatrix;
     clientCompositionDisplay.deviceHandlesColorTransform =
             outputState.usesDeviceComposition || getSkipColorTransform();
+
+    if (getState().displayBrightnessNits > 0.0f && getState().sdrWhitePointNits > 0.0f) {
+        clientCompositionDisplay.targetHdrSdrRatio =
+                getState().displayBrightnessNits / getState().sdrWhitePointNits;
+    }
     return clientCompositionDisplay;
 }
 
@@ -1674,13 +1676,32 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                                              BlurRegionsOnly
                                    : LayerFE::ClientCompositionTargetSettings::BlurSetting::
                                              Enabled);
+
+                std::shared_ptr<gui::DisplayLuts> luts;
+
+                if (layerFEState->luts) {
+                    luts = layerFEState->luts;
+                } else {
+                    bool hasSmpte2094_50 = false;
+
+                    if (FlagManager::getInstance().force_agtm_without_luts() &&
+                        layerFEState->buffer) {
+                        std::optional<std::vector<uint8_t>> smpte2094_50;
+                        status_t err = layerFEState->buffer->getSmpte2094_50(&smpte2094_50);
+                        hasSmpte2094_50 = err == OK && smpte2094_50;
+                    }
+
+                    if (!hasSmpte2094_50 && layer->getState().hwc) {
+                        luts = layer->getState().hwc->luts;
+                    }
+                }
                 compositionengine::LayerFE::ClientCompositionTargetSettings
                         targetSettings{.clip = clip,
                                        .needsFiltering = layer->needsFiltering() ||
                                                outputState.needsFiltering,
                                        .isSecure = outputState.isSecure,
-                                       .isProtected = outputState.isProtected &&
-                                               supportsProtectedContent,
+                                       .isProtected =
+                                               outputState.isProtected && supportsProtectedContent,
                                        .viewport = outputState.layerStackSpace.getContent(),
                                        .dataspace = outputDataspace,
                                        .realContentIsVisible = realContentIsVisible,
@@ -1688,8 +1709,7 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                                        .blurSetting = blurSetting,
                                        .whitePointNits = layerState.whitePointNits,
                                        .treat170mAsSrgb = outputState.treat170mAsSrgb,
-                                       .luts = layer->getState().hwc ? layer->getState().hwc->luts
-                                                                     : nullptr};
+                                       .luts = luts};
                 if (auto clientCompositionSettings =
                             layerFE.prepareClientComposition(targetSettings)) {
                     clientCompositionLayers.push_back(std::move(*clientCompositionSettings));
@@ -1944,10 +1964,6 @@ bool Output::mustRecompose() const {
 
 float Output::getHdrSdrRatio(const std::shared_ptr<renderengine::ExternalTexture>& buffer) const {
     if (buffer == nullptr) {
-        return 1.0f;
-    }
-
-    if (!FlagManager::getInstance().fp16_client_target()) {
         return 1.0f;
     }
 

@@ -835,7 +835,7 @@ void Layer::prepareReleaseCallbacks(ftl::Future<FenceResult> futureFenceResult,
 
     if (ch != nullptr) {
         ch->previousReleaseCallbackId = mPreviousReleaseCallbackId;
-        ch->previousReleaseFences.emplace_back(std::move(futureFenceResult));
+        ch->fenceMerger.addFuture(std::move(futureFenceResult));
         ch->name = mName;
     } else {
         // If we didn't get a release callback yet (e.g. some scenarios when capturing
@@ -1168,7 +1168,7 @@ bool Layer::setTransactionCompletedListeners(const std::vector<sp<CallbackHandle
                 // Add fence from previous screenshot now so that it can be dispatched to the
                 // client.
                 for (auto& [_, future] : mAdditionalPreviousReleaseFences) {
-                    handle->previousReleaseFences.emplace_back(std::move(future));
+                    handle->fenceMerger.addFuture(std::move(future));
                 }
                 mAdditionalPreviousReleaseFences.clear();
             }

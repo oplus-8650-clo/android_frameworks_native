@@ -11,13 +11,6 @@ flag {
 } # adpf_gpu_sf
 
 flag {
-  name: "anchor_list"
-  namespace: "core_graphics"
-  description: "Use an anchor list for frame rate selection"
-  bug: "356986687"
-} # anchor_list
-
-flag {
   name: "arr_setframerate_api"
   namespace: "core_graphics"
   description: "New SDK Surface#setFrameRate API and Surface.FrameRateParams for Android 16"
@@ -34,6 +27,26 @@ flag {
   is_fixed_read_only: true
   is_exported: true
 } # arr_surfacecontrol_setframerate_api
+
+flag {
+  name: "bugfix_resize_virtual_display_surfaces"
+  namespace: "core_graphics"
+  description: "Surfaces should be resized when virtual display size is set"
+  bug: "391237198"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # bugfix_resize_virtual_display_surfaces
+
+flag {
+  name: "color_transform_translation"
+  namespace: "core_graphics"
+  description: "Fixes a bug that incorrectly applies a the translation component of global color transforms to source alpha"
+  bug: "432040449"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # color_transform_translation
 
 flag {
   name: "configure_work_duration"
@@ -119,6 +132,13 @@ flag {
   description: "Guards use of the new display command modeset"
   bug: "373900661"
 } # display_command_modeset
+
+flag {
+  name: "fence_handling"
+  namespace: "window_surfaces"
+  description: "Unblock main thread with asynchronous fence handling"
+  bug: "428611036"
+} # fence_handling
 
 flag {
   name: "follower_arbitrary_refresh_rate_selection"
@@ -271,21 +291,11 @@ flag {
 } # offload_gpu_composition
 
 flag {
-  name: "parse_edid_version_and_input_type"
-  namespace: "desktop_display"
+  name: "parse_edid_version_and_input_type_v2"
+  namespace: "serviceability"
   description: "Extends the display information parsed and provided by SurfaceFlinger to include EDID version and input type."
   bug: "420767380"
-} # parse_edid_version_and_input_type
-
-flag {
-  name: "re_check_fence"
-  namespace: "core_graphics"
-  description: "Check fence status before waiting for fence in RenderEngine"
-  bug: "446240423"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # re_check_fence
+} # parse_edid_version_and_input_type_v2
 
 flag {
   name: "re_powered_off_displays_inform_cache_budgets"
@@ -304,16 +314,6 @@ flag {
   bug: "384816457"
   is_exported: true
 } # readback_screenshot
-
-flag {
-  name: "resync_on_tx_separate_timer"
-  namespace: "core_graphics"
-  description: "Keep a seaprate resync timer for resync triggered by transactions"
-  bug: "439654802"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # resync_on_tx_separate_timer
 
 flag {
   name: "set_client_drawn_corner_radii"
@@ -360,14 +360,6 @@ flag {
   bug: "352320847"
   is_fixed_read_only: true
 } # stable_edid_ids
-
-flag {
-    name: "stop_layer"
-    namespace: "window_surfaces"
-    description: "Enables stop layers when building layer snapshots"
-    bug: "403312802"
-    is_fixed_read_only: true
-} # stop_layer
 
 flag {
   name: "synced_resolution_switch"

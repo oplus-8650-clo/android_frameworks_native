@@ -22,6 +22,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <jni.h>
 #include <memory>
 
 namespace android::input_trace::impl {
@@ -37,23 +38,23 @@ struct Visitor : V... {
 } // namespace
 
 std::shared_ptr<input_trace::InputTracingBackendInterface> createInputTracingBackendIfEnabled(
-        JNIEnv* env) {
+        JavaVM* vm) {
     static const bool isDebuggable = base::GetBoolProperty("ro.debuggable", false);
     if (!isDebuggable) {
         return nullptr;
     }
     return std::make_shared<input_trace::impl::ThreadedBackend<
-            input_trace::impl::PerfettoBackend>>(input_trace::impl::PerfettoBackend(), env);
+            input_trace::impl::PerfettoBackend>>(input_trace::impl::PerfettoBackend(), vm);
 }
 
 // --- ThreadedBackend ---
 
 template <typename Backend>
-ThreadedBackend<Backend>::ThreadedBackend(Backend&& innerBackend, JNIEnv* env)
+ThreadedBackend<Backend>::ThreadedBackend(Backend&& innerBackend, JavaVM* vm)
       : mBackend(std::move(innerBackend)),
         mTracerThread(
                 "InputTracer", [this]() { threadLoop(); },
-                [this]() { mThreadWakeCondition.notify_all(); }, /*isInCriticalPath=*/false, env) {}
+                [this]() { mThreadWakeCondition.notify_all(); }, /*isInCriticalPath=*/false, vm) {}
 
 template <typename Backend>
 ThreadedBackend<Backend>::~ThreadedBackend() {

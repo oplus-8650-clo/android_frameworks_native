@@ -1,4 +1,4 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
@@ -63,7 +63,7 @@ public:
     virtual void qtiUpdateDisplayExtension(uint32_t displayId, uint32_t configId,
                                            bool connected) = 0;
     virtual void qtiUpdateDisplaysList(sp<DisplayDevice> display, bool addDisplay) = 0;
-    virtual void qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId, 
+    virtual void qtiUpdateOnProcessDisplayHotplug(uint32_t hwcDisplayId,
                                                   const HWComposer::HotplugEvent hotplugEvent,
                                                   PhysicalDisplayId id) = 0;
     virtual void qtiUpdateOnComposerHalHotplug(hal::HWDisplayId hwcDisplayId,
@@ -157,7 +157,7 @@ public:
                                  uint32_t curLayerStackId, uint32_t drawLayerStackId) = 0;
     virtual uint32_t qtiGetLayerClass(std::string mName) = 0;
     virtual void qtiSetVisibleLayerInfo(DisplayId displayId,
-                                 const char* name, int32_t sequence) = 0;
+                                 const char* name, int32_t sequence, Rect displayFrame) = 0;
     virtual bool qtiIsSmomoOptimalRefreshActive() = 0;
 
     /*
@@ -165,8 +165,8 @@ public:
      */
     virtual void qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod);
     virtual void qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                nsecs_t desiredPresentTime);
-    virtual void qtiDolphinTrackBufferDecrement(const char *name, int count);
+                                                uint32_t flags, nsecs_t desiredPresentTime);
+    virtual void qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height);
     virtual void qtiDolphinTrackVsyncSignal();
     virtual void qtiDolphinUnblockPendingBuffer();
     virtual bool qtiDolphinIsTargetFpsActive() = 0;

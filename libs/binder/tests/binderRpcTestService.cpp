@@ -204,6 +204,8 @@ int main(int argc, char* argv[]) {
         }
         service->setMinRpcThreads(serverConfig.numMinThreadsPerBinder);
         service->server = server;
+        sp<MyBinderRpcTestAndroid> extension = sp<MyBinderRpcTestAndroid>::make();
+        service->setExtension(extension);
         return service;
     });
 

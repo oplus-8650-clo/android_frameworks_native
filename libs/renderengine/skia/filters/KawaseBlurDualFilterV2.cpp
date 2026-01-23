@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-#include "SkColorType.h"
-#include "SkImage.h"
-#include "SkImageInfo.h"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "KawaseBlurDualFilterV2.h"
+
 #include <SkAlphaType.h>
 #include <SkBlendMode.h>
 #include <SkCanvas.h>
+#include <SkColorType.h>
 #include <SkData.h>
+#include <SkImage.h>
+#include <SkImageInfo.h>
 #include <SkPaint.h>
 #include <SkRRect.h>
 #include <SkRuntimeEffect.h>
@@ -33,10 +34,10 @@
 #include <SkSurface.h>
 #include <SkTileMode.h>
 #include <common/FlagManager.h>
+#include <common/trace.h>
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
 #include <log/log.h>
-#include <utils/Trace.h>
 
 #include "RuntimeEffectManager.h"
 
@@ -288,21 +289,35 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generate(SkiaGpuContext* context,
 }
 
 void KawaseBlurDualFilterV2::preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) {
+    SFTRACE_CALL();
     std::lock_guard<std::mutex> lock(mRenderingMutex);
 
+    mPreallocatedDisplaySize = size;
+    size_t totalBytes = 0;
     for (int i = 0; i < kMaxSurfaces; i++) {
         const int newW =
                 std::max(1, static_cast<int>(static_cast<float>(size.width) / kScales[i]));
         const int newH =
                 std::max(1, static_cast<int>(static_cast<float>(size.height) / kScales[i]));
 
-        sp<GraphicBuffer> buffer = sp<GraphicBuffer>::make(newW, newH, PIXEL_FORMAT_RGBA_8888, 1,
-                                                           kProtectedUsageFlags);
+        sp<GraphicBuffer> buffer =
+                sp<GraphicBuffer>::make(newW, newH, PIXEL_FORMAT_RGBA_8888, 1, kProtectedUsageFlags,
+                                        "KawaseBlurDualFilterV2");
+        LOG_ALWAYS_FATAL_IF(buffer->initCheck() != OK,
+                            "Failed to preallocate GraphicBuffer for intermediate blur surface: "
+                            "%s. Is protected memory supported? (i:%d, %dx%x, RGBA_8888, "
+                            "usage:0x%" PRIx64 ")",
+                            statusToString(buffer->initCheck()).c_str(), i, newW, newH,
+                            kProtectedUsageFlags);
         std::unique_ptr<SkiaBackendTexture> backendTexture =
                 protectedContext->makeBackendTexture(buffer->toAHardwareBuffer(), true);
         mProtectedTextures[i] = std::make_shared<AutoBackendTexture::LocalRef>(
                 std::move(backendTexture), mTextureCleanupMgr);
+        totalBytes += newW * newH * bytesPerPixel(PIXEL_FORMAT_RGBA_8888);
     }
+    ALOGD("(Re)allocated %zu bytes of protected memory for intermediate blur surfaces (%dx%d "
+          "display)",
+          totalBytes, size.width, size.height);
 }
 
 } // namespace skia

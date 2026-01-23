@@ -24,6 +24,7 @@
 #include "cutils/properties.h"
 #include "renderengine/DisplaySettings.h"
 #include "renderengine/LayerSettings.h"
+#include "renderengine/RenderEngine.h"
 #include "renderengine/impl/ExternalTexture.h"
 #include "ui/GraphicBuffer.h"
 #include "ui/GraphicTypes.h"
@@ -45,6 +46,8 @@ namespace {
 static const std::string kCacheAvailableProp = "service.sf.cache_dir_available";
 static const char* kEglShaderCachePath = "/data/misc/surfaceflinger/egl_shaders";
 static const char* kSkiaShaderCachePath = "/data/misc/surfaceflinger/skia_shaders";
+static const char* kSkiaPersistentPipelinesPath =
+        "/data/misc/surfaceflinger/skia_graphite_pipelines";
 
 // clang-format off
 // Any non-identity matrix will do.
@@ -1061,25 +1064,42 @@ void Cache::primeShaderCache(SkiaRenderEngine* renderengine, PrimeCacheConfig co
     }
 }
 
-void Cache::initializeDiskCache() {
-    static bool sInitialized = false;
-    if (sInitialized) return;
-
+static void maybeSetDiskCacheFilename(uirenderer::skiapipeline::ShaderCache& cache,
+                                      const char* filename) {
     if (FlagManager::getInstance().shader_disk_cache()) {
-        auto& cache = uirenderer::skiapipeline::ShaderCache::get();
         auto before = systemTime();
         SFTRACE_NAME("Initializing disk cache");
         if (base::WaitForProperty(kCacheAvailableProp, "1", std::chrono::seconds(5))) {
             auto after = systemTime();
             ALOGD("Waited %.4fms for disk to be ready", (after - before) / 1000000.0f);
             egl_set_cache_filename(kEglShaderCachePath);
-            cache.setFilename(kSkiaShaderCachePath);
+            cache.setFilename(filename);
         } else {
             ALOGW("Timeout waiting for shader disk cache location");
         }
     }
+}
 
-    sInitialized = true;
+void Cache::initializeGaneshDiskCache() {
+    static bool sGaneshInitialized = false;
+
+    auto& cache = uirenderer::skiapipeline::ShaderCache::get(
+            renderengine::RenderEngine::SkiaBackend::Ganesh);
+    if (!sGaneshInitialized) {
+        maybeSetDiskCacheFilename(cache, kSkiaShaderCachePath);
+        sGaneshInitialized = true;
+    }
+}
+
+void Cache::initializeGraphiteDiskCache() {
+    static bool sGraphiteInitialized = false;
+
+    auto& cache = uirenderer::skiapipeline::ShaderCache::get(
+            renderengine::RenderEngine::SkiaBackend::Graphite);
+    if (!sGraphiteInitialized) {
+        maybeSetDiskCacheFilename(cache, kSkiaPersistentPipelinesPath);
+        sGraphiteInitialized = true;
+    }
 }
 
 } // namespace android::renderengine::skia

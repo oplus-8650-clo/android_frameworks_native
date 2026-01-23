@@ -116,8 +116,8 @@ public:
     SurfaceStats(const sp<IBinder>& sc, std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence,
                  const sp<Fence>& prevReleaseFence, std::optional<uint32_t> hint,
                  uint32_t currentMaxAcquiredBuffersCount,
-                 std::optional<gui::CornerRadii> cornerRadii,
-                 FrameEventHistoryStats frameEventStats,
+                 const std::optional<gui::CornerRadii>& cornerRadii,
+                 const FrameEventHistoryStats& frameEventStats,
                  ReleaseCallbackId previousReleaseCallbackId)
           : surfaceControl(sc),
             acquireTimeOrFence(std::move(acquireTimeOrFence)),
@@ -126,7 +126,7 @@ public:
             currentMaxAcquiredBufferCount(currentMaxAcquiredBuffersCount),
             cornerRadii(cornerRadii),
             eventStats(frameEventStats),
-            previousReleaseCallbackId(previousReleaseCallbackId) {}
+            previousReleaseCallbackId(std::move(previousReleaseCallbackId)) {}
 
     sp<IBinder> surfaceControl;
     std::variant<nsecs_t, sp<Fence>> acquireTimeOrFence = -1;
@@ -148,8 +148,9 @@ public:
     TransactionStats(const std::unordered_set<CallbackId, CallbackIdHash>& ids)
           : callbackIds(ids.begin(), ids.end()) {}
     TransactionStats(const std::vector<CallbackId>& ids, nsecs_t latch, const sp<Fence>& present,
-                     const std::vector<SurfaceStats>& surfaces)
-          : callbackIds(ids), latchTime(latch), presentFence(present), surfaceStats(surfaces) {}
+                     std::vector<SurfaceStats> surfaces)
+          : callbackIds(ids), latchTime(latch), presentFence(present),
+            surfaceStats(std::move(surfaces)) {}
 
     std::vector<CallbackId> callbackIds;
     nsecs_t latchTime = -1;

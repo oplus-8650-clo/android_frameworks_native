@@ -369,7 +369,8 @@ namespace android {
     DEFINE_KEYCODE(F21), \
     DEFINE_KEYCODE(F22), \
     DEFINE_KEYCODE(F23), \
-    DEFINE_KEYCODE(F24)
+    DEFINE_KEYCODE(F24), \
+    DEFINE_KEYCODE(ACCESSIBILITY)
 
 // NOTE: If you add a new axis here you must also add it to several other files.
 //       Refer to frameworks/base/core/java/android/view/MotionEvent.java for the full list.

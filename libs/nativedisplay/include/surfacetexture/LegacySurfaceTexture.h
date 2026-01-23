@@ -321,7 +321,7 @@ protected:
      * abandonLocked overrides the ConsumerBase method to clear
      * mCurrentTextureImage in addition to the ConsumerBase behavior.
      */
-    virtual void abandonLocked();
+    virtual void abandonLocked(BufferFreedCallback onBufferFreed = [](auto&) {}) override;
 
     /**
      * dumpLocked overrides the ConsumerBase method to dump SurfaceTexture-
@@ -333,19 +333,22 @@ protected:
      * acquireBufferLocked overrides the ConsumerBase method to update the
      * mEglSlots array in addition to the ConsumerBase behavior.
      */
-    virtual status_t acquireBufferLocked(BufferItem* item, nsecs_t presentWhen,
-                                         uint64_t maxFrameNumber = 0) override;
+    virtual status_t acquireBufferLocked(
+            BufferItem* item, nsecs_t presentWhen, uint64_t maxFrameNumber = 0,
+            BufferFreedCallback onBufferFreed = [](auto&) {}) override;
 
     /**
      * releaseBufferLocked overrides the ConsumerBase method to update the
      * mEglSlots array in addition to the ConsumerBase.
      */
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
-    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer) override;
+    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer>& graphicBuffer,
+                                         BufferFreedCallback onBufferFreed) override;
 #else
-    virtual status_t releaseBufferLocked(int slot, const sp<GraphicBuffer> graphicBuffer,
-                                         EGLDisplay display = EGL_NO_DISPLAY,
-                                         EGLSyncKHR eglFence = EGL_NO_SYNC_KHR) override;
+    virtual status_t releaseBufferLocked(
+            int slot, const sp<GraphicBuffer>& graphicBuffer, EGLDisplay display = EGL_NO_DISPLAY,
+            EGLSyncKHR eglFence = EGL_NO_SYNC_KHR,
+            BufferFreedCallback onBufferFreed = [](auto&) {}) override;
 #endif
 
     /**
@@ -355,7 +358,7 @@ protected:
      *
      * This method must be called with mMutex locked.
      */
-    virtual void freeBufferLocked(int slotIndex);
+    virtual void freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) override;
 
     /**
      * computeCurrentTransformMatrixLocked computes the transform matrix for the

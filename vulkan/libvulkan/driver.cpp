@@ -667,11 +667,11 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
+            case ProcHook::KHR_get_physical_device_properties2:
             case ProcHook::EXT_debug_report:
                 // both we and HAL can take part in
                 hook_extensions_.set(ext_bit);
                 break;
-            case ProcHook::KHR_get_physical_device_properties2:
             case ProcHook::KHR_device_group_creation:
             case ProcHook::KHR_external_memory_capabilities:
             case ProcHook::KHR_external_semaphore_capabilities:
@@ -690,6 +690,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::ANDROID_external_memory_android_hardware_buffer:
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
             case ProcHook::KHR_external_fence_fd:
@@ -726,6 +727,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_incremental_present:
             case ProcHook::KHR_shared_presentable_image:
             case ProcHook::GOOGLE_display_timing:
+            case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
                 hook_extensions_.set(ext_bit);
@@ -1131,7 +1133,7 @@ VkResult EnumerateDeviceExtensionProperties(
         VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
         VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION,
     });
-    if (flags::present_mode_fifo_latest_ready_ext()) {
+    if (flags::present_mode_fifo_latest_ready_ext2()) {
         loader_extensions.push_back(
             {VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME,
              VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_SPEC_VERSION});
@@ -1156,6 +1158,10 @@ VkResult EnumerateDeviceExtensionProperties(
         loader_extensions.push_back({
                 VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
                 VK_GOOGLE_DISPLAY_TIMING_SPEC_VERSION});
+        if (flags::present_timing_ext()) {
+            loader_extensions.push_back({VK_EXT_PRESENT_TIMING_EXTENSION_NAME,
+                                         VK_EXT_PRESENT_TIMING_SPEC_VERSION});
+        }
     }
 
     loader_extensions.push_back(
@@ -1686,17 +1692,11 @@ VkResult QueueSubmit(VkQueue queue,
     return data.driver.QueueSubmit(queue, submitCount, pSubmits, fence);
 }
 
-void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
-                                VkPhysicalDeviceFeatures2* pFeatures) {
+static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
+        VkPhysicalDeviceFeatures2* pFeatures) {
+
     ATRACE_CALL();
-
     const auto& driver = GetData(physicalDevice).driver;
-
-    if (driver.GetPhysicalDeviceFeatures2) {
-        driver.GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
-    } else {
-        driver.GetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
-    }
 
     // Conditionally add imageCompressionControlSwapchain if
     // imageCompressionControl is supported Check for imageCompressionControl in
@@ -1744,10 +1744,24 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR: {
                 auto* features =
-                    reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(pFeats);
+                    reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(
+                        pFeats);
                 features->presentId = VK_TRUE;
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT: {
+                if (flags::present_timing_ext() &&
+                    android::base::GetBoolProperty(
+                        "service.sf.present_timestamp", false)) {
+                    VkPhysicalDevicePresentTimingFeaturesEXT* timingsFeatures =
+                        reinterpret_cast<
+                            VkPhysicalDevicePresentTimingFeaturesEXT*>(pFeats);
+                    timingsFeatures->presentTiming = true;
+                    timingsFeatures->presentAtAbsoluteTime = true;
+                    timingsFeatures->presentAtRelativeTime = false;
+                }
+            } break;
 
             default:
                 break;
@@ -1802,6 +1816,32 @@ void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
     }
 }
 
+void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
+                                VkPhysicalDeviceFeatures2* pFeatures) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
+
+    if (driver.GetPhysicalDeviceFeatures2) {
+        driver.GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
+    } else {
+        driver.GetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+    }
+
+    PopulateLoaderImplementedFeatures(physicalDevice, pFeatures);
+}
+
+void GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
+                                   VkPhysicalDeviceFeatures2KHR* pFeatures) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
+
+    driver.GetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+
+    PopulateLoaderImplementedFeatures(physicalDevice, pFeatures);
+}
+
 void GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
                                   VkPhysicalDeviceProperties2* pProperties) {
     ATRACE_CALL();
@@ -1812,6 +1852,15 @@ void GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
         driver.GetPhysicalDeviceProperties2(physicalDevice, pProperties);
         return;
     }
+
+    driver.GetPhysicalDeviceProperties2KHR(physicalDevice, pProperties);
+}
+
+void GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice,
+                                     VkPhysicalDeviceProperties2KHR* pProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
 
     driver.GetPhysicalDeviceProperties2KHR(physicalDevice, pProperties);
 }
@@ -1834,6 +1883,18 @@ void GetPhysicalDeviceFormatProperties2(
                                                  pFormatProperties);
 }
 
+void GetPhysicalDeviceFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkFormat format,
+    VkFormatProperties2KHR* pFormatProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
+
+    driver.GetPhysicalDeviceFormatProperties2KHR(physicalDevice, format,
+                                                 pFormatProperties);
+}
+
 VkResult GetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
@@ -1846,6 +1907,18 @@ VkResult GetPhysicalDeviceImageFormatProperties2(
         return driver.GetPhysicalDeviceImageFormatProperties2(
             physicalDevice, pImageFormatInfo, pImageFormatProperties);
     }
+
+    return driver.GetPhysicalDeviceImageFormatProperties2KHR(
+        physicalDevice, pImageFormatInfo, pImageFormatProperties);
+}
+
+VkResult GetPhysicalDeviceImageFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    const VkPhysicalDeviceImageFormatInfo2KHR* pImageFormatInfo,
+    VkImageFormatProperties2KHR* pImageFormatProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
 
     return driver.GetPhysicalDeviceImageFormatProperties2KHR(
         physicalDevice, pImageFormatInfo, pImageFormatProperties);
@@ -1869,6 +1942,18 @@ void GetPhysicalDeviceQueueFamilyProperties2(
         physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
 }
 
+void GetPhysicalDeviceQueueFamilyProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    uint32_t* pQueueFamilyPropertyCount,
+    VkQueueFamilyProperties2KHR* pQueueFamilyProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
+
+    driver.GetPhysicalDeviceQueueFamilyProperties2KHR(
+        physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
+}
+
 void GetPhysicalDeviceMemoryProperties2(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceMemoryProperties2* pMemoryProperties) {
@@ -1881,6 +1966,17 @@ void GetPhysicalDeviceMemoryProperties2(
                                                   pMemoryProperties);
         return;
     }
+
+    driver.GetPhysicalDeviceMemoryProperties2KHR(physicalDevice,
+                                                 pMemoryProperties);
+}
+
+void GetPhysicalDeviceMemoryProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    VkPhysicalDeviceMemoryProperties2KHR* pMemoryProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
 
     driver.GetPhysicalDeviceMemoryProperties2KHR(physicalDevice,
                                                  pMemoryProperties);
@@ -1900,6 +1996,19 @@ void GetPhysicalDeviceSparseImageFormatProperties2(
             physicalDevice, pFormatInfo, pPropertyCount, pProperties);
         return;
     }
+
+    driver.GetPhysicalDeviceSparseImageFormatProperties2KHR(
+        physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+}
+
+void GetPhysicalDeviceSparseImageFormatProperties2KHR(
+    VkPhysicalDevice physicalDevice,
+    const VkPhysicalDeviceSparseImageFormatInfo2KHR* pFormatInfo,
+    uint32_t* pPropertyCount,
+    VkSparseImageFormatProperties2KHR* pProperties) {
+    ATRACE_CALL();
+
+    const auto& driver = GetData(physicalDevice).driver;
 
     driver.GetPhysicalDeviceSparseImageFormatProperties2KHR(
         physicalDevice, pFormatInfo, pPropertyCount, pProperties);

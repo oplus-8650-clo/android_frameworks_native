@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // #define LOG_NDEBUG 0
@@ -150,7 +150,7 @@ void QtiOutputExtension::qtiGetVisibleLayerInfo(
 
         for (auto* layer: output->getOutputLayersOrderedByZ()) {
             sfext->qtiSetVisibleLayerInfo(*displayId, layer->getLayerFE().getDebugName(),
-                    layer->getLayerFE().getLayerId());
+                    layer->getLayerFE().getLayerId(), layer->getState().displayFrame);
         }
     }
 }

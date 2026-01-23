@@ -132,6 +132,7 @@ void VirtualDisplaySurface::prepareSurfacesLocked() {
     // Since the renderer can be used for GPU compositing at any point, make sure we are generating
     // buffers we can send over to the app.
     mRendererConsumer->setConsumerUsageBits(getRendererUsage() | mSinkUsage);
+    mRendererConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);
 
     if (isHalDisplay()) {
         std::tie(mOutputConsumer, mOutputSurface) =
@@ -394,16 +395,20 @@ void VirtualDisplaySurface::applyResizeLocked(const ui::Size& newSize) {
 
     mSinkHelper->setBufferSize(mSinkWidth, mSinkHeight);
 
-    status_t ret = mOutputConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to set output consumer default buffer size %dx%d", __func__, mSinkWidth,
-              mSinkHeight);
-    }
+    status_t ret;
+    if (isHalDisplay()) {
+        ret = mOutputConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);
 
-    ret = mOutputSurface->setBuffersDimensions(mSinkWidth, mSinkHeight);
-    if (ret != NO_ERROR) {
-        ALOGE("%s: Unable to set output surface buffer size %dx%d", __func__, mSinkWidth,
-              mSinkHeight);
+        if (ret != NO_ERROR) {
+            ALOGE("%s: Unable to set output consumer default buffer size %dx%d", __func__,
+                  mSinkWidth, mSinkHeight);
+        }
+
+        ret = mOutputSurface->setBuffersDimensions(mSinkWidth, mSinkHeight);
+        if (ret != NO_ERROR) {
+            ALOGE("%s: Unable to set output surface buffer size %dx%d", __func__, mSinkWidth,
+                  mSinkHeight);
+        }
     }
 
     ret = mRendererConsumer->setDefaultBufferSize(mSinkWidth, mSinkHeight);

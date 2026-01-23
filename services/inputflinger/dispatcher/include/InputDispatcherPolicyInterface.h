@@ -48,7 +48,8 @@ public:
     /* Notifies the system that an application does not have a focused window.
      */
     virtual void notifyNoFocusedWindowAnr(
-            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle) = 0;
+            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+            nsecs_t eventTime, std::chrono::milliseconds timeoutDuration) = 0;
 
     /* Notifies the system that a window just became unresponsive. This indicates that ANR
      * should be raised for this window. The window can be identified via its input token and the
@@ -56,7 +57,9 @@ public:
      * haven't received a response for.
      */
     virtual void notifyWindowUnresponsive(const sp<IBinder>& token, std::optional<gui::Pid> pid,
-                                          const std::string& reason) = 0;
+                                          const std::string& reason, int32_t eventId,
+                                          nsecs_t eventTime,
+                                          std::chrono::milliseconds timeoutDuration) = 0;
 
     /* Notifies the system that a window just became responsive. This is only called after the
      * window was first marked "unresponsive". This indicates that ANR dialog (if any) should

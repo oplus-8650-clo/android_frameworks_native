@@ -20,7 +20,6 @@
 #include <android-base/stringprintf.h>
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
-#include <com_android_input_flags.h>
 #include <common/FlagManager.h>
 #include <common/test/FlagUtils.h>
 #include <compositionengine/LayerFECompositionState.h>
@@ -49,8 +48,6 @@
 
 namespace android::compositionengine {
 namespace {
-
-namespace input_flags = com::android::input::flags;
 
 using namespace com::android::graphics::surfaceflinger;
 
@@ -637,40 +634,7 @@ TEST_F(OutputTest, getDirtyRegion) {
     EXPECT_THAT(mOutput->getDirtyRegion(), RegionEq(Region(Rect(50, 200))));
 }
 
-/*
- * Output::includesLayer()
- */
-
-TEST_F_WITH_FLAGS(OutputTest, layerFiltering,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
-    const ui::LayerStack layerStack1{123u};
-    const ui::LayerStack layerStack2{456u};
-
-    // If the output is associated to layerStack1 and to an internal display...
-    mOutput->setLayerFilter({layerStack1, true});
-
-    // It excludes layers with no layer stack, internal-only or not.
-    EXPECT_FALSE(mOutput->includesLayer({ui::UNASSIGNED_LAYER_STACK, false}));
-    EXPECT_FALSE(mOutput->includesLayer({ui::UNASSIGNED_LAYER_STACK, true}));
-
-    // It includes layers on layerStack1, internal-only or not.
-    EXPECT_TRUE(mOutput->includesLayer({layerStack1, false}));
-    EXPECT_TRUE(mOutput->includesLayer({layerStack1, true}));
-    EXPECT_FALSE(mOutput->includesLayer({layerStack2, true}));
-    EXPECT_FALSE(mOutput->includesLayer({layerStack2, false}));
-
-    // If the output is associated to layerStack1 but not to an internal display...
-    mOutput->setLayerFilter({layerStack1, false});
-
-    // It includes layers on layerStack1, unless they are internal-only.
-    EXPECT_TRUE(mOutput->includesLayer({layerStack1, false}));
-    EXPECT_FALSE(mOutput->includesLayer({layerStack1, true}));
-    EXPECT_FALSE(mOutput->includesLayer({layerStack2, true}));
-    EXPECT_FALSE(mOutput->includesLayer({layerStack2, false}));
-}
-
-TEST_F_WITH_FLAGS(OutputTest, layerFiltering_skipScreenshot,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+TEST_F(OutputTest, layerFiltering_skipScreenshot) {
     const ui::LayerStack layerStack1{123u};
     const ui::LayerStack layerStack2{456u};
 
@@ -708,56 +672,7 @@ TEST_F(OutputTest, layerFilteringWithoutCompositionState) {
     EXPECT_FALSE(mOutput->includesLayer(layerFE));
 }
 
-TEST_F_WITH_FLAGS(OutputTest, layerFilteringWithCompositionState,
-                  REQUIRES_FLAGS_DISABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
-    NonInjectedLayer layer;
-    sp<LayerFE> layerFE(layer.layerFE);
-
-    const ui::LayerStack layerStack1{123u};
-    const ui::LayerStack layerStack2{456u};
-
-    // If the output is associated to layerStack1 and to an internal display...
-    mOutput->setLayerFilter({layerStack1, true});
-
-    // It excludes layers with no layer stack, internal-only or not.
-    layer.layerFEState.outputFilter = {ui::UNASSIGNED_LAYER_STACK, false};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {ui::UNASSIGNED_LAYER_STACK, true};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    // It includes layers on layerStack1, internal-only or not.
-    layer.layerFEState.outputFilter = {layerStack1, false};
-    EXPECT_TRUE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack1, true};
-    EXPECT_TRUE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack2, true};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack2, false};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    // If the output is associated to layerStack1 but not to an internal display...
-    mOutput->setLayerFilter({layerStack1, false});
-
-    // It includes layers on layerStack1, unless they are internal-only.
-    layer.layerFEState.outputFilter = {layerStack1, false};
-    EXPECT_TRUE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack1, true};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack2, true};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-
-    layer.layerFEState.outputFilter = {layerStack2, false};
-    EXPECT_FALSE(mOutput->includesLayer(layerFE));
-}
-
-TEST_F_WITH_FLAGS(OutputTest, layerFilteringWithCompositionState_skipScreenshot,
-                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(input_flags, connected_displays_cursor))) {
+TEST_F(OutputTest, layerFilteringWithCompositionState_skipScreenshot) {
     NonInjectedLayer layer;
     sp<LayerFE> layerFE(layer.layerFE);
 
@@ -3220,7 +3135,6 @@ TEST_F(OutputFinishFrameTest, queuesBufferIfComposeSurfacesReturnsAFence) {
 }
 
 TEST_F(OutputFinishFrameTest, queuesBufferWithHdrSdrRatio) {
-    SET_FLAG_FOR_TEST(flags::fp16_client_target, true);
     mOutput.mState.isEnabled = true;
 
     InSequence seq;
@@ -4482,7 +4396,6 @@ TEST_F(OutputComposeSurfacesTest_UsesExpectedDisplaySettings,
 
 TEST_F(OutputComposeSurfacesTest_UsesExpectedDisplaySettings,
        usesExpectedDisplaySettingsWithFp16Buffer) {
-    SET_FLAG_FOR_TEST(flags::fp16_client_target, true);
     verify().ifMixedCompositionIs(false)
             .andIfUsesHdr(true)
             .withDisplayBrightnessNits(kDisplayLuminance)

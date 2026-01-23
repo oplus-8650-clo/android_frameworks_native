@@ -36,6 +36,13 @@ flag {
 }
 
 flag {
+  name: "enable_captured_verification"
+  namespace: "input"
+  description: "Enable input event verification on event streams from captured touchpads and mice"
+  bug: "411389468"
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"
@@ -54,13 +61,6 @@ flag {
   namespace: "accessibility"
   description: "Brings back fatal logging for inconsistent event streams originating from accessibility."
   bug: "299977100"
-}
-
-flag {
-  name: "enable_v2_touchpad_typing_palm_rejection"
-  namespace: "input"
-  description: "In addition to touchpad palm rejection v1, v2 will also cancel ongoing move gestures while typing and add delay in re-enabling the tap to click."
-  bug: "301055381"
 }
 
 flag {
@@ -180,34 +180,10 @@ flag {
 }
 
 flag {
-  name: "connected_displays_cursor"
-  namespace: "lse_desktop_experience"
-  description: "Allow cursor to transition across multiple connected displays"
-  bug: "362719483"
-}
-
-flag {
-  name: "scale_cursor_speed_with_dpi"
-  namespace: "lse_desktop_experience"
-  description: "Scale the cursor speed based on display density"
-  bug: "367662715"
-}
-
-flag {
   name: "prevent_merging_input_pointer_devices"
   namespace: "desktop_input"
   description: "Prevent merging input sub-devices that provide pointer input streams"
   bug: "389689566"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
-  name: "enable_display_topology_validation"
-  namespace: "input"
-  description: "Set to true to enable display topology validation"
-  bug: "401219231"
   metadata {
     purpose: PURPOSE_BUGFIX
   }
@@ -228,26 +204,6 @@ flag {
   namespace: "input"
   description: "Log low-level events from evdev and the Gestures library in traces"
   bug: "394861376"
-}
-
-flag {
-  name: "use_separate_xy_dpi_scaling_for_mice"
-  namespace: "input"
-  description: "Use the xDpi and yDpi values to scale mouse moves"
-  bug: "432649760"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
-  name: "touchpad_down_time_fix"
-  namespace: "input"
-  description: "Fix the down times on HOVER_EXIT and BUTTON_PRESS events emitted when a button press occurs on a touchpad"
-  bug: "447603159"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
 }
 
 flag {

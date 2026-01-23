@@ -74,7 +74,7 @@ private:
 
     virtual ~LegacyFramebufferSurface() {}; // this class cannot be overloaded
 
-    virtual void freeBufferLocked(int slotIndex);
+    virtual void freeBufferLocked(int slotIndex, BufferFreedCallback onBufferFreed) override;
 
     virtual void dumpLocked(String8& result, const char* prefix) const;
 
