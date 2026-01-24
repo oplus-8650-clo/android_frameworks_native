@@ -241,6 +241,12 @@ void DisplayModeController::clearDesiredMode(PhysicalDisplayId displayId) {
     }
 }
 
+void DisplayModeController::clearPendingMode(PhysicalDisplayId displayId) {
+    std::lock_guard lock(mDisplayLock);
+    const auto& displayPtr = FTL_TRY(mDisplays.get(displayId).ok_or(ftl::Unit())).get();
+    displayPtr->pendingModeOpt.reset();
+}
+
 auto DisplayModeController::initiateModeChange(PhysicalDisplayId displayId,
                                                DisplayModeRequest&& desiredMode,
                                                const hal::VsyncPeriodChangeConstraints& constraints,

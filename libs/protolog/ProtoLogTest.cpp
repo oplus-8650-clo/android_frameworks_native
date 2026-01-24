@@ -378,45 +378,7 @@ TEST_F_WITH_FLAGS(ProtoLogTest, FiltersByLevel,
 // Verifies that stack traces are captured when configured.
 TEST_F_WITH_FLAGS(ProtoLogTest, LogsWithStacktrace,
                   REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_PACKAGE, native_proto_logging))) {
-    perfetto::TraceConfig cfg;
-    cfg.add_buffers()->set_size_kb(1024);
-    auto* ds_cfg = cfg.add_data_sources()->mutable_config();
-    ds_cfg->set_name(DATASOURCE_NAME);
-
-    perfetto::protos::ProtoLogConfig protolog_cfg;
-    auto* group_override = protolog_cfg.add_group_overrides();
-    group_override->set_group_name("StackTraceGroup");
-    group_override->set_log_from(perfetto::protos::PROTOLOG_LEVEL_INFO);
-    group_override->set_collect_stacktrace(true);
-    protolog_cfg.set_tracing_mode(perfetto::protos::ProtoLogConfig_TracingMode_ENABLE_ALL);
-    protolog_cfg.set_default_log_from_level(perfetto::protos::PROTOLOG_LEVEL_INFO);
-    ds_cfg->set_protolog_config_raw(protolog_cfg.SerializeAsString());
-
-    auto tracing_session = perfetto::Tracing::NewTrace();
-    tracing_session->Setup(cfg);
-    tracing_session->StartBlocking();
-
-    PROTOLOG_E("StackTraceGroup", "This message should have a stacktrace.");
-    PROTOLOG_W("NonStackTraceGroup", "This message should not have a stacktrace.");
-
-    std::string trace_str = StopAndReadTrace(tracing_session.get());
-    auto tp = GetTraceProcessor(trace_str);
-
-    auto it = tp->ExecuteQuery("SELECT message, stacktrace FROM protolog ORDER BY ts");
-
-    // First message (ERROR) should have a stacktrace.
-    ASSERT_TRUE(it.Next());
-    EXPECT_STREQ(it.Get(0).AsString(), "This message should have a stacktrace.");
-    EXPECT_FALSE(it.Get(1).is_null());
-    ASSERT_THAT(it.Get(1).AsString(),
-                testing::HasSubstr("android::protolog::ProtoLogTest_LogsWithStacktrace_Test"));
-
-    // Second message (WARN) should not have a stacktrace.
-    ASSERT_TRUE(it.Next());
-    EXPECT_STREQ(it.Get(0).AsString(), "This message should not have a stacktrace.");
-    EXPECT_TRUE(it.Get(1).is_null());
-
-    ASSERT_FALSE(it.Next());
+    // TODO(b/477870887): Unsupported for now, so test was removed. Context: b/473868195.
 }
 
 // Verifies that logging from multiple threads simultaneously works correctly.

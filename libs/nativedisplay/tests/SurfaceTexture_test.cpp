@@ -594,7 +594,6 @@ TEST_F(SurfaceTextureTest, MemoryManagement_ConsumerModeClearsBuffers_WhenBuffer
             << "When the buffer is removed from the queue, it should be removed from the ST.";
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 // See b/458169755.
 TEST_F(SurfaceTextureTest, Legacy_UnlimitedSlots_NotAllowed) {
     if (wb_surfacetexture()) {
@@ -644,7 +643,6 @@ TEST_F(SurfaceTextureTest, UnlimitedSlots_Allowed) {
                 << "Unable to queue buffer " << graphicBuffer->getId() << " #" << i;
     }
 }
-#endif
 
 TEST_F(SurfaceTextureTest, MultiThreaded_UpdateTexImage_vs_SwapBuffers) {
     GLuint textureId;

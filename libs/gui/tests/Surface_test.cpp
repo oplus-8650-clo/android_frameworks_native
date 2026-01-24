@@ -2595,7 +2595,6 @@ TEST_F(SurfaceTest, QueueBufferOutput_TracksReplacements_Plural) {
     EXPECT_TRUE(outputs[1].bufferReplaced);
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 TEST_F(SurfaceTest, UnlimitedSlots_FailsOnIncompatibleConsumer) {
     sp<IGraphicBufferProducer> producer;
     sp<IGraphicBufferConsumer> consumer;
@@ -2747,7 +2746,6 @@ TEST_F(SurfaceTest, UnlimitedSlots_SetMaxDequeuedBufferCount_EdgeCase) {
         ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence)) << "Failed to dequeue buffer #" << i;
     }
 }
-#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 
 TEST_F(SurfaceTest, isBufferOwned) {
     const int TEST_USAGE_FLAGS = GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_HW_RENDER;

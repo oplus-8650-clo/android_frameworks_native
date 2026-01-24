@@ -53,6 +53,8 @@ public:
 
     void setDisplayPowerMode(hal::PowerMode powerMode) final;
 
+    bool isModeChangeInProgress() const final { return mModeChangeInProgress; }
+
     void resetModel() final;
 
     void dump(std::string& result) const final;
@@ -79,6 +81,8 @@ private:
     bool mMoreSamplesNeeded GUARDED_BY(mMutex) = false;
     bool mPeriodConfirmationInProgress GUARDED_BY(mMutex) = false;
     DisplayModePtr mModePtrTransitioningTo GUARDED_BY(mMutex);
+    std::atomic<bool> mModeChangeInProgress = false;
+    std::optional<DisplayModeId> mDisplayModeId GUARDED_BY(mMutex);
 
     class LastHwVsync {
     public:

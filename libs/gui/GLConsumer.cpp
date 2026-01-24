@@ -145,9 +145,7 @@ GLConsumer::GLConsumer(uint32_t tex, uint32_t texTarget, bool useFenceSync, bool
         mTexTarget(texTarget),
         mEglDisplay(EGL_NO_DISPLAY),
         mEglContext(EGL_NO_CONTEXT),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mEglSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
         mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
         mAttached(true) {
     GLC_LOGV("GLConsumer");
@@ -175,9 +173,7 @@ GLConsumer::GLConsumer(const sp<IGraphicBufferConsumer>& bq, uint32_t tex, uint3
         mTexTarget(texTarget),
         mEglDisplay(EGL_NO_DISPLAY),
         mEglContext(EGL_NO_CONTEXT),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mEglSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
         mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
         mAttached(true) {
     GLC_LOGV("GLConsumer");
@@ -202,9 +198,7 @@ GLConsumer::GLConsumer(uint32_t texTarget, bool useFenceSync, bool isControlledB
         mTexTarget(texTarget),
         mEglDisplay(EGL_NO_DISPLAY),
         mEglContext(EGL_NO_CONTEXT),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mEglSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
         mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
         mAttached(false) {
     GLC_LOGV("GLConsumer");
@@ -230,9 +224,7 @@ GLConsumer::GLConsumer(const sp<IGraphicBufferConsumer>& bq, uint32_t texTarget,
         mTexTarget(texTarget),
         mEglDisplay(EGL_NO_DISPLAY),
         mEglContext(EGL_NO_CONTEXT),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mEglSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
         mCurrentTexture(BufferQueue::INVALID_BUFFER_SLOT),
         mAttached(false) {
     GLC_LOGV("GLConsumer");
@@ -432,7 +424,6 @@ status_t GLConsumer::acquireBufferLocked(BufferItem* item, nsecs_t presentWhen,
     return NO_ERROR;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 void GLConsumer::onSlotCountChanged(int slotCount) {
     ConsumerBase::onSlotCountChanged(slotCount);
 
@@ -441,7 +432,6 @@ void GLConsumer::onSlotCountChanged(int slotCount) {
         mEglSlots.resize(slotCount);
     }
 }
-#endif
 
 #if !COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_GL_FENCE_CLEANUP)
 status_t GLConsumer::releaseBufferLocked(int buf, const sp<GraphicBuffer>& graphicBuffer,

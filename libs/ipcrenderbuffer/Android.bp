@@ -26,11 +26,11 @@ cc_library_static {
     ],
 }
 
-//cc_binary {
-//    name: "replay_render_buffer",
-//    srcs: ["replay_render_buffer.cpp"], // Adjust path if needed
-//    static_libs: ["libipcrenderbuffer_static", "libskia"],
-//    shared_libs: ["libandroid", "libgui"],
-//    defaults: ["skia_deps"],
-//    local_include_dirs: ["include"], // If your viewer app has local headers
-//}
+cc_binary {
+    name: "replay_render_buffer",
+    srcs: ["replay_render_buffer.cpp"], // Adjust path if needed
+    static_libs: ["libipcrenderbuffer_static", "libskia"],
+    shared_libs: ["libandroid", "libgui", "libbinder", "libutils"],
+    defaults: ["skia_deps"],
+    local_include_dirs: ["include"], // If your viewer app has local headers
+}

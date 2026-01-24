@@ -288,7 +288,11 @@ bool isDrawingOp(uint32_t type) {
 bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
-    auto buffer = consumer->consumerAcquire();
+    auto buffer = consumer->getCurrentBuffer();
+    if (buffer == nullptr) {
+        ALOGE("Failed to acquire RenderCommandBuffer for replay");
+        return false;
+    }
 
     bool foundFirstDrawingOp = false;
 

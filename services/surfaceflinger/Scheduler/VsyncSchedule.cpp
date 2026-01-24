@@ -219,4 +219,8 @@ bool VsyncSchedule::getPendingHardwareVsyncState() const {
     return mPendingHwVsyncState == HwVsyncState::Enabled;
 }
 
+bool VsyncSchedule::isModeChangeInProgress() const {
+    return mController->isModeChangeInProgress();
+}
+
 } // namespace android::scheduler

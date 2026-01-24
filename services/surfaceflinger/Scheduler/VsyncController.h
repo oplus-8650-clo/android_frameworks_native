@@ -87,6 +87,11 @@ public:
     virtual void setDisplayPowerMode(hal::PowerMode powerMode) = 0;
 
     /*
+     * Returns whether a display mode change is in progress.
+     */
+    virtual bool isModeChangeInProgress() const = 0;
+
+    /*
      * Resets the vsync model
      */
     virtual void resetModel() = 0;

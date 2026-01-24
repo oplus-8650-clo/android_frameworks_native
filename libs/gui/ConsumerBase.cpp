@@ -67,10 +67,7 @@ static int32_t createProcessUniqueId() {
 }
 
 ConsumerBase::ConsumerBase(const sp<IGraphicBufferConsumer>& bufferQueue, bool controlledByApp)
-      :
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
-        mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
+      : mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
         mAbandoned(false),
         mConsumer(bufferQueue),
         mPrevFinalReleaseFence(Fence::NO_FENCE) {
@@ -78,10 +75,7 @@ ConsumerBase::ConsumerBase(const sp<IGraphicBufferConsumer>& bufferQueue, bool c
 }
 
 ConsumerBase::ConsumerBase(bool controlledByApp, bool consumerIsSurfaceFlinger)
-      :
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
-        mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
+      : mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
         mAbandoned(false),
         mPrevFinalReleaseFence(Fence::NO_FENCE) {
     sp<IGraphicBufferProducer> producer;
@@ -92,10 +86,7 @@ ConsumerBase::ConsumerBase(bool controlledByApp, bool consumerIsSurfaceFlinger)
 
 ConsumerBase::ConsumerBase(const sp<IGraphicBufferProducer>& producer,
                            const sp<IGraphicBufferConsumer>& consumer, bool controlledByApp)
-      :
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
-        mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#endif
+      : mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
         mAbandoned(false),
         mConsumer(consumer),
         mSurface(sp<Surface>::make(producer, controlledByApp)),
@@ -122,12 +113,10 @@ void ConsumerBase::initialize(bool controlledByApp) {
     }
 
     mConsumer->setConsumerName(mName);
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     if (err = mConsumer->allowUnlimitedSlots(true); err != NO_ERROR) {
         CB_LOGE("ConsumerBase: error marking as allowed to have unlimited slots: %s (%d)",
                 strerror(-err), err);
     }
-#endif
 }
 
 ConsumerBase::~ConsumerBase() {
@@ -154,11 +143,7 @@ int ConsumerBase::getSlotForBufferLocked(const sp<GraphicBuffer>& buffer) {
     }
 
     uint64_t id = buffer->getId();
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     for (int i = 0; i < (int)mSlots.size(); ++i) {
-#else
-    for (int i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
-#endif
         auto& slot = mSlots[i];
         if (slot.mGraphicBuffer && slot.mGraphicBuffer->getId() == id) {
             return i;
@@ -313,7 +298,6 @@ void ConsumerBase::onBuffersReleasedLocked(BufferFreedCallback bufferFreedCallba
         return;
     }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     std::vector<bool> mask;
     mConsumer->getReleasedBuffersExtended(&mask);
     for (size_t i = 0; i < mSlots.size(); i++) {
@@ -321,21 +305,11 @@ void ConsumerBase::onBuffersReleasedLocked(BufferFreedCallback bufferFreedCallba
             freeBufferLocked(i, bufferFreedCallback);
         }
     }
-#else
-    uint64_t mask = 0;
-    mConsumer->getReleasedBuffers(&mask);
-    for (int i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
-        if (mask & (1ULL << i)) {
-            freeBufferLocked(i, bufferFreedCallback);
-        }
-    }
-#endif
 }
 
 void ConsumerBase::onSidebandStreamChanged() {
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 void ConsumerBase::onSlotCountChanged(int slotCount) {
     CB_LOGV("onSlotCountChanged: %d", slotCount);
     Mutex::Autolock lock(mMutex);
@@ -344,7 +318,6 @@ void ConsumerBase::onSlotCountChanged(int slotCount) {
         mSlots.resize(slotCount);
     }
 }
-#endif
 
 void ConsumerBase::abandon() {
     CB_LOGV("abandon");
@@ -361,11 +334,7 @@ void ConsumerBase::abandonLocked(BufferFreedCallback bufferFreedCallback) {
         CB_LOGE("abandonLocked: ConsumerBase is abandoned!");
         return;
     }
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     for (int i = 0; i < (int)mSlots.size(); ++i) {
-#else
-    for (int i =0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
-#endif
         freeBufferLocked(i, bufferFreedCallback);
     }
     // disconnect from the BufferQueue
@@ -481,13 +450,11 @@ status_t ConsumerBase::setMaxBufferCount(int bufferCount) {
         return NO_INIT;
     }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     if (status_t err = mConsumer->allowUnlimitedSlots(false); err != NO_ERROR) {
         CB_LOGE("ConsumerBase: error marking as not allowed to have unlimited slots: %s (%d)",
                 strerror(-err), err);
         return err;
     }
-#endif
 
     return mConsumer->setMaxBufferCount(bufferCount);
 }
@@ -558,7 +525,6 @@ status_t ConsumerBase::discardFreeBuffersLocked(BufferFreedCallback onBufferFree
     if (err != OK) {
         return err;
     }
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     std::vector<bool> mask;
     mConsumer->getReleasedBuffersExtended(&mask);
     for (int i = 0; i < (int)mSlots.size(); i++) {
@@ -566,15 +532,6 @@ status_t ConsumerBase::discardFreeBuffersLocked(BufferFreedCallback onBufferFree
             freeBufferLocked(i, onBufferFreed);
         }
     }
-#else
-    uint64_t mask;
-    mConsumer->getReleasedBuffers(&mask);
-    for (int i = 0; i < BufferQueue::NUM_BUFFER_SLOTS; i++) {
-        if (mask & (1ULL << i)) {
-            freeBufferLocked(i, onBufferFreed);
-        }
-    }
-#endif
 
     return OK;
 }
@@ -746,11 +703,7 @@ status_t ConsumerBase::releaseBufferLocked(int slot, const sp<GraphicBuffer>& gr
 }
 
 bool ConsumerBase::stillTracking(int slot, const sp<GraphicBuffer>& graphicBuffer) {
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     if (slot < 0 || slot >= (int)mSlots.size()) {
-#else
-    if (slot < 0 || slot >= BufferQueue::NUM_BUFFER_SLOTS) {
-#endif
         return false;
     }
     return (mSlots[slot].mGraphicBuffer != nullptr &&

@@ -675,7 +675,6 @@ status_t BufferQueueConsumer::getReleasedBuffers(uint64_t *outSlotMask) {
     return NO_ERROR;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 status_t BufferQueueConsumer::getReleasedBuffersExtended(std::vector<bool>* outSlotMask) {
     ATRACE_CALL();
 
@@ -710,7 +709,6 @@ status_t BufferQueueConsumer::getReleasedBuffersExtended(std::vector<bool>* outS
 
     return NO_ERROR;
 }
-#endif
 
 status_t BufferQueueConsumer::setDefaultBufferSize(uint32_t width,
         uint32_t height) {
@@ -730,7 +728,6 @@ status_t BufferQueueConsumer::setDefaultBufferSize(uint32_t width,
     return NO_ERROR;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 status_t BufferQueueConsumer::allowUnlimitedSlots(bool allowUnlimitedSlots) {
     ATRACE_CALL();
     BQ_LOGV("allowUnlimitedSlots: %d", allowUnlimitedSlots);
@@ -750,7 +747,6 @@ status_t BufferQueueConsumer::allowUnlimitedSlots(bool allowUnlimitedSlots) {
 
     return OK;
 }
-#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 
 status_t BufferQueueConsumer::setMaxBufferCount(int bufferCount) {
     ATRACE_CALL();
@@ -801,12 +797,7 @@ status_t BufferQueueConsumer::setMaxAcquiredBufferCount(
 
         // We reserve two slots in order to guarantee that the producer and
         // consumer can run asynchronously.
-        int maxMaxAcquiredBuffers =
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
-                mCore->getTotalSlotCountLocked() - 2;
-#else
-                BufferQueueCore::MAX_MAX_ACQUIRED_BUFFERS;
-#endif
+        int maxMaxAcquiredBuffers = mCore->getTotalSlotCountLocked() - 2;
         if (maxAcquiredBuffers < 1 || maxAcquiredBuffers > maxMaxAcquiredBuffers) {
             BQ_LOGE("setMaxAcquiredBufferCount: invalid count %d allowed maxCount is %d",
                     maxAcquiredBuffers, maxMaxAcquiredBuffers);

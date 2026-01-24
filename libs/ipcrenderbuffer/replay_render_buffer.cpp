@@ -24,32 +24,99 @@
 #include <SkPngEncoder.h>
 #include <SkSurface.h>
 #include <android/ipcrenderbuffer/RenderBufferOps.h>
-// TODO: Bitmap Arena system not in yet.
-// #include <gui/BitmapArenaAllocator.h>
+#include <android/ipcrenderbuffer/RenderBufferHelpers.h>
+
 #include <gui/RenderCommandBuffer.h>
 #include <gui/RenderCommandBufferConsumer.h>
+
 #include <fstream>
 #include <memory>
+#include <getopt.h>
+#include <cstdlib>
+#include <ctime>
 
 using namespace android;
 
+bool renderCommandBufferToReplayCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
+                                 SkCanvas* canvas,
+                                 const std::function<void(int)>& renderProxyCallback,
+                                 bool dumpOps, bool noBitmaps) {
+    auto buffer = consumer->consumerAcquire();
+
+    bool foundFirstDrawingOp = false;
+
+    if (dumpOps) {
+        ALOGE("Rendering command buffer");
+    }
+
+    for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
+        if (dumpOps) {
+            ALOGE("Rendering op %s", opTypeToString(op->type).c_str());
+            ALOGE("Details %s", opToString(op).c_str());
+        }
+        if (op->type == DrawImageRectOp::kType) {
+            if (noBitmaps) {
+                auto* imageRectOp = static_cast<DrawImageRectOp*>(op);
+                SkPaint p;
+                p.setColor(SkColorSetARGB(0xFF, rand() % 255, rand() % 255, rand() % 255));
+                canvas->drawRect(imageRectOp->dst, p);
+            } else {
+                LOG_ALWAYS_FATAL("Bitmap rendering not yet supported in replay");
+            }
+        } else {
+            renderOpToCanvas(cache, consumer, op, canvas, renderProxyCallback);
+        }
+    }
+    return true;
+}
+
 int main(int argc, char** argv) {
-    if (argc < 3) {
+    srand(time(nullptr));
+    bool dumpOps = false;
+    bool noBitmaps = true;
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"dump-ops", no_argument, 0, 'd'},
+        {"no-bitmaps", no_argument, 0, 'n'},
+        {"bitmaps", no_argument, 0, 'b'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int option_index = 0;
+    while ((opt = getopt_long(argc, argv, "hdnb", long_options, &option_index)) != -1) {
+        switch (opt) {
+            case 'h':
+                printf("Usage: replay_render_buffer [options] <command_buffer_file> <bitmap_arena_file>\n");
+                printf("Options:\n");
+                printf("  -h, --help            Show this help message\n");
+                printf("  -d, --dump-ops        Dump render buffer ops to logcat\n");
+                printf("  -n, --no-bitmaps      Interpret DrawImageRect commands as drawing a random color (default)\n");
+                printf("  -b, --bitmaps         Render bitmaps (not yet supported)\n");
+                return 0;
+            case 'd':
+                dumpOps = true;
+                break;
+            case 'n':
+                noBitmaps = true;
+                break;
+            case 'b':
+                noBitmaps = false;
+                break;
+            default: /* '?' */
+                printf("Usage: replay_render_buffer [options] <command_buffer_file> <bitmap_arena_file>\n");
+                return 1;
+        }
+    }
+    if (optind + 1 >= argc) {
         printf("Usage: replay_render_buffer <command_buffer_file> <bitmap_arena_file>\n");
         return 1;
     }
-    const char* commandBufferFile = argv[1];
-    const char* bitmapArenaFile = argv[2];
+    const char* commandBufferFile = argv[optind];
 
     // Load from files
-    std::unique_ptr<RenderCommandBuffer> loadedCommandBuffer = std::unique_ptr<RenderCommandBuffer>(
-            RenderCommandBuffer::loadFromFile(commandBufferFile));
-    /*
-    std::unique_ptr<BitmapArenaAllocator> loadedAllocator = std::unique_ptr<BitmapArenaAllocator>(
-            BitmapArenaAllocator::loadFromFile(bitmapArenaFile));
-    */
-
-    if (!loadedCommandBuffer || !loadedAllocator) {
+    std::unique_ptr<RenderCommandBuffer> loadedCommandBuffer = std::unique_ptr<RenderCommandBuffer>(RenderCommandBuffer::loadFromFile(commandBufferFile));
+    if (!loadedCommandBuffer) {
         printf("Failed to load from files");
         return 1;
     }
@@ -58,17 +125,10 @@ int main(int argc, char** argv) {
             std::make_shared<RenderCommandBufferConsumer>();
 
     consumer->setRenderCommandBuffer(loadedCommandBuffer.get());
-    /*
-    consumer->setBitmapArenaAllocator(std::move(loadedAllocator));
-    */
+
 
     IPCServerResourceCache cache;
-    resetRenderCommandBufferForReplay(&cache, consumer);
-
-    // Dump to text file
-    // dumpRenderCommandBufferToText(consumer, "/sdcard/render_command_buffer.txt");
-
-    SkImageInfo info = SkImageInfo::MakeN32Premul(512, 512); // Example size
+    SkImageInfo info = SkImageInfo::MakeN32Premul(loadedCommandBuffer->mWidth, loadedCommandBuffer->mHeight);
     const size_t minRowBytes = info.minRowBytes();
     const size_t size = info.computeMinByteSize();
     SkPMColor* pixels = new SkPMColor[size];
@@ -85,8 +145,9 @@ int main(int argc, char** argv) {
     canvas->clear(SK_ColorWHITE); // Example background
 
     // Replay the render commands
-    renderCommandBufferToCanvas(&cache, consumer,
-                                canvas); // Pass the canvas obtained from the surface
+    std::function<void(int)> renderProxyCallback = [](int) {};
+    renderCommandBufferToReplayCanvas(&cache, consumer.get(),
+                                canvas, renderProxyCallback, dumpOps, noBitmaps); // Pass the canvas obtained from the surface
 
     // Now you can display the surface's image or save it to a file.
     // For example, to save to a PNG:

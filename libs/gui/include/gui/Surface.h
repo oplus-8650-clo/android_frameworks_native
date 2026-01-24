@@ -630,11 +630,7 @@ protected:
     // slot that has not yet been used. The buffer allocated to a slot will also
     // be replaced if the requested buffer usage or geometry differs from that
     // of the buffer allocated to a slot.
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     std::vector<BufferSlot> mSlots;
-#else
-    BufferSlot mSlots[NUM_BUFFER_SLOTS];
-#endif
 
     struct BufferHash {
         std::size_t operator()(const sp<GraphicBuffer>& buffer) const {
@@ -820,9 +816,7 @@ protected:
     std::vector<sp<GraphicBuffer>> mRemovedBuffers;
     int mMaxBufferCount;
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     bool mIsSlotExpansionAllowed;
-#endif
 
     sp<ProducerListenerProxy> mListenerProxy;
 

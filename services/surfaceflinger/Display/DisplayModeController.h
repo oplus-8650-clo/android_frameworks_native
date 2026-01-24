@@ -94,6 +94,8 @@ public:
 
     // TODO: Remove once `modeset_state_machine` flag is cleaned up.
     void clearDesiredMode(PhysicalDisplayId) EXCLUDES(mDisplayLock);
+    // TODO: Remove once `synced_resolution_switch` flag is cleaned up.
+    void clearPendingMode(PhysicalDisplayId) REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     DisplayModeRequestOpt getPendingMode(PhysicalDisplayId) const REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock);
