@@ -46,6 +46,8 @@ bool RenderCommandBuffer::dumpToFile(const char* filename) const {
         return false;
     }
 
+    file.write(reinterpret_cast<const char*>(&mWidth), sizeof(mWidth));
+    file.write(reinterpret_cast<const char*>(&mHeight), sizeof(mHeight));
     file.write(reinterpret_cast<const char*>(&mUsed), sizeof(mUsed));
     file.write(reinterpret_cast<const char*>(mBytes), mUsed);
 
@@ -65,6 +67,19 @@ RenderCommandBuffer* RenderCommandBuffer::loadFromFile(const char* filename) {
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
         ALOGE("RenderCommandBuffer::loadFromFile: Failed to open file for reading: %s", filename);
+        return nullptr;
+    }
+
+    if (!file.read(reinterpret_cast<char*>(&cmdBuffer->mWidth), sizeof(cmdBuffer->mWidth))) {
+        ALOGE("RenderCommandBuffer::loadFromFile: Error reading width from file: %s", filename);
+        file.close();
+        delete cmdBuffer;
+        return nullptr;
+    }
+    if (!file.read(reinterpret_cast<char*>(&cmdBuffer->mHeight), sizeof(cmdBuffer->mHeight))) {
+        ALOGE("RenderCommandBuffer::loadFromFile: Error reading height from file: %s", filename);
+        file.close();
+        delete cmdBuffer;
         return nullptr;
     }
 
@@ -94,8 +109,9 @@ RenderCommandBuffer* RenderCommandBuffer::loadFromFile(const char* filename) {
     cmdBuffer->mUsed = usedSize;
 
     file.close();
-    ALOGE("RenderCommandBuffer::loadFromFile: Command buffer loaded from %s, used size: %zu",
-          filename, usedSize);
+    ALOGE("RenderCommandBuffer::loadFromFile: Command buffer loaded from %s, used size: %zu, "
+          "width: %d, height: %d",
+          filename, usedSize, cmdBuffer->mWidth, cmdBuffer->mHeight);
     return cmdBuffer;
 }
 

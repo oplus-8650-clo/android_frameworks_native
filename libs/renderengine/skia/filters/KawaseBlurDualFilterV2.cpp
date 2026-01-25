@@ -34,6 +34,7 @@
 #include <SkSurface.h>
 #include <SkTileMode.h>
 #include <common/FlagManager.h>
+#include <common/ThreadStateCrashLogger.h>
 #include <common/trace.h>
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
@@ -193,7 +194,8 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generate(SkiaGpuContext* context,
                 std::max(1, static_cast<int>(static_cast<float>(targetBlurRect.height()) / scale));
         sk_sp<SkSurface> surface =
                 context->createRenderTarget(input->imageInfo().makeWH(newW, newH));
-        LOG_ALWAYS_FATAL_IF(!surface, "%s: Failed to create surface for blurring!", __func__);
+        LOG_THREAD_STATE_AND_CRASH_IF(!surface, "%s: Failed to create surface for blurring!",
+                                      __func__);
         return surface;
     };
 
@@ -303,12 +305,12 @@ void KawaseBlurDualFilterV2::preallocateBuffer(SkiaGpuContext* protectedContext,
         sp<GraphicBuffer> buffer =
                 sp<GraphicBuffer>::make(newW, newH, PIXEL_FORMAT_RGBA_8888, 1, kProtectedUsageFlags,
                                         "KawaseBlurDualFilterV2");
-        LOG_ALWAYS_FATAL_IF(buffer->initCheck() != OK,
-                            "Failed to preallocate GraphicBuffer for intermediate blur surface: "
-                            "%s. Is protected memory supported? (i:%d, %dx%x, RGBA_8888, "
-                            "usage:0x%" PRIx64 ")",
-                            statusToString(buffer->initCheck()).c_str(), i, newW, newH,
-                            kProtectedUsageFlags);
+        LOG_THREAD_STATE_AND_CRASH_IF(buffer->initCheck() != OK,
+                                      "Failed to preallocate GraphicBuffer for intermediate blur "
+                                      "surface: %s. Is protected memory supported? (i:%d, %dx%x, "
+                                      "RGBA_8888, usage:0x%" PRIx64 ")",
+                                      statusToString(buffer->initCheck()).c_str(), i, newW, newH,
+                                      kProtectedUsageFlags);
         std::unique_ptr<SkiaBackendTexture> backendTexture =
                 protectedContext->makeBackendTexture(buffer->toAHardwareBuffer(), true);
         mProtectedTextures[i] = std::make_shared<AutoBackendTexture::LocalRef>(

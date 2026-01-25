@@ -63,10 +63,19 @@ protected:
 INSTANTIATE_TEST_CASE_P(
         LayerTypeAndRenderTypeTransactionTests, LayerTypeAndRenderTypeTransactionTest,
         ::testing::Combine(
-                ::testing::Values(
-                        static_cast<uint32_t>(ISurfaceComposerClient::eFXSurfaceBufferState)),
+            []() {
+                std::vector<uint32_t> layerTypes;
+                if (com_android_graphics_libgui_flags_out_of_process_rendering()) {
+                    layerTypes.push_back(
+                            static_cast<uint32_t>(ISurfaceComposerClient::eFXSurfaceBufferState));
+                    layerTypes.push_back(static_cast<uint32_t>(LAYER_TYPE_RENDER_COMMAND_BUFFER));
+                } else {
+                    layerTypes.push_back(
+                            static_cast<uint32_t>(ISurfaceComposerClient::eFXSurfaceBufferState));
+                }
+                return ::testing::ValuesIn(layerTypes);
+            }(),
                 ::testing::Values(RenderPath::VIRTUAL_DISPLAY, RenderPath::SCREENSHOT)));
-
 TEST_P(LayerTypeAndRenderTypeTransactionTest, SetZBasic) {
     sp<SurfaceControl> layerR;
     sp<SurfaceControl> layerG;
@@ -1150,6 +1159,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetRenderBuffer) {
     Transaction()
             .setLayer(layer, mLayerZBase + 1)
             .setRenderCommandBuffer(layer, canvas.getRenderCommandBufferProducer())
+            .setRenderCommandBufferFrameId(layer, 1)
             .setCrop(layer,
                      Rect(cropInset, cropInset, layerSize - 2 * cropInset,
                           layerSize - 2 * cropInset))
@@ -1233,6 +1243,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
             .setRenderResourceToken(layer, renderResourceToken)
             .setCrop(layer, Rect(0, 0, width, height))
             .setRenderCommandBuffer(layer, canvas.getRenderCommandBufferProducer())
+            .setRenderCommandBufferFrameId(layer, 1)
             .apply(true);
 
     // Verify output

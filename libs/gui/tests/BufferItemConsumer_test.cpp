@@ -283,7 +283,6 @@ TEST_F(BufferItemConsumerTest, DetachBufferWithBuffer) {
     EXPECT_THAT(mDetachedBufferSlots, testing::ElementsAre(slot));
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 TEST_F(BufferItemConsumerTest, UnlimitedSlots_AcquireReleaseAll) {
     ASSERT_EQ(OK, mProducer->extendSlotCount(256));
     mBuffers.resize(256);
@@ -329,7 +328,6 @@ TEST_F(BufferItemConsumerTest, UnlimitedSlots_AcquireDetachAll) {
         DetachBuffer(slot);
     }
 }
-#endif
 
 TEST_F(BufferItemConsumerTest, OnSetFrameRateCallback) {
     class MockListener : public BufferItemConsumer::FrameAvailableListener {

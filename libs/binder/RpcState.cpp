@@ -1290,9 +1290,12 @@ processTransactInternalTailCall:
         return OK;
     }
 
-    // No refcounts for root object - it's always held. If an error results
-    // in us not having the binder so that we can't flush refs, then there may
+    // No refcounts for special transactions - they are always available, and there is
+    // no binder object involved.
+    //
+    // If an error results in us not having the binder so that we can't flush refs, then there may
     // be a leak, but the more fundamental problem is the error.
+    //
     // Binder refs are flushed for oneway calls only after all calls which are
     // built up are executed. Otherwise, they fill up the binder buffer.
     if (addr != RPC_SPECIAL_TRANSACTION_ADDRESS && target != nullptr) {

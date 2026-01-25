@@ -406,7 +406,9 @@ LayerInfo::RefreshRateVotes LayerInfo::getRefreshRateVote(nsecs_t now) {
 
     auto refreshRate = calculateRefreshRateIfPossible(now);
     if (refreshRate.has_value()) {
-        SFTRACE_FORMAT_INSTANT("calculated (%s)", to_string(*refreshRate).c_str());
+        if (CC_UNLIKELY(SFTRACE_ENABLED())) {
+            SFTRACE_FORMAT_INSTANT("calculated (%s)", to_string(*refreshRate).c_str());
+        }
         ALOGV("%s calculated refresh rate: %s", mName.c_str(), to_string(*refreshRate).c_str());
         votes.push_back({LayerHistory::LayerVoteType::Heuristic, refreshRate.value()});
         return votes;

@@ -250,7 +250,7 @@ public:
                                          std::unique_ptr<InputChannel>& outServerChannel,
                                          std::unique_ptr<InputChannel>& outClientChannel);
 
-    inline std::string getName() const { return name; }
+    inline const std::string& getName() const { return name; }
     inline int getFd() const { return fd.get(); }
 
     /* Send a message to the other endpoint.

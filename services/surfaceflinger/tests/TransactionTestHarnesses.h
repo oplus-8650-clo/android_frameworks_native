@@ -19,10 +19,21 @@
 #include <com_android_graphics_libgui_flags.h>
 #include <ui/DisplayState.h>
 
+#include <android/ipcrenderbuffer/IPCRecordingCanvas.h>
+#include <android/ipcrenderbuffer/RenderBufferOps.h>
+#include <SkColor.h>
+#include <SkPaint.h>
+#include <SkRect.h>
 #include "LayerTransactionTest.h"
 #include "ui/LayerStack.h"
 
+#include <map>
+#include <memory>
+
 namespace android {
+
+// Not a real layer type, but used for testing render command buffer layers.
+const uint32_t LAYER_TYPE_RENDER_COMMAND_BUFFER = 0x10000000;
 
 using android::hardware::graphics::common::V1_1::BufferUsage;
 
@@ -159,27 +170,129 @@ public:
         if (flags & ISurfaceComposerClient::eFXSurfaceMask) {
             return nullptr;
         }
+
+        if (mLayerType == LAYER_TYPE_RENDER_COMMAND_BUFFER) {
+            auto layer =
+                    LayerTransactionTest::createLayer(name, 0, 0,
+                                                      flags |
+                                                              ISurfaceComposerClient::
+                                                                      eFXSurfaceEffect,
+                                                      parent, outTransformHint, format);
+            if (layer) {
+                auto cache = std::make_unique<IPCClientResourceCache>();
+                auto canvas = std::make_shared<IPCRecordingCanvas>(*cache);
+                Transaction()
+                        .setRenderCommandBuffer(layer, canvas->getRenderCommandBufferProducer())
+                        .apply();
+                mRenderResourceCaches[layer.get()] = std::move(cache);
+                mRenderCommandCanvases[layer.get()] = canvas;
+                mRenderCommandFrameIds[layer.get()] = 0;
+            }
+            return layer;
+        }
         return LayerTransactionTest::createLayer(name, width, height, flags | mLayerType, parent,
                                                  outTransformHint, format);
     }
 
     void fillLayerColor(const sp<SurfaceControl>& layer, const Color& color, uint32_t bufferWidth,
                         uint32_t bufferHeight) {
-        ASSERT_NO_FATAL_FAILURE(LayerTransactionTest::fillLayerColor(mLayerType, layer, color,
-                                                                     bufferWidth, bufferHeight));
+        if (mLayerType == LAYER_TYPE_RENDER_COMMAND_BUFFER) {
+            auto it = mRenderCommandCanvases.find(layer.get());
+            ASSERT_NE(it, mRenderCommandCanvases.end());
+            auto canvas = it->second;
+            auto& frameId = mRenderCommandFrameIds.at(layer.get());
+            frameId++;
+            ASSERT_NO_FATAL_FAILURE(fillRenderCommandBufferLayerColor(canvas, frameId, layer,
+                                                                      color, bufferWidth,
+                                                                      bufferHeight));
+        } else {
+            ASSERT_NO_FATAL_FAILURE(LayerTransactionTest::fillLayerColor(mLayerType, layer, color,
+                                                                         bufferWidth,
+                                                                         bufferHeight));
+        }
     }
 
     void fillLayerQuadrant(const sp<SurfaceControl>& layer, uint32_t bufferWidth,
                            uint32_t bufferHeight, const Color& topLeft, const Color& topRight,
                            const Color& bottomLeft, const Color& bottomRight) {
-        ASSERT_NO_FATAL_FAILURE(LayerTransactionTest::fillLayerQuadrant(mLayerType, layer,
-                                                                        bufferWidth, bufferHeight,
-                                                                        topLeft, topRight,
-                                                                        bottomLeft, bottomRight));
+        if (mLayerType == LAYER_TYPE_RENDER_COMMAND_BUFFER) {
+            auto it = mRenderCommandCanvases.find(layer.get());
+            ASSERT_NE(it, mRenderCommandCanvases.end());
+            auto canvas = it->second;
+            auto& frameId = mRenderCommandFrameIds.at(layer.get());
+            frameId++;
+            ASSERT_NO_FATAL_FAILURE(
+                    fillRenderCommandBufferLayerQuadrant(canvas, frameId, layer, bufferWidth,
+                                                         bufferHeight, topLeft, topRight,
+                                                         bottomLeft, bottomRight));
+        } else {
+            ASSERT_NO_FATAL_FAILURE(
+                    LayerTransactionTest::fillLayerQuadrant(mLayerType, layer, bufferWidth,
+                                                            bufferHeight, topLeft, topRight,
+                                                            bottomLeft, bottomRight));
+        }
+    }
+
+    void fillRenderCommandBufferLayerColor(std::shared_ptr<IPCRecordingCanvas> canvas,
+                                           uint64_t frameId, const sp<SurfaceControl>& layer,
+                                           const Color& color, uint32_t bufferWidth,
+                                           uint32_t bufferHeight) {
+        if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
+            return;
+        }
+        canvas->startRecording();
+        canvas->drawColor(SkColorSetARGB(color.a, color.r, color.g, color.b), SkBlendMode::kSrc);
+        canvas->endRecording();
+
+        Transaction()
+                .setRenderCommandBufferFrameId(layer, frameId)
+                .setCrop(layer, Rect(bufferWidth, bufferHeight))
+                .apply(true);
+    }
+
+    void fillRenderCommandBufferLayerQuadrant(std::shared_ptr<IPCRecordingCanvas> canvas,
+                                              uint64_t frameId, const sp<SurfaceControl>& layer,
+                                              uint32_t bufferWidth, uint32_t bufferHeight,
+                                              const Color& topLeft, const Color& topRight,
+                                              const Color& bottomLeft,
+                                              const Color& bottomRight) {
+        if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
+            return;
+        }
+        canvas->startRecording();
+
+        ASSERT_TRUE(bufferWidth % 2 == 0 && bufferHeight % 2 == 0);
+        const int32_t halfW = bufferWidth / 2;
+        const int32_t halfH = bufferHeight / 2;
+
+        SkPaint paint;
+        paint.setAntiAlias(false);
+
+        paint.setColor(SkColorSetARGB(topLeft.a, topLeft.r, topLeft.g, topLeft.b));
+        canvas->drawRect(SkRect::MakeLTRB(0, 0, halfW, halfH), paint);
+
+        paint.setColor(SkColorSetARGB(topRight.a, topRight.r, topRight.g, topRight.b));
+        canvas->drawRect(SkRect::MakeLTRB(halfW, 0, bufferWidth, halfH), paint);
+
+        paint.setColor(SkColorSetARGB(bottomLeft.a, bottomLeft.r, bottomLeft.g, bottomLeft.b));
+        canvas->drawRect(SkRect::MakeLTRB(0, halfH, halfW, bufferHeight), paint);
+
+        paint.setColor(SkColorSetARGB(bottomRight.a, bottomRight.r, bottomRight.g, bottomRight.b));
+        canvas->drawRect(SkRect::MakeLTRB(halfW, halfH, bufferWidth, bufferHeight), paint);
+
+        canvas->endRecording();
+
+        Transaction()
+                .setRenderCommandBufferFrameId(layer, frameId)
+                .setCrop(layer, Rect(bufferWidth, bufferHeight))
+                .apply(true);
     }
 
 protected:
     uint32_t mLayerType;
+    std::map<SurfaceControl*, std::unique_ptr<IPCClientResourceCache>> mRenderResourceCaches;
+    std::map<SurfaceControl*, std::shared_ptr<IPCRecordingCanvas>> mRenderCommandCanvases;
+    std::map<SurfaceControl*, uint64_t> mRenderCommandFrameIds;
 };
 } // namespace android
 #endif

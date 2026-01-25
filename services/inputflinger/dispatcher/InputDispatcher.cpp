@@ -1070,7 +1070,7 @@ nsecs_t InputDispatcher::processNoFocusedWindowAnrWarningLocked() {
                                      mNoFocusedWindowAnrState->eventId, elapsedDuration,
                                      mNoFocusedWindowAnrState->timeoutDuration);
         mNoFocusedWindowAnrState->anrWarningTriggered = true;
-        return LLONG_MAX;
+        return LLONG_MIN;
     }
 
     // return the earliest time we want to trigger ANR warning.

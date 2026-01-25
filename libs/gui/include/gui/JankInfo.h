@@ -55,6 +55,8 @@ enum JankType {
     AppResyncedJitter = 0x800,
     // Display is not on (off or doze).
     DisplayNotOn = 0x1000,
+    // Display mode change is in progress
+    DisplayModeChangeInProgress = 0x2000,
 };
 
 // IMPORTANT: update this whenever a new value is added to JankType.
@@ -63,7 +65,8 @@ constexpr int kJankTypeAll = JankType::None | JankType::DisplayHAL |
         JankType::AppDeadlineMissed | JankType::PredictionError |
         JankType::SurfaceFlingerScheduling | JankType::BufferStuffing | JankType::Unknown |
         JankType::SurfaceFlingerStuffing | JankType::Dropped | JankType::NonAnimating |
-        JankType::AppResyncedJitter | JankType::DisplayNotOn;
+        JankType::AppResyncedJitter | JankType::DisplayNotOn |
+        JankType::DisplayModeChangeInProgress;
 
 // Jank severity type tracked by SurfaceFlinger(SF) for Perfetto tracing and telemetry.
 enum class JankSeverityType {

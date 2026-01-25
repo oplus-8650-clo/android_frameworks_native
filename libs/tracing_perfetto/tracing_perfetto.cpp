@@ -18,8 +18,6 @@
 
 #include <cutils/trace.h>
 
-#include <cstdarg>
-
 #include "tracing_perfetto_internal.h"
 
 namespace tracing_perfetto {
@@ -36,32 +34,6 @@ void traceBegin(uint64_t category, const char* name) {
     atrace_begin(category, name);
   } else if (internal::isPerfettoCategoryEnabled(perfettoTeCategory)) {
     internal::perfettoTraceBegin(*perfettoTeCategory, name);
-  }
-}
-
-void traceFormatBegin(uint64_t category, const char* fmt, ...) {
-  struct PerfettoTeCategory* perfettoTeCategory =
-      internal::toPerfettoCategory(category);
-  const bool preferAtrace =
-      internal::shouldPreferAtrace(perfettoTeCategory, category);
-  const bool preferPerfetto =
-      internal::isPerfettoCategoryEnabled(perfettoTeCategory);
-  if (CC_LIKELY(!(preferAtrace || preferPerfetto))) {
-    return;
-  }
-
-  const int BUFFER_SIZE = 256;
-  va_list ap;
-  char buf[BUFFER_SIZE];
-
-  va_start(ap, fmt);
-  vsnprintf(buf, BUFFER_SIZE, fmt, ap);
-  va_end(ap);
-
-  if (preferAtrace) {
-    atrace_begin(category, buf);
-  } else if (preferPerfetto) {
-    internal::perfettoTraceBegin(*perfettoTeCategory, buf);
   }
 }
 
@@ -132,32 +104,6 @@ void traceInstant(uint64_t category, const char* name) {
     atrace_instant(category, name);
   } else if (internal::isPerfettoCategoryEnabled(perfettoTeCategory)) {
     internal::perfettoTraceInstant(*perfettoTeCategory, name);
-  }
-}
-
-void traceFormatInstant(uint64_t category, const char* fmt, ...) {
-  struct PerfettoTeCategory* perfettoTeCategory =
-      internal::toPerfettoCategory(category);
-  const bool preferAtrace =
-      internal::shouldPreferAtrace(perfettoTeCategory, category);
-  const bool preferPerfetto =
-      internal::isPerfettoCategoryEnabled(perfettoTeCategory);
-  if (CC_LIKELY(!(preferAtrace || preferPerfetto))) {
-    return;
-  }
-
-  const int BUFFER_SIZE = 256;
-  va_list ap;
-  char buf[BUFFER_SIZE];
-
-  va_start(ap, fmt);
-  vsnprintf(buf, BUFFER_SIZE, fmt, ap);
-  va_end(ap);
-
-  if (preferAtrace) {
-    atrace_instant(category, buf);
-  } else if (preferPerfetto) {
-    internal::perfettoTraceInstant(*perfettoTeCategory, buf);
   }
 }
 

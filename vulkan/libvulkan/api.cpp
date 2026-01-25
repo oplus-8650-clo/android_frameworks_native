@@ -1537,7 +1537,7 @@ VkResult EnumerateInstanceVersion(uint32_t* pApiVersion) {
     if (!EnsureInitialized())
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    *pApiVersion = flags::vulkan_1_4_instance_api() ? VK_API_VERSION_1_4 : VK_API_VERSION_1_3;
+    *pApiVersion = VK_API_VERSION_1_4;
     return VK_SUCCESS;
 }
 

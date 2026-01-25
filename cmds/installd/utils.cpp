@@ -25,6 +25,7 @@
 #include <sys/pidfd.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -432,6 +433,15 @@ long get_project_id(uid_t uid, long start_project_id_range) {
     return uid - AID_APP_START + start_project_id_range;
 }
 
+bool IsLegacyUserdata(const std::string& path) {
+    struct statfs s;
+    if (statfs(path.c_str(), &s) != 0) {
+        PLOG(WARNING) << "statfs failed for " << path;
+        return false;
+    }
+    return (s.f_type == EXT4_SUPER_MAGIC);
+}
+
 int set_quota_project_id(const std::string& path, long project_id, bool set_inherit) {
     struct fsxattr fsx;
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
@@ -447,6 +457,12 @@ int set_quota_project_id(const std::string& path, long project_id, bool set_inhe
 
     fsx.fsx_projid = project_id;
     if (ioctl(fd, FS_IOC_FSSETXATTR, &fsx) == -1) {
+        int err = errno;
+        if (IsLegacyUserdata(path) && (err == EINVAL || err == ENOTTY || err == EOPNOTSUPP)){
+            LOG(WARNING) << "Project quota not supported on " << path
+                         << " (errno=" << err << "), skipping for legacy userdata";
+            return 0; // swallow
+        }
         PLOG(ERROR) << "Failed to set project id on " << path;
         return -1;
     }

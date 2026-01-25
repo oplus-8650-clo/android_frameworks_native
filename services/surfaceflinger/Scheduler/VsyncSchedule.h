@@ -115,6 +115,8 @@ public:
 
     PhysicalDisplayId getPhysicalDisplayId() const { return mId; }
 
+    bool isModeChangeInProgress() const;
+
 protected:
     using ControllerPtr = std::unique_ptr<VsyncController>;
 

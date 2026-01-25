@@ -349,10 +349,9 @@ void Choreographer::dispatchHotplugConnectionError(nsecs_t, int32_t connectionEr
           this, connectionError);
 }
 
-void Choreographer::dispatchModeChangedWithFrameRateOverrides(nsecs_t, PhysicalDisplayId, int32_t,
-                                                              nsecs_t, nsecs_t, nsecs_t,
-                                                              std::vector<FrameRateOverride>,
-                                                              std::vector<SupportedRefreshRate>) {
+void Choreographer::dispatchModeChangedWithFrameRateOverrides(
+        nsecs_t, PhysicalDisplayId, int32_t, nsecs_t, nsecs_t, nsecs_t,
+        const std::vector<FrameRateOverride>&, const std::vector<SupportedRefreshRate>&) {
     LOG_ALWAYS_FATAL(
             "dispatchModeChangedWithFrameRateOverrides was called but was never registered");
 }

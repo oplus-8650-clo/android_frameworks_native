@@ -20,6 +20,7 @@
 #include <include/gpu/vk/VulkanBackendContext.h>
 
 #include <android-base/stringprintf.h>
+#include <common/ThreadStateCrashLogger.h>
 #include <log/log_main.h>
 #include <utils/Timers.h>
 
@@ -178,7 +179,7 @@ void VulkanInterface::onVkDeviceFault(void* callbackContext, const std::string& 
     }
 
     crashMsg << "): " << description;
-    LOG_ALWAYS_FATAL("%s", crashMsg.str().c_str());
+    LOG_THREAD_STATE_AND_CRASH("%s", crashMsg.str().c_str());
 };
 
 static skgpu::VulkanGetProc sGetProc = [](const char* proc_name,

@@ -41,14 +41,6 @@ flag {
 } # bq_extendedallocate
 
 flag {
-  name: "wb_consumer_base_owns_bq"
-  namespace: "core_graphics"
-  description: "ConsumerBase-based classes now own their own bufferqueue"
-  bug: "340933754"
-  is_fixed_read_only: true
-} # wb_consumer_base_owns_bq
-
-flag {
   name: "wb_ring_buffer"
   namespace: "core_graphics"
   description: "Remove slot dependency in the Ring Buffer Consumer."
@@ -71,14 +63,6 @@ flag {
   bug: "447613760"
   is_fixed_read_only: true
 } # wb_surfacetexture
-
-flag {
-  name: "wb_unlimited_slots"
-  namespace: "core_graphics"
-  description: "Adds APIs and updates the implementation of bufferqueues to have a user-defined slot count."
-  bug: "341359814"
-  is_fixed_read_only: true
-} # wb_unlimited_slots
 
 flag {
   name: "bq_gl_fence_cleanup"

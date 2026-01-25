@@ -1365,6 +1365,7 @@ private:
     void dumpHdrInfo(std::string& result) const REQUIRES(mStateLock);
     void dumpFrontEnd(std::string& result) REQUIRES(kMainThreadContext);
     void dumpVisibleFrontEnd(std::string& result) REQUIRES(mStateLock, kMainThreadContext);
+    void dumpRenderCommandBuffers(std::string& result) REQUIRES(kMainThreadContext);
 
     perfetto::protos::LayersProto dumpDrawingStateProto(uint32_t traceFlags) const
             REQUIRES(kMainThreadContext);

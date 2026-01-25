@@ -40,7 +40,6 @@ cc_library_shared {
         "libaconfig_storage_read_api_cc",
         "liblog",
         "libutils",
-        "libutilscallstack",
     ],
     host_supported: true,
     export_include_dirs: ["."],

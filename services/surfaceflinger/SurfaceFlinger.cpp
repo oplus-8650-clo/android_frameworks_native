@@ -1613,7 +1613,10 @@ bool SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
         processDisplayChangesLocked();
 
         if (FlagManager::getInstance().modeset_state_machine()) {
-            mDisplayModeController.finalizeModeChange(displayId);
+            // processDisplayAdded has set the active mode in DMC, but not cleared the pending mode.
+            // Note that hotplug reconnect does not need to clear, because it registers the display
+            // anew with DMC, which resets the display's state.
+            mDisplayModeController.clearPendingMode(displayId);
         }
 
         // The DisplayDevice has been destroyed, so abort the commit for the now dead FrameTargeter.
@@ -3148,13 +3151,15 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     // Composite if transactions were committed, or if requested by HWC.
     bool mustComposite = mMustComposite.exchange(false);
     {
-        const bool pacesetterPoweredOn =
-                FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))->getPowerMode()
-                    == hal::PowerMode::ON;
+        scheduler::FrameTimelineDisplayState displayState = {
+                .poweredOn = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(pacesetterId))
+                                     ->getPowerMode() == hal::PowerMode::ON,
+                .modeChangeInProgress = mScheduler->getVsyncSchedule()->isModeChangeInProgress(),
+        };
         mFrameTimeline->setSfWakeUp(ftl::to_underlying(vsyncId),
                                     pacesetterFrameTargetPtr->frameBeginTime().ns(),
                                     Fps::fromPeriodNsecs(vsyncPeriod.ns()),
-                                    mScheduler->getPacesetterRefreshRate(), pacesetterPoweredOn);
+                                    mScheduler->getPacesetterRefreshRate(), displayState);
 
         const bool flushTransactions = clearTransactionFlags(eTransactionFlushNeeded);
         bool transactionsAreEmpty = false;
@@ -4682,6 +4687,15 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
 
             mScheduler->registerDisplay(displayId, connectionType,
                                         display->holdRefreshRateSelector());
+
+            if (FlagManager::getInstance().modeset_state_machine()) {
+                auto activeModePtr = physical.activeMode;
+                const auto fps = activeModePtr->getPeakFps();
+
+                applyActiveMode({.mode = scheduler::FrameRateMode{fps,
+                                                                  ftl::as_non_null(std::move(
+                                                                          activeModePtr))}});
+            }
         }
     }
 
@@ -4706,7 +4720,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
     // For an external display, loadDisplayModes already attempted to select the same mode
     // as DM, but SF still needs to be updated to match.
     // TODO (b/318534874): Let DM decide the initial mode.
-    if (mScheduler && state.isPhysical()) {
+    if (!FlagManager::getInstance().modeset_state_machine() && mScheduler && state.isPhysical()) {
         const auto& physical = state.getPhysical();
         const bool isInternalDisplay = mPhysicalDisplays.get(physical.id)
                                                .transform(&PhysicalDisplay::isInternal)
@@ -6878,6 +6892,7 @@ status_t SurfaceFlinger::doDump(int fd, const DumpArgs& args, bool asProto) {
              {"--planner"s, argsDumper(&SurfaceFlinger::dumpPlannerInfo)},
              {"--scheduler"s, dumper(&SurfaceFlinger::dumpScheduler)},
              {"--timestats"s, protoDumper(&SurfaceFlinger::dumpTimeStats)},
+             {"--render-command-buffer"s, mainThreadDumper(&SurfaceFlinger::dumpRenderCommandBuffers)},
              {"--vsync"s, dumper(&SurfaceFlinger::dumpVsync)},
              {"--wide-color"s, dumper(&SurfaceFlinger::dumpWideColorInfo)},
              {"--renderdoc"s, dumper(&SurfaceFlinger::captureRenderDocFrame)}};
@@ -7313,6 +7328,39 @@ void SurfaceFlinger::dumpHwcLayersMinidump(std::string& result) const {
         }
         result.append("\n");
     }
+}
+
+// TODO(b/475255466) support bitmaps
+void SurfaceFlinger::dumpRenderCommandBuffers(std::string& result) {
+    std::stringstream dump_output_string;
+    std::string dump_output_path = "/data/renderbuffers/";
+    std::filesystem::create_directory(dump_output_path);
+
+    int numDumps = 0;
+    mLayerSnapshotBuilder.forEachSnapshot([&](const frontend::LayerSnapshot& snapshot) {
+        if (snapshot.renderCommandBufferConsumer != nullptr) {
+            std::string filename_prefix = dump_output_path + std::to_string(numDumps) + "_";
+            std::string rcb_filename = filename_prefix + "rcb.dump";
+
+            auto buffer = snapshot.renderCommandBufferConsumer->getCurrentBuffer();
+
+            if (buffer != nullptr) {
+                buffer->dumpToFile(
+                        rcb_filename.c_str());
+
+                dump_output_string << "  Layer: " << snapshot.name << " (sequence: "
+                                   << snapshot.sequence << ")\n";
+                dump_output_string << "    RenderCommandBuffer dumped to: " << rcb_filename << "\n";
+            } else {
+                dump_output_string << "  Layer: " << snapshot.name << " (sequence: "
+                                   << snapshot.sequence << ")\n";
+                dump_output_string << "    ERROR: RenderCommandBuffer is null.\n";
+            }
+            numDumps++;
+        }
+    });
+    result.append(dump_output_string.str());
+    result.append("\n");
 }
 
 void SurfaceFlinger::dumpAll(const DumpArgs& args, const std::string& compositionLayers,

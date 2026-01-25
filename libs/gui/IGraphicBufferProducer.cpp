@@ -155,7 +155,6 @@ public:
         return result;
     }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     status_t extendSlotCount(int size) override {
         Parcel data, reply;
         data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
@@ -167,7 +166,6 @@ public:
         result = reply.readInt32();
         return result;
     }
-#endif
 
     virtual status_t setAsyncMode(bool async) {
         Parcel data, reply;
@@ -1042,13 +1040,11 @@ IMPLEMENT_HYBRID_META_INTERFACE(GraphicBufferProducer,
 
 // ----------------------------------------------------------------------
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 status_t IGraphicBufferProducer::extendSlotCount(int size) {
     // No-op for IGBP other than BufferQueue.
     (void)size;
     return INVALID_OPERATION;
 }
-#endif
 
 status_t IGraphicBufferProducer::setLegacyBufferDrop(bool drop) {
     // No-op for IGBP other than BufferQueue.
@@ -1678,7 +1674,6 @@ status_t BnGraphicBufferProducer::onTransact(
             return NO_ERROR;
         }
 #endif
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         case SET_MAX_BUFER_COUNT_EXTENDED: {
             CHECK_INTERFACE(IGraphicBufferProducer, data, reply);
             int size = data.readInt32();
@@ -1686,7 +1681,6 @@ status_t BnGraphicBufferProducer::onTransact(
             reply->writeInt32(result);
             return NO_ERROR;
         }
-#endif
         case SET_PRESENT_MODE: {
             CHECK_INTERFACE(IGraphicBufferProducer, data, reply);
             int32_t mode = data.readInt32();

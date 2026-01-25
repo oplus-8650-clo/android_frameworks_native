@@ -162,6 +162,11 @@ std::string jankTypeBitmaskToString(int32_t jankType) {
         jankType &= ~JankType::DisplayNotOn;
     }
 
+    if (jankType & JankType::DisplayModeChangeInProgress) {
+        janks.emplace_back("ModeChange in progress");
+        jankType &= ~JankType::DisplayModeChangeInProgress;
+    }
+
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
     return std::accumulate(janks.begin(), janks.end(), std::string(),
@@ -302,6 +307,10 @@ int32_t jankTypeBitmaskToProto(int32_t jankType) {
         protoJank |= FrameTimelineEvent::JANK_DISPLAY_NOT_ON;
         jankType &= ~JankType::DisplayNotOn;
     }
+    if (jankType & JankType::DisplayModeChangeInProgress) {
+        protoJank |= FrameTimelineEvent::JANK_DISPLAY_MODE_CHANGE_IN_PROGRESS;
+        jankType &= ~JankType::DisplayModeChangeInProgress;
+    }
 
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
@@ -383,7 +392,7 @@ std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
             JankType::PredictionError | JankType::SurfaceFlingerScheduling | JankType::Unknown |
             JankType::Dropped | JankType::AppResyncedJitter;
     const int32_t nonJankBitmask = JankType::BufferStuffing | JankType::SurfaceFlingerStuffing |
-            JankType::NonAnimating | JankType::DisplayNotOn;
+            JankType::NonAnimating | JankType::DisplayNotOn | JankType::DisplayModeChangeInProgress;
     static_assert((kJankTypeAll & ~(jankBitmask | nonJankBitmask)) == 0);
 
     if ((jankType & jankBitmask) == 0) { // Not Janky
@@ -1355,12 +1364,12 @@ void FrameTimeline::addSurfaceFrame(std::shared_ptr<SurfaceFrame> surfaceFrame) 
 }
 
 void FrameTimeline::setSfWakeUp(int64_t token, nsecs_t wakeUpTime, Fps refreshRate, Fps renderRate,
-                                bool displayOn) {
+                                FrameTimelineDisplayState displayState) {
     SFTRACE_CALL();
     std::scoped_lock lock(mMutex);
     mCurrentDisplayFrame->onSfWakeUp(token, refreshRate, renderRate,
                                      mTokenManager.getPredictionsForToken(token), wakeUpTime,
-                                     displayOn);
+                                     displayState);
 }
 
 void FrameTimeline::setSfPresent(nsecs_t sfPresentTime,
@@ -1390,7 +1399,8 @@ void FrameTimeline::DisplayFrame::addSurfaceFrame(std::shared_ptr<SurfaceFrame> 
 
 void FrameTimeline::DisplayFrame::onSfWakeUp(int64_t token, Fps refreshRate, Fps renderRate,
                                              std::optional<TimelineItem> predictions,
-                                             nsecs_t wakeUpTime, bool displayOn) {
+                                             nsecs_t wakeUpTime,
+                                             FrameTimelineDisplayState displayState) {
     mToken = token;
     mRefreshRate = refreshRate;
     mRenderRate = renderRate;
@@ -1401,7 +1411,7 @@ void FrameTimeline::DisplayFrame::onSfWakeUp(int64_t token, Fps refreshRate, Fps
         mSurfaceFlingerPredictions = *predictions;
     }
     mSurfaceFlingerActuals.startTime = wakeUpTime;
-    mDisplayOn = displayOn;
+    mDisplayState = displayState;
 }
 
 void FrameTimeline::DisplayFrame::setPredictions(PredictionState predictionState,
@@ -1522,7 +1532,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
         }
 
         mJankType.experimental() =
-                !FlagManager::getInstance().jank_classification_v2() || mDisplayOn
+                !FlagManager::getInstance().jank_classification_v2() || mDisplayState.poweredOn
                 ? mJankType.legacy()
                 : JankType::DisplayNotOn;
         return;
@@ -1602,7 +1612,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
         }
     }
 
-    if (!mDisplayOn) {
+    if (!mDisplayState.poweredOn) {
         mJankType.experimental() = JankType::DisplayNotOn;
         return;
     }
@@ -1666,6 +1676,10 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
     } else {
         // present time unknown, mark the first as none animating
         mJankType.experimental() = JankType::NonAnimating;
+    }
+
+    if (mJankType.experimental() != JankType::None && mDisplayState.modeChangeInProgress) {
+        mJankType.experimental() |= JankType::DisplayModeChangeInProgress;
     }
 }
 

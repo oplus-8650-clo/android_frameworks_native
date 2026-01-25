@@ -35,6 +35,7 @@ public:
     MOCK_METHOD(void, onDisplayModeChanged, (ftl::NonNull<DisplayModePtr>, bool), (override));
     MOCK_METHOD(void, setIgnorePresentFences, (bool), (override));
     MOCK_METHOD(void, setDisplayPowerMode, (hal::PowerMode), (override));
+    MOCK_METHOD(bool, isModeChangeInProgress, (), (const, override));
     MOCK_METHOD(void, resetModel, (), (override));
     MOCK_METHOD(void, dump, (std::string&), (const, override));
 };

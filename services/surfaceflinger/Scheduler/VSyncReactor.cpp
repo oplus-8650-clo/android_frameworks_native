@@ -131,12 +131,18 @@ void VSyncReactor::startPeriodTransitionInternal(ftl::NonNull<DisplayModePtr> mo
     mModePtrTransitioningTo = modePtr.get();
     mMoreSamplesNeeded = true;
     setIgnorePresentFencesInternal(true);
+
+    if (!mDisplayModeId.has_value() || mDisplayModeId.value() != modePtr->getId()) {
+        mModeChangeInProgress = true;
+    }
+    mDisplayModeId = modePtr->getId();
 }
 
 void VSyncReactor::endPeriodTransition() {
     SFTRACE_FORMAT("%s %" PRIu64, __func__, mId.value);
     mModePtrTransitioningTo.reset();
     mPeriodConfirmationInProgress = false;
+    mModeChangeInProgress = false;
     mLastHwVsync.reset();
 }
 
