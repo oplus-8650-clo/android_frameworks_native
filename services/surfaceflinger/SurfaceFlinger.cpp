@@ -654,29 +654,17 @@ void SurfaceFlinger::run() {
 
 sp<IBinder> SurfaceFlinger::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy,
-        gui::ISurfaceComposer::EmbeddedContentPolicy embeddedContentPolicy,
-        const std::string& uniqueId, uid_t ownerUid, float requestedRefreshRate) {
+        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
+        uid_t ownerUid, float requestedRefreshRate) {
+    (void)ownerUid;
+
     // SurfaceComposerAIDL checks for some permissions, but adding an additional check here.
     // This is to ensure that only root, system, and graphics can request to create a secure
     // display. Secure displays can show secure content so we add an additional restriction on it.
     const uid_t uid = IPCThreadState::self()->getCallingUid();
-    const bool isPrivileged = uid == AID_ROOT || uid == AID_GRAPHICS || uid == AID_SYSTEM;
-
-    if (!isPrivileged) {
-        if (isSecure) {
-            ALOGE("Only privileged processes can create a secure display");
-            return nullptr;
-        }
-        if (embeddedContentPolicy == gui::ISurfaceComposer::EmbeddedContentPolicy::Include) {
-            ALOGE("Only privileged processes can create a virtual display that includes embedded "
-                  "content.");
-            return nullptr;
-        }
-        if (ownerUid != uid) {
-            ALOGW("Only privileged processes can create a virtual display for another UID.");
-            ownerUid = uid;
-        }
+    if (isSecure && uid != AID_ROOT && uid != AID_GRAPHICS && uid != AID_SYSTEM) {
+        ALOGE("Only privileged processes can create a secure display");
+        return nullptr;
     }
 
     ALOGD("Creating virtual display: %s", displayName.c_str());
@@ -709,8 +697,6 @@ sp<IBinder> SurfaceFlinger::createVirtualDisplay(
     state.displayName = displayName;
     state.uniqueId = uniqueId;
     state.requestedRefreshRate = Fps::fromValue(requestedRefreshRate);
-    state.ownerUid = gui::Uid{static_cast<unsigned int>(ownerUid)};
-    state.embeddedContentPolicy = embeddedContentPolicy;
     mCurrentState.displays.emplace_or_replace(token, state);
     return token;
 }
@@ -2951,6 +2937,9 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
 
 bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                             const scheduler::FrameTargets& frameTargets) EXCLUDES(mStateLock) {
+    const scheduler::FrameTarget* pacesetterFrameTargetPtr = frameTargets.get(pacesetterId)->get();
+    const VsyncId vsyncId = pacesetterFrameTargetPtr->vsyncId();
+
 // QTI_BEGIN: 2023-11-08: Display: sf: Enable QtiExtensions in V
     mQtiSFExtnIntf->qtiDolphinTrackVsyncSignal();
 // QTI_END: 2023-11-08: Display: sf: Enable QtiExtensions in V
@@ -2968,12 +2957,8 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         }
     }
 
-    panopticon::make(ids, panopticon::Source::CG_FrameSignal);
+    panopticon::make(ids, panopticon::Source::CG_FrameSignal, ftl::to_underlying(vsyncId));
     auto commitTokens = panopticon::slice(panopticon::SliceType::CG_Sf_Commit);
-
-    const scheduler::FrameTarget* pacesetterFrameTargetPtr = frameTargets.get(pacesetterId)->get();
-
-    const VsyncId vsyncId = pacesetterFrameTargetPtr->vsyncId();
     SFTRACE_NAME(ftl::Concat(__func__, ' ', ftl::to_underlying(vsyncId)).c_str());
 
 // QTI_BEGIN: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
@@ -3616,7 +3601,7 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
 
     TimeStats::ClientCompositionRecord clientCompositionRecord;
 
-    for (const auto& [_, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    for (const auto& [_, display] : displays) {
         const auto& state = display->getCompositionDisplay()->getState();
         CompositionCoverageFlags& flags =
                 mCompositionCoverage.try_emplace(display->getDisplayIdVariant()).first->second;
@@ -4501,12 +4486,7 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
                                                     RenderIntent::COLORIMETRIC});
 
     display->setLayerFilter(
-            makeLayerFilterForDisplay(display->getDisplayIdVariant(), state.layerStack,
-                                      state.embeddedContentPolicy ==
-                                                      gui::ISurfaceComposer::EmbeddedContentPolicy::
-                                                              Exclude
-                                              ? state.ownerUid
-                                              : gui::Uid::INVALID));
+            makeLayerFilterForDisplay(display->getDisplayIdVariant(), state.layerStack));
     display->setProjection(state.orientation, state.layerStackSpaceRect,
                            state.orientedDisplaySpaceRect);
     display->setDisplayName(state.displayName);
@@ -4850,14 +4830,8 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
 
 // QTI_END: 2024-04-09: Display: sf: extensions: Add support for fb scaling
         if (currentState.layerStack != drawingState.layerStack) {
-            display->setLayerFilter(
-                    makeLayerFilterForDisplay(display->getDisplayIdVariant(),
-                                              currentState.layerStack,
-                                              currentState.embeddedContentPolicy ==
-                                                              gui::ISurfaceComposer::
-                                                                      EmbeddedContentPolicy::Exclude
-                                                      ? currentState.ownerUid
-                                                      : gui::Uid::INVALID));
+            display->setLayerFilter(makeLayerFilterForDisplay(display->getDisplayIdVariant(),
+                                                              currentState.layerStack));
             if (currentState.isPhysical()) {
                 mQtiSFExtnIntf->qtiUpdateSmomoLayerStackId(currentState.getPhysical().hwcDisplayId,
                                                            currentState.layerStack.id,
@@ -5057,7 +5031,8 @@ void SurfaceFlinger::persistDisplayBrightness(bool needsComposite) {
         return;
     }
 
-    for (const auto& [_, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+    for (const auto& [_, display] : displays) {
         if (const auto brightness = display->getStagedBrightness(); brightness) {
             if (!needsComposite) {
                 const status_t error =
@@ -5100,7 +5075,8 @@ void SurfaceFlinger::buildWindowInfos(std::vector<WindowInfo>& outWindowInfos,
 
 void SurfaceFlinger::updateCursorAsync() {
     compositionengine::CompositionRefreshArgs refreshArgs;
-    for (const auto& [_, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+    for (const auto& [_, display] : displays) {
         if (asHalDisplayId(display->getDisplayIdVariant())) {
             refreshArgs.outputs.push_back(display->getCompositionDisplay());
         }
@@ -5420,7 +5396,8 @@ void SurfaceFlinger::doCommitTransactions() {
 }
 
 void SurfaceFlinger::invalidateLayerStack(const LayerFilter& layerFilter, const Region& dirty) {
-    for (const auto& [token, displayDevice] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+    for (const auto& [token, displayDevice] : displays) {
         auto display = displayDevice->getCompositionDisplay();
         if (display->includesLayer(layerFilter)) {
             display->editState().dirtyRegion.orSelf(dirty);
@@ -6510,7 +6487,8 @@ void SurfaceFlinger::initializeDisplays() {
     state.id = transactionId;
 
     auto layerStack = ui::DEFAULT_LAYER_STACK.id;
-    for (const auto& [id, display] : FTL_FAKE_GUARD(mStateLock, mPhysicalDisplays)) {
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mPhysicalDisplays);
+    for (const auto& [id, display] : displays) {
         state.displays.emplace_back(
                 DisplayState(display.token(), ui::LayerStack::fromValue(layerStack++)));
     }
@@ -7238,7 +7216,8 @@ perfetto::protos::LayersProto SurfaceFlinger::dumpDrawingStateProto(uint32_t tra
 
     // Determine if virtual layers display should be skipped
     if ((traceFlags & LayerTracing::TRACE_VIRTUAL_DISPLAYS) == 0) {
-        for (const auto& [_, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+        const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+        for (const auto& [_, display] : displays) {
             if (display->isVirtual()) {
                 stackIdsToSkip.insert(display->getLayerStack().id);
             }
@@ -7259,9 +7238,10 @@ perfetto::protos::LayersProto SurfaceFlinger::dumpDrawingStateProto(uint32_t tra
 
 google::protobuf::RepeatedPtrField<perfetto::protos::DisplayProto>
 SurfaceFlinger::dumpDisplayProto() const {
-    google::protobuf::RepeatedPtrField<perfetto::protos::DisplayProto> displays;
-    for (const auto& [_, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
-        perfetto::protos::DisplayProto* displayProto = displays.Add();
+    google::protobuf::RepeatedPtrField<perfetto::protos::DisplayProto> displayProtos;
+    const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
+    for (const auto& [_, display] : displays) {
+        perfetto::protos::DisplayProto* displayProto = displayProtos.Add();
         displayProto->set_id(display->getId().value);
         displayProto->set_name(display->getDisplayName());
         displayProto->set_layer_stack(display->getLayerStack().id);
@@ -7281,7 +7261,7 @@ SurfaceFlinger::dumpDisplayProto() const {
                                                 displayProto->mutable_transform());
         displayProto->set_is_virtual(display->isVirtual());
     }
-    return displays;
+    return displayProtos;
 }
 
 void SurfaceFlinger::dumpHwc(std::string& result) const {
@@ -10205,17 +10185,14 @@ binder::Status SurfaceComposerAIDL::createConnection(sp<gui::ISurfaceComposerCli
 
 binder::Status SurfaceComposerAIDL::createVirtualDisplay(
         const std::string& displayName, bool isSecure,
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy,
-        gui::ISurfaceComposer::EmbeddedContentPolicy embeddedContentPolicy,
-        const std::string& uniqueId, int32_t ownerUid, float requestedRefreshRate,
-        sp<IBinder>* outDisplay) {
+        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy, const std::string& uniqueId,
+        int32_t ownerUid, float requestedRefreshRate, sp<IBinder>* outDisplay) {
     status_t status = checkAccessPermission();
     if (status != OK) {
         return binderStatusFromStatusT(status);
     }
     *outDisplay = mFlinger->createVirtualDisplay(displayName, isSecure, optimizationPolicy,
-                                                 embeddedContentPolicy, uniqueId, ownerUid,
-                                                 requestedRefreshRate);
+                                                 uniqueId, ownerUid, requestedRefreshRate);
     return binder::Status::ok();
 }
 

@@ -1289,19 +1289,14 @@ void SurfaceComposerClient::Transaction::enableDebugLogCallPoints() {
 sp<IBinder> SurfaceComposerClient::createVirtualDisplay(const std::string& displayName,
                                                         bool isSecure, bool optimizeForPower,
                                                         const std::string& uniqueId, uid_t ownerUid,
-                                                        bool includeEmbeddedContent,
                                                         float requestedRefreshRate) {
     const gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy = optimizeForPower
             ? gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower
             : gui::ISurfaceComposer::OptimizationPolicy::optimizeForPerformance;
-    const gui::ISurfaceComposer::EmbeddedContentPolicy emmbeddedContentPolicy =
-            includeEmbeddedContent ? gui::ISurfaceComposer::EmbeddedContentPolicy::Include
-                                   : gui::ISurfaceComposer::EmbeddedContentPolicy::Exclude;
     sp<IBinder> display = nullptr;
     binder::Status status =
             ComposerServiceAIDL::getComposerService()->createVirtualDisplay(displayName, isSecure,
                                                                             optimizationPolicy,
-                                                                            emmbeddedContentPolicy,
                                                                             uniqueId, ownerUid,
                                                                             requestedRefreshRate,
                                                                             &display);

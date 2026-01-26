@@ -38,6 +38,11 @@
 #include "PaintOptionsBuilder.h"
 #include "skia/filters/RuntimeEffectManager.h"
 
+// A given SoC will reject external formats it doesn't know, so Precompiling with a wide range
+// of them is problematic. Short term, we're disabling Precompilation with any external formats.
+// Long term, the plan is to have an SoC-specific file with allowed external formats.
+#define RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES 0
+
 namespace android::renderengine::skia {
 
 using namespace skgpu::graphite;
@@ -79,6 +84,7 @@ static constexpr DrawTypeFlags operator|(DrawTypeFlags a, DrawTypeFlags b) {
                                       static_cast<std::underlying_type<DrawTypeFlags>::type>(b));
 }
 
+#if RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
 skgpu::VulkanYcbcrConversionInfo ycbcr_info(uint64_t externalFormat,
                                             VkSamplerYcbcrModelConversion model,
                                             VkSamplerYcbcrRange range, VkChromaLocation location,
@@ -108,6 +114,7 @@ sk_sp<PrecompileShader> vulkan_ycbcr_image_shader(const skgpu::VulkanYcbcrConver
                                                PrecompileShaders::ImageShaderFlags::kExcludeCubic,
                                                {&ci, 1}, {});
 }
+#endif // RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
 
 sk_sp<PrecompileShader> create_hw_image_precompile_shader() {
     SkColorInfo ci{kRGBA_8888_SkColorType, kPremul_SkAlphaType,
@@ -263,6 +270,7 @@ skgpu::graphite::PaintOptions BlurFilterMix(RuntimeEffectManager& effectManager)
     return paintOptions;
 }
 
+#if RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
 PaintOptions ImagePremulYCbCr238Srcover(bool narrow) {
     PaintOptions paintOptions;
 
@@ -442,6 +450,7 @@ PaintOptions LinearEffectImageYCbCr54(RuntimeEffectManager& effectManager) {
                         /* dither= */ true,
                         SkColorSpace::MakeSRGBLinear());
 }
+#endif // RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
 
 skgpu::graphite::PaintOptions EdgeExtensionPassthroughSrcover(RuntimeEffectManager& effectManager) {
     SkColorInfo ci { kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr };
@@ -996,6 +1005,7 @@ void GraphitePipelineManager::PrecompilePipelines(
           DrawTypeFlags::kNonAAFillRect,
           kRGBA_1_D },
 
+#if RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
         // 238 Full range (kHIAAO4AAAAAAAAA) block ----------------
 
         { ImagePremulYCbCr238Srcover(/* narrow= */ false),
@@ -1090,6 +1100,7 @@ void GraphitePipelineManager::PrecompilePipelines(
         { LinearEffectImageYCbCr54(effectManager),
           DrawTypeFlags::kNonAAFillRect,
           kRGBA_1_D_SRGB },
+#endif // RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
     };
 
     // clang-format on

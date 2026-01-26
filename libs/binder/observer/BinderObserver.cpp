@@ -24,7 +24,10 @@
 #include "BinderStatsUtils.h"
 
 namespace android {
+#if !defined(LIBBINDER_BINDER_OBSERVER_V2)
 constexpr int kSendIntervalSec = 5;
+#endif
+
 constexpr int64_t kNanoSecondsPerSec = 1000'000'000LL;
 
 /**
@@ -98,7 +101,11 @@ void BinderObserver::deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& que
 
 bool BinderObserver::isFlushRequired(int64_t nowSec) {
     int64_t previousFlushTimeSec = mLastFlushTimeSec.load();
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    return previousFlushTimeSec < nowSec;
+#else
     return nowSec - previousFlushTimeSec >= kSendIntervalSec;
+#endif
 }
 
 void BinderObserver::addStatMaybeFlush(const std::shared_ptr<BinderStatsSpscQueue>& queue,

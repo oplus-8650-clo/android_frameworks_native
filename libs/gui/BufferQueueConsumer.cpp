@@ -353,7 +353,6 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
     ATRACE_BUFFER_INDEX(slot);
     BQ_LOGV("detachBuffer: slot %d", slot);
     sp<IProducerListener> listener;
-    bool shouldCallReleaseCb = false;
     {
         std::lock_guard<std::mutex> lock(mCore->mMutex);
 
@@ -376,9 +375,9 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
                     "(state = %s)", slot, mSlots[slot].mBufferState.string());
             return BAD_VALUE;
         }
-
-        shouldCallReleaseCb = mCore->mBufferReleasedCbEnabled;
-        listener = mCore->mConnectedProducerListener;
+        if (mCore->mBufferReleasedCbEnabled) {
+            listener = mCore->mConnectedProducerListener;
+        }
 
         mSlots[slot].mBufferState.detachConsumer();
         mCore->mActiveBuffers.erase(slot);
@@ -390,12 +389,8 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
     }
 
     if (listener) {
-        if (shouldCallReleaseCb) {
-            listener->onBufferDetached(slot);
-        }
-        listener->onBuffersDiscarded({slot});
+        listener->onBufferDetached(slot);
     }
-
     return NO_ERROR;
 }
 

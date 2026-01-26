@@ -64,6 +64,7 @@ public:
     bool enable_color_correction_bugfix() const;
     bool fence_handling() const;
     bool frontend_caching_v0() const;
+    bool frametimeline_boottime_in_lambda() const;
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;
     bool graphite_renderengine_preview2_rollout() const;
@@ -104,6 +105,7 @@ public:
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
     bool shader_disk_cache() const;
+    bool small_blur_region_improvements() const;
     bool skip_invisible_windows_in_input() const;
     bool stable_edid_ids() const;
     bool synced_resolution_switch() const;

@@ -106,6 +106,43 @@ protected:
         tp->NotifyEndOfFile();
         return tp;
     }
+
+    std::pair<int, int> analyzeConcurrentTrace(const std::string& trace, int start_counter,
+                                               int end_counter) {
+        auto tp = GetTraceProcessor(trace);
+        auto it = tp->ExecuteQuery("SELECT message FROM protolog WHERE tag = 'StressGroup' AND "
+                                   "message LIKE 'Message %' ORDER BY ts");
+
+        std::vector<std::string> messages;
+        while (it.Next()) {
+            messages.push_back(it.Get(0).AsString());
+        }
+
+        EXPECT_FALSE(messages.empty());
+
+        int first_msg_num;
+        sscanf(messages.begin()->c_str(), "Message %d", &first_msg_num);
+
+        int expected_msg_num = first_msg_num;
+        for (auto mIt = messages.begin(); mIt != messages.end(); ++mIt) {
+            int current_msg_num;
+            if (sscanf(mIt->c_str(), "Message %d", &current_msg_num) == 1) {
+                EXPECT_EQ(current_msg_num, expected_msg_num) << "Data messages are not consecutive";
+                expected_msg_num++;
+            }
+        }
+
+        int last_msg_num;
+        sscanf(messages.back().c_str(), "Message %d", &last_msg_num);
+
+        // Starting and stopping the trace is an async call and we have no guarantees of when it
+        // actually starts and stops tracing, so the best we can do is assert there are no messages
+        // from before and after we make the call to start and stop tracing respectively.
+        EXPECT_GE(first_msg_num, start_counter);
+        EXPECT_LE(last_msg_num, end_counter);
+
+        return {first_msg_num, last_msg_num};
+    }
 };
 
 std::string GetLine(const std::string& input, int line_number) {
@@ -412,7 +449,8 @@ TEST_F_WITH_FLAGS(ProtoLogTest, MultiThreadedLogging,
 }
 
 // Verifies that concurrent sessions starting and stopping during continuous
-// logging capture the correct messages.
+// logging capture the correct messages. This test uses in-band markers to
+// define the capture window, making it robust against timing-related flakiness.
 TEST_F_WITH_FLAGS(ProtoLogTest, StressTestConcurrentSessions,
                   REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_PACKAGE, native_proto_logging))) {
     std::atomic<bool> stop_logging(false);
@@ -430,73 +468,35 @@ TEST_F_WITH_FLAGS(ProtoLogTest, StressTestConcurrentSessions,
     // Let some messages be logged before any session starts.
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    auto session1 = StartTracing();
-    // The first message ID for session 1 is captured inside StartTracing.
-    // We capture the counter here as a proxy for which messages should be in the trace.
     int start_counter1 = message_counter.load();
+    auto session1 = StartTracing();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    auto session2 = StartTracing();
     int start_counter2 = message_counter.load();
+    auto session2 = StartTracing();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    int end_counter1 = message_counter.load();
     std::string trace1 = StopAndReadTrace(session1.get());
+    int end_counter1 = message_counter.load();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    int end_counter2 = message_counter.load();
     std::string trace2 = StopAndReadTrace(session2.get());
+    int end_counter2 = message_counter.load();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     stop_logging = true;
     logging_thread.join();
 
     // Analyze trace 1
-    auto tp1 = GetTraceProcessor(trace1);
-    auto it1 =
-            tp1->ExecuteQuery("SELECT message FROM protolog WHERE tag = 'StressGroup' ORDER BY ts");
-    int message_count1 = 0;
-    int min_msg_num1 = -1, max_msg_num1 = -1;
-    while (it1.Next()) {
-        int msg_num;
-        // The format must match the PROTOLOG_I call exactly.
-        if (sscanf(it1.Get(0).AsString(), "Message %d", &msg_num) == 1) {
-            if (min_msg_num1 == -1 || msg_num < min_msg_num1) min_msg_num1 = msg_num;
-            if (max_msg_num1 == -1 || msg_num > max_msg_num1) max_msg_num1 = msg_num;
-            message_count1++;
-        }
-    }
-
-    // We expect to see some messages.
-    ASSERT_GT(message_count1, 0);
-    // The message numbers should be within the approximate range of when the session was active.
-    // We allow a small margin for timing inaccuracies between the test thread and the logging
-    // thread.
-    EXPECT_GE(min_msg_num1, start_counter1 - 10);
-    EXPECT_LT(max_msg_num1, end_counter1 + 10);
+    auto range1 = analyzeConcurrentTrace(trace1, start_counter1, end_counter1);
 
     // Analyze trace 2
-    auto tp2 = GetTraceProcessor(trace2);
-    auto it2 =
-            tp2->ExecuteQuery("SELECT message FROM protolog WHERE tag = 'StressGroup' ORDER BY ts");
-    int message_count2 = 0;
-    int min_msg_num2 = -1, max_msg_num2 = -1;
-    while (it2.Next()) {
-        int msg_num;
-        if (sscanf(it2.Get(0).AsString(), "Message %d", &msg_num) == 1) {
-            if (min_msg_num2 == -1 || msg_num < min_msg_num2) min_msg_num2 = msg_num;
-            if (max_msg_num2 == -1 || msg_num > max_msg_num2) max_msg_num2 = msg_num;
-            message_count2++;
-        }
-    }
-
-    ASSERT_GT(message_count2, 0);
-    EXPECT_GE(min_msg_num2, start_counter2 - 10);
-    EXPECT_LT(max_msg_num2, end_counter2 + 10);
+    auto range2 = analyzeConcurrentTrace(trace2, start_counter2, end_counter2);
 
     // Session 2 should have started after session 1.
-    EXPECT_GT(min_msg_num2, min_msg_num1);
+    EXPECT_LT(range1.first, range2.first);
     // Session 1 stopped before session 2.
-    EXPECT_LT(max_msg_num1, max_msg_num2);
+    EXPECT_LT(range1.second, range2.second);
 }
 
 } // namespace protolog

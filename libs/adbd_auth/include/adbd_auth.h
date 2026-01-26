@@ -57,6 +57,11 @@ struct AdbdAuthCallbacksV2 : AdbdAuthCallbacksV1 {
     void (*stop_adbd_wifi)();
 };
 
+struct AdbdAuthCallbacksV3: AdbdAuthCallbacksV2 {
+    // The framework has connected to adbd_auth socket
+    void (*on_framework_connected)();
+};
+
 struct AdbdAuthContext;
 typedef struct AdbdAuthContext AdbdAuthContext;
 

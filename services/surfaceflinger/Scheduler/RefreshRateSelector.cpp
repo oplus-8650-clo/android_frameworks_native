@@ -363,9 +363,7 @@ struct RefreshRateSelector::RefreshRateScoreComparator {
     bool operator()(const RefreshRateScore& lhs, const RefreshRateScore& rhs) const {
         const auto& [frameRateMode, overallScore, _] = lhs;
 
-        std::string name = to_string(frameRateMode);
-
-        ALOGV("%s sorting scores %.2f", name.c_str(), overallScore);
+        ALOGV("%s sorting scores %.2f", to_string(frameRateMode).c_str(), overallScore);
 
         if (!ScoredFrameRate::scoresEqual(overallScore, rhs.overallScore)) {
             return overallScore > rhs.overallScore;

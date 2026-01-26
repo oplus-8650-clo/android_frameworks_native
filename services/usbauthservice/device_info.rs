@@ -87,6 +87,8 @@ impl UsbDeviceInfoWithState {
     /// It returns an error if essential sysfs attributes cannot be read or parsed.
     #[allow(dead_code)]
     pub fn from_device(device: &Device) -> Result<Self, DeviceInfoError> {
+        let bus_num = Self::get_u16_sysattr(device, "busnum")?;
+        let dev_num = Self::get_u16_sysattr(device, "devnum")?;
         let vendor_id = Self::get_hex_u16_sysattr(device, "idVendor")?;
         let product_id = Self::get_hex_u16_sysattr(device, "idProduct")?;
         let device_class = Self::get_hex_u8_sysattr(device, "bDeviceClass")?;
@@ -107,6 +109,8 @@ impl UsbDeviceInfoWithState {
         Ok(Self {
             info: UsbAuthDeviceInfo {
                 syspath: device.syspath().to_string_lossy().to_string(),
+                busNumber: bus_num as i32,
+                deviceNumber: dev_num as i32,
                 vendorId: vendor_id as i32,
                 productId: product_id as i32,
                 deviceClass: device_class as i8,
@@ -130,6 +134,19 @@ impl UsbDeviceInfoWithState {
     /// Helper to get a sysfs attribute as a string, defaulting to "" if missing.
     fn get_string_sysattr(device: &Device, attr_name: &str) -> String {
         device.sysattrs().get(attr_name).ok().unwrap_or_default().to_string()
+    }
+
+    /// Helper to get and parse a sysfs attribute as a u16 from decimal, defaulting to 0 if missing.
+    /// Returns an error if the attribute is present but malformed.
+    fn get_u16_sysattr(device: &Device, attr_name: &str) -> Result<u16, DeviceInfoError> {
+        let Ok(s) = device.sysattrs().get(attr_name) else {
+            return Ok(0);
+        };
+        s.trim().parse::<u16>().map_err(|e| DeviceInfoError::ParseInt {
+            attribute: attr_name.to_string(),
+            value: s.to_string(),
+            source: e,
+        })
     }
 
     /// Helper to get and parse a sysfs attribute as a u16 from hex, defaulting to 0 if missing.
@@ -172,6 +189,8 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     fn create_mock_sysfs_with_device(
         name: &'static str,
+        bus_num: &'static str,
+        dev_num: &'static str,
         id_vendor: &'static str,
         id_product: &'static str,
         device_class: &'static str,
@@ -185,6 +204,8 @@ mod tests {
         let interface_name = format!("{}:1.0", name);
         let leaked_interface_name = Box::leak(interface_name.into_boxed_str());
         let device_files = HashMap::from([
+            ("busnum", SysfsFile::RegularFile(bus_num)),
+            ("devnum", SysfsFile::RegularFile(dev_num)),
             ("idVendor", SysfsFile::RegularFile(id_vendor)),
             ("idProduct", SysfsFile::RegularFile(id_product)),
             ("bDeviceClass", SysfsFile::RegularFile(device_class)),
@@ -229,12 +250,14 @@ mod tests {
     #[test]
     fn test_from_device_success() -> Result<(), DeviceInfoError> {
         let mock_sys = create_mock_sysfs_with_device(
-            "1-1", "18d1", "4ee7", "09", "00", "00", "0223", "03", "01", "02",
+            "1-1", "1", "2", "18d1", "4ee7", "09", "00", "00", "0223", "03", "01", "02",
         );
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
         let device = Device::with_root_and_syspath(mock_sys.path(), &device_path).unwrap();
         let device_info = UsbDeviceInfoWithState::from_device(&device)?;
 
+        assert_eq!(device_info.info.busNumber, 1);
+        assert_eq!(device_info.info.deviceNumber, 2);
         assert_eq!(device_info.info.vendorId, 0x18d1);
         assert_eq!(device_info.info.productId, 0x4ee7);
         assert_eq!(device_info.info.deviceClass, 0x09);
@@ -258,7 +281,7 @@ mod tests {
     #[test]
     fn test_from_device_missing_attributes() -> Result<(), DeviceInfoError> {
         let mock_sys = create_mock_sysfs_with_device(
-            "1-1", "18d1", "4ee7", "", "00", "00", "0223", "03", "01", "02",
+            "1-1", "1", "2", "18d1", "4ee7", "", "00", "00", "0223", "03", "01", "02",
         ); // HID
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
         let device = Device::with_root_and_syspath(mock_sys.path(), &device_path).unwrap();
@@ -275,6 +298,8 @@ mod tests {
     fn test_from_device_malformed_hex() -> Result<(), DeviceInfoError> {
         let mock_sys = create_mock_sysfs_with_device(
             "1-1",
+            "1",
+            "2",
             "18d1",
             "4ee7",
             "09",

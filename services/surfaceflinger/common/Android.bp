@@ -18,6 +18,7 @@ cc_defaults {
         "libSurfaceFlingerProp",
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [
@@ -68,6 +69,7 @@ cc_defaults {
     shared_libs: [
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [
@@ -86,6 +88,7 @@ cc_defaults {
     shared_libs: [
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [

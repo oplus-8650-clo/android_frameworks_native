@@ -16,10 +16,15 @@
 #pragma once
 
 #include <android/os/binder/IBinderStatsConsumerService.h>
+#include <binder/Functional.h>
 #include <vector>
 #include "BinderStatsUtils.h"
 
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+#include "BinderCallsVectorAggregation.h"
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
 #include "BinderCallsMapAggregation.h"
+#endif
 
 class BinderStatsPusherTest_GetBinderStatsService_Test;
 class BinderAllocation_BinderStatsPusher_aggregateStatsLocked_Test;
@@ -37,13 +42,33 @@ namespace android {
  */
 class BinderStatsPusher {
 public:
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    /**
+     * Functor to aggregate statistics. Used by BinderCallsVectorAggregation to trigger data
+     * aggregation.
+     */
+    struct AggregateStatsFunctor {
+        AggregateStatsFunctor(BinderStatsPusher* pusher) : mPusher(pusher) {}
+        BinderStatsPusher* mPusher;
+        void operator()(const int64_t nowSec, std::vector<BinderCallData>& data) const {
+            mPusher->sortAndAggregateStatsLocked(nowSec, data);
+        }
+    };
+#endif
     /**
      * Functor to add BinderCallData to the internal aggregation buffer.
      */
     struct AddCallDataFunctor {
         AddCallDataFunctor(BinderStatsPusher* pusher) : mPusher(pusher) {}
         BinderStatsPusher* mPusher;
-        void operator()(BinderCallData&& b) const;
+        void operator()(BinderCallData&& b) const {
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+            mPusher->mCallsAggregation.addCallStatsLocked(std::move(b),
+                                                          AggregateStatsFunctor(mPusher));
+#else
+            mPusher->mCallsAggregation.addCallStatsLocked(std::move(b));
+#endif
+        }
     };
 
     /**
@@ -91,15 +116,27 @@ private:
      * Appends aggregated call statistics to the mCallStats report.
      */
     void appendCallStatsToReportLocked(const BinderCallData& chunk, const CallAggregation& agg);
+
     /**
      * Aggregates binder transaction data into Binder Report objects.
      */
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    void sortAndAggregateStatsLocked(int64_t nowSec, std::vector<BinderCallData>& data);
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
     void aggregateStatsLocked(int64_t nowSec);
+#endif
 
     // Class used to store and aggregate data.
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    BinderCallsVectorAggregation mCallsAggregation;
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
     BinderCallsMapAggregation mCallsAggregation;
+#endif
     // Vectors to temporarily store the data before sending to BinderStatsConsumer.
     // They are member variables to reduce allocations across multiple calls.
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    std::vector<os::binder::SingleSecondBinderStats> mSingleSecondStats;
+#else  // !defined(LIBBINDER_BINDER_OBSERVER_V2)
     std::vector<os::binder::BinderCallsStats> mCallStats;
     std::vector<os::binder::BinderSpamStats> mSpamStats;
 
@@ -110,6 +147,7 @@ private:
      * once 'nowSec - startTimeSec >= kAggregationWindowSec'.
      */
     static const int64_t kAggregationWindowSec = 5;
+#endif // defined(LIBBINDER_BINDER_OBSERVER_V2)
     /**
      * Time of the last check for the binder stats consumer service.
      */

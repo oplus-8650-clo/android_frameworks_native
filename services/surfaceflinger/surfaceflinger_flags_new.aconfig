@@ -209,6 +209,16 @@ flag {
 } # frame_rate_category_mrr
 
 flag {
+  name: "frametimeline_boottime_in_lambda"
+  namespace: "core_graphics"
+  description: "Converts monotonic boottime timestamps to wallclock time in FrameTimeline"
+  bug: "477947066"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # frametimeline_boottime_in_lambda
+
+flag {
   name: "frontend_caching_v0"
   namespace: "core_graphics"
   description: "Enables caching of frontend layer states"
@@ -362,13 +372,6 @@ flag {
 } # set_client_drawn_corner_radii
 
 flag {
-  name: "shader_disk_cache"
-  namespace: "core_graphics"
-  description: "Enable shader disk cache for RenderEngine"
-  bug: "428980914"
-} # shader_disk_cache
-
-flag {
   name: "set_power_mode_async"
   namespace: "window_surfaces"
   description: "Run power mode hardware transitions asynchronously"
@@ -377,6 +380,23 @@ flag {
     purpose: PURPOSE_FEATURE
   }
 } # set_power_mode_async
+
+flag {
+  name: "shader_disk_cache"
+  namespace: "core_graphics"
+  description: "Enable shader disk cache for RenderEngine"
+  bug: "428980914"
+} # shader_disk_cache
+
+flag {
+  name: "small_blur_region_improvements"
+  namespace: "core_graphics"
+  description: "Flag for some small blur region improvements"
+  bug: "475706309"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # small_blur_region_improvements
 
 flag {
   name: "skip_invisible_windows_in_input"

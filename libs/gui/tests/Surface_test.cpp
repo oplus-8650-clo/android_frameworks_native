@@ -714,7 +714,6 @@ public:
     binder::Status createVirtualDisplay(
             const std::string& /*displayName*/, bool /*isSecure*/,
             gui::ISurfaceComposer::OptimizationPolicy /*optimizationPolicy*/,
-            gui::ISurfaceComposer::EmbeddedContentPolicy /*embeddedContentPolicy*/,
             const std::string& /*uniqueId*/, int32_t /*ownerUid*/, float /*requestedRefreshRate*/,
             sp<IBinder>* /*outDisplay*/) override {
         return binder::Status::ok();
@@ -2595,6 +2594,52 @@ TEST_F(SurfaceTest, QueueBufferOutput_TracksReplacements_Plural) {
     EXPECT_TRUE(outputs[1].bufferReplaced);
 }
 
+TEST_F(SurfaceTest, QueueBufferInputOutput) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    SurfaceQueueBufferInput input;
+    input.fence = fence;
+    input.crop = Rect(0, 0, 10, 10);
+    input.transform = NATIVE_WINDOW_TRANSFORM_ROT_90;
+    input.timestamp = 12345;
+
+    SurfaceQueueBufferOutput output;
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, input, &output));
+
+    EXPECT_GE(output.nextFrameNumber, 1u);
+}
+
+TEST_F(SurfaceTest, CancelBuffer_GraphicBuffer_Fence) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
+}
+
+TEST_F(SurfaceTest, AttachBuffer_GraphicBuffer) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    // We need a detached buffer.
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->detachBuffer(buffer));
+
+    ASSERT_EQ(OK, surface->attachBuffer(buffer));
+    // Can cancel/queue after attach
+    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
+}
+
 TEST_F(SurfaceTest, UnlimitedSlots_FailsOnIncompatibleConsumer) {
     sp<IGraphicBufferProducer> producer;
     sp<IGraphicBufferConsumer> consumer;
@@ -2988,59 +3033,6 @@ TEST_F(SurfaceTest, Detach_BufferIsNotLeaked) {
     buffer = nullptr;
     ASSERT_EQ(OK, surface->detachBuffer(weakBuffer.promote()));
     ASSERT_EQ(nullptr, weakBuffer.promote());
-}
-
-TEST_F(SurfaceTest, ConsumerDetach_BufferIsNotLeaked) {
-    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
-
-    struct DetachingListener : public StubSurfaceListener {
-    public:
-        virtual void onBufferDetached(int slot) override { mDetachedSlots.push_back(slot); }
-        virtual bool needsReleaseNotify() override { return true; }
-
-        std::vector<int> mDetachedSlots;
-    };
-
-    sp<DetachingListener> listener = sp<DetachingListener>::make();
-    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
-
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
-    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
-
-    {
-        BufferItem item;
-        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
-        ASSERT_EQ(OK, consumer->detachBuffer(item.mGraphicBuffer));
-    }
-
-    ASSERT_EQ(1u, listener->mDetachedSlots.size());
-    wp<GraphicBuffer> weakBuffer = buffer;
-    buffer = nullptr;
-    EXPECT_EQ(nullptr, weakBuffer.promote());
-}
-
-TEST_F(SurfaceTest, ConsumerDetach_BufferIsNotLeaked_WithoutNotifyRelease) {
-    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
-
-    sp<StubSurfaceListener> listener = sp<StubSurfaceListener>::make();
-    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
-
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
-    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
-
-    {
-        BufferItem item;
-        ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
-        ASSERT_EQ(OK, consumer->detachBuffer(item.mGraphicBuffer));
-    }
-
-    wp<GraphicBuffer> weakBuffer = buffer;
-    buffer = nullptr;
-    EXPECT_EQ(nullptr, weakBuffer.promote());
 }
 
 // TEST_F(SurfaceTest, DiscardDetach_DoesNotDeadlock) {

@@ -52,15 +52,16 @@
 #define TRACE_CATEGORY_THERMAL (1 << 27)
 
 // Should match the definitions in: frameworks/native/cmds/atrace/atrace.cpp
-#define TRACK_EVENT_CATEGORIES(C) \
-  C(bitmap, "bitmap", "Enables bitmap tracing in the system")
+#define TRACK_EVENT_CATEGORIES(C)                             \
+  C(bitmap, "bitmap", "Enables bitmap tracing in the system") \
+  C(rendering, "rendering", "Enables rendering workload tracing in the system")
 
 namespace tracing_perfetto {
 namespace track_event_categories {
 
 PERFETTO_TE_CATEGORIES_DECLARE(TRACK_EVENT_CATEGORIES);
 
-}  // namespace categories
+}  // namespace track_event_categories
 }  // namespace tracing_perfetto
 
 #endif  // TRACE_CATEGORIES_H
