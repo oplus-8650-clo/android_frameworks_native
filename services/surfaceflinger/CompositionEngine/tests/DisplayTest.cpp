@@ -722,6 +722,7 @@ TEST_F(DisplayAnyLayersRequireClientCompositionTest, returnsFalse) {
 TEST_F(DisplayAnyLayersRequireClientCompositionTest, returnsTrue) {
     EXPECT_CALL(*mLayer1.outputLayer, requiresClientComposition()).WillOnce(Return(false));
     EXPECT_CALL(*mLayer2.outputLayer, requiresClientComposition()).WillOnce(Return(true));
+    EXPECT_CALL(*mLayer3.outputLayer, requiresClientComposition()).WillOnce(Return(false));
 
     EXPECT_TRUE(mDisplay->anyLayersRequireClientComposition());
 }

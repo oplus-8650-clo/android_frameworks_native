@@ -1105,6 +1105,11 @@ void SurfaceFrame::tracePredictions(int64_t displayFrameToken, nsecs_t monoBootO
         std::scoped_lock lock(mMutex);
         auto packet = ctx.NewTracePacket();
         packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+        if (monoBootOffset > 0 &&
+            FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+            monoBootOffset =
+                    systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+        }
         packet->set_timestamp(static_cast<uint64_t>(timestamp + monoBootOffset));
 
         auto* event = packet->set_frame_timeline_event();
@@ -1125,6 +1130,11 @@ void SurfaceFrame::tracePredictions(int64_t displayFrameToken, nsecs_t monoBootO
             std::scoped_lock lock(mMutex);
             auto packet = ctx.NewTracePacket();
             packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+            if (monoBootOffset > 0 &&
+                FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                monoBootOffset =
+                        systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+            }
             packet->set_timestamp(static_cast<uint64_t>(mPredictions.endTime + monoBootOffset));
 
             auto* event = packet->set_frame_timeline_event();
@@ -1166,6 +1176,11 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
         std::scoped_lock lock(mMutex);
         auto packet = ctx.NewTracePacket();
         packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+        if (monoBootOffset > 0 &&
+            FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+            monoBootOffset =
+                    systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+        }
         packet->set_timestamp(static_cast<uint64_t>(timestamp + monoBootOffset));
 
         auto* event = packet->set_frame_timeline_event();
@@ -1227,6 +1242,11 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
             std::scoped_lock lock(mMutex);
             auto packet = ctx.NewTracePacket();
             packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+            if (monoBootOffset > 0 &&
+                FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                monoBootOffset =
+                        systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+            }
             if (mPresentState == PresentState::Dropped) {
                 packet->set_timestamp(static_cast<uint64_t>(mDropTime + monoBootOffset));
             } else {
@@ -1720,6 +1740,11 @@ void FrameTimeline::DisplayFrame::tracePredictions(pid_t surfaceFlingerPid, nsec
 
         auto packet = ctx.NewTracePacket();
         packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+        if (monoBootOffset > 0 &&
+            FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+            monoBootOffset =
+                    systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+        }
         packet->set_timestamp(static_cast<uint64_t>(timestamp + monoBootOffset));
 
         auto* event = packet->set_frame_timeline_event();
@@ -1736,6 +1761,11 @@ void FrameTimeline::DisplayFrame::tracePredictions(pid_t surfaceFlingerPid, nsec
         FrameTimelineDataSource::Trace([&](FrameTimelineDataSource::TraceContext ctx) {
             auto packet = ctx.NewTracePacket();
             packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+            if (monoBootOffset > 0 &&
+                FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                monoBootOffset =
+                        systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+            }
             packet->set_timestamp(
                     static_cast<uint64_t>(mSurfaceFlingerPredictions.endTime + monoBootOffset));
 
@@ -1788,6 +1818,11 @@ void FrameTimeline::DisplayFrame::addSkippedFrame(pid_t surfaceFlingerPid, nsecs
 
             auto packet = ctx.NewTracePacket();
             packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+            if (monoBootOffset > 0 &&
+                FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                monoBootOffset =
+                        systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+            }
             packet->set_timestamp(static_cast<uint64_t>(skippedFrameStartTime + monoBootOffset));
 
             auto* event = packet->set_frame_timeline_event();
@@ -1817,6 +1852,11 @@ void FrameTimeline::DisplayFrame::addSkippedFrame(pid_t surfaceFlingerPid, nsecs
             FrameTimelineDataSource::Trace([&](FrameTimelineDataSource::TraceContext ctx) {
                 auto packet = ctx.NewTracePacket();
                 packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+                if (monoBootOffset > 0 &&
+                    FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                    monoBootOffset =
+                            systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+                }
                 packet->set_timestamp(
                         static_cast<uint64_t>(skippedFramePresentTime + monoBootOffset));
 
@@ -1845,6 +1885,11 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
 
         auto packet = ctx.NewTracePacket();
         packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+        if (monoBootOffset > 0 &&
+            FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+            monoBootOffset =
+                    systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+        }
         packet->set_timestamp(static_cast<uint64_t>(timestamp + monoBootOffset));
 
         auto* event = packet->set_frame_timeline_event();
@@ -1890,7 +1935,11 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
                     presentTime = mSurfaceFlingerActuals.startTime + ms2ns(4);
                 }
             }
-
+            if (monoBootOffset > 0 &&
+                FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
+                monoBootOffset =
+                        systemTime(SYSTEM_TIME_BOOTTIME) - systemTime(SYSTEM_TIME_MONOTONIC);
+            }
             packet->set_timestamp(static_cast<uint64_t>(presentTime + monoBootOffset));
 
             auto* event = packet->set_frame_timeline_event();

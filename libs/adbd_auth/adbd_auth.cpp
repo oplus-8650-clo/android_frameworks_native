@@ -22,7 +22,7 @@
 
 using android::base::unique_fd;
 
-static constexpr uint32_t kAuthVersion = 2;
+static constexpr uint32_t kAuthVersion = 3;
 
 static std::set<AdbdAuthFeature> supported_features = {
     AdbdAuthFeature::WifiLifeCycle};
@@ -344,6 +344,8 @@ void AdbdAuthContext::Run() {
           std::lock_guard<std::mutex> lock(mutex_);
           ReplaceFrameworkFd(std::move(new_framework_fd));
 
+          this->on_framework_connected();
+
           // Stop iterating over events: one of the later ones might be the old
           // framework fd.
           restart = false;
@@ -571,26 +573,32 @@ void AdbdAuthContextV2::StopAdbWifi(std::string_view buf) EXCLUDES(mutex_) {
   callbacks_v2_.stop_adbd_wifi();
 }
 
+AdbdAuthContextV3::AdbdAuthContextV3(const AdbdAuthCallbacksV3* callbacks, std::optional<int> server_fd)
+        : AdbdAuthContextV2(callbacks, server_fd), callbacks_v3_(*callbacks) {}
+
 AdbdAuthContext* adbd_auth_new(AdbdAuthCallbacks* callbacks) {
+  AdbdAuthContext* ctx = nullptr;
   switch (callbacks->version) {
     case 1: {
-      AdbdAuthContext* ctx = new AdbdAuthContext(
-          reinterpret_cast<AdbdAuthCallbacksV1*>(callbacks));
-      ctx->InitFrameworkHandlers();
-      return ctx;
+      ctx = new AdbdAuthContext( reinterpret_cast<AdbdAuthCallbacksV1*>(callbacks));
+      break;
     }
-    case kAuthVersion: {
-      AdbdAuthContextV2* ctx2 = new AdbdAuthContextV2(
-          reinterpret_cast<AdbdAuthCallbacksV2*>(callbacks));
-      ctx2->InitFrameworkHandlers();
-      return ctx2;
+    case 2: {
+      ctx = new AdbdAuthContextV2( reinterpret_cast<AdbdAuthCallbacksV2*>(callbacks));
+      break;
+    }
+    case kAuthVersion : {
+      ctx = new AdbdAuthContextV3( reinterpret_cast<AdbdAuthCallbacksV3*>(callbacks));
+      break;
     }
     default: {
-      LOG(ERROR) << "adbd_auth: received unknown AdbdAuthCallbacks version "
-                 << callbacks->version;
+      LOG(FATAL) << "adbd_auth: unknown AdbdAuthCallbacks version " << callbacks->version;
       return nullptr;
     }
   }
+
+  ctx->InitFrameworkHandlers();
+  return ctx;
 }
 
 void adbd_auth_delete(AdbdAuthContext* ctx) { delete ctx; }

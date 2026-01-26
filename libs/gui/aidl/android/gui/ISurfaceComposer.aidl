@@ -76,11 +76,6 @@ interface ISurfaceComposer {
         optimizeForPerformance = 1,
     }
 
-    enum EmbeddedContentPolicy {
-        Exclude = 0,
-        Include = 1,
-    }
-
     /**
      * Signal that we're done booting.
      * Requires ACCESS_SURFACE_FLINGER permission
@@ -115,9 +110,6 @@ interface ISurfaceComposer {
      *     Whether to optimize for power or performance. Displays that are optimizing for power may
      *     be dependent on a different display that optimizes for performance when they are on,
      *     which will guarantee performance for all of the other displays.
-     * embeddedContentPolicy
-     *     Specifies the policy for handling embedded content on this virtual display.
-     *     Can be set to Include or Exclude.
      * uniqueId
      *     The unique ID for the display.
      * ownerUid
@@ -131,14 +123,9 @@ interface ISurfaceComposer {
      *
      * requires ACCESS_SURFACE_FLINGER permission.
      */
-    @nullable IBinder createVirtualDisplay(
-                @utf8InCpp String displayName,
-                boolean isSecure,
-                OptimizationPolicy optimizationPolicy,
-                EmbeddedContentPolicy embeddedContentPolicy,
-                @utf8InCpp String uniqueId,
-                int /* uid_t */ ownerUid,
-                float requestedRefreshRate);
+    @nullable IBinder createVirtualDisplay(@utf8InCpp String displayName, boolean isSecure,
+            OptimizationPolicy optimizationPolicy, @utf8InCpp String uniqueId, int /* uid_t */ ownerUid, float requestedRefreshRate);
+
     /**
      * Destroy a virtual display.
      * requires ACCESS_SURFACE_FLINGER permission.

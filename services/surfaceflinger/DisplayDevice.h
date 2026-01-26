@@ -35,7 +35,6 @@
 #include <common/LayerFilter.h>
 #include <compositionengine/Display.h>
 #include <compositionengine/DisplaySurface.h>
-#include <gui/ISurfaceComposer.h>
 #include <gui/LayerState.h>
 #include <gui/Surface.h>
 #include <math/mat4.h>
@@ -369,9 +368,6 @@ struct DisplayDeviceState {
     std::string displayName;
     std::string uniqueId;
     bool isSecure = false;
-    gui::Uid ownerUid = gui::Uid::INVALID;
-    gui::ISurfaceComposer::EmbeddedContentPolicy embeddedContentPolicy =
-            gui::ISurfaceComposer::EmbeddedContentPolicy::Include;
 
     gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy =
             gui::ISurfaceComposer::OptimizationPolicy::optimizeForPerformance;

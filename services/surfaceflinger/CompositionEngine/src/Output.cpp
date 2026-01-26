@@ -1945,9 +1945,14 @@ bool Output::canPredictCompositionStrategy(const CompositionRefreshArgs& refresh
 }
 
 bool Output::anyLayersRequireClientComposition() const {
+    return numLayersRequiringClientComposition() > 0;
+}
+
+size_t Output::numLayersRequiringClientComposition() const {
     const auto layers = getOutputLayersOrderedByZ();
-    return std::any_of(layers.begin(), layers.end(),
-                       [](const auto& layer) { return layer->requiresClientComposition(); });
+    return static_cast<size_t>(std::count_if(layers.begin(), layers.end(), [](const auto& layer) {
+        return layer->requiresClientComposition();
+    }));
 }
 
 void Output::finishPrepareFrame() {
@@ -1955,6 +1960,11 @@ void Output::finishPrepareFrame() {
     if (mPlanner) {
         mPlanner->reportFinalPlan(getOutputLayersOrderedByZ());
     }
+
+    const auto numGpuLayers = numLayersRequiringClientComposition();
+
+    panopticon::reportGpuRenderedLayers(static_cast<int32_t>(numGpuLayers));
+    panopticon::reportDpuRenderedLayers(static_cast<int32_t>(getOutputLayerCount() - numGpuLayers));
     mRenderSurface->prepareFrame(state.usesClientComposition, state.usesDeviceComposition);
 }
 

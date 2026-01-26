@@ -428,7 +428,6 @@ public:
                                             bool optimizeForPower = true,
                                             const std::string& uniqueId = kEmpty,
                                             uid_t ownerUid = gui::Uid::INVALID.val(),
-                                            bool includeEmbeddedContent = false,
                                             float requestedRefreshRate = 0);
 
     static status_t destroyVirtualDisplay(const sp<IBinder>& displayToken);

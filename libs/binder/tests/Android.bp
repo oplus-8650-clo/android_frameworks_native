@@ -37,6 +37,10 @@ cc_defaults {
     ] + select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER"), {
         true: ["-DLIBBINDER_BINDER_OBSERVER"],
         default: [],
+    }) + select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER_V2"), {
+        true: ["-DLIBBINDER_BINDER_OBSERVER_V2"],
+        false: [],
+        default: [],
     }),
 }
 

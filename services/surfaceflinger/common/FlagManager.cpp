@@ -130,6 +130,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
     DUMP_ACONFIG_FLAG(frontend_caching_v0);
+    DUMP_ACONFIG_FLAG(frametimeline_boottime_in_lambda);
     DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview2_rollout);
@@ -177,6 +178,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
     DUMP_ACONFIG_FLAG(restore_blur_step);
     DUMP_ACONFIG_FLAG(shader_disk_cache);
+    DUMP_ACONFIG_FLAG(small_blur_region_improvements);
     DUMP_ACONFIG_FLAG(skip_invisible_windows_in_input);
     DUMP_ACONFIG_FLAG(stable_edid_ids);
     DUMP_ACONFIG_FLAG(synced_resolution_switch);
@@ -279,6 +281,7 @@ FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition,
 FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition_platform,
                           "debug.sf.force_slower_follower_gpu_composition_platform");
 FLAG_MANAGER_ACONFIG_FLAG(frame_rate_category_mrr, "debug.sf.frame_rate_category_mrr")
+FLAG_MANAGER_ACONFIG_FLAG(frametimeline_boottime_in_lambda, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
@@ -292,6 +295,7 @@ FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
 FLAG_MANAGER_ACONFIG_FLAG(renderable_buffer_usage, "")
 FLAG_MANAGER_ACONFIG_FLAG(restore_blur_step, "debug.renderengine.restore_blur_step")
 FLAG_MANAGER_ACONFIG_FLAG(shader_disk_cache, "");
+FLAG_MANAGER_ACONFIG_FLAG(small_blur_region_improvements, "");
 FLAG_MANAGER_ACONFIG_FLAG(skip_invisible_windows_in_input, "");
 FLAG_MANAGER_ACONFIG_FLAG(stable_edid_ids, "debug.sf.stable_edid_ids")
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
