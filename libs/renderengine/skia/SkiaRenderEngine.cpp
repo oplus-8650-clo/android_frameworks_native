@@ -60,8 +60,8 @@
 #include <include/gpu/ganesh/GrContextOptions.h>
 #include <include/gpu/ganesh/GrTypes.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
+#include <include/private/SkHdrMetadata.h>
 #include <pthread.h>
-#include <src/codec/SkHdrAgtmPriv.h>
 #include <src/core/SkTraceEventCommon.h>
 #include <sync/sync.h>
 #include <ui/BlurRegion.h>
@@ -661,11 +661,13 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
             if (err == OK && smpte2094_50) {
                 auto smpte2094_50Data =
                         SkData::MakeWithoutCopy(smpte2094_50->data(), smpte2094_50->size());
-                auto agtm = skhdr::Agtm::Make(smpte2094_50Data.get());
-                if (agtm) {
+                skhdr::AdaptiveGlobalToneMap agtm;
+                if (agtm.parse(smpte2094_50Data.get())) {
                     SFTRACE_NAME("AGTM");
-                    shader = shader->makeWithColorFilter(
-                            agtm->makeColorFilter(std::log2(parameters.display.targetHdrSdrRatio)));
+                    skhdr::Metadata metadata = skhdr::Metadata::MakeEmpty();
+                    metadata.setAdaptiveGlobalToneMap(agtm);
+                    shader = shader->makeWithColorFilter(metadata.makeToneMapColorFilter(
+                            std::log2(parameters.display.targetHdrSdrRatio)));
                 }
             }
         }

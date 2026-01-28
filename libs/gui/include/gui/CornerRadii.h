@@ -95,6 +95,11 @@ inline bool operator==(const CornerRadii& lhs, const CornerRadii& rhs) {
             static_cast<const ::android::gui::CornerRadiiData&>(rhs);
 }
 
+inline bool operator!=(const CornerRadii& lhs, const CornerRadii& rhs) {
+    return static_cast<const ::android::gui::CornerRadiiData&>(lhs) !=
+            static_cast<const ::android::gui::CornerRadiiData&>(rhs);
+}
+
 inline bool operator>(const CornerRadii& lhs, const CornerRadii& rhs) {
     return fromAidlVec2(lhs.topLeft) > fromAidlVec2(rhs.topLeft) ||
             fromAidlVec2(lhs.topRight) > fromAidlVec2(rhs.topRight) ||

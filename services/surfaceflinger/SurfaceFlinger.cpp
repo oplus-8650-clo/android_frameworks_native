@@ -2017,16 +2017,11 @@ status_t SurfaceFlinger::setHdrConversionStrategy(
                 aidl::android::hardware::graphics::common::HdrConversionStrategy;
         using GuiHdrConversionStrategyTag = gui::HdrConversionStrategy::Tag;
         AidlHdrConversionStrategy aidlConversionStrategy;
-        status_t status;
-        aidl::android::hardware::graphics::common::Hdr aidlPreferredHdrOutputType;
         switch (hdrConversionStrategy.getTag()) {
             case GuiHdrConversionStrategyTag::passthrough: {
                 aidlConversionStrategy.set<AidlHdrConversionStrategy::Tag::passthrough>(
                         hdrConversionStrategy.get<GuiHdrConversionStrategyTag::passthrough>());
-                status = getHwComposer().setHdrConversionStrategy(aidlConversionStrategy,
-                                                                  &aidlPreferredHdrOutputType);
-                *outPreferredHdrOutputType = static_cast<int32_t>(aidlPreferredHdrOutputType);
-                return status;
+                break;
             }
             case GuiHdrConversionStrategyTag::autoAllowedHdrTypes: {
                 auto autoHdrTypes =
@@ -2039,24 +2034,33 @@ status_t SurfaceFlinger::setHdrConversionStrategy(
                 }
                 aidlConversionStrategy.set<AidlHdrConversionStrategy::Tag::autoAllowedHdrTypes>(
                         aidlAutoHdrTypes);
-                status = getHwComposer().setHdrConversionStrategy(aidlConversionStrategy,
-                                                                  &aidlPreferredHdrOutputType);
-                *outPreferredHdrOutputType = static_cast<int32_t>(aidlPreferredHdrOutputType);
-                return status;
+                break;
             }
             case GuiHdrConversionStrategyTag::forceHdrConversion: {
+                using AidlHdr = aidl::android::hardware::graphics::common::Hdr;
                 auto forceHdrConversion =
                         hdrConversionStrategy
                                 .get<GuiHdrConversionStrategyTag::forceHdrConversion>();
+                // DisplayManager invalid HDR type is '-1', while AIDL invalid HDR type is '0'
+                AidlHdr aidlForceHdrConversion = forceHdrConversion == -1
+                        ? AidlHdr::INVALID
+                        : static_cast<AidlHdr>(forceHdrConversion);
                 aidlConversionStrategy.set<AidlHdrConversionStrategy::Tag::forceHdrConversion>(
-                        static_cast<aidl::android::hardware::graphics::common::Hdr>(
-                                forceHdrConversion));
-                status = getHwComposer().setHdrConversionStrategy(aidlConversionStrategy,
-                                                                  &aidlPreferredHdrOutputType);
-                *outPreferredHdrOutputType = static_cast<int32_t>(aidlPreferredHdrOutputType);
-                return status;
+                        aidlForceHdrConversion);
+
+                // Legacy HALs expect passthrough=true for forced SDR
+                if (!FlagManager::getInstance().invalid_hdr_type_for_force_sdr_optin() &&
+                    aidlForceHdrConversion == AidlHdr::INVALID) {
+                    aidlConversionStrategy.set<AidlHdrConversionStrategy::Tag::passthrough>(true);
+                }
+                break;
             }
         }
+        aidl::android::hardware::graphics::common::Hdr aidlPreferredHdrOutputType;
+        status_t status = getHwComposer().setHdrConversionStrategy(aidlConversionStrategy,
+                                                                   &aidlPreferredHdrOutputType);
+        *outPreferredHdrOutputType = static_cast<int32_t>(aidlPreferredHdrOutputType);
+        return status;
     });
     return future.get();
 }
@@ -6204,6 +6208,11 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
     }
     if (what & layer_state_t::eDesiredHdrHeadroomChanged) {
         if (layer->setDesiredHdrHeadroom(s.desiredHdrSdrRatio)) {
+            flags |= eTraversalNeeded;
+        }
+    }
+    if (what & layer_state_t::eDesiredMaxHdrHeadroomChanged) {
+        if (layer->setDesiredMaxHdrHeadroom(s.maxDesiredHdrSdrRatio)) {
             flags |= eTraversalNeeded;
         }
     }

@@ -28,6 +28,9 @@ use thiserror::Error;
 pub enum Action {
     /// Allow the USB device connection.
     Allow,
+    /// Allow the USB device if the client has persisted a previous allow decision.
+    /// Similar to Ask but should not be user visible.
+    AllowPersisted,
     /// Ask the user for authorization.
     Ask,
     /// Deny the USB device connection.
@@ -46,6 +49,7 @@ impl Action {
         if let Some(&action_str) = parts.peek() {
             let action = match action_str {
                 "allow" => Ok(Action::Allow),
+                "allow-persisted" => Ok(Action::AllowPersisted),
                 "ask" => Ok(Action::Ask),
                 "deny" => Ok(Action::Deny),
                 "defer" => Ok(Action::Defer),

@@ -47,6 +47,13 @@ ndk_library {
     symbol_file: "libGLESv1_CM.map.txt",
     first_version: "9",
     unversioned_until: "current",
+    // Lower GLES have an empty denylist because some of the symbols conflict
+    // with GLESv3.
+    //
+    // This means that we will have incomplete denylist coverage for apps
+    // that link to GLESv1CM or GLESv2, but these are rare, and GPU does
+    // not work in isolated processes anyway.
+    bypass_artless_denylist: true,
 }
 
 ndk_library {
@@ -54,6 +61,7 @@ ndk_library {
     symbol_file: "libGLESv2.map.txt",
     first_version: "9",
     unversioned_until: "current",
+    bypass_artless_denylist: true,
 }
 
 ndk_library {

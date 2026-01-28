@@ -161,6 +161,7 @@ public:
         bool autoRefresh = false;
         float currentHdrSdrRatio = 1.f;
         float desiredHdrSdrRatio = -1.f;
+        float maxDesiredHdrSdrRatio = 0.f;
         int64_t latchedVsyncId = 0;
         bool useVsyncIdForRefreshRateSelection = false;
         bool useLuts = false;
@@ -192,6 +193,7 @@ public:
     bool setDataspace(ui::Dataspace /*dataspace*/);
     bool setExtendedRangeBrightness(float currentBufferRatio, float desiredRatio);
     bool setDesiredHdrHeadroom(float desiredRatio);
+    bool setDesiredMaxHdrHeadroom(float maxDesiredHdrSdrRatio);
     void setUseLuts(bool useLuts) { mDrawingState.useLuts = useLuts; }
     bool setSidebandStream(const sp<NativeHandle>& /*sidebandStream*/,
                            const FrameTimelineInfo& /* info*/, nsecs_t /* postTime */,
