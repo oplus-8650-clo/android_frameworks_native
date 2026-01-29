@@ -46,6 +46,8 @@ struct RoundedCornerState {
     // The radius used as the source for children to inherit from.
     gui::CornerRadii effectiveRadii;
 
+    bool disableClientDrawnRadii = false;
+
     bool hasClientDrawnRadius() const { return !clientDrawnRadii.isEmpty(); }
     bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }
     bool hasSfDrawnRadius() const { return !sfDrawnRadii.isEmpty(); }
@@ -114,6 +116,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     std::optional<ui::Transform::RotationFlags> transformHint;
     bool handleSkipScreenshotFlag = false;
     int32_t frameRateSelectionPriority = -1;
+    float maxDesiredHdrSdrRatio = 0.f;
     LayerHierarchy::TraversalPath mirrorRootPath;
     uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     uint32_t touchCropId;

@@ -1894,6 +1894,9 @@ status_t BufferQueueProducer::setPresentMode(int32_t mode) {
     std::lock_guard<std::mutex> lock(mCore->mMutex);
     switch (mode) {
         case ANATIVEWINDOW_PRESENT_DEFAULT:
+            mCore->mLegacyBufferDrop = true;
+            mCore->mPresentMode = mode;
+            return NO_ERROR;
         case ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY:
             mCore->mLegacyBufferDrop = false;
             mCore->mPresentMode = mode;

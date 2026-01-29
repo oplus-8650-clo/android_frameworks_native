@@ -1116,6 +1116,14 @@ bool Layer::setDesiredHdrHeadroom(float desiredRatio) {
     return true;
 }
 
+bool Layer::setDesiredMaxHdrHeadroom(float maxDesiredHdrSdrRatio) {
+    if (mDrawingState.maxDesiredHdrSdrRatio == maxDesiredHdrSdrRatio) return false;
+    mDrawingState.maxDesiredHdrSdrRatio = maxDesiredHdrSdrRatio;
+    mFlinger->mHdrLayerInfoChanged = true;
+    setTransactionFlags(eTransactionNeeded);
+    return true;
+}
+
 bool Layer::setSidebandStream(const sp<NativeHandle>& sidebandStream, const FrameTimelineInfo& info,
                               nsecs_t postTime, gui::GameMode gameMode,
                               int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {

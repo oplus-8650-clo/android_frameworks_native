@@ -111,9 +111,10 @@ void FlagManager::dump(std::string& result) const {
     DUMP_SYSPROP_FLAG(disable_sched_fifo_re);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer_callback);
+    DUMP_SYSPROP_FLAG(force_agtm_without_luts);
+    DUMP_SYSPROP_FLAG(invalid_hdr_type_for_force_sdr_optin);
     DUMP_SYSPROP_FLAG(productionize_readback_screenshot);
     DUMP_SYSPROP_FLAG(stable_edid_ids_for_external_displays_optin);
-    DUMP_SYSPROP_FLAG(force_agtm_without_luts);
 
     /// Legacy server flags ///
     DUMP_LEGACY_SERVER_FLAG(test_flag);
@@ -129,6 +130,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
+    DUMP_ACONFIG_FLAG(force_sdr_invalid_hdr_type);
     DUMP_ACONFIG_FLAG(frontend_caching_v0);
     DUMP_ACONFIG_FLAG(frametimeline_boottime_in_lambda);
     DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
@@ -247,9 +249,10 @@ FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_sf_sched, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_re, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer_callback, /* default */ false)
+FLAG_MANAGER_SYSPROP_FLAG(force_agtm_without_luts, /* default */ false)
+FLAG_MANAGER_SYSPROP_FLAG(invalid_hdr_type_for_force_sdr_optin, /* default */ false);
 FLAG_MANAGER_SYSPROP_FLAG(productionize_readback_screenshot, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(stable_edid_ids_for_external_displays_optin, /* default */ false)
-FLAG_MANAGER_SYSPROP_FLAG(force_agtm_without_luts, /* default */ false)
 
 /// Legacy server flags ///
 FLAG_MANAGER_LEGACY_SERVER_FLAG(test_flag, "", "")
@@ -315,6 +318,7 @@ FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
 FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_bugfix, "");
+FLAG_MANAGER_ACONFIG_FLAG(force_sdr_invalid_hdr_type, "");
 FLAG_MANAGER_ACONFIG_FLAG(frontend_caching_v0, "");
 FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
                           "debug.sf.get_display_known_vsync_sample_enabled");

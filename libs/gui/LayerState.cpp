@@ -228,6 +228,7 @@ status_t layer_state_t::write(Parcel& output) const
     SAFE_PARCEL(output.writeParcelable, trustedPresentationListener);
     SAFE_PARCEL(output.writeFloat, currentHdrSdrRatio);
     SAFE_PARCEL(output.writeFloat, desiredHdrSdrRatio);
+    SAFE_PARCEL(output.writeFloat, maxDesiredHdrSdrRatio);
     SAFE_PARCEL(output.writeInt32, static_cast<int32_t>(cachingHint));
 
     const bool hasBufferReleaseChannel = (bufferReleaseChannel != nullptr);
@@ -418,6 +419,8 @@ status_t layer_state_t::read(const Parcel& input)
     currentHdrSdrRatio = tmpFloat;
     SAFE_PARCEL(input.readFloat, &tmpFloat);
     desiredHdrSdrRatio = tmpFloat;
+    SAFE_PARCEL(input.readFloat, &tmpFloat);
+    maxDesiredHdrSdrRatio = tmpFloat;
 
     int32_t tmpInt32;
     SAFE_PARCEL(input.readInt32, &tmpInt32);
@@ -739,6 +742,10 @@ void layer_state_t::merge(const layer_state_t& other) {
         what |= eDesiredHdrHeadroomChanged;
         desiredHdrSdrRatio = other.desiredHdrSdrRatio;
     }
+    if (other.what & eDesiredMaxHdrHeadroomChanged) {
+        what |= eDesiredMaxHdrHeadroomChanged;
+        maxDesiredHdrSdrRatio = other.maxDesiredHdrSdrRatio;
+    }
     if (other.what & eCachingHintChanged) {
         what |= eCachingHintChanged;
         cachingHint = other.cachingHint;
@@ -950,6 +957,7 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
     CHECK_DIFF2(diff, eExtendedRangeBrightnessChanged, other, currentHdrSdrRatio,
                 desiredHdrSdrRatio);
     CHECK_DIFF(diff, eDesiredHdrHeadroomChanged, other, desiredHdrSdrRatio);
+    CHECK_DIFF(diff, eDesiredMaxHdrHeadroomChanged, other, maxDesiredHdrSdrRatio);
     CHECK_DIFF(diff, eCachingHintChanged, other, cachingHint);
     CHECK_DIFF(diff, eHdrMetadataChanged, other, hdrMetadata);
     if (other.what & eSurfaceDamageRegionChanged &&

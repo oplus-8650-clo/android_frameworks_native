@@ -176,6 +176,13 @@ flag {
 } # follower_display_backpressure_platform
 
 flag {
+  name: "force_sdr_invalid_hdr_type"
+  namespace: "core_graphics"
+  description: "Allow OEMs to opt into receiving stronger signals about forced-SDR mode by sending forceHdrType=INVALID_HDR_TYPE into Composer HAL"
+  bug: "419756717"
+} # force_sdr_invalid_hdr_type
+
+flag {
   name: "force_slower_follower_gpu_composition"
   namespace: "desktop_display"
   description: "Force slower connected displays to be GPU composited."

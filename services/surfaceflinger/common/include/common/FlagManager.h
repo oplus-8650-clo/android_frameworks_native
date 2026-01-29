@@ -43,9 +43,10 @@ public:
     bool disable_sched_fifo_re() const;
     bool disable_sched_fifo_composer() const;
     bool disable_sched_fifo_composer_callback() const;
+    bool force_agtm_without_luts() const;
+    bool invalid_hdr_type_for_force_sdr_optin() const;
     bool productionize_readback_screenshot() const;
     bool stable_edid_ids_for_external_displays_optin() const;
-    bool force_agtm_without_luts() const;
 
     /// Legacy server flags ///
     bool test_flag() const;
@@ -63,6 +64,7 @@ public:
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
     bool fence_handling() const;
+    bool force_sdr_invalid_hdr_type() const;
     bool frontend_caching_v0() const;
     bool frametimeline_boottime_in_lambda() const;
     bool get_display_known_vsync_sample_enabled() const;

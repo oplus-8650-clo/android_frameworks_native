@@ -439,10 +439,14 @@ void BLASTBufferQueue::transactionCallback(nsecs_t /*latchTime*/, const sp<Fence
                 }
 
                 if (stat.cornerRadii.has_value()) {
-                    BQA_LOGV("updated cornerRadii=%s", stat.cornerRadii.value().toString().c_str());
-                    std::function<void(const gui::CornerRadii)> callbackCopy =
-                            getCornerRadiiCallback();
-                    if (callbackCopy) callbackCopy(stat.cornerRadii.value());
+                    const gui::CornerRadii& newRadii = stat.cornerRadii.value();
+                    if (mLastCornerRadii != newRadii) {
+                        mLastCornerRadii = newRadii;
+                        std::function<void(const gui::CornerRadii)> callbackCopy =
+                                getCornerRadiiCallback();
+                        if (callbackCopy) callbackCopy(newRadii);
+                        BQA_LOGV("updated cornerRadii=%s", newRadii.toString().c_str());
+                    }
                 }
                 // Update frametime stamps if the frame was latched and presented, indicated by a
                 // valid latch time.

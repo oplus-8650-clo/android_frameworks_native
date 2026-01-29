@@ -121,11 +121,7 @@ fn device_matches_rule(device_with_state: &UsbDeviceInfoWithState, rule: &Rule) 
 
     // Using `with_interface` from the unwrapped `attributes`
     if let Some(interface_attr) = &attributes.with_interface {
-        if !interface_attr.matches_device_interfaces(&[InterfaceType {
-            class: device_with_state.info.bInterfaceClass as u8,
-            subclass: Some(device_with_state.info.bInterfaceSubClass as u8),
-            protocol: Some(device_with_state.info.bInterfaceProtocol as u8),
-        }]) {
+        if !interface_attr.matches_device_interfaces(&device_with_state.interfaces) {
             // Also check against device class attributes if interface doesn't match
             if !interface_attr.matches_device_interfaces(&[InterfaceType {
                 class: device_with_state.info.bDeviceClass as u8,
@@ -178,6 +174,11 @@ mod tests {
     ) -> UsbDeviceInfoWithState {
         UsbDeviceInfoWithState {
             info: create_test_device(class, subclass, protocol, product_name),
+            interfaces: vec![InterfaceType {
+                class: class as u8,
+                subclass: Some(subclass as u8),
+                protocol: Some(protocol as u8),
+            }],
             authorized: false,
             is_deferred: false,
         }

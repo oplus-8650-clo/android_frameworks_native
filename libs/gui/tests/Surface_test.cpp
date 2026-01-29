@@ -2594,52 +2594,6 @@ TEST_F(SurfaceTest, QueueBufferOutput_TracksReplacements_Plural) {
     EXPECT_TRUE(outputs[1].bufferReplaced);
 }
 
-TEST_F(SurfaceTest, QueueBufferInputOutput) {
-    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
-    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
-
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
-
-    SurfaceQueueBufferInput input;
-    input.fence = fence;
-    input.crop = Rect(0, 0, 10, 10);
-    input.transform = NATIVE_WINDOW_TRANSFORM_ROT_90;
-    input.timestamp = 12345;
-
-    SurfaceQueueBufferOutput output;
-    ASSERT_EQ(OK, surface->queueBuffer(buffer, input, &output));
-
-    EXPECT_GE(output.nextFrameNumber, 1u);
-}
-
-TEST_F(SurfaceTest, CancelBuffer_GraphicBuffer_Fence) {
-    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
-    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
-
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
-
-    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
-}
-
-TEST_F(SurfaceTest, AttachBuffer_GraphicBuffer) {
-    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
-    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
-
-    // We need a detached buffer.
-    sp<GraphicBuffer> buffer;
-    sp<Fence> fence;
-    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
-    ASSERT_EQ(OK, surface->detachBuffer(buffer));
-
-    ASSERT_EQ(OK, surface->attachBuffer(buffer));
-    // Can cancel/queue after attach
-    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
-}
-
 TEST_F(SurfaceTest, UnlimitedSlots_FailsOnIncompatibleConsumer) {
     sp<IGraphicBufferProducer> producer;
     sp<IGraphicBufferConsumer> consumer;
@@ -3209,14 +3163,22 @@ TEST_F(SurfaceTest, DisconnectWithBadApi) {
     ASSERT_EQ(1u, surfaceListener->mReleasedCount);
 }
 
-TEST_F(SurfaceTest, LegacyBufferDrop_AppOwned) {
-    auto [consumer, surface] =
-            BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS, 10, /* controlledByApp */ true);
+enum class LegacyBufferDropMode : uint8_t {
+    Disabled = 0,
+    Enabled = 1,
+};
 
-    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
-    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
-
-    // Legacy buffer drop starts out true.
+void CheckLegacyBufferDropMode(sp<BufferItemConsumer> consumer, sp<Surface> surface,
+                               LegacyBufferDropMode mode) {
+    // Clear all the buffers for a fresh queue.
+    for (;;) {
+        BufferItem item;
+        status_t ret = consumer->acquireBuffer(&item, 0);
+        if (ret == BufferItemConsumer::NO_BUFFER_AVAILABLE) {
+            break;
+        }
+        EXPECT_EQ(OK, consumer->releaseBuffer(item));
+    }
 
     sp<GraphicBuffer> bufferA, bufferB, bufferC, bufferD;
     sp<Fence> fenceA, fenceB, fenceC, fenceD;
@@ -3229,38 +3191,63 @@ TEST_F(SurfaceTest, LegacyBufferDrop_AppOwned) {
     EXPECT_EQ(OK, surface->dequeueBuffer(&bufferD, &fenceD));
     EXPECT_EQ(OK, surface->queueBuffer(bufferD, fenceD));
 
-    // The queue will replace the last buffer.
-    EXPECT_NE(bufferA, bufferB);
-    EXPECT_EQ(bufferA, bufferC);
-    EXPECT_EQ(bufferB, bufferD);
-
-    // Clear all the buffers for a fresh queue.
-    for (;;) {
-        BufferItem item;
-        status_t ret = consumer->acquireBuffer(&item, 0);
-        if (ret == BufferItemConsumer::NO_BUFFER_AVAILABLE) {
+    switch (mode) {
+        case LegacyBufferDropMode::Enabled: {
+            // The queue will replace the last buffer.
+            EXPECT_NE(bufferA, bufferB);
+            EXPECT_EQ(bufferA, bufferC);
+            EXPECT_EQ(bufferB, bufferD);
             break;
         }
-        EXPECT_EQ(OK, consumer->releaseBuffer(item));
+        case LegacyBufferDropMode::Disabled: {
+            EXPECT_NE(bufferA, bufferB);
+            EXPECT_NE(bufferA, bufferC);
+            EXPECT_NE(bufferA, bufferD);
+            EXPECT_NE(bufferB, bufferC);
+            EXPECT_NE(bufferB, bufferD);
+            EXPECT_NE(bufferC, bufferD);
+            break;
+        }
+        default: {
+            FAIL() << "Unknown LegacyBufferDropMode: " << static_cast<uint8_t>(mode);
+            break;
+        }
     }
+}
+
+TEST_F(SurfaceTest, LegacyBufferDrop_AppOwned) {
+    auto [consumer, surface] =
+            BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS, 10, /* controlledByApp */ true);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    // Legacy buffer drop starts out true.
+    CheckLegacyBufferDropMode(consumer, surface, LegacyBufferDropMode::Enabled);
 
     ASSERT_EQ(OK, surface->setLegacyBufferDrop(false));
 
-    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferA, &fenceA));
-    EXPECT_EQ(OK, surface->queueBuffer(bufferA, fenceA));
-    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferB, &fenceB));
-    EXPECT_EQ(OK, surface->queueBuffer(bufferB, fenceB));
-    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferC, &fenceC));
-    EXPECT_EQ(OK, surface->queueBuffer(bufferC, fenceC));
-    EXPECT_EQ(OK, surface->dequeueBuffer(&bufferD, &fenceD));
-    EXPECT_EQ(OK, surface->queueBuffer(bufferD, fenceD));
+    CheckLegacyBufferDropMode(consumer, surface, LegacyBufferDropMode::Disabled);
+}
 
-    EXPECT_NE(bufferA, bufferB);
-    EXPECT_NE(bufferA, bufferC);
-    EXPECT_NE(bufferA, bufferD);
-    EXPECT_NE(bufferB, bufferC);
-    EXPECT_NE(bufferB, bufferD);
-    EXPECT_NE(bufferC, bufferD);
+TEST_F(SurfaceTest, LegacyBufferDrop_PresentMode) {
+    auto [consumer, surface] =
+            BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS, 10, /* controlledByApp */ true);
+    sp<ANativeWindow> window(surface);
+
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, listener));
+
+    // In default mode, legacy buffer mode should be enabled
+    ASSERT_EQ(NO_ERROR,
+              native_window_set_present_mode(window.get(), ANATIVEWINDOW_PRESENT_DEFAULT));
+    CheckLegacyBufferDropMode(consumer, surface, LegacyBufferDropMode::Enabled);
+
+    // With fifo latest ready, legacy buffer mode should be disabled
+    ASSERT_EQ(NO_ERROR,
+              native_window_set_present_mode(window.get(),
+                                             ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY));
+    CheckLegacyBufferDropMode(consumer, surface, LegacyBufferDropMode::Disabled);
 }
 
 // Test for native_window_get_last_replaced_frame_id, which is used by Vulkan's

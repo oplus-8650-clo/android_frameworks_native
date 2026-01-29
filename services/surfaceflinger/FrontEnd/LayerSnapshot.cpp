@@ -358,8 +358,12 @@ std::ostream& operator<<(std::ostream& out, const LayerSnapshot& obj) {
         out << " currentHdrSdrRatio=" << obj.currentHdrSdrRatio;
     }
 
-    if (obj.desiredHdrSdrRatio > 1.f) {
+    if (obj.desiredHdrSdrRatio >= 1.f) {
         out << " desiredHdrSdrRatio=" << obj.desiredHdrSdrRatio;
+    }
+
+    if (obj.maxDesiredHdrSdrRatio >= 1.f) {
+        out << " maxDesiredHdrSdrRatio=" << obj.maxDesiredHdrSdrRatio;
     }
 
     if (obj.stopLayerId != UNASSIGNED_LAYER_ID) {
@@ -427,6 +431,9 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
     }
     if (forceUpdate || requested.what & layer_state_t::eDesiredHdrHeadroomChanged) {
         desiredHdrSdrRatio = requested.desiredHdrSdrRatio;
+    }
+    if (forceUpdate || requested.what & layer_state_t::eDesiredMaxHdrHeadroomChanged) {
+        maxDesiredHdrSdrRatio = requested.maxDesiredHdrSdrRatio;
     }
     if (forceUpdate || requested.what & layer_state_t::eCachingHintChanged) {
         cachingHint = requested.cachingHint;

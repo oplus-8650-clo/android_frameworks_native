@@ -47,6 +47,18 @@ using namespace ftl::flag_operators;
 
 namespace {
 
+float getMaxHdrSdrRatio(float left, float right) {
+    if (left >= 1.f && right >= 1.f) {
+        return std::min(left, right);
+    } else if (left >= 1.f) {
+        return left;
+    } else if (right >= 1.f) {
+        return right;
+    }
+
+    return 0.f;
+}
+
 FloatRect getMaxDisplayBounds(const DisplayInfos& displays) {
     const ui::Size maxSize = [&displays] {
         if (displays.empty()) return ui::Size{5000, 5000};
@@ -356,6 +368,8 @@ LayerSnapshot LayerSnapshotBuilder::getRootSnapshot() {
     snapshot.trustedOverlay = gui::TrustedOverlay::UNSET;
     snapshot.gameMode = gui::GameMode::Unsupported;
     snapshot.frameRate = {};
+    snapshot.desiredHdrSdrRatio = 0.f;
+    snapshot.maxDesiredHdrSdrRatio = 0.f;
     snapshot.fixedTransformHint = ui::Transform::ROT_INVALID;
     snapshot.ignoreLocalTransform = false;
     return snapshot;
@@ -1016,6 +1030,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
+    if (forceUpdate ||
+        snapshot.clientChanges &
+                (layer_state_t::eDesiredHdrHeadroomChanged |
+                 layer_state_t::eDesiredMaxHdrHeadroomChanged)) {
+        snapshot.maxDesiredHdrSdrRatio = getMaxHdrSdrRatio(requested.maxDesiredHdrSdrRatio,
+                                                           parentSnapshot.maxDesiredHdrSdrRatio);
+        snapshot.desiredHdrSdrRatio =
+                getMaxHdrSdrRatio(snapshot.maxDesiredHdrSdrRatio, requested.desiredHdrSdrRatio);
+    }
+
     bool hasSmpte2094_50 = false;
     // For now we don't check LUT support so guard by a debug sysprop
     if (FlagManager::getInstance().force_agtm_without_luts() && snapshot.buffer) {
@@ -1055,7 +1079,6 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
     }
 
     RoundedCornerState finalSettings = RoundedCornerState();
-
     // Populate parent settings to inherit
     RoundedCornerState parentSettings =
             calculateParentRoundedCornerSettings(parentSnapshot, snapshot);
@@ -1085,18 +1108,31 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
                                                parentSettings.effectiveRadii)) {
         finalSettings = parentSettings;
     }
-
     snapshot.roundedCorner = finalSettings;
 
-    snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
-    snapshot.roundedCorner.reportedRadii =
-            getClippedClientRadii(snapshot.roundedCorner.effectiveRadii,
-                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+    snapshot.roundedCorner.disableClientDrawnRadii =
+            requested.flags & layer_state_t::eRoundedCornerOptDisabled ||
+            parentSettings.disableClientDrawnRadii;
 
-    if (shouldDisableCornerRounding(snapshot, requested)) {
-        snapshot.roundedCorner.sfDrawnRadii = gui::CornerRadii(0.f);
-    } else {
+    if (snapshot.clientChanges & layer_state_t::eClientDrawnCornerRadiusChanged) {
+        snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
+    }
+
+    if (snapshot.roundedCorner.disableClientDrawnRadii) {
+        // We are in a transition. Force Client to 0 and let SF handle it.
+        snapshot.roundedCorner.reportedRadii = gui::CornerRadii(0.f);
         snapshot.roundedCorner.sfDrawnRadii = snapshot.roundedCorner.effectiveRadii;
+    } else {
+        snapshot.roundedCorner.reportedRadii =
+                getClippedClientRadii(snapshot.roundedCorner.effectiveRadii,
+                                      snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+        if (shouldDisableCornerRounding(snapshot, requested)) {
+            // Optimization ENABLED: Client draws, SF is 0.
+            snapshot.roundedCorner.sfDrawnRadii = gui::CornerRadii(0.f);
+        } else {
+            // Optimization DISABLED: Client is 0, SF draws.
+            snapshot.roundedCorner.sfDrawnRadii = snapshot.roundedCorner.effectiveRadii;
+        }
     }
 }
 
@@ -1123,6 +1159,7 @@ RoundedCornerState LayerSnapshotBuilder::calculateParentRoundedCornerSettings(
     const auto& parentRoundedCorner = parentSnapshot.roundedCorner;
     if (parentRoundedCorner.hasEffectiveRadii()) {
         ui::Transform t = snapshot.localTransform.inverse();
+        parentSettings.disableClientDrawnRadii = parentRoundedCorner.disableClientDrawnRadii;
         parentSettings.cropRect = t.transform(parentRoundedCorner.cropRect);
         parentSettings.effectiveRadii = parentRoundedCorner.effectiveRadii;
         parentSettings.effectiveRadii.transform(t);

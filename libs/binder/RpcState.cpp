@@ -18,6 +18,7 @@
 
 #include "RpcState.h"
 
+#include <binder/Binder.h>
 #include <binder/BpBinder.h>
 #include <binder/Functional.h>
 #include <binder/IPCThreadState.h>
@@ -591,8 +592,11 @@ status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
         status != OK) {
         // TODO(b/414720799): this log is added to debug this bug, but it could be a bit noisy, and
         // we may only want to log it from some cases moving forward.
-        ALOGE("RPC protocol error during call to binder: %p code: %" PRIu32 " transaction: %s",
-              binder.get(), code, statusToString(status).c_str());
+        std::string functionName = binder->localBinder()
+                ? binder->localBinder()->getFunctionName(code)
+                : "#" + std::to_string(code);
+        ALOGE("RPC protocol error during call to binder: %p function: %s transaction: %s",
+              binder.get(), functionName.c_str(), statusToString(status).c_str());
         return status;
     }
 
@@ -605,8 +609,11 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
                                     Parcel* reply, uint32_t flags) {
     std::string errorMsg;
     if (status_t status = validateParcel(session, data, &errorMsg); status != OK) {
-        ALOGE("Refusing to send RPC on binder %p code %" PRIu32 ": Parcel %p failed validation: %s",
-              maybeBinder.get(), code, &data, errorMsg.c_str());
+        std::string functionName = maybeBinder && maybeBinder->localBinder()
+                ? maybeBinder->localBinder()->getFunctionName(code)
+                : "#" + std::to_string(code);
+        ALOGE("Refusing to send RPC on binder %p function: %s: Parcel %p failed validation: %s",
+              maybeBinder.get(), functionName.c_str(), &data, errorMsg.c_str());
         return status;
     }
 
@@ -669,7 +676,11 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
 
     if (bodySize >= binder::kRpcTransactionLimitBytes - sizeof(RpcWireHeader)) {
         // fail here rather than having client allocate a huge amount of data
-        ALOGE("Transaction for code %d too large: %" PRIu32 " body size bytes.", code, bodySize);
+        std::string functionName = maybeBinder && maybeBinder->localBinder()
+                ? maybeBinder->localBinder()->getFunctionName(code)
+                : "#" + std::to_string(code);
+        ALOGE("Transaction for function %s too large: %" PRIu32 " body size bytes.",
+              functionName.c_str(), bodySize);
         return FAILED_TRANSACTION;
     }
 
@@ -1325,7 +1336,10 @@ processTransactInternalTailCall:
     // case, so if the bug repros again, we prove that there are missing logs. Try the negative
     // as well to be extra careful. TODO - delete this code anytime in the future.
     if (replyStatus == NO_MEMORY || replyStatus == ENOMEM) {
-        ALOGE("Replying to transaction code: %" PRIo32 " error: %s.", transaction->code,
+        std::string functionName = target && target->localBinder()
+                ? target->localBinder()->getFunctionName(transaction->code)
+                : "#" + std::to_string(transaction->code);
+        ALOGE("Replying to transaction function: %s error: %s.", functionName.c_str(),
               statusToString(replyStatus).c_str());
     }
 
@@ -1354,8 +1368,11 @@ processTransactInternalTailCall:
         // entire packet, as +/- a few bytes doesn't matter, this would work even
         // if those are combined, and it errs on making the packet here slightly
         // smaller.
-        ALOGE("Reply transaction for code %d too large: %" PRIu32 " body size bytes.",
-              transaction->code, bodySize);
+        std::string functionName = target && target->localBinder()
+                ? target->localBinder()->getFunctionName(transaction->code)
+                : "#" + std::to_string(transaction->code);
+        ALOGE("Reply transaction for function %s too large: %" PRIu32 " body size bytes.",
+              functionName.c_str(), bodySize);
         reply.setDataSize(0);
         objectTableSpan.clear();
         replyStatus = FAILED_TRANSACTION; // match kernel binder

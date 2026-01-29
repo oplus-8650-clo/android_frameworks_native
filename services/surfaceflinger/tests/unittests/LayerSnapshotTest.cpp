@@ -1784,6 +1784,56 @@ TEST_F(LayerSnapshotTest, childIgnoreCornerRadiusOverridesParent) {
     EXPECT_EQ(getSnapshot({.id = 111})->roundedCorner.sfDrawnRadii, RADII);
 }
 
+TEST_F(LayerSnapshotTest, childInheritsParentDisableClientDrawnRadiusOpt) {
+    // ROOT
+    // ├── 1 (crop rect set to contain child layers)
+    // │   ├── 11
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+
+    setRoundedCorners(1, RADIUS);
+    setCrop(1, Rect{1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, gui::CornerRadii(RADIUS));
+
+    // Disable the optimization on the parent (Task)
+    setFlags(1, layer_state_t::eRoundedCornerOptDisabled, layer_state_t::eRoundedCornerOptDisabled);
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.sfDrawnRadii, gui::CornerRadii(RADIUS));
+}
+
+TEST_F(LayerSnapshotTest, disableClientDrawnRadiusOpt) {
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+    static const gui::CornerRadii ACTUAL_RADIUS = gui::CornerRadii(RADIUS);
+
+    setRoundedCorners(1, RADIUS);
+    setCrop(1, Rect{1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_FALSE(getSnapshot({.id = 1})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.reportedRadii, ACTUAL_RADIUS);
+
+    // Disable optimization (Transition Start)
+    setFlags(1, layer_state_t::eRoundedCornerOptDisabled, layer_state_t::eRoundedCornerOptDisabled);
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_TRUE(getSnapshot({.id = 1})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.reportedRadii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.sfDrawnRadii, ACTUAL_RADIUS);
+
+    // Re-enable optimization (Transition Finish/Cleanup)
+    setFlags(1, layer_state_t::eRoundedCornerOptDisabled, 0);
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    EXPECT_FALSE(getSnapshot({.id = 1})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.reportedRadii, ACTUAL_RADIUS);
+}
+
 TEST_F(LayerSnapshotTest, setShadowRadius) {
     static constexpr float SHADOW_RADIUS = 123.f;
     setShadowRadius(1, SHADOW_RADIUS);
