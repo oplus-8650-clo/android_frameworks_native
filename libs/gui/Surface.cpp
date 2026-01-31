@@ -1454,12 +1454,10 @@ status_t Surface::queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& 
         applyGrallocMetadataLocked(buffer, input);
     }
     nsecs_t now = systemTime();
-// QTI_BEGIN: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     if (mQtiSurfaceExtn) {
         mQtiSurfaceExtn->qtiTrackTransaction(mNextFrameNumber, now);
     }
 
-// QTI_END: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     // Drop the lock temporarily while we touch the underlying producer. In the case of a local
     // BufferQueue, the following should be allowable:
     //
