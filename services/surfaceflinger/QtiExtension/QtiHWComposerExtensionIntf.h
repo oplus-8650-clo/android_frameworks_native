@@ -1,4 +1,5 @@
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
@@ -48,6 +49,10 @@ public:
                                             uint32_t dataspace) = 0;
     virtual status_t qtiSetLayerFlag(HWC2::Layer* layer,
                                      uint32_t layerFlag) = 0;
+    virtual status_t qtiSetCornerRadius(HWC2::Layer* layer, float x, float y) = 0;
+    virtual status_t qtiSetPrivacyRegions(HWC2::Layer* layer, const std::vector<Rect>& rectList,
+                                          const std::vector<float>& radiusList,
+                                          const std::vector<uint32_t>& indexList) = 0;
 };
 
 QtiHWComposerExtensionIntf* qtiCreateHWComposerExtension(android::impl::HWComposer& hwc,
@@ -68,6 +73,10 @@ public:
                                     uint32_t dataspace) override;
     status_t qtiTryDrawMethod(HalDisplayId displayId,
                               uint32_t drawMethod) override;
+    status_t qtiSetCornerRadius(HWC2::Layer* layer, float x, float y) override;
+    status_t qtiSetPrivacyRegions(HWC2::Layer* layer, const std::vector<Rect>& rectList,
+                                  const std::vector<float>& radiusList,
+                                  const std::vector<uint32_t>& indexList) override;
 
 private:
     android::impl::HWComposer& mQtiHWComposer;
