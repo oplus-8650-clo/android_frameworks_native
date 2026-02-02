@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <compositionengine/LayerFE.h>
@@ -70,6 +77,10 @@ public:
 
     MOCK_CONST_METHOD0(getLayerId, int32_t());
 // QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
+
+    // QTI_BEGIN
+    MOCK_CONST_METHOD0(getCornerRadius, vec2());
+    // QTI_END
 };
 
 } // namespace android::compositionengine::mock

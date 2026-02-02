@@ -1,4 +1,5 @@
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
@@ -30,6 +31,11 @@ public:
                                          uint32_t dataspace) = 0;
     virtual Error qtiSetLayerFlag(Display display, V2_1_Layer layer,
                                   uint32_t layerFlag) = 0;
+    virtual Error qtiSetCornerRadius(Display display, V2_1_Layer layer, float x, float y) = 0;
+    virtual Error qtiSetPrivacyRegions(Display display, V2_1_Layer layer,
+                                       const std::vector<Rect>& rectList,
+                                       const std::vector<float>& radiusList,
+                                       const std::vector<uint32_t>& indexList) = 0;
 };
 
 } // namespace surfaceflingerextension

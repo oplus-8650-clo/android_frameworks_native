@@ -1,9 +1,10 @@
-/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #pragma once
-
 #include <android/hardware/graphics/composer3/ComposerClientWriter.h>
+
 using ::aidl::android::hardware::graphics::composer3::ComposerClientWriter;
 
 #ifndef QTI_COMPOSER3_EXTENSIONS
@@ -12,11 +13,13 @@ using ::aidl::android::hardware::graphics::composer3::ComposerClientWriter;
 #include <aidl/vendor/qti/hardware/display/composer3/IQtiComposer3Client.h>
 
 using aidl::vendor::qti::hardware::display::composer3::IQtiComposer3Client;
+using aidl::vendor::qti::hardware::display::composer3::QtiCornerRadius;
 using aidl::vendor::qti::hardware::display::composer3::QtiDisplayCommand;
 using aidl::vendor::qti::hardware::display::composer3::QtiDrawMethod;
 using aidl::vendor::qti::hardware::display::composer3::QtiLayerCommand;
 using aidl::vendor::qti::hardware::display::composer3::QtiLayerFlags;
 using aidl::vendor::qti::hardware::display::composer3::QtiLayerType;
+using aidl::vendor::qti::hardware::display::composer3::QtiPrivacyRegion;
 
 namespace android::Hwc2 {
 
@@ -75,6 +78,36 @@ public:
         qtiFlushLayerCommand();
         qtiFlushDisplayCommand();
         return mQtiCommands;
+    }
+
+    void qtiSetCornerRadius(int64_t display, int64_t layer, float x, float y) {
+        auto qtiLayerCommand = qtiGetLayerCommand(display, layer);
+
+        if (qtiLayerCommand) {
+            QtiCornerRadius cornerRadius = {x, y};
+            qtiLayerCommand->qtiCornerRadius = cornerRadius;
+        }
+    }
+
+    void qtiSetPrivacyRegions(int64_t display, int64_t layer, std::vector<Rect> rectList,
+                              std::vector<float> radiusList, std::vector<uint32_t> indexList) {
+        auto qtiLayerCommand = qtiGetLayerCommand(display, layer);
+
+        if (qtiLayerCommand) {
+            if (rectList.size() == radiusList.size()) {
+                std::vector<std::optional<QtiPrivacyRegion> > privacyRegions;
+                privacyRegions.reserve(rectList.size());
+                for (size_t i = 0; i < rectList.size(); i++) {
+                    QtiPrivacyRegion privacyRegion;
+                    const Rect& rect = rectList.at(i);
+                    privacyRegion.cornerRadius = radiusList.at(i);
+                    privacyRegion.rect = {rect.left, rect.top, rect.right, rect.bottom};
+                    privacyRegion.index = static_cast<int>(indexList.at(i));
+                    privacyRegions.push_back(privacyRegion);
+                }
+                qtiLayerCommand->qtiPrivacyRegions.emplace(std::move(privacyRegions));
+            }
+        }
     }
 
 private:

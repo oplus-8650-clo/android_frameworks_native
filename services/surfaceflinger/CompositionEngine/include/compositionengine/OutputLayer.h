@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <cstdint>
@@ -22,6 +29,9 @@
 #include <vector>
 
 #include <ui/PictureProfileHandle.h>
+// QTI_BEGIN
+#include <ui/StaticDisplayInfo.h>
+// QTI_END
 #include <ui/Transform.h>
 #include <utils/StrongPointer.h>
 
@@ -157,6 +167,10 @@ public:
 
     // Debugging
     virtual void dump(std::string& result) const = 0;
+
+    // QTI_BEGIN
+    virtual void qtiSetConnectionType(ui::DisplayConnectionType type) = 0;
+    // QTI_END
 };
 
 } // namespace compositionengine

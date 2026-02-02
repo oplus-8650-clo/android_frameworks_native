@@ -15,12 +15,10 @@
  */
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-/* Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
-
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include <android-base/stringprintf.h>
 #include <common/trace.h>
@@ -231,6 +229,15 @@ std::unique_ptr<compositionengine::OutputLayer> Display::createOutputLayer(
         outputLayer && !mIsDisconnected && halDisplayId) {
         auto& hwc = getCompositionEngine().getHwComposer();
         auto hwcLayer = hwc.createLayer(*halDisplayId);
+
+        // QTI_BEGIN
+        const auto physicalDisplayId = getDisplayIdVariant().and_then(asPhysicalDisplayId);
+        if (physicalDisplayId.has_value()) {
+            auto connectiontype = hwc.getDisplayConnectionType(*physicalDisplayId);
+            outputLayer->qtiSetConnectionType(connectiontype);
+        }
+        // QTI_END
+
         ALOGE_IF(!hwcLayer, "Failed to create a HWC layer for a HWC supported display %s",
                  getName().c_str());
         outputLayer->setHwcLayer(std::move(hwcLayer));
