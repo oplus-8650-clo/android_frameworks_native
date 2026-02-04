@@ -26,6 +26,7 @@
 
 #include <android/gui/ISystemContentPriorityConstants.h>
 #include <common/FlagManager.h>
+#include <ftl/static_vector.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/JankInfo.h>
 #include <gui/LayerMetadata.h>
@@ -213,6 +214,7 @@ public:
     // Used by both SF and FrameTimeline.
     std::optional<int32_t> getJankType() const;
     std::optional<JankSeverityType> getJankSeverityType() const;
+    std::optional<float> getJankSeverityScore() const;
 
     // Functions called by SF
     int64_t getToken() const { return mToken; };
@@ -294,13 +296,15 @@ public:
         Status status;
         TimelineItem predictions;
         TimelineItem actuals;
+        nsecs_t vsyncResyncedJitter;
 
-        static PreviousFrameData unknown() { return PreviousFrameData{Status::Unknown, {}, {}}; }
+        static PreviousFrameData unknown() { return PreviousFrameData{Status::Unknown, {}, {}, 0}; }
         static PreviousFrameData outOfOrder() {
-            return PreviousFrameData{Status::OutOfOrder, {}, {}};
+            return PreviousFrameData{Status::OutOfOrder, {}, {}, 0};
         }
-        static PreviousFrameData create(TimelineItem predictions, TimelineItem actuals) {
-            return PreviousFrameData{Status::Valid, predictions, actuals};
+        static PreviousFrameData create(TimelineItem predictions, TimelineItem actuals,
+                                        nsecs_t vsyncResyncedJitter) {
+            return PreviousFrameData{Status::Valid, predictions, actuals, vsyncResyncedJitter};
         }
     };
     PreviousFrameData previousFrameDataLocked() const REQUIRES(mMutex);
@@ -472,10 +476,10 @@ private:
 
     void flushTokens(nsecs_t flushTime) REQUIRES(mMutex);
 
-    std::map<int64_t, TimelineItem> mPredictions GUARDED_BY(mMutex);
+    static constexpr size_t kMaxTokens = 500;
+    ftl::StaticVector<std::pair<int64_t, TimelineItem>, kMaxTokens> mPredictions GUARDED_BY(mMutex);
     int64_t mCurrentToken GUARDED_BY(mMutex);
     mutable std::mutex mMutex;
-    static constexpr size_t kMaxTokens = 500;
 };
 
 class FrameTimeline : public android::scheduler::FrameTimeline {

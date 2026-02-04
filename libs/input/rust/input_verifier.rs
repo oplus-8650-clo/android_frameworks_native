@@ -267,7 +267,16 @@ impl InputVerifier {
                 .process_event(event)?;
         }
 
-        if self.verify_down_time {
+        // We currently only verify down times when the pointer is down or going down, since
+        // the Autoclick accessibility feature currently injects down events into the real mouse's
+        // event stream, causing the down time to go backwards the next time that mouse moves in a
+        // hover.
+        // TODO(b/479982869): once accessibility migrates to injecting events through a separate
+        //   event stream, always verify down times.
+        if self.verify_down_time
+            && (event.action == MotionAction::Down
+                || self.touching_pointer_ids_by_device.contains_key(&event.device_id))
+        {
             let old_down_time_nanos =
                 *(self.down_time_by_device.get(&event.device_id).unwrap_or(&0));
             if event.down_time_nanos < old_down_time_nanos {
@@ -895,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn down_time_goes_backwards() {
+    fn down_time_goes_backwards_during_down() {
         // Check that the down time verification would have caught b/447603159, where the button
         // press event after a down on a touchpad had the old down time.
         let mut verifier = make_test_verifier();
@@ -914,6 +923,64 @@ mod tests {
                 action: MotionAction::ButtonPress { action_button: MotionButton::Primary },
                 button_state: MotionButton::Primary,
                 down_time_nanos: 0,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_err());
+    }
+
+    #[test]
+    // TODO(b/479982869): remove this test once accessibility migrates to injecting events through
+    //   a separate event stream.
+    fn down_time_goes_backwards_during_hover() {
+        let mut verifier = make_test_verifier();
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::Down,
+                down_time_nanos: 100,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::Up,
+                down_time_nanos: 100,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::HoverEnter,
+                down_time_nanos: 100,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        // Down time going backwards during hovering should be OK.
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::HoverMove,
+                down_time_nanos: 0,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::HoverExit,
+                down_time_nanos: 0,
+                ..BASE_MOUSE_EVENT
+            })
+            .is_ok());
+        // But the next event with the pointer down should still be rejected if it has a down time
+        // earlier than the last one we saw with the pointer down.
+        assert!(verifier
+            .process_movement(NotifyMotionArgs {
+                event_time_nanos: 100,
+                action: MotionAction::Down,
+                down_time_nanos: 50,
                 ..BASE_MOUSE_EVENT
             })
             .is_err());

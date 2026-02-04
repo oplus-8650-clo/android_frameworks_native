@@ -125,6 +125,7 @@ void FlagManager::dump(std::string& result) const {
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
+    DUMP_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
@@ -311,6 +312,7 @@ FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces, "");
+FLAG_MANAGER_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate, "");
 FLAG_MANAGER_ACONFIG_FLAG(color_transform_translation, "");
 FLAG_MANAGER_ACONFIG_FLAG(configure_work_duration, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
@@ -342,9 +344,8 @@ FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(enable_user_preferred_hdr_mode, "", com::android::window::flags);
 
 bool FlagManager::follower_arbitrary_refresh_rate_selection_combined() const {
-    return (follower_arbitrary_refresh_rate_selection() ||
-            follower_arbitrary_refresh_rate_selection_platform()) &&
-            modeset_state_machine();
+    return follower_arbitrary_refresh_rate_selection() ||
+            follower_arbitrary_refresh_rate_selection_platform();
 }
 
 bool FlagManager::follower_display_backpressure_combined() const {

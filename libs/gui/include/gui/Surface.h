@@ -277,6 +277,14 @@ public:
      * See IGBP::setGenerationNumber for more information. */
     status_t setGenerationNumber(uint32_t generationNumber);
 
+    /*
+     * Set whether the Surface should automatically update the generation number
+     * on any buffers attached to it after this call.
+     *
+     * Default is true.
+     */
+    void setAutoGenerationUpdate(bool autoGeneration);
+
     // See IGraphicBufferProducer::getConsumerName
     String8 getConsumerName() const;
 
@@ -830,6 +838,10 @@ protected:
     // Stores the current generation number. See setGenerationNumber and
     // IGraphicBufferProducer::setGenerationNumber for more information.
     uint32_t mGenerationNumber;
+
+    // If true, the generation number is automatically updated on any buffers
+    // attached to this surface.
+    bool mAutoGenerationUpdate = true;
 
     // Caches the values that have been passed to the producer.
     bool mSharedBufferMode;

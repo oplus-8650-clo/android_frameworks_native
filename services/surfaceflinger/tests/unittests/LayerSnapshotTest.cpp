@@ -444,7 +444,7 @@ TEST_F(LayerSnapshotTest, UpdateMetadataOfHiddenLayers) {
                                     .genericLayerMetadataKeyMap = {}};
     update(mSnapshotBuilder, args);
 
-    EXPECT_EQ(static_cast<int64_t>(getSnapshot(1)->clientChanges),
+    EXPECT_EQ(getSnapshot(1)->clientChanges,
               layer_state_t::eMetadataChanged | layer_state_t::eFlagsChanged);
     EXPECT_EQ(getSnapshot(1)->layerMetadata.getInt32(METADATA_OWNER_UID, -1), 123);
     EXPECT_EQ(getSnapshot(1)->layerMetadata.getInt32(METADATA_WINDOW_TYPE, -1), 234);

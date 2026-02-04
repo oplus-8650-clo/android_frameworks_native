@@ -1216,7 +1216,9 @@ binder::Status InstalldNativeService::clearAppProfiles(const std::string& packag
 }
 
 binder::Status InstalldNativeService::clearAppData(const std::optional<std::string>& uuid,
-        const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode) {
+                                                   const std::string& packageName, int32_t userId,
+                                                   int32_t flags, int64_t ceDataInode,
+                                                   int64_t pccCeDataInode) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -1233,9 +1235,8 @@ binder::Status InstalldNativeService::clearAppData(const std::optional<std::stri
 
         if (res.isOk()) {
             const std::string pccPackageName = packageName + kPccDataSuffix;
-            // TODO(b/http://b/460401607) : Track inode for PCC Directories
             auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
-                                                            /* ce_data_inode= */ 0);
+                                                            pccCeDataInode);
             res = clearCeDirectoryLocked(pccPath, flags);
         }
     }
@@ -1393,7 +1394,9 @@ binder::Status InstalldNativeService::deleteReferenceProfile(const std::string& 
 }
 
 binder::Status InstalldNativeService::destroyAppData(const std::optional<std::string>& uuid,
-        const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode) {
+                                                     const std::string& packageName, int32_t userId,
+                                                     int32_t flags, int64_t ceDataInode,
+                                                     int64_t pccCeDataInode) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -1411,9 +1414,8 @@ binder::Status InstalldNativeService::destroyAppData(const std::optional<std::st
         }
 
         const std::string pccPackageName = packageName + kPccDataSuffix;
-        // TODO(b/460401607) : Track inode for PCC Directories
         auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
-                                                        /* ce_data_inode= */ 0);
+                                                        /* ce_data_inode= */ pccCeDataInode);
         if (res.isOk() && rename_delete_dir_contents_and_dir(pccPath) != 0) {
             res = error("Failed to delete " + pccPath);
         }
@@ -1758,7 +1760,8 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
 
     // ce_data_inode is not needed when FLAG_CLEAR_CACHE_ONLY is set.
     binder::Status clear_cache_result =
-            clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CACHE_ONLY, 0);
+            clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CACHE_ONLY,
+                         /* ceDataInode=*/0, /*pccCeDataInode=*/0);
     if (!clear_cache_result.isOk()) {
         // It should be fine to continue snapshot if we for some reason failed
         // to clear cache.
@@ -1768,7 +1771,7 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
     // ce_data_inode is not needed when FLAG_CLEAR_CODE_CACHE_ONLY is set.
     binder::Status clear_code_cache_result =
             clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CODE_CACHE_ONLY,
-                         0);
+                         /* ceDataInode=*/0, /*pccCeDataInode=*/0);
     if (!clear_code_cache_result.isOk()) {
         // It should be fine to continue snapshot if we for some reason failed
         // to clear code_cache.
@@ -1884,8 +1887,8 @@ binder::Status InstalldNativeService::restoreAppDataSnapshot(
     // It's fine to pass 0 as ceDataInode here, because restoreAppDataSnapshot
     // can only be called when user unlocks the phone, meaning that CE user data
     // is decrypted.
-    binder::Status res =
-            clearAppData(volumeUuid, packageName, userId, storageFlags, 0 /* ceDataInode */);
+    binder::Status res = clearAppData(volumeUuid, packageName, userId, storageFlags,
+                                      0 /* ceDataInode */, 0 /* pccCeDataInode */);
     if (!res.isOk()) {
         return res;
     }

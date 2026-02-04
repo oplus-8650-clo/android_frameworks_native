@@ -76,37 +76,6 @@ ftl::NonNull<DisplayModePtr> displayMode(nsecs_t period) {
                                               DEFAULT_DISPLAY_ID));
 }
 
-void verifyModelAccuracyForPastTimePoint(VSyncPredictor& predictor, int minSamples, nsecs_t slope,
-                                         nsecs_t intercept, nsecs_t timePoint) {
-    predictor.setDisplayModePtr(displayMode(slope));
-
-    // Generate timestamps to create a model with the given slope and intercept.
-    // We choose a large base index to ensure oldestTS is greater than timePoint.
-    const int64_t i_base = 2 * timePoint / slope;
-    nsecs_t oldestTS = 0;
-    for (size_t i = 0; i < minSamples; ++i) {
-        nsecs_t timestamp = intercept + slope * (i_base + i);
-        if (i == 0) oldestTS = timestamp;
-        predictor.addVsyncTimestamp(timestamp);
-    }
-
-    const auto model = predictor.getVSyncPredictionModel();
-    const nsecs_t accuracy = predictor.getModelAccuracyInNs(timePoint);
-
-    EXPECT_LT(accuracy, model.slope);
-
-    const nsecs_t zeroPoint = oldestTS + model.intercept;
-    const double delta = static_cast<double>(timePoint - zeroPoint);
-    const double d_slope = static_cast<double>(model.slope);
-    const int64_t ordinal = static_cast<int64_t>(std::ceil(delta / d_slope));
-
-    const nsecs_t vsync1 = zeroPoint + ordinal * model.slope;
-    const nsecs_t vsync0 = vsync1 - model.slope;
-    const nsecs_t expected_accuracy = std::min(timePoint - vsync0, vsync1 - timePoint);
-
-    EXPECT_EQ(accuracy, expected_accuracy);
-}
-
 class TestClock : public Clock {
 public:
     TestClock() = default;
@@ -131,6 +100,42 @@ private:
 } // namespace
 
 struct VSyncPredictorTest : testing::Test {
+    void verifyAccuracy(int minSamples, nsecs_t slope, nsecs_t intercept, nsecs_t timePoint) {
+        tracker.setDisplayModePtr(displayMode(slope));
+
+        // Generate timestamps to create a model with the given slope and intercept.
+        // We choose a large base index to ensure oldestTS is greater than timePoint.
+        const int64_t i_base = 2 * timePoint / slope;
+        nsecs_t oldestTS = 0;
+        for (size_t i = 0; i < minSamples; ++i) {
+            nsecs_t timestamp = intercept + slope * (i_base + i);
+            if (i == 0) oldestTS = timestamp;
+            tracker.addVsyncTimestamp(timestamp);
+        }
+
+        const auto model = tracker.getVSyncPredictionModel();
+        nsecs_t accuracy = 0;
+        {
+            std::lock_guard lock(tracker.mMutex);
+            accuracy = tracker.getModelAccuracyLocked(timePoint,
+                                                      VSyncTracker::VsyncTimeSource::Unknown)
+                               .modelErrorNs;
+        }
+
+        EXPECT_LT(accuracy, model.slope);
+
+        const nsecs_t zeroPoint = oldestTS + model.intercept;
+        const double delta = static_cast<double>(timePoint - zeroPoint);
+        const double d_slope = static_cast<double>(model.slope);
+        const int64_t ordinal = static_cast<int64_t>(std::ceil(delta / d_slope));
+
+        const nsecs_t vsync1 = zeroPoint + ordinal * model.slope;
+        const nsecs_t vsync0 = vsync1 - model.slope;
+        const nsecs_t expected_accuracy = std::min(timePoint - vsync0, vsync1 - timePoint);
+
+        EXPECT_EQ(accuracy, expected_accuracy);
+    }
+
     nsecs_t mNow = 0;
     nsecs_t mPeriod = 1000;
     ftl::NonNull<DisplayModePtr> mMode = displayMode(mPeriod);
@@ -1232,8 +1237,7 @@ TEST_F(VSyncPredictorTest, reportsCorrectAccuracyForPastTimePointBeforeVSync) {
     const nsecs_t theoretical_vsync = intercept + slope * 10;
     const nsecs_t timePoint = theoretical_vsync - 100;
 
-    verifyModelAccuracyForPastTimePoint(tracker, kMinimumSamplesForPrediction, slope, intercept,
-                                        timePoint);
+    verifyAccuracy(kMinimumSamplesForPrediction, slope, intercept, timePoint);
 }
 
 // Checks that when timePoint is after a theoretical VSync (and older than oldestTS), snapToVsync
@@ -1246,8 +1250,7 @@ TEST_F(VSyncPredictorTest, reportsCorrectAccuracyForPastTimePointAfterVSync) {
     const nsecs_t theoretical_vsync = intercept + slope * 10;
     const nsecs_t timePoint = theoretical_vsync + 100;
 
-    verifyModelAccuracyForPastTimePoint(tracker, kMinimumSamplesForPrediction, slope, intercept,
-                                        timePoint);
+    verifyAccuracy(kMinimumSamplesForPrediction, slope, intercept, timePoint);
 }
 } // namespace android::scheduler
 

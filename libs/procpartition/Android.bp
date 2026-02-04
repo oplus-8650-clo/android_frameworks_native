@@ -28,6 +28,9 @@ cc_library_static {
     ],
     shared_libs: [
         "libbase",
+        "libbinder",
+        "libutils",
+        "packagemanager_aidl-cpp",
     ],
     srcs: [
         "procpartition.cpp",
@@ -39,10 +42,5 @@ cc_library_static {
     ],
     export_include_dirs: [
         "include",
-    ],
-    min_sdk_version: "30",
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.neuralnetworks",
     ],
 }

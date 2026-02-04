@@ -410,6 +410,7 @@ public:
 
     void commitTransactionsLocked(uint32_t transactionFlags, bool modeset = false) {
         Mutex::Autolock lock(mFlinger->mStateLock);
+        std::lock_guard modeLock(mFlinger->mModeTransitionMutex);
         ftl::FakeGuard guard(kMainThreadContext);
         mFlinger->processDisplayChangesLocked();
         mFlinger->commitTransactionsLocked(transactionFlags);

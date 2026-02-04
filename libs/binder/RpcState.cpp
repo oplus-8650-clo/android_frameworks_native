@@ -595,8 +595,9 @@ status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
         std::string functionName = binder->localBinder()
                 ? binder->localBinder()->getFunctionName(code)
                 : "#" + std::to_string(code);
-        ALOGE("RPC protocol error during call to binder: %p function: %s transaction: %s",
-              binder.get(), functionName.c_str(), statusToString(status).c_str());
+        ALOGE("RPC protocol error during call to binder: %p, function: %s, code: %" PRIu32
+              ", status: %s",
+              binder.get(), functionName.c_str(), code, statusToString(status).c_str());
         return status;
     }
 
@@ -612,8 +613,9 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
         std::string functionName = maybeBinder && maybeBinder->localBinder()
                 ? maybeBinder->localBinder()->getFunctionName(code)
                 : "#" + std::to_string(code);
-        ALOGE("Refusing to send RPC on binder %p function: %s: Parcel %p failed validation: %s",
-              maybeBinder.get(), functionName.c_str(), &data, errorMsg.c_str());
+        ALOGE("Refusing to send RPC on binder %p, function: %s, code: %" PRIu32
+              ": Parcel %p failed validation: %s",
+              maybeBinder.get(), functionName.c_str(), code, &data, errorMsg.c_str());
         return status;
     }
 
@@ -679,8 +681,9 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
         std::string functionName = maybeBinder && maybeBinder->localBinder()
                 ? maybeBinder->localBinder()->getFunctionName(code)
                 : "#" + std::to_string(code);
-        ALOGE("Transaction for function %s too large: %" PRIu32 " body size bytes.",
-              functionName.c_str(), bodySize);
+        ALOGE("Transaction for function %s, code: %" PRIu32 ", too large: %" PRIu32
+              " body size bytes.",
+              functionName.c_str(), code, bodySize);
         return FAILED_TRANSACTION;
     }
 
@@ -1339,8 +1342,8 @@ processTransactInternalTailCall:
         std::string functionName = target && target->localBinder()
                 ? target->localBinder()->getFunctionName(transaction->code)
                 : "#" + std::to_string(transaction->code);
-        ALOGE("Replying to transaction function: %s error: %s.", functionName.c_str(),
-              statusToString(replyStatus).c_str());
+        ALOGE("Replying to transaction function: %s, code: %" PRIu32 ", error: %s.",
+              functionName.c_str(), transaction->code, statusToString(replyStatus).c_str());
     }
 
     auto* rpcFields = reply.maybeRpcFields();
@@ -1371,8 +1374,9 @@ processTransactInternalTailCall:
         std::string functionName = target && target->localBinder()
                 ? target->localBinder()->getFunctionName(transaction->code)
                 : "#" + std::to_string(transaction->code);
-        ALOGE("Reply transaction for function %s too large: %" PRIu32 " body size bytes.",
-              functionName.c_str(), bodySize);
+        ALOGE("Reply transaction for function %s, code: %" PRIu32 ", too large: %" PRIu32
+              " body size bytes.",
+              functionName.c_str(), transaction->code, bodySize);
         reply.setDataSize(0);
         objectTableSpan.clear();
         replyStatus = FAILED_TRANSACTION; // match kernel binder

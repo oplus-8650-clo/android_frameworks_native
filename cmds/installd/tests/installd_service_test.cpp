@@ -343,7 +343,7 @@ TEST_F(ServiceTest, DestroyAppData) {
     EXPECT_TRUE(exists("user/0/com.example/bar"));
     EXPECT_TRUE(exists("user/0/com.example/bar/file"));
 
-    service->destroyAppData(testUuid, "com.example", 0, FLAG_STORAGE_DE | FLAG_STORAGE_CE, 0);
+    service->destroyAppData(testUuid, "com.example", 0, FLAG_STORAGE_DE | FLAG_STORAGE_CE, 0, 0);
 
     EXPECT_FALSE(exists("user/0/com.example/foo"));
     EXPECT_FALSE(exists("user/0/com.example/foo/file"));
@@ -1464,7 +1464,8 @@ TEST_F(DestroyAppDataTest, DestroySdkSandboxDataDirectories_WithCeAndDeFlag) {
     ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
     // Destroy the app user data.
     ASSERT_BINDER_SUCCESS(service->destroyAppData(args.uuid, args.packageName, args.userId,
-                                                  args.flags, result.ceDataInode));
+                                                  args.flags, result.ceDataInode,
+                                                  result.pccCeDataInode));
     ASSERT_FALSE(exists("/data/local/tmp/misc_ce/0/sdksandbox/com.foo"));
     ASSERT_FALSE(exists("/data/local/tmp/misc_de/0/sdksandbox/com.foo"));
 }
@@ -1477,7 +1478,8 @@ TEST_F(DestroyAppDataTest, DestroySdkSandboxDataDirectories_WithoutDeFlag) {
     ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
     // Destroy the app user data.
     ASSERT_BINDER_SUCCESS(service->destroyAppData(args.uuid, args.packageName, args.userId,
-                                                  FLAG_STORAGE_CE, result.ceDataInode));
+                                                  FLAG_STORAGE_CE, result.ceDataInode,
+                                                  result.pccCeDataInode));
     ASSERT_TRUE(exists("/data/local/tmp/misc_de/0/sdksandbox/com.foo"));
     ASSERT_FALSE(exists("/data/local/tmp/misc_ce/0/sdksandbox/com.foo"));
 }
@@ -1490,7 +1492,8 @@ TEST_F(DestroyAppDataTest, DestroySdkSandboxDataDirectories_WithoutCeFlag) {
     ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
     // Destroy the app user data.
     ASSERT_BINDER_SUCCESS(service->destroyAppData(args.uuid, args.packageName, args.userId,
-                                                  FLAG_STORAGE_DE, result.ceDataInode));
+                                                  FLAG_STORAGE_DE, result.ceDataInode,
+                                                  result.pccCeDataInode));
     ASSERT_TRUE(exists("/data/local/tmp/misc_ce/0/sdksandbox/com.foo"));
     ASSERT_FALSE(exists("/data/local/tmp/misc_de/0/sdksandbox/com.foo"));
 }
@@ -1518,7 +1521,7 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithCeAndClearCacheFlag)
     createTestSdkData("com.foo", {"shared", "sdk1", "sdk2"});
     // Clear the app user data.
     ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0,
-                                                FLAG_STORAGE_CE | FLAG_CLEAR_CACHE_ONLY, -1));
+                                                FLAG_STORAGE_CE | FLAG_CLEAR_CACHE_ONLY, -1, -1));
 
     const std::string packagePath = kTestPath + "/misc_ce/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared/cache"));
@@ -1530,7 +1533,8 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithCeAndClearCodeCacheF
     createTestSdkData("com.foo", {"shared", "sdk1", "sdk2"});
     // Clear the app user data.
     ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0,
-                                                FLAG_STORAGE_CE | FLAG_CLEAR_CODE_CACHE_ONLY, -1));
+                                                FLAG_STORAGE_CE | FLAG_CLEAR_CODE_CACHE_ONLY, -1,
+                                                -1));
 
     const std::string packagePath = kTestPath + "/misc_ce/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared/code_cache"));
@@ -1544,7 +1548,7 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithDeAndClearCacheFlag)
     ASSERT_BINDER_SUCCESS(
             service->clearAppData(kTestUuid, "com.foo", 0,
                                   FLAG_STORAGE_DE | (InstalldNativeService::FLAG_CLEAR_CACHE_ONLY),
-                                  -1));
+                                  -1, -1));
 
     const std::string packagePath = kTestPath + "/misc_de/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared/cache"));
@@ -1556,7 +1560,8 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithDeAndClearCodeCacheF
     createTestSdkData("com.foo", {"shared", "sdk1", "sdk2"});
     // Clear the app user data.
     ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0,
-                                                FLAG_STORAGE_DE | FLAG_CLEAR_CODE_CACHE_ONLY, -1));
+                                                FLAG_STORAGE_DE | FLAG_CLEAR_CODE_CACHE_ONLY, -1,
+                                                -1));
 
     const std::string packagePath = kTestPath + "/misc_de/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared/code_cache"));
@@ -1567,7 +1572,7 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithDeAndClearCodeCacheF
 TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithCeAndWithoutAnyCacheFlag) {
     createTestSdkData("com.foo", {"shared", "sdk1", "sdk2"});
     // Clear the app user data.
-    ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0, FLAG_STORAGE_CE, -1));
+    ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0, FLAG_STORAGE_CE, -1, -1));
 
     const std::string packagePath = kTestPath + "/misc_ce/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared"));
@@ -1578,7 +1583,7 @@ TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithCeAndWithoutAnyCache
 TEST_F(ClearAppDataTest, ClearSdkSandboxDataDirectories_WithDeAndWithoutAnyCacheFlag) {
     createTestSdkData("com.foo", {"shared", "sdk1", "sdk2"});
     // Clear the app user data.
-    ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0, FLAG_STORAGE_DE, -1));
+    ASSERT_BINDER_SUCCESS(service->clearAppData(kTestUuid, "com.foo", 0, FLAG_STORAGE_DE, -1, -1));
 
     const std::string packagePath = kTestPath + "/misc_de/0/sdksandbox/com.foo";
     ASSERT_TRUE(is_empty(packagePath + "/shared"));
@@ -1741,7 +1746,7 @@ TEST_F(ServiceTest, ClearAppData_WithPcc) {
     // Action: Clear app data
     ASSERT_BINDER_SUCCESS(service->clearAppData(testUuid, "com.foo", kTestUserId,
                                                 FLAG_STORAGE_CE | FLAG_STORAGE_DE,
-                                                result.ceDataInode));
+                                                result.ceDataInode, result.pccCeDataInode));
 
     // Verification: Directories should still exist but be empty
     EXPECT_TRUE(exists(cePath));
@@ -1776,7 +1781,7 @@ TEST_F(ServiceTest, DestroyAppData_WithPcc) {
     // Action: Destroy app data
     ASSERT_BINDER_SUCCESS(service->destroyAppData(testUuid, "com.foo", kTestUserId,
                                                   FLAG_STORAGE_CE | FLAG_STORAGE_DE,
-                                                  result.ceDataInode));
+                                                  result.ceDataInode, result.pccCeDataInode));
 
     // Verification: All directories should be gone
     EXPECT_FALSE(exists("user/0/com.foo"));

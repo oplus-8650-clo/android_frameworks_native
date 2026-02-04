@@ -31,9 +31,9 @@ interface IInstalld {
     void migrateAppData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
             int userId, int flags);
     void clearAppData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
-            int userId, int flags, long ceDataInode);
+            int userId, int flags, long ceDataInode, long pccCeDataInode);
     void destroyAppData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
-            int userId, int flags, long ceDataInode);
+            int userId, int flags, long ceDataInode, long pccCeDataInode);
     void destroyPccData(@nullable @utf8InCpp String uuid, @utf8InCpp String packageName,
          int userId, int flags, long ceDataInode);
 

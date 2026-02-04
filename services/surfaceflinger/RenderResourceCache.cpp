@@ -45,11 +45,7 @@ void RenderResourceCache::queueRegisterGraphicBuffers(const gui::GraphicBuffersR
     }
 
     mPendingOps.push([this, info]() {
-        std::shared_ptr<IPCServerResourceCache>& cache = mCaches[info.renderResourceToken];
-        if (!cache) {
-            // TODO: initialize font manager
-            cache = std::make_shared<IPCServerResourceCache>();
-        }
+        std::shared_ptr<IPCServerResourceCache> cache = getCache(info.renderResourceToken);
 
         for (const auto& buffer : info.buffers) {
             cache->bitmaps[buffer->getId()] = IPCServerBitmap{.buffer = buffer};
@@ -87,7 +83,17 @@ std::shared_ptr<IPCServerResourceCache> RenderResourceCache::getCache(const sp<I
     if (it != mCaches.end()) {
         return it->second;
     }
-    return nullptr;
+    // Create new cache entry if not found, to ensure shared_ptr is stable for LayerSnapshotBuilder.
+    // LayerSnapshotBuilder might query getCache() before the registration command arrives.
+    // By returning a valid shared_ptr, we allow LayerSnapshot to hold a reference that will
+    // be populated later, avoiding the need for LayerSnapshotBuilder to re-query getCache().
+    std::shared_ptr<IPCServerResourceCache>& cache = mCaches[token];
+    cache = std::make_shared<IPCServerResourceCache>();
+
+    sp<DeathRecipient> recipient = sp<DeathRecipient>::fromExisting(this);
+    token->linkToDeath(recipient);
+
+    return cache;
 }
 
 void RenderResourceCache::binderDied(const wp<IBinder>& binder) {

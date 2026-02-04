@@ -360,6 +360,57 @@ TEST_F(SurfaceTest, SettingGenerationNumber) {
     ASSERT_EQ(1U, graphicBuffer->getGenerationNumber());
 }
 
+TEST_F(SurfaceTest, AutoGenerationUpdate) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+
+    // Allocate a buffer.
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(NO_ERROR, surface->connect(NATIVE_WINDOW_API_CPU, nullptr));
+    ASSERT_EQ(NO_ERROR, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(buffer, fence));
+
+    // Detach the buffer and check its generation number.
+    sp<GraphicBuffer> graphicBuffer;
+    ASSERT_EQ(NO_ERROR, surface->detachNextBuffer(&graphicBuffer, &fence));
+    ASSERT_EQ(0U, graphicBuffer->getGenerationNumber());
+
+    // Auto-generation is on by default. Attaching should update the generation number.
+    ASSERT_EQ(NO_ERROR, surface->setGenerationNumber(1));
+    ASSERT_EQ(NO_ERROR, surface->attachBuffer(graphicBuffer));
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(graphicBuffer, fence));
+    ASSERT_EQ(NO_ERROR, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(1U, buffer->getGenerationNumber());
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(buffer, fence));
+    ASSERT_EQ(NO_ERROR, surface->detachNextBuffer(&graphicBuffer, &fence));
+    ASSERT_EQ(1U, graphicBuffer->getGenerationNumber());
+
+    // Turn auto-generation off. Attaching should not update the generation number. And,
+    // importantly, attaching should fail for generation number mismatch.
+    surface->setAutoGenerationUpdate(false);
+    ASSERT_EQ(NO_ERROR, surface->setGenerationNumber(2));
+    ASSERT_EQ(BAD_VALUE, surface->attachBuffer(graphicBuffer));
+
+    graphicBuffer->setGenerationNumber(2);
+    ASSERT_EQ(NO_ERROR, surface->attachBuffer(graphicBuffer));
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(graphicBuffer, fence));
+
+    ASSERT_EQ(NO_ERROR, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(2U, buffer->getGenerationNumber());
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(buffer, fence));
+    ASSERT_EQ(NO_ERROR, surface->detachNextBuffer(&graphicBuffer, &fence));
+    ASSERT_EQ(2U, graphicBuffer->getGenerationNumber());
+
+    // Turn auto-generation back on. Attaching should update the generation number again.
+    surface->setAutoGenerationUpdate(true);
+    ASSERT_EQ(NO_ERROR, surface->setGenerationNumber(3));
+    ASSERT_EQ(NO_ERROR, surface->attachBuffer(graphicBuffer));
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(graphicBuffer, fence));
+    ASSERT_EQ(NO_ERROR, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(3U, buffer->getGenerationNumber());
+    ASSERT_EQ(NO_ERROR, surface->cancelBuffer(buffer, fence));
+}
+
 TEST_F(SurfaceTest, GetConsumerName) {
     sp<IGraphicBufferProducer> producer;
     sp<IGraphicBufferConsumer> consumer;

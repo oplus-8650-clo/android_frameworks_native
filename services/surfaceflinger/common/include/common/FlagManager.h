@@ -57,6 +57,7 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
     bool bugfix_resize_virtual_display_surfaces() const;
+    bool bugfix_virtual_display_refresh_rate() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
     bool deprecate_vsync_sf_v2() const;

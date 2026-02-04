@@ -54,9 +54,12 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
     const String16& interfaceDescriptor = binder->getInterfaceDescriptor();
     BinderObserverConfig::TrackingInfo trackingInfo =
             mConfig->getTrackingInfo(interfaceDescriptor, code);
-
+    // For V1, the aggregation strategy requires a start time for every tracked transaction. For
+    // V2, we only need the start time if we are tracking latency for a transaction.
+    bool trackStartTime =
+            kBinderObserverV2Enabled ? trackingInfo.trackLatency : trackingInfo.isTracked();
     return {
-            .startTimeNanos = trackingInfo.isTracked() ? uptimeNanos() : 0,
+            .startTimeNanos = trackStartTime ? uptimeNanos() : 0,
             .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? getCpuTimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
             // TODO(b/299356196): Reduce std::string and String16 allocations.
@@ -78,9 +81,13 @@ void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& que
         queue = std::make_shared<BinderStatsSpscQueue>();
         mBinderStatsCollector.registerQueue(queue);
     }
+    // For V2, the aggregation strategy requires an end time for every transaction. For V1, we
+    // only record an end time if we are tracking latency.
+    bool shouldRecordEndTime = kBinderObserverV2Enabled || callInfo.trackingInfo.trackLatency;
+    int64_t endTimeNanos = shouldRecordEndTime ? uptimeNanos() : 0;
     BinderCallData observerData = {
             .startTimeNanos = callInfo.startTimeNanos,
-            .endTimeNanos = callInfo.trackingInfo.trackLatency ? uptimeNanos() : 0,
+            .endTimeNanos = endTimeNanos,
             .cpuTimeNanos = callInfo.trackingInfo.trackCpu && callInfo.cpuUsageStartTimeNanos != 0
                     ? getCpuTimeNanos()
                     : 0,

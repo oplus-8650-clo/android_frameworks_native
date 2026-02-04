@@ -947,6 +947,7 @@ cc_test {
     shared_libs: [
         "libbinder",
         "libutils",
+        "packagemanager_aidl-cpp",
     ],
     static_libs: [
         "libprocpartition",

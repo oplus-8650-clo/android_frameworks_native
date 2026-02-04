@@ -39,6 +39,16 @@ flag {
 } # bugfix_resize_virtual_display_surfaces
 
 flag {
+  name: "bugfix_virtual_display_refresh_rate"
+  namespace: "core_graphics"
+  description: "Fixes Virtual Display setRequestedRefreshRate api"
+  bug: "478905638"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # bugfix_virtual_display_refresh_rate
+
+flag {
   name: "color_transform_translation"
   namespace: "core_graphics"
   description: "Fixes a bug that incorrectly applies a the translation component of global color transforms to source alpha"
