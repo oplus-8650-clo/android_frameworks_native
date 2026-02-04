@@ -2594,6 +2594,53 @@ TEST_F(SurfaceTest, QueueBufferOutput_TracksReplacements_Plural) {
     EXPECT_TRUE(outputs[1].bufferReplaced);
 }
 
+TEST_F(SurfaceTest, QueueBufferInputOutput) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    ASSERT_EQ(OK, consumer->setDefaultBufferSize(20, 20));
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    SurfaceQueueBufferInput input;
+    input.fence = fence;
+    input.crop = Rect(0, 0, 10, 10);
+    input.transform = NATIVE_WINDOW_TRANSFORM_ROT_90;
+    input.timestamp = 12345;
+
+    SurfaceQueueBufferOutput output;
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, input, &output));
+
+    EXPECT_GE(output.nextFrameNumber, 1u);
+}
+
+TEST_F(SurfaceTest, CancelBuffer_GraphicBuffer_Fence) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
+}
+
+TEST_F(SurfaceTest, AttachBuffer_GraphicBuffer) {
+    auto [consumer, surface] = BufferItemConsumer::create(GRALLOC_USAGE_SW_READ_OFTEN);
+    surface->connect(NATIVE_WINDOW_API_CPU, nullptr, false);
+
+    // We need a detached buffer.
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->detachBuffer(buffer));
+
+    ASSERT_EQ(OK, surface->attachBuffer(buffer));
+    // Can cancel/queue after attach
+    ASSERT_EQ(OK, surface->cancelBuffer(buffer, fence));
+}
+
 TEST_F(SurfaceTest, UnlimitedSlots_FailsOnIncompatibleConsumer) {
     sp<IGraphicBufferProducer> producer;
     sp<IGraphicBufferConsumer> consumer;

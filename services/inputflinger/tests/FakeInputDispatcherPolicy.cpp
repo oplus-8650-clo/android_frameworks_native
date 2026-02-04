@@ -213,13 +213,19 @@ void FakeInputDispatcherPolicy::assertSetPointerCaptureNotCalled() {
     mPointerCaptureRequest.reset();
 }
 
-void FakeInputDispatcherPolicy::assertDropTargetEquals(const InputDispatcherInterface& dispatcher,
-                                                       const sp<IBinder>& targetToken) {
-    dispatcher.waitForIdle();
-    std::scoped_lock lock(mLock);
-    ASSERT_TRUE(mNotifyDropWindowWasCalled);
-    ASSERT_EQ(targetToken, mDropTargetWindowToken);
-    mNotifyDropWindowWasCalled = false;
+void FakeInputDispatcherPolicy::assertNotifyDropWindowWasCalled(
+        const InputDispatcherInterface& dispatcher, const sp<IBinder>& targetToken, vec2 location,
+        vec2 rawLocation) {
+    std::unique_lock lock(mLock);
+    base::ScopedLockAssertion assumeLocked(mLock);
+
+    std::optional<DropEvent> event =
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_OCCUR_TIMEOUT, mDropEvents, lock,
+                                                  mNotifyDropWindow);
+    ASSERT_NE(event, std::nullopt);
+    ASSERT_EQ(targetToken, event->token);
+    EXPECT_EQ(location, event->location);
+    EXPECT_EQ(rawLocation, event->rawLocation);
 }
 
 void FakeInputDispatcherPolicy::assertNotifyInputChannelBrokenWasCalled(const sp<IBinder>& token) {
@@ -533,10 +539,11 @@ void FakeInputDispatcherPolicy::setPointerCapture(const PointerCaptureRequest& r
     mPointerCaptureChangedCondition.notify_all();
 }
 
-void FakeInputDispatcherPolicy::notifyDropWindow(const sp<IBinder>& token, float x, float y) {
+void FakeInputDispatcherPolicy::notifyDropWindow(const sp<IBinder>& token, vec2 location,
+                                                 vec2 rawLocation) {
     std::scoped_lock lock(mLock);
-    mNotifyDropWindowWasCalled = true;
-    mDropTargetWindowToken = token;
+    mDropEvents.push({token, location, rawLocation});
+    mNotifyDropWindow.notify_all();
 }
 
 void FakeInputDispatcherPolicy::notifyDeviceInteraction(int32_t deviceId, nsecs_t timestamp,

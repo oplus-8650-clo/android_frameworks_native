@@ -55,8 +55,8 @@ void Log(ProtoLogLevel level, const std::string_view group, const char* format, 
         __attribute__((format(printf, 3, 4)));
 void Log(ProtoLogLevel level, const std::string_view group, const char* format,
          IArgumentProvider& provider);
-void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash, int paramsMask,
-         int argCount, IArgumentProvider& provider);
+void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash,
+         uint64_t paramsMask, int argCount, IArgumentProvider& provider);
 
 #define PROTOLOG(level, group, format, ...) \
     android::protolog::Log(level, group, format, ##__VA_ARGS__)
@@ -84,7 +84,7 @@ inline void Log(ProtoLogLevel level, const std::string_view group, const std::st
 inline void Log(ProtoLogLevel level, const std::string_view group, const char* format,
                 IArgumentProvider& provider) {}
 inline void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash,
-                int paramsMask, int argCount, IArgumentProvider& provider) {}
+                uint64_t paramsMask, int argCount, IArgumentProvider& provider) {}
 
 #define PROTOLOG(...) (void)0
 #define PROTOLOG_V(...) (void)0

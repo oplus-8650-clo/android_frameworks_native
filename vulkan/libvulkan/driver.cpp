@@ -1187,7 +1187,7 @@ VkResult EnumerateDeviceExtensionProperties(
             {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
     }
 
-    if (flags::vk_khr_present_wait2()) {
+    if (flags::vk_khr_present_wait2_gpu()) {
         loader_extensions.push_back({VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME,
                                      VK_KHR_PRESENT_WAIT_2_SPEC_VERSION});
     }
@@ -1814,7 +1814,7 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR: {
-                if (!flags::vk_khr_present_wait2()) {
+                if (!flags::vk_khr_present_wait2_gpu()) {
                     break;
                 }
                 auto features =

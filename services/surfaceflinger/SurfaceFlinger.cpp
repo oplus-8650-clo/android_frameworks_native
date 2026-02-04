@@ -4453,12 +4453,7 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
         nativeWindow->setSwapInterval(nativeWindow.get(), 0);
     }
 
-    if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-        creationArgs.initialPowerMode = state.initialPowerMode;
-    } else {
-        creationArgs.initialPowerMode =
-                state.isVirtual() ? hal::PowerMode::ON : hal::PowerMode::OFF;
-    }
+    creationArgs.initialPowerMode = state.initialPowerMode;
 
     creationArgs.requestedRefreshRate = state.requestedRefreshRate;
 
@@ -4691,9 +4686,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         incRefreshableDisplays();
     }
 
-    if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-        applyOptimizationPolicy(__func__);
-    }
+    applyOptimizationPolicy(__func__);
 
     mDisplays.try_emplace(displayToken, std::move(display));
     mQtiSFExtnIntf->qtiSetDisplayCount(mDisplays.size());
@@ -4765,9 +4758,7 @@ void SurfaceFlinger::processDisplayRemoved(const wp<IBinder>& displayToken) {
         }));
     }
 
-    if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-        applyOptimizationPolicy(__func__);
-    }
+    applyOptimizationPolicy(__func__);
 }
 
 void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
@@ -6581,19 +6572,13 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
         incRefreshableDisplays();
     }
 
-    const bool shouldApplyOptimizationPolicy =
-            FlagManager::getInstance().disable_synthetic_vsync_for_performance() &&
-            FlagManager::getInstance().correct_virtual_display_power_state();
-    if (shouldApplyOptimizationPolicy) {
-        applyOptimizationPolicy(__func__);
-    }
+    applyOptimizationPolicy(__func__);
 
     if (mScheduler->setDisplayPowerMode(displayId, mode)) {
         onNewPacesetterDisplay();
     }
 
     const auto activeMode = display->refreshRateSelector().getActiveMode().modePtr;
-    using OptimizationPolicy = gui::ISurfaceComposer::OptimizationPolicy;
     if (display->isPrimary()) {
         mQtiSFExtnIntf->qtiFbScalingOnPowerChange(display);
     }
@@ -6613,18 +6598,12 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
             onNewFrontInternalDisplay(frontInternalDisplay.get(), *display);
         }
 
-        if (displayId == mFrontInternalDisplayId && !shouldApplyOptimizationPolicy) {
-            optimizeThreadScheduling("setPhysicalDisplayPowerMode(ON/DOZE)",
-                                     OptimizationPolicy::optimizeForPerformance);
-        }
-
         if (FlagManager::getInstance().set_power_mode_async()) {
             // Revert to OFF until hardware op completes.
             display->setPowerMode(currentMode);
         }
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer([this, displayId, mode, shouldApplyOptimizationPolicy, activeMode,
-                                display]()
+                ftl::Finalizer([this, displayId, mode, activeMode, display]()
                                        FTL_FAKE_GUARD(kMainThreadContext) {
                                            const auto _ =
                                                    makePowerModeAsyncFinalizer(displayId, mode);
@@ -6638,11 +6617,6 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
                                                        mScheduler->getVsyncSchedule(displayId)
                                                                ->getPendingHardwareVsyncState();
                                                requestHardwareVsync(displayId, enable);
-
-                                               if (displayId == mFrontInternalDisplayId &&
-                                                   !shouldApplyOptimizationPolicy) {
-                                                   mScheduler->enableSyntheticVsync(false);
-                                               }
 
                                                constexpr bool kAllowToEnable = true;
                                                mScheduler->resyncToHardwareVsync(displayId,
@@ -6662,15 +6636,6 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
             if (const auto display = findFrontInternalDisplay()) {
                 const auto frontInternalDisplay = getFrontInternalDisplayLocked();
                 onNewFrontInternalDisplay(frontInternalDisplay.get(), *display);
-            } else {
-                if (!shouldApplyOptimizationPolicy) {
-                    optimizeThreadScheduling("setPhysicalDisplayPowerMode(OFF)",
-                                             OptimizationPolicy::optimizeForPower);
-                }
-
-                if (currentModeNotDozeSuspend && !shouldApplyOptimizationPolicy) {
-                    mScheduler->enableSyntheticVsync();
-                }
             }
         }
         if (currentModeNotDozeSuspend) {
@@ -6695,31 +6660,28 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
     } else if (mode == hal::PowerMode::DOZE || mode == hal::PowerMode::ON) {
         // Update display while dozing
         return {getHwComposer().setPowerMode(displayId, mode),
-                ftl::Finalizer([this, currentMode, displayId, mode, shouldApplyOptimizationPolicy,
-                                activeMode]() FTL_FAKE_GUARD(kMainThreadContext) {
-                    const auto _ = makePowerModeAsyncFinalizer(displayId, mode);
-                    if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
-                        if (displayId == mFrontInternalDisplayId) {
-                            ALOGI("Force repainting for DOZE_SUSPEND -> DOZE or ON.");
-                            mVisibleRegionsDirty = true;
-                            scheduleRepaint();
-                            if (!shouldApplyOptimizationPolicy) {
-                                mScheduler->enableSyntheticVsync(false);
-                            }
-                        }
-                        constexpr bool kAllowToEnable = true;
-                        mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable,
-                                                          activeMode.get());
-                    }
-                })};
+                ftl::Finalizer([this, currentMode, displayId, mode, activeMode]()
+                                       FTL_FAKE_GUARD(kMainThreadContext) {
+                                           const auto _ =
+                                                   makePowerModeAsyncFinalizer(displayId, mode);
+                                           if (currentMode == hal::PowerMode::DOZE_SUSPEND) {
+                                               if (displayId == mFrontInternalDisplayId) {
+                                                   ALOGI("Force repainting for DOZE_SUSPEND -> "
+                                                         "DOZE or ON.");
+                                                   mVisibleRegionsDirty = true;
+                                                   scheduleRepaint();
+                                               }
+                                               constexpr bool kAllowToEnable = true;
+                                               mScheduler->resyncToHardwareVsync(displayId,
+                                                                                 kAllowToEnable,
+                                                                                 activeMode.get());
+                                           }
+                                       })};
     } else if (mode == hal::PowerMode::DOZE_SUSPEND) {
         // Leave display going to doze
         constexpr bool kDisallow = true;
         mScheduler->disableHardwareVsync(displayId, kDisallow);
 
-        if (displayId == mFrontInternalDisplayId && !shouldApplyOptimizationPolicy) {
-            mScheduler->enableSyntheticVsync();
-        }
         return {getHwComposer().setPowerMode(displayId, mode),
                 makePowerModeAsyncFinalizer(displayId, mode)};
     } else {
@@ -6809,12 +6771,8 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
             }
             ALOGE("Failed to set power mode %d for display token %p", mode, displayToken.get());
         } else if (display->isVirtual()) {
-            if (FlagManager::getInstance().correct_virtual_display_power_state()) {
-                ftl::FakeGuard guard(mStateLock);
-                setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
-            } else {
-                ALOGW("Attempt to set power mode %d for virtual display", mode);
-            }
+            ftl::FakeGuard guard(mStateLock);
+            setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
         } else {
             ftl::FakeGuard guard(mStateLock);
             if (FlagManager::getInstance().set_power_mode_async() &&

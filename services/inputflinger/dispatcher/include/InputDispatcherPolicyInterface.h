@@ -173,8 +173,8 @@ public:
      */
     virtual void setPointerCapture(const PointerCaptureRequest&) = 0;
 
-    /* Notifies the policy that the drag window has moved over to another window */
-    virtual void notifyDropWindow(const sp<IBinder>& token, float x, float y) = 0;
+    /* Notifies the system that a window has been dropped on. */
+    virtual void notifyDropWindow(const sp<IBinder>& token, vec2 location, vec2 rawLocation) = 0;
 
     /* Notifies the policy that there was an input device interaction with apps. */
     virtual void notifyDeviceInteraction(DeviceId deviceId, nsecs_t timestamp,

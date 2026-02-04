@@ -2893,12 +2893,14 @@ void InputDispatcher::finishDragAndDrop(ui::LogicalDisplayId displayId, float x,
     sp<WindowInfoHandle> dropWindow =
             mWindowInfos.findTouchedWindowAt(displayId, x, y, isStylus, /*ignoreWindow=*/
                                              mDragState->dragWindow);
+    vec2 raw = mWindowInfos.getDisplayTransform(displayId).transform(x, y);
+
     if (dropWindow) {
         vec2 local = dropWindow->getInfo()->transform.transform(x, y);
-        sendDropWindowCommandLocked(dropWindow->getToken(), local.x, local.y);
+        sendDropWindowCommandLocked(dropWindow->getToken(), local, raw);
     } else {
         ALOGW("No window found when drop.");
-        sendDropWindowCommandLocked(nullptr, 0, 0);
+        sendDropWindowCommandLocked(nullptr, {0, 0}, raw);
     }
     mDragState.reset();
 }
@@ -2976,7 +2978,7 @@ void InputDispatcher::addDragEventLocked(const MotionEntry& entry) {
             break;
         case AMOTION_EVENT_ACTION_CANCEL: {
             ALOGD("Receiving cancel when drag and drop.");
-            sendDropWindowCommandLocked(nullptr, 0, 0);
+            sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0}, /*rawLocation=*/{0, 0});
             mDragState.reset();
             break;
         }
@@ -4289,7 +4291,8 @@ void InputDispatcher::synthesizeCancellationEventsForConnectionLocked(
                         LOG(INFO) << __func__
                                   << ": Canceling drag and drop because the pointers for the drag "
                                      "window are being canceled.";
-                        sendDropWindowCommandLocked(nullptr, /*x=*/0, /*y=*/0);
+                        sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0},
+                                                    /*rawLocation=*/{0, 0});
                         mDragState.reset();
                     }
                     mTouchStates
@@ -5664,7 +5667,7 @@ void InputDispatcher::setInputWindowsLocked(
         std::find(windowHandles.begin(), windowHandles.end(), mDragState->dragWindow) ==
                 windowHandles.end()) {
         ALOGI("Drag window went away: %s", mDragState->dragWindow->getName().c_str());
-        sendDropWindowCommandLocked(nullptr, 0, 0);
+        sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0}, /*rawLocation=*/{0, 0});
         mDragState.reset();
     }
 
@@ -6685,10 +6688,11 @@ void InputDispatcher::sendFocusChangedCommandLocked(const sp<IBinder>& oldToken,
     postCommandLocked(std::move(command));
 }
 
-void InputDispatcher::sendDropWindowCommandLocked(const sp<IBinder>& token, float x, float y) {
-    auto command = [this, token, x, y]() REQUIRES(mLock) {
+void InputDispatcher::sendDropWindowCommandLocked(const sp<IBinder>& token, vec2 location,
+                                                  vec2 rawLocation) {
+    auto command = [this, token, location, rawLocation]() REQUIRES(mLock) {
         scoped_unlock unlock(mLock);
-        mPolicy.notifyDropWindow(token, x, y);
+        mPolicy.notifyDropWindow(token, location, rawLocation);
     };
     postCommandLocked(std::move(command));
 }
