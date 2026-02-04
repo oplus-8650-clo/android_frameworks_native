@@ -28,6 +28,8 @@ enum {
     ON_BUFFER_DETACHED,
     ON_BUFFER_ATTACHED,
     NEEDS_ATTACH_NOTIFY,
+    ON_BUFFER_ACQUIRED,
+    ON_BUFFER_DROPPED,
 };
 
 class BpProducerListener : public BpInterface<IProducerListener>
@@ -66,6 +68,22 @@ public:
         data.writeInterfaceToken(IProducerListener::getInterfaceDescriptor());
         data.writeInt32Vector(discardedSlots);
         remote()->transact(ON_BUFFERS_DISCARDED, data, &reply, IBinder::FLAG_ONEWAY);
+    }
+
+    virtual void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IProducerListener::getInterfaceDescriptor());
+        data.writeUint64(bufferId);
+        data.writeUint64(frameNumber);
+        remote()->transact(ON_BUFFER_ACQUIRED, data, &reply, IBinder::FLAG_ONEWAY);
+    }
+
+    virtual void onBufferDropped(uint64_t bufferId, uint64_t frameNumber) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IProducerListener::getInterfaceDescriptor());
+        data.writeUint64(bufferId);
+        data.writeUint64(frameNumber);
+        remote()->transact(ON_BUFFER_DROPPED, data, &reply, IBinder::FLAG_ONEWAY);
     }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
@@ -148,6 +166,30 @@ status_t BnProducerListener::onTransact(uint32_t code, const Parcel& data,
                 return result;
             }
             onBuffersDiscarded(discardedSlots);
+            return NO_ERROR;
+        }
+        case ON_BUFFER_ACQUIRED: {
+            CHECK_INTERFACE(IProducerListener, data, reply);
+            uint64_t bufferId, frameNumber;
+            status_t result = data.readUint64(&bufferId);
+            result = (result != NO_ERROR) ? result : data.readUint64(&frameNumber);
+            if (result != NO_ERROR) {
+                ALOGE("ON_BUFFER_ACQUIRED failed to read long: %d", result);
+                return result;
+            }
+            onBufferAcquired(bufferId, frameNumber);
+            return NO_ERROR;
+        }
+        case ON_BUFFER_DROPPED: {
+            CHECK_INTERFACE(IProducerListener, data, reply);
+            uint64_t bufferId, frameNumber;
+            status_t result = data.readUint64(&bufferId);
+            result = (result != NO_ERROR) ? result : data.readUint64(&frameNumber);
+            if (result != NO_ERROR) {
+                ALOGE("ON_BUFFER_DROPPED failed to read long: %d", result);
+                return result;
+            }
+            onBufferDropped(bufferId, frameNumber);
             return NO_ERROR;
         }
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)

@@ -107,11 +107,59 @@ public:
     virtual void onBufferDetached(int /*slot*/) override {}
 };
 
+struct SurfaceQueueBufferInput {
+    sp<Fence> fence;
+
+    android_dataspace dataSpace = HAL_DATASPACE_UNKNOWN;
+    HdrMetadata hdrMetadata;
+
+    Rect crop;
+    int scalingMode = 0;
+    uint32_t transform = 0;
+    uint32_t stickyTransform = 0;
+    Region surfaceDamage;
+
+    int64_t timestamp = 0;
+    int isAutoTimestamp = 0;
+    bool getFrameTimestamps = false;
+
+    std::optional<PictureProfileHandle> pictureProfileHandle;
+};
+
 // Contains additional data from the queueBuffer operation.
 struct SurfaceQueueBufferOutput {
     // True if this queueBuffer caused a buffer to be replaced in the queue
-    // (and therefore not will not be acquired)
+    // (and therefore not will not be acquired).
+    //
+    // This happens when the producer queues a buffer but the consumer has
+    // configured the BufferQueue to drop older buffers (e.g. in async mode),
+    // and the queue was full or the last buffer was droppable.
     bool bufferReplaced = false;
+
+    // The default width and height of the buffers in the queue, as set by
+    // setDefaultBufferSize(). This may be different from the dimensions of the
+    // buffer just queued if the producer is scaling or if the default size was
+    // changed recently.
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    // The transform hint (NATIVE_WINDOW_TRANSFORM_*) that the consumer would like
+    // the producer to apply to the buffer content. This usually corresponds to
+    // the display rotation.
+    uint32_t transformHint = 0;
+
+    // The number of buffers currently in the queue waiting to be acquired by the
+    // consumer. This includes the buffer just queued.
+    uint32_t numPendingBuffers = 0;
+
+    // The frame number that will be assigned to the next buffer queued.
+    // This is useful for the producer to know what frame number it just used
+    // (nextFrameNumber - 1).
+    uint64_t nextFrameNumber = 0;
+
+    // If requested by the input, this will contain any recent changes to the
+    // frame event history (timestamps for previous frames).
+    FrameEventHistoryDelta frameTimestamps;
 };
 
 /*
@@ -417,7 +465,6 @@ private:
 
 protected:
     virtual int dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd);
-    virtual int cancelBuffer(sp<GraphicBuffer>&& buffer, int fenceFd);
     virtual int perform(int operation, va_list args);
     virtual int setSwapInterval(int interval);
 
@@ -456,6 +503,7 @@ public:
                         bool needsDroppedNotify = false);
     virtual int detachNextBuffer(sp<GraphicBuffer>* outBuffer, sp<Fence>* outFence);
     virtual int attachBuffer(ANativeWindowBuffer*);
+    virtual int attachBuffer(const sp<GraphicBuffer>& buffer);
 
     virtual void destroy();
 
@@ -480,6 +528,12 @@ public:
     // attachBuffer operation.
     status_t queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fd = Fence::NO_FENCE,
                          SurfaceQueueBufferOutput* output = nullptr);
+
+    status_t queueBuffer(const sp<GraphicBuffer>& buffer, const SurfaceQueueBufferInput& input,
+                         SurfaceQueueBufferOutput* output = nullptr);
+
+    // Cancels the buffer, returning it to the BufferQueue without actually queuing it.
+    virtual status_t cancelBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence);
 
     // Detaches this buffer, dissociating it from this Surface. This buffer must have been returned
     // by queueBuffer or associated with this Surface via an attachBuffer operation.
@@ -588,6 +642,10 @@ protected:
     void getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
                                    nsecs_t timestamp,
                                    IGraphicBufferProducer::QueueBufferInput* out);
+
+    status_t queueBufferImpl(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
+                             const SurfaceQueueBufferInput* maybeInput,
+                             SurfaceQueueBufferOutput* output) EXCLUDES(mMutex);
 
     // For easing in adoption of gralloc4 metadata by vendor components, as well as for supporting
     // the public ANativeWindow api, allow setting relevant metadata when queueing a buffer through

@@ -1612,11 +1612,15 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
     const auto filterRefreshRates = [&](const FpsRanges& ranges,
                                         const char* rangeName) REQUIRES(mLock) {
         const auto filterModes = [&](const DisplayMode& mode) {
+            bool hdrOutputTypeMatches = FlagManager::getInstance().enable_user_preferred_hdr_mode()
+                    ? mode.getHdrOutputType() == defaultMode->getHdrOutputType()
+                    : true;
             return mode.getResolution() == defaultMode->getResolution() &&
                     mode.getDpi() == defaultMode->getDpi() &&
                     (policy->allowGroupSwitching || mode.getGroup() == defaultMode->getGroup()) &&
                     ranges.physical.includes(mode.getPeakFps()) &&
-                    (supportsFrameRateOverride() || ranges.render.includes(mode.getPeakFps()));
+                    (supportsFrameRateOverride() || ranges.render.includes(mode.getPeakFps())) &&
+                    hdrOutputTypeMatches;
         };
 
         auto frameRateModes = createFrameRateModes(*policy, filterModes, ranges.render);

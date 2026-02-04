@@ -73,6 +73,12 @@ public:
         std::chrono::milliseconds timeoutDuration;
     };
 
+    struct DropEvent {
+        sp<IBinder> token;
+        vec2 location;
+        vec2 rawLocation;
+    };
+
     void assertFilterInputEventWasCalled(const NotifyKeyArgs& args);
     void assertFilterInputEventWasCalled(const NotifyMotionArgs& args, vec2 point);
     void assertFilterInputEventWasNotCalled();
@@ -106,8 +112,9 @@ public:
     PointerCaptureRequest assertSetPointerCaptureCalled(const sp<gui::WindowInfoHandle>& window,
                                                         PointerCaptureMode mode);
     void assertSetPointerCaptureNotCalled();
-    void assertDropTargetEquals(const InputDispatcherInterface& dispatcher,
-                                const sp<IBinder>& targetToken);
+    void assertNotifyDropWindowWasCalled(const InputDispatcherInterface& dispatcher,
+                                         const sp<IBinder>& targetToken, vec2 location,
+                                         vec2 rawLocation);
     void assertNotifyInputChannelBrokenWasCalled(const sp<IBinder>& token);
     std::chrono::nanoseconds getKeyWaitingForEventsTimeout() override;
     void setStaleEventTimeout(std::chrono::nanoseconds timeout);
@@ -159,8 +166,9 @@ private:
     std::queue<NoFocusedWindowAnrWarningResult> mNoFocusedWindowAnrWarnings GUARDED_BY(mLock);
     std::condition_variable mNotifyNoFocusedWindowAnrWarning;
 
-    sp<IBinder> mDropTargetWindowToken GUARDED_BY(mLock);
-    bool mNotifyDropWindowWasCalled GUARDED_BY(mLock) = false;
+    // Drag and drop
+    std::queue<DropEvent> mDropEvents GUARDED_BY(mLock);
+    std::condition_variable mNotifyDropWindow;
 
     std::condition_variable mNotifyUserActivity;
     std::queue<UserActivityPokeEvent> mUserActivityPokeEvents;
@@ -228,7 +236,7 @@ private:
     bool isStaleEvent(nsecs_t currentTime, nsecs_t eventTime) override;
     void onPointerDownOutsideFocus(const sp<IBinder>& newToken) override;
     void setPointerCapture(const PointerCaptureRequest& request) override;
-    void notifyDropWindow(const sp<IBinder>& token, float x, float y) override;
+    void notifyDropWindow(const sp<IBinder>& token, vec2 location, vec2 rawLocation) override;
     void notifyDeviceInteraction(int32_t deviceId, nsecs_t timestamp,
                                  const std::set<gui::Uid>& uids) override;
     void notifyFocusedDisplayChanged(ui::LogicalDisplayId displayId) override;

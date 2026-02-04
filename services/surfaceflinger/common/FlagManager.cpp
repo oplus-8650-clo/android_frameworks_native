@@ -34,6 +34,7 @@
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <com_android_server_display_feature_flags.h>
+#include <com_android_window_flags.h>
 
 namespace android {
 using namespace com::android::graphics::surfaceflinger;
@@ -126,7 +127,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
-    DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
@@ -158,8 +158,8 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(connected_display_hdr_v3);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
-    DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_command_modeset);
+    DUMP_ACONFIG_FLAG(enable_user_preferred_hdr_mode);
     DUMP_ACONFIG_FLAG(fence_handling);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection_platform);
@@ -269,7 +269,6 @@ FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v3, "debug.sf.connected_display_hdr_v3");
 FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
-FLAG_MANAGER_ACONFIG_FLAG(disable_synthetic_vsync_for_performance, "");
 FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
 FLAG_MANAGER_ACONFIG_FLAG(fence_handling, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
@@ -339,9 +338,8 @@ FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
-                                   android::companion::virtualdevice::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);
+FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(enable_user_preferred_hdr_mode, "", com::android::window::flags);
 
 bool FlagManager::follower_arbitrary_refresh_rate_selection_combined() const {
     return (follower_arbitrary_refresh_rate_selection() ||

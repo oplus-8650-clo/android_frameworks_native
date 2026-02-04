@@ -13048,7 +13048,8 @@ TEST_F(InputDispatcherDragTests, DragAndDrop) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13157,7 +13158,8 @@ TEST_F(InputDispatcherDragTests, StylusDragAndDrop) {
     mDragWindow->consumeMotionMove(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
 
     // nothing to the window.
     mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_STYLUS)
@@ -13203,7 +13205,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropOnInvalidWindow) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, nullptr);
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, nullptr, /*location=*/{0, 0},
+                                                 /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13284,9 +13287,42 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenSplitTouch) {
               injectMotionEvent(*mDispatcher, secondFingerUpEvent, INJECT_EVENT_TIMEOUT,
                                 InputEventInjectionSync::WAIT_FOR_RESULT));
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 50});
     mWindow->assertNoEvents();
     mSecondWindow->consumeMotionMove();
+}
+
+TEST_F(InputDispatcherDragTests, DragAndDropCoordinatesWithDisplayTransform) {
+    // Set a display translation of (10, 20). This means that a point at (x, y) in logical
+    // space will be at (x + 10, y + 20) in global space.
+    ui::Transform displayTransform;
+    displayTransform.set(10, 20);
+    addDisplay(ui::LogicalDisplayId::DEFAULT, displayTransform);
+    updateWindowInfos();
+
+    startDrag();
+
+    // Move on window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .displayId(ui::LogicalDisplayId::DEFAULT)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    mDragWindow->consumeMotionMove(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
+    mWindow->consumeDragEvent(false, 50, 50);
+
+    // drop to another window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .displayId(ui::LogicalDisplayId::DEFAULT)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
+                                      .build());
+    mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
+
+    // The drop window coordinates are local to the window (150 - 100, 50 - 0) = (50, 50).
+    // The display coordinates are transformed by the display transform:
+    // (150 + 10, 50 + 20) = (160, 70).
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{160, 70});
 }
 
 TEST_F(InputDispatcherDragTests, DragAndDropWhenMultiDisplays) {
@@ -13340,7 +13376,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenMultiDisplays) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13381,7 +13418,8 @@ TEST_F(InputDispatcherDragTests, MouseDragAndDrop) {
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(150).y(50))
                     .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13427,7 +13465,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropFinishedWhenCancelCurrentTouch) {
 
     ASSERT_TRUE(mDispatcher->waitForIdle());
     // The D&D finished with nullptr
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, nullptr);
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, nullptr, /*location=*/{0, 0},
+                                                 /*rawLocation=*/{0, 0});
 
     // Remove drag window
     mDispatcher->onWindowInfosChanged({{*mWindow->getInfo(), *mSecondWindow->getInfo()}, {}, 0, 0});
@@ -13553,7 +13592,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenSplitTouchAndMultiDevice) {
     mDragWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_UP), WithDeviceId(deviceA),
                                           WithDisplayId(ui::LogicalDisplayId::DEFAULT),
                                           WithFlags(MotionFlag::NO_FOCUS_CHANGE)));
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{51, 51}, /*rawLocation=*/{51, 51});
     mSecondWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_MOVE), WithDeviceId(deviceA),
                                             WithDisplayId(ui::LogicalDisplayId::DEFAULT)));
 
@@ -15917,7 +15957,8 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrim
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
                     .build());
     mDragWindow->consumeMotionUp(SECOND_DISPLAY_ID, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindowOnSecondDisplay->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindowOnSecondDisplay->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 450});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
     mWindowOnSecondDisplay->assertNoEvents();
@@ -15967,7 +16008,8 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonP
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
                     .build());
     mDragWindow->consumeMotionUp(DISPLAY_ID, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
     mWindowOnSecondDisplay->assertNoEvents();

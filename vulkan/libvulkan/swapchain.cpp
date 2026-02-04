@@ -331,6 +331,13 @@ bool IsSharedPresentMode(VkPresentModeKHR mode) {
         mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR;
 }
 
+static void nativeWindowOnAcquiredCallback(uint64_t /*bufferId*/,
+                                           uint64_t frameId,
+                                           void* data) {
+    Surface* surface = static_cast<Surface*>(data);
+    surface->listener.onFramePresented(frameId);
+}
+
 struct Swapchain {
     Swapchain(Surface& surface_,
               uint32_t num_images_,
@@ -763,14 +770,31 @@ VkResult CreateAndroidSurfaceKHR(
         return VK_ERROR_SURFACE_LOST_KHR;
     }
 
-    err =
-        native_window_api_connect(surface->window.get(), NATIVE_WINDOW_API_EGL);
+    if (flags::vk_khr_present_wait2_gpu()) {
+        err = native_window_api_connect_with_listener(
+            surface->window.get(), NATIVE_WINDOW_API_EGL, false, true, true);
+    } else {
+        err = native_window_api_connect(surface->window.get(),
+                                        NATIVE_WINDOW_API_EGL);
+    }
     if (err != android::OK) {
-        ALOGE("native_window_api_connect() failed: %s (%d)", strerror(-err),
-              err);
+        ALOGE("native_window_api_connect_with_listener() failed: %s (%d)",
+              strerror(-err), err);
         surface->~Surface();
         allocator->pfnFree(allocator->pUserData, surface);
         return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+    }
+    if (flags::vk_khr_present_wait2_gpu()) {
+        err = native_window_set_on_acquired_callback(
+            surface->window.get(), &nativeWindowOnAcquiredCallback, surface);
+        ALOGW_IF(err != android::OK,
+                 "native_window_set_on_acquired_callback failed: %s (%d)",
+                 strerror(-err), err);
+        err = native_window_set_on_dropped_callback(
+            surface->window.get(), &nativeWindowOnAcquiredCallback, surface);
+        ALOGW_IF(err != android::OK,
+                 "native_window_set_on_dropped_callback failed: %s (%d)",
+                 strerror(-err), err);
     }
 
     *out_surface = HandleFromSurface(surface);
@@ -1222,7 +1246,7 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
             }
 
             case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_WAIT_2_KHR: {
-                if (!flags::vk_khr_present_wait2())
+                if (!flags::vk_khr_present_wait2_gpu())
                     break;
 
                 VkSurfaceCapabilitiesPresentWait2KHR* present_wait2 =
@@ -1923,10 +1947,27 @@ VkResult CreateSwapchainKHR(VkDevice device,
         ALOGW_IF(err != android::OK,
                  "native_window_api_disconnect failed: %s (%d)", strerror(-err),
                  err);
-        err = native_window_api_connect(window, NATIVE_WINDOW_API_EGL);
+        if (flags::vk_khr_present_wait2_gpu()) {
+            err = native_window_api_connect_with_listener(
+                window, NATIVE_WINDOW_API_EGL, false, true, true);
+        } else {
+            err = native_window_api_connect(window, NATIVE_WINDOW_API_EGL);
+        }
         ALOGW_IF(err != android::OK,
-                 "native_window_api_connect failed: %s (%d)", strerror(-err),
-                 err);
+                 "native_window_api_connect_with_listener failed: %s (%d)",
+                 strerror(-err), err);
+        if (flags::vk_khr_present_wait2_gpu()) {
+            err = native_window_set_on_acquired_callback(
+                window, &nativeWindowOnAcquiredCallback, &surface);
+            ALOGW_IF(err != android::OK,
+                     "native_window_set_on_acquired_callback failed: %s (%d)",
+                     strerror(-err), err);
+            err = native_window_set_on_dropped_callback(
+                window, &nativeWindowOnAcquiredCallback, &surface);
+            ALOGW_IF(err != android::OK,
+                     "native_window_set_on_dropped_callback failed: %s (%d)",
+                     strerror(-err), err);
+        }
     }
 
     err =
@@ -2755,6 +2796,17 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                 SetSwapchainFrameTimestamp(
                     swapchain, pGoogleTime->presentID, nativeFrameId,
                     pGoogleTime->desiredPresentTime, 0, false);
+            }
+            if (flags::vk_khr_present_wait2_gpu() && presentId != 0) {
+                swapchain.surface.listener.associatePresentId(nativeFrameId,
+                                                              presentId);
+            }
+            if (flags::vk_khr_present_wait2_gpu()) {
+                uint64_t frameId;
+                native_window_get_last_replaced_frame_id(window, &frameId);
+                if (frameId != 0) {
+                    swapchain.surface.listener.onFramePresented(frameId);
+                }
             }
             if (pPresentMode) {
                 if (!SetSwapchainPresentMode(window, *pPresentMode))

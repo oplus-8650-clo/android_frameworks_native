@@ -1366,6 +1366,48 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
     }
 }
 
+TEST_F(SchedulerTest, isVsyncValid) {
+    // Setup a mock VSyncTracker to intercept calls.
+    auto mockVsyncTracker = std::make_shared<android::mock::VSyncTracker>();
+
+    // Register a display which will become the pacesetter, and inject the mock tracker.
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                mockVsyncTracker);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    const uid_t uid = 1234;
+    const TimePoint expectedVsyncTime = TimePoint::fromNs(1'000'000'000);
+
+    // Case 1: No frame rate override for the given UID.
+    // isVsyncValid should return true without consulting the VSyncTracker.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(_, _)).Times(0);
+    EXPECT_TRUE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
+
+    // Case 2: A frame rate override is set for the UID.
+    // isVsyncValid should delegate the check to VSyncTracker::isVSyncInPhase.
+    const Fps frameRateOverride = 30_Hz;
+    mScheduler->setPreferredRefreshRateForUid({uid, frameRateOverride.getValue()});
+
+    // Mock the tracker to return false.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(expectedVsyncTime.ns(), frameRateOverride))
+            .WillOnce(Return(false));
+
+    // Verify isVsyncValid returns false.
+    EXPECT_FALSE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
+
+    // Mock the tracker to return true.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(expectedVsyncTime.ns(), frameRateOverride))
+            .WillOnce(Return(true));
+
+    // Verify isVsyncValid returns true.
+    EXPECT_TRUE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
+}
+
 TEST_F(SchedulerTest, nextFrameIntervalTest) {
     static constexpr size_t kHistorySize = 10;
     static constexpr size_t kMinimumSamplesForPrediction = 6;

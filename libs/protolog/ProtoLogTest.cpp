@@ -231,6 +231,26 @@ TEST_F_WITH_FLAGS(ProtoLogTest, LogsParametersCorrectly,
     ASSERT_FALSE(it.Next());
 }
 
+// Verifies that more than 16 arguments can be logged correctly.
+TEST_F_WITH_FLAGS(ProtoLogTest, LogsMoreThan16ParametersCorrectly,
+                  REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_PACKAGE, native_proto_logging))) {
+    auto session = StartTracing();
+
+    PROTOLOG_W("MultiGroup",
+               "Params: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, "
+               "%d, %d",
+               1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
+
+    std::string trace_str = StopAndReadTrace(session.get());
+    auto tp = GetTraceProcessor(trace_str);
+
+    auto it = tp->ExecuteQuery("SELECT message FROM protolog WHERE tag = 'MultiGroup'");
+    ASSERT_TRUE(it.Next());
+    EXPECT_STREQ(it.Get(0).AsString(),
+                 "Params: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20");
+    ASSERT_FALSE(it.Next());
+}
+
 // Verifies that duplicate strings are only interned and written to the trace once.
 TEST_F_WITH_FLAGS(ProtoLogTest, InterningIsCorrect,
                   REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(FLAG_PACKAGE, native_proto_logging))) {

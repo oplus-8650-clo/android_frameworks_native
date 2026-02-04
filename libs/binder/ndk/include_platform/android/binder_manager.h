@@ -154,6 +154,8 @@ __attribute__((warn_unused_result)) AIBinder* AServiceManager_getService(const c
  * \param instance identifier of the service. This will be used to lookup the service.
  *
  * \return STATUS_OK on success.
+ *         STATUS_UNEXPECTED_NULL if null arguments
+ *         UNKNOWN_ERROR if registration failed (look for "libbinder" logs)
  */
 binder_status_t AServiceManager_registerLazyService(AIBinder* binder, const char* instance)
         __INTRODUCED_IN(31);
@@ -168,6 +170,8 @@ binder_status_t AServiceManager_registerLazyService(AIBinder* binder, const char
  *        registered.
  *
  * \return STATUS_OK on success.
+ *         STATUS_UNEXPECTED_NULL if null arguments
+ *         UNKNOWN_ERROR if registration failed (look for "libbinder" logs)
  */
 binder_status_t AServiceManager_registerLazyServiceWithFlags(
         AIBinder* binder, const char* instance, const AServiceManager_AddServiceFlag flags)

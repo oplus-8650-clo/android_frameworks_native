@@ -59,7 +59,6 @@ public:
     bool bugfix_resize_virtual_display_surfaces() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
-    bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
@@ -90,8 +89,8 @@ public:
     bool connected_display_hdr_v3() const;
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
-    bool disable_synthetic_vsync_for_performance() const;
     bool display_command_modeset() const;
+    bool enable_user_preferred_hdr_mode() const;
     bool frame_rate_category_mrr() const;
     bool graphite_renderengine() const;
     bool hdcp_level_hal() const;

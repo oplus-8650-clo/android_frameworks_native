@@ -1181,6 +1181,10 @@ private:
     friend class sp<AsyncProducerListener>;
 
 public:
+    bool needsAcquiredNotify() override { return mListener->needsAcquiredNotify(); }
+
+    bool needsDroppedNotify() override { return mListener->needsDroppedNotify(); }
+
     void onBufferReleased() override {
         AsyncWorker::getInstance().post([listener = mListener]() { listener->onBufferReleased(); });
     }
@@ -1194,6 +1198,20 @@ public:
         AsyncWorker::getInstance().post(
                 [listener = mListener, slot = slot]() { listener->onBufferDetached(slot); });
     }
+
+    void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) override {
+        AsyncWorker::getInstance().post(
+                [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
+                    listener->onBufferAcquired(bufferId, frameNumber);
+                });
+    };
+
+    void onBufferDropped(uint64_t bufferId, uint64_t frameNumber) override {
+        AsyncWorker::getInstance().post(
+                [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
+                    listener->onBufferDropped(bufferId, frameNumber);
+                });
+    };
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
     void onBufferAttached() override {

@@ -337,8 +337,8 @@ void Log(ProtoLogLevel level, const std::string_view group, const char* format,
             true);
 }
 
-void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash, int paramsMask,
-         int argCount, IArgumentProvider& args_provider) {
+void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash,
+         uint64_t paramsMask, int argCount, IArgumentProvider& args_provider) {
     LogInternal(
             level, group,
             [&](struct PerfettoDsTracerIterator&, datasource::IncrementalState&, uint64_t) {
