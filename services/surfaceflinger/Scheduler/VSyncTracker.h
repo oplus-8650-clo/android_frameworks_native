@@ -89,15 +89,6 @@ public:
                                                  std::optional<nsecs_t> lastVsyncOpt = {}) = 0;
 
     /*
-     * For a given known vsync, return the model's prediction error in nanoseconds.
-     * This is a query-only function and does not affect the state of the model.
-     *
-     * \param [in] knownVsync   A vsync timestamp to compare against the model.
-     * \return                  The model's prediction error in nanoseconds.
-     */
-    virtual nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const = 0;
-
-    /*
      * The current period of the vsync signal.
      *
      * \return  The current period of the vsync signal

@@ -209,7 +209,7 @@ struct layer_state_t {
         eRoundedCornerOptDisabled = 0x4000,
     };
 
-    enum {
+    enum : uint64_t {
         ePositionChanged = 0x00000001,
         eLayerChanged = 0x00000002,
         eTrustedPresentationInfoChanged = 0x00000004,

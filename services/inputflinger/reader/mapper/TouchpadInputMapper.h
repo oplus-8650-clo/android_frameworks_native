@@ -25,8 +25,7 @@
 #include <android/os/PointerCaptureMode.h>
 #include <utils/Timers.h>
 
-#include "CapturedTouchpadEventConverter.h"
-#include "EventHub.h"
+#include "AbsoluteTouchpadEventConverter.h"
 #include "InputDevice.h"
 #include "InputMapper.h"
 #include "InputReaderBase.h"
@@ -98,7 +97,7 @@ private:
 
     HardwareStateConverter mStateConverter;
     UncapturedGestureConverter mGestureConverter;
-    CapturedTouchpadEventConverter mCapturedEventConverter;
+    AbsoluteTouchpadEventConverter mAbsoluteModeEventConverter;
     RelativeModeGestureConverter mRelativeModeGestureConverter;
     HardwareProperties mHardwareProperties;
 

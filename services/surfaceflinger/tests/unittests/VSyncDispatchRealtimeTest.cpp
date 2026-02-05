@@ -73,8 +73,6 @@ public:
         }
         return timePoint - floor + mPeriod;
     }
-
-    nsecs_t getModelAccuracyInNs(nsecs_t) const final { return 0; }
 };
 
 class VRRStubTracker : public StubTracker {
@@ -90,8 +88,6 @@ public:
         }
         return normalized_to_base - floor + mPeriod + mBase;
     }
-
-    nsecs_t getModelAccuracyInNs(nsecs_t) const final { return 0; }
 
     void set_interval(nsecs_t interval, nsecs_t last_known) {
         std::lock_guard lock(mMutex);

@@ -15,6 +15,7 @@
  */
 #pragma once
 #include <utils/String16.h>
+#include "../BuildFlags.h"
 
 namespace android {
 // Data for a monitored binder transaction.
@@ -28,7 +29,13 @@ struct BinderCallData {
     uint32_t transactionCode;
     uint32_t senderUid;
 
-    bool hasLatencyData() const { return endTimeNanos > startTimeNanos; }
+    bool hasLatencyData() const {
+        if (kBinderObserverV2Enabled) {
+            return startTimeNanos > 0;
+        } else {
+            return endTimeNanos > 0 && startTimeNanos > 0;
+        }
+    }
 };
 
 } // namespace android

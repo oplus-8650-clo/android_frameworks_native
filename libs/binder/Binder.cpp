@@ -473,10 +473,11 @@ status_t BBinder::transact(
     }
 
     if (data.dataSize() > binder::kLogTransactionsOverBytes) {
-        ALOGW("Large data transaction of %zu bytes, interface descriptor %s, function %s, flags "
+        ALOGW("Large data transaction of %zu bytes, interface descriptor %s, function: %s, code: "
+              "%" PRIu32 ", flags: "
               "%d",
               data.dataSize(), String8(getInterfaceDescriptor()).c_str(),
-              getFunctionName(code).c_str(), flags);
+              getFunctionName(code).c_str(), code, flags);
     }
 
     status_t err = NO_ERROR;
@@ -511,10 +512,10 @@ status_t BBinder::transact(
     if (reply != nullptr) {
         reply->setDataPosition(0);
         if (reply->dataSize() > binder::kLogTransactionsOverBytes) {
-            ALOGW("Large reply transaction of %zu bytes, interface descriptor %s, function %s, "
-                  "flags %d",
+            ALOGW("Large reply transaction of %zu bytes, interface descriptor %s, function: %s, "
+                  "code: %" PRIu32 ", flags: %d",
                   reply->dataSize(), String8(getInterfaceDescriptor()).c_str(),
-                  getFunctionName(code).c_str(), flags);
+                  getFunctionName(code).c_str(), code, flags);
         }
     }
 
@@ -542,9 +543,9 @@ status_t BBinder::transact(
 
     const uint64_t transactionMs = to_ms(std::chrono::steady_clock::now() - startTime);
     if (transactionMs > 1000lu) {
-        ALOGW("Binder transaction to %s function %s took %" PRIu64
+        ALOGW("Binder transaction to %s, function: %s, code: %" PRIu32 ", took %" PRIu64
               "ms. Data bytes: %zu Reply bytes: %zu Flags: %d",
-              String8(getInterfaceDescriptor()).c_str(), getFunctionName(code).c_str(),
+              String8(getInterfaceDescriptor()).c_str(), getFunctionName(code).c_str(), code,
               transactionMs, data.dataSize(), reply ? reply->dataSize() : 0u, flags);
     }
 

@@ -307,6 +307,11 @@ status_t Surface::setGenerationNumber(uint32_t generation) {
     return result;
 }
 
+void Surface::setAutoGenerationUpdate(bool autoGeneration) {
+    Mutex::Autolock lock(mMutex);
+    mAutoGenerationUpdate = autoGeneration;
+}
+
 uint64_t Surface::getNextFrameNumber() const {
     Mutex::Autolock lock(mMutex);
     return mNextFrameNumber;
@@ -2471,6 +2476,8 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     mEnableFrameTimestamps = false;
     mMaxBufferCount = NUM_BUFFER_SLOTS;
     mLastReplacedFrameId = {};
+    mGenerationNumber = 0;
+    mAutoGenerationUpdate = true;
 
     if (api == NATIVE_WINDOW_API_CPU) {
         mConnectedToCpu = false;
@@ -2579,20 +2586,26 @@ int Surface::attachBuffer(ANativeWindowBuffer* buffer) {
 
 int Surface::attachBuffer(const sp<GraphicBuffer>& graphicBuffer) {
     ATRACE_CALL();
-    SURF_LOGV("Surface::attachBuffer bufferId=%" PRIu64, graphicBuffer->getId());
-
     Mutex::Autolock lock(mMutex);
+    SURF_LOGV("Surface::attachBuffer bufferId=%" PRIu64
+              " mAutoGenerationUpdate=%d, mGenerationNumber=%u, graphicBuffer generation number=%u",
+              graphicBuffer->getId(), mAutoGenerationUpdate, mGenerationNumber,
+              graphicBuffer->mGenerationNumber);
     if (mReportRemovedBuffers) {
         mRemovedBuffers.clear();
     }
 
     uint32_t priorGeneration = graphicBuffer->mGenerationNumber;
-    graphicBuffer->mGenerationNumber = mGenerationNumber;
+    if (mAutoGenerationUpdate) {
+        graphicBuffer->mGenerationNumber = mGenerationNumber;
+    }
     int32_t attachedSlot = -1;
     status_t result = mGraphicBufferProducer->attachBuffer(&attachedSlot, graphicBuffer);
     if (result != NO_ERROR) {
         SURF_LOGE("attachBuffer: IGraphicBufferProducer call failed (%d)", result);
-        graphicBuffer->mGenerationNumber = priorGeneration;
+        if (mAutoGenerationUpdate) {
+            graphicBuffer->mGenerationNumber = priorGeneration;
+        }
         return result;
     }
     if (mReportRemovedBuffers && (mSlots[attachedSlot].buffer != nullptr)) {

@@ -236,8 +236,8 @@ protected:
 
         if (!kDebug) {
             service_->controlDexOptBlocking(false);
-            service_->destroyAppData(
-                volume_uuid_, package_name_, kTestUserId, kAppDataFlags, ce_data_inode_);
+            service_->destroyAppData(volume_uuid_, package_name_, kTestUserId, kAppDataFlags,
+                                     ce_data_inode_, pcc_ce_data_inode_);
             run_cmd("rm -rf " + app_apk_dir_);
             run_cmd("rm -rf " + app_private_dir_ce_);
             run_cmd("rm -rf " + app_private_dir_de_);
@@ -1457,6 +1457,7 @@ class BootProfileTest : public ProfileTest {
   public:
     std::vector<std::string> extra_apps_;
     std::vector<int64_t> extra_ce_data_inodes_;
+    std::vector<int64_t> extra_pcc_ce_data_inodes_;
 
     virtual void SetUp() {
         if (base::GetBoolProperty("dalvik.vm.useartservice", false)) {
@@ -1498,6 +1499,7 @@ class BootProfileTest : public ProfileTest {
                                             /*pccUid= */ -1, /*previousPccUid=*/0));
             extra_apps_.push_back(package_name);
             extra_ce_data_inodes_.push_back(ce_data_inode);
+            extra_pcc_ce_data_inodes_.push_back(pcc_ce_data_inode_);
             std::string profile = create_current_profile_path(
                     kTestUserId, package_name, kPrimaryProfile, /*is_secondary_dex*/ false);
             SetupProfile(profile, kTestAppUid, kTestAppGid, 0600, 1);
@@ -1509,8 +1511,8 @@ class BootProfileTest : public ProfileTest {
             return;
         }
         for (size_t i = 0; i < extra_apps_.size(); i++) {
-            service_->destroyAppData(
-                volume_uuid_, extra_apps_[i], kTestUserId, kAppDataFlags, extra_ce_data_inodes_[i]);
+            service_->destroyAppData(volume_uuid_, extra_apps_[i], kTestUserId, kAppDataFlags,
+                                     extra_ce_data_inodes_[i], extra_pcc_ce_data_inodes_[i]);
         }
     }
 

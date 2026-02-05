@@ -18,9 +18,15 @@
 #include <procpartition/apexcache.h>
 
 #include <android-base/file.h>
+#include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/logging.h>
+#include <android/content/pm/IPackageManagerNative.h>
+#include <android/content/pm/PackageInfoNative.h>
+#include <binder/IServiceManager.h>
+#include <utils/String8.h>
 #include <filesystem>
+#include <sstream>
 
 namespace android {
 namespace procpartition {
@@ -126,11 +132,32 @@ Partition parsePartition(const std::string& s) {
     return Partition::UNKNOWN;
 }
 
+std::optional<uid_t> getUid(pid_t pid) {
+    std::string content;
+    if (!android::base::ReadFileToString("/proc/" + std::to_string(pid) + "/status", &content)) {
+        return std::nullopt;
+    }
+    std::istringstream stream(content);
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (android::base::StartsWith(line, "Uid:")) {
+            std::vector<std::string> parts = android::base::Split(line, "\t ");
+            for (const auto& part : parts) {
+                if (part == "Uid:") continue;
+                if (part.empty()) continue;
+                uid_t ret;
+                return android::base::ParseUint(part, &ret) ?
+                    std::make_optional(ret) : std::nullopt;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 Partition getPartitionFromRealpath(const std::string& path) {
     if (path == "/system/bin/app_process64" ||
         path == "/system/bin/app_process32") {
-
-        return Partition::UNKNOWN; // cannot determine
+        return Partition::UNKNOWN;
     }
     size_t backslash = path.find_first_of('/', 1);
     std::string partition = (backslash != std::string::npos) ? path.substr(1, backslash - 1) : path;
@@ -139,6 +166,42 @@ Partition getPartitionFromRealpath(const std::string& path) {
     }
 
     return parsePartition(partition);
+}
+
+Partition getPartitionFromPackageManager(pid_t pid) {
+    std::optional<uid_t> uid = getUid(pid);
+    if (!uid.has_value()) {
+         LOG(ERROR) << "Process with PID: " << pid << " has no UID";
+         return Partition::UNKNOWN;
+    }
+
+    sp<IServiceManager> sm = defaultServiceManager();
+    sp<IBinder> binder = sm->checkService(String16("package_native"));
+    if (binder == nullptr) {
+        LOG(ERROR) << "Package_native service is not running, no binder returned";
+        return Partition::UNKNOWN;
+    }
+
+    sp<content::pm::IPackageManagerNative> packageMgr =
+            interface_cast<content::pm::IPackageManagerNative>(binder);
+
+    std::optional<std::vector<std::optional<content::pm::PackageInfoNative>>> packageInfos;
+
+    if (binder::Status status =
+        packageMgr->getPackageInfoWithSigningInfoForUid(uid.value(), &packageInfos);
+        status.isOk() && packageInfos.has_value()) {
+        for (const auto& infoOpt : packageInfos.value()) {
+            if (infoOpt.has_value() && infoOpt.value().sourceDir.has_value()) {
+                android::String8 sourceDir8(infoOpt.value().sourceDir.value());
+                Partition p = getPartitionFromRealpath(sourceDir8.c_str());
+                if (p != Partition::UNKNOWN) {
+                    return p;
+                }
+            }
+        }
+    }
+
+    return Partition::UNKNOWN;
 }
 
 Partition getPartitionFromCmdline(pid_t pid) {
@@ -158,6 +221,10 @@ Partition getPartitionFromExe(pid_t pid) {
     if (real.empty() || real.front() != '/') {
         LOG(INFO) << "getPartitionFromExe empty or front not '/': " << real;
         return Partition::UNKNOWN;
+    }
+    if (real == "/system/bin/app_process64" ||
+        real == "/system/bin/app_process32") {
+        return getPartitionFromPackageManager(pid);
     }
     return getPartitionFromRealpath(real);
 }

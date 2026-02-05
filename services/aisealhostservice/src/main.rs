@@ -25,6 +25,9 @@ use crate::instance_data::{invalidate_current_vm, InstanceData};
 use crate::package_manager::PackageManager;
 use crate::payload::VmPayload;
 use crate::vsock_selinux::connect_with_cid_port_context;
+use aiseal_internal_service_aidl::aidl::com::android::internal::aiseal::IAiSealInternalService::{
+    BnAiSealInternalService, IAiSealInternalService,
+};
 use aisealhostservice_aidl::aidl::android::aiseal::IAiSealHostService::{
     BnAiSealHostService, IAiSealHostService,
 };
@@ -47,6 +50,7 @@ use binder::{
 use log::{error, info, warn};
 use rustutils::android::{users::AID_ROOT, users::AID_SYSTEM};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use vmclient::{DeathReason, ErrorCode, VmInstance, VmWaitError};
 
@@ -179,8 +183,13 @@ fn try_main() -> Result<()> {
         }
     }
 
-    let host_service = AiSealHostService::new_binder(pm, instance, aiseal_config);
+    let instance = Arc::new(instance);
+    let host_service = AiSealHostService::new_binder(pm, instance.clone(), aiseal_config);
     add_service("aiseal_host", host_service.as_binder()).context("Registering host service")?;
+
+    let internal_service = AiSealInternalService::new_binder(instance);
+    add_service("aiseal_internal", internal_service.as_binder())
+        .context("Registering internal service")?;
 
     info!("Registered services, joining threadpool");
     ProcessState::join_thread_pool();
@@ -276,7 +285,7 @@ fn replace_mls_level(context: &str, level: &str) -> binder::Result<String> {
 /// Implementation of the `IAiSealHostService` AIDL interface.
 struct AiSealHostService {
     pm: PackageManager,
-    instance: VmInstance,
+    instance: Arc<VmInstance>,
     service_to_owner: HashMap<String, ExportedServiceWithOwner>,
 }
 
@@ -287,7 +296,7 @@ impl AiSealHostService {
     /// Creates a new binder object for the `AiSealHostService`.
     fn new_binder(
         pm: PackageManager,
-        instance: VmInstance,
+        instance: Arc<VmInstance>,
         config: AiSealConfig,
     ) -> Strong<dyn IAiSealHostService> {
         let service_to_owner = config.aiseal_payload_config.get_service_to_owner_map();
@@ -339,5 +348,34 @@ impl IAiSealHostService for AiSealHostService {
         info!("vsock_new_context: {vsock_new_context}");
         connect_with_cid_port_context(self.instance.cid() as u32, port, &vsock_new_context)
             .or_binder_exception(ExceptionCode::SECURITY)
+    }
+}
+
+/// Implementation of the `IAiSealInternalService` AIDL interface.
+#[allow(dead_code)]
+struct AiSealInternalService {
+    instance: Arc<VmInstance>,
+}
+
+impl Interface for AiSealInternalService {}
+
+impl AiSealInternalService {
+    fn new_binder(instance: Arc<VmInstance>) -> Strong<dyn IAiSealInternalService> {
+        BnAiSealInternalService::new_binder(
+            AiSealInternalService { instance },
+            BinderFeatures::default(),
+        )
+    }
+}
+
+impl IAiSealInternalService for AiSealInternalService {
+    fn onUserUnlocking(&self, user_id: i32) -> binder::Result<()> {
+        info!("onUserUnlocking {user_id}");
+        Ok(())
+    }
+
+    fn onUserStopped(&self, user_id: i32) -> binder::Result<()> {
+        info!("onUserStopped {user_id}");
+        Ok(())
     }
 }

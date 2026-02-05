@@ -87,9 +87,11 @@ public:
     binder::Status migrateAppData(const std::optional<std::string>& uuid,
             const std::string& packageName, int32_t userId, int32_t flags);
     binder::Status clearAppData(const std::optional<std::string>& uuid,
-            const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode);
+                                const std::string& packageName, int32_t userId, int32_t flags,
+                                int64_t ceDataInode, int64_t pccCeDataInode);
     binder::Status destroyAppData(const std::optional<std::string>& uuid,
-            const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode);
+                                  const std::string& packageName, int32_t userId, int32_t flags,
+                                  int64_t ceDataInode, int64_t pccCeDataInode);
     binder::Status destroyPccData(const std::optional<std::string>& uuid,
                                   const std::string& packageName, int32_t userId, int32_t flags,
                                   int64_t ceDataInode);

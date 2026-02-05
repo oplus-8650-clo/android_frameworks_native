@@ -19,7 +19,6 @@
 #include <bitset>
 #include <list>
 #include <map>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,7 +27,6 @@
 #include <input/Input.h>
 #include <utils/Timers.h>
 
-#include "EventHub.h"
 #include "InputDevice.h"
 #include "accumulator/CursorButtonAccumulator.h"
 #include "accumulator/MultiTouchMotionAccumulator.h"
@@ -36,9 +34,9 @@
 
 namespace android {
 
-class CapturedTouchpadEventConverter {
+class AbsoluteTouchpadEventConverter {
 public:
-    explicit CapturedTouchpadEventConverter(InputReaderContext& readerContext,
+    explicit AbsoluteTouchpadEventConverter(InputReaderContext& readerContext,
                                             const InputDeviceContext& deviceContext,
                                             MultiTouchMotionAccumulator& motionAccumulator,
                                             DeviceId deviceId);

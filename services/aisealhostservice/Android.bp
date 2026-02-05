@@ -10,6 +10,7 @@ rust_binary {
     init_rc: ["aisealhostservice.rc"],
     rustlibs: [
         "aisealhostservice_aidl-rust",
+        "aiseal_internal_service_aidl-rust",
         "android.os.permissions_aidl-rust",
         "android.system.virtualizationservice-rust",
         "libandroid_logger",

@@ -1323,8 +1323,6 @@ TEST_F(BinderLibTest, RecvOwnedFileDescriptors) {
 
 // Used to trigger fdsan error (b/239222407).
 TEST_F(BinderLibTest, RecvOwnedFileDescriptorsAndWriteInt) {
-    GTEST_SKIP() << "triggers fdsan false positive: b/370824489";
-
     FdLeakDetector fd_leak_detector;
 
     Parcel data;
@@ -1342,8 +1340,6 @@ TEST_F(BinderLibTest, RecvOwnedFileDescriptorsAndWriteInt) {
 
 // Used to trigger fdsan error (b/239222407).
 TEST_F(BinderLibTest, RecvOwnedFileDescriptorsAndTruncate) {
-    GTEST_SKIP() << "triggers fdsan false positive: b/370824489";
-
     FdLeakDetector fd_leak_detector;
 
     Parcel data;

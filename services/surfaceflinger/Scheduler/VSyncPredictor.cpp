@@ -171,10 +171,10 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp, VsyncTimeSource source
         return false;
     }
 
-    const nsecs_t modelErrorNs = getModelAccuracyInNsLocked(timestamp);
-    SFTRACE_FORMAT("VsyncPredictionError(ms): error= %.2f, actual= %.2f, VsyncTimeSource: %s",
-                   static_cast<float>(modelErrorNs) / 1e6f, static_cast<float>(timestamp) / 1e6f,
-                   ftl::enum_string(source).c_str());
+    {
+        const auto accuracy = getModelAccuracyLocked(timestamp, source);
+        SFTRACE_FORMAT("VsyncPredictionError(ms): %s", accuracy.to_string().c_str());
+    }
 
     if (mTimestamps.size() != kHistorySize) {
         mTimestamps.push_back(timestamp);
@@ -419,18 +419,25 @@ nsecs_t VSyncPredictor::nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
     return vsyncOpt->ns();
 }
 
-nsecs_t VSyncPredictor::getModelAccuracyInNs(nsecs_t knownVsync) const {
-    std::lock_guard lock(mMutex);
-    return getModelAccuracyInNsLocked(knownVsync);
-}
-
-nsecs_t VSyncPredictor::getModelAccuracyInNsLocked(nsecs_t knownVsync) const {
+VSyncPredictor::ModelAccuracy VSyncPredictor::getModelAccuracyLocked(nsecs_t knownVsync,
+                                                                     VsyncTimeSource source) const {
     const nsecs_t predictedVsync = snapToVsync(knownVsync - idealPeriod() / 2);
-    ALOGV("%s : knownVsync=%" PRId64 ", inputtime=%" PRId64 ", predictedVsync=%" PRId64
-          ", period=%" PRId64 ", error=%" PRId64,
-          __func__, knownVsync, knownVsync - idealPeriod() / 2, predictedVsync, idealPeriod(),
-          std::abs(predictedVsync - knownVsync));
-    return std::abs(predictedVsync - knownVsync);
+    const nsecs_t modelErrorNs = std::abs(predictedVsync - knownVsync);
+
+    // Calculate the number of ideal VSync periods that have elapsed between the last recorded VSync
+    // signal and the current knownVsync.
+    const std::optional<nsecs_t> lastVsync = !mTimestamps.empty()
+            ? std::make_optional(mTimestamps[mLastTimestampIndex])
+            : mKnownTimestamp;
+    const double vsyncPeriodsElapsed = lastVsync
+            ? static_cast<double>(knownVsync - *lastVsync) / static_cast<double>(idealPeriod())
+            : 0.0;
+
+    ALOGV("%s : error=%" PRId64 ", actualVsync=%" PRId64 ", inputtime=%" PRId64
+          ", predictedVsync=%" PRId64 ", period=%" PRId64 ", vsyncPeriodsElapsed=%.2f ",
+          __func__, modelErrorNs, knownVsync, knownVsync - idealPeriod() / 2, predictedVsync,
+          idealPeriod(), vsyncPeriodsElapsed);
+    return {modelErrorNs, knownVsync, predictedVsync, idealPeriod(), vsyncPeriodsElapsed, source};
 }
 
 /*

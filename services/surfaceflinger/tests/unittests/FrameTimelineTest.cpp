@@ -193,7 +193,8 @@ public:
     }
 
     NO_THREAD_SAFETY_ANALYSIS
-    const std::map<int64_t, TimelineItem>& getPredictions() const {
+    const ftl::StaticVector<std::pair<int64_t, TimelineItem>, impl::TokenManager::kMaxTokens>&
+    getPredictions() const {
         return mTokenManager->mPredictions;
     }
 
@@ -4011,6 +4012,115 @@ TEST_F(FrameTimelineTest, jankClassification_appDeadlineAdjustedForBufferStuffin
               FramePresentMetadata::OnTimePresent);
     EXPECT_EQ(presentedSurfaceFrame2.getFrameReadyMetadata(), FrameReadyMetadata::LateFinish);
     EXPECT_EQ(presentedSurfaceFrame2.getJankType(), JankType::BufferStuffing);
+}
+
+TEST_F(FrameTimelineTest, jankClassification_appVsyncResyncJitter) {
+    SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, true);
+
+    const auto refreshRate = Fps::fromPeriodNsecs(10);
+
+    FrameTimelineInfo ftInfo1;
+    ftInfo1.vsyncId = mTokenManager->generateTokenForPredictions({8, 9, 10});
+    ftInfo1.inputEventId = sInputEventId;
+    ftInfo1.vsyncResyncedJitterNanos = 0;
+
+    FrameTimelineInfo ftInfo2;
+    ftInfo2.vsyncId = mTokenManager->generateTokenForPredictions({18, 19, 20});
+    ftInfo2.inputEventId = sInputEventId;
+    ftInfo2.vsyncResyncedJitterNanos = 0;
+
+    // ftInfo3 was resynced
+    FrameTimelineInfo ftInfo3;
+    ftInfo3.vsyncId = mTokenManager->generateTokenForPredictions({28, 29, 30});
+    ftInfo3.inputEventId = sInputEventId;
+    ftInfo3.vsyncResyncedJitterNanos = 10;
+
+    // ftInfo4 is skipped as the app main thread was busy;
+    FrameTimelineInfo ftInfo5;
+    ftInfo5.vsyncId = mTokenManager->generateTokenForPredictions({38, 39, 50});
+    ftInfo5.inputEventId = sInputEventId;
+    ftInfo5.vsyncResyncedJitterNanos = 0;
+
+    int64_t sfToken1 = mTokenManager->generateTokenForPredictions({10, 11, 20});
+    int64_t sfToken2 = mTokenManager->generateTokenForPredictions({20, 21, 30});
+    int64_t sfToken3 = mTokenManager->generateTokenForPredictions({30, 31, 40});
+    int64_t sfToken4 = mTokenManager->generateTokenForPredictions({40, 41, 50});
+
+    auto surfaceFrame1 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo1, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+    surfaceFrame1->setAcquireFenceTime(10);
+    mFrameTimeline->setSfWakeUp(sfToken1, 10, refreshRate, refreshRate);
+    surfaceFrame1->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame1);
+    auto presentFence1 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    mFrameTimeline->setSfPresent(20, presentFence1);
+    presentFence1->signalForTest(20);
+
+    auto surfaceFrame2 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo2, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+    surfaceFrame2->setAcquireFenceTime(20);
+    mFrameTimeline->setSfWakeUp(sfToken2, 20, refreshRate, refreshRate);
+    surfaceFrame2->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame2);
+    auto presentFence2 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    mFrameTimeline->setSfPresent(30, presentFence2);
+    presentFence2->signalForTest(30);
+
+    auto surfaceFrame3 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo3, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+    surfaceFrame3->setAcquireFenceTime(30);
+    mFrameTimeline->setSfWakeUp(sfToken3, 30, refreshRate, refreshRate);
+    surfaceFrame3->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame3);
+    auto presentFence3 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    mFrameTimeline->setSfPresent(40, presentFence3);
+    presentFence3->signalForTest(40);
+
+    auto surfaceFrame5 =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo5, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+    surfaceFrame5->setAcquireFenceTime(50);
+    mFrameTimeline->setSfWakeUp(sfToken4, 40, refreshRate, refreshRate);
+    surfaceFrame5->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame5);
+    auto presentFence4 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    mFrameTimeline->setSfPresent(50, presentFence4);
+    presentFence4->signalForTest(50);
+
+    addEmptyDisplayFrame();
+
+    EXPECT_EQ(*surfaceFrame1->getJankType(), JankType::NonAnimating);
+    EXPECT_EQ(surfaceFrame1->getFramePresentMetadata(), FramePresentMetadata::UnknownPresent);
+    EXPECT_FLOAT_EQ(*surfaceFrame1->getJankSeverityScore(), 0);
+
+    EXPECT_EQ(*surfaceFrame2->getJankType(), JankType::BufferStuffing);
+    EXPECT_EQ(surfaceFrame2->getFramePresentMetadata(), FramePresentMetadata::OnTimePresent);
+    EXPECT_FLOAT_EQ(*surfaceFrame2->getJankSeverityScore(), 0);
+
+    EXPECT_EQ(*surfaceFrame3->getJankType(),
+              JankType::AppResyncedJitter | JankType::SurfaceFlingerScheduling);
+    EXPECT_EQ(surfaceFrame3->getFramePresentMetadata(), FramePresentMetadata::EarlyPresent);
+
+    const float w_s = std::log2((/*presentDelay*/ 10.f + /*expectedPresentDelta*/ 20.f) /
+                                /*expectedPresentDelta*/ 20.f);
+    const float w_f = std::sqrt(/*expectedPresentDelta*/ 20.f /
+                                static_cast<float>((120_Hz).getPeriodNsecs()));
+    EXPECT_FLOAT_EQ(*surfaceFrame3->getJankSeverityScore(), w_s * w_f);
+
+    EXPECT_EQ(*surfaceFrame5->getJankType(), JankType::None);
+    EXPECT_EQ(surfaceFrame5->getFramePresentMetadata(), FramePresentMetadata::OnTimePresent);
+    EXPECT_FLOAT_EQ(*surfaceFrame5->getJankSeverityScore(), 0);
 }
 
 TEST_F(FrameTimelineTest,
