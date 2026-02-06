@@ -71,6 +71,36 @@ protected:
     }
 };
 
+TEST_F(UtilsTest, IsPathNormalized) {
+    EXPECT_TRUE(is_path_normalized("/data/user/0/com.foo/bar"));
+    EXPECT_TRUE(is_path_normalized("/"));
+    EXPECT_TRUE(is_path_normalized(""));
+    EXPECT_TRUE(is_path_normalized("foo..test.txt"));
+    EXPECT_TRUE(is_path_normalized(".foo"));
+    EXPECT_TRUE(is_path_normalized("..foo"));
+    EXPECT_TRUE(is_path_normalized("foo."));
+    EXPECT_TRUE(is_path_normalized("foo.."));
+
+    EXPECT_FALSE(is_path_normalized(".."));
+    EXPECT_FALSE(is_path_normalized("../foo"));
+    EXPECT_FALSE(is_path_normalized("/data/../foo"));
+    EXPECT_FALSE(is_path_normalized("/data/foo/.."));
+    EXPECT_FALSE(is_path_normalized("/data/foo/../bar"));
+
+    EXPECT_FALSE(is_path_normalized("."));
+    EXPECT_FALSE(is_path_normalized("./foo"));
+    EXPECT_FALSE(is_path_normalized("/data/./foo"));
+    EXPECT_FALSE(is_path_normalized("/data/foo/."));
+    EXPECT_FALSE(is_path_normalized("/data/foo/./bar"));
+
+    EXPECT_FALSE(is_path_normalized("//"));
+    EXPECT_FALSE(is_path_normalized("/data//foo"));
+    EXPECT_FALSE(is_path_normalized("/data/foo//"));
+
+    EXPECT_FALSE(is_path_normalized("/data/foo/"));
+    EXPECT_FALSE(is_path_normalized("foo/"));
+}
+
 TEST_F(UtilsTest, IsValidApkPath_BadPrefix) {
     // Bad prefixes directories
     const char *badprefix1 = "/etc/passwd";

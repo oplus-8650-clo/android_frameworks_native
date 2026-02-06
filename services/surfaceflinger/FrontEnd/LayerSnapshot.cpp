@@ -165,7 +165,8 @@ bool LayerSnapshot::isOpaqueFormat(PixelFormat format) {
 }
 
 bool LayerSnapshot::hasBufferOrSidebandStream() const {
-    return ((sidebandStream != nullptr) || (externalTexture != nullptr)) || (renderCommandBufferConsumer != nullptr);
+    return ((sidebandStream != nullptr) || (externalTexture != nullptr)) ||
+            (renderCommandBuffer != nullptr);
 }
 
 bool LayerSnapshot::drawShadows() const {
@@ -195,7 +196,7 @@ bool LayerSnapshot::hasEffect() const {
 }
 
 bool LayerSnapshot::hasSomethingToDraw() const {
-    return hasEffect() || hasBufferOrSidebandStream() || renderCommandBufferConsumer != nullptr;
+    return hasEffect() || hasBufferOrSidebandStream() || renderCommandBuffer != nullptr;
 }
 
 bool LayerSnapshot::isContentOpaque() const {
@@ -262,7 +263,7 @@ std::string LayerSnapshot::getIsVisibleReason() const {
     if (sidebandStream != nullptr) reason << " sidebandStream";
     if (externalTexture != nullptr)
         reason << " buffer=" << externalTexture->getId() << " frame=" << frameNumber;
-    if (renderCommandBufferConsumer != nullptr) reason << " renderCommandBufferConsumer";
+    if (renderCommandBuffer != nullptr) reason << " renderCommandBuffer";
     if (fillsColor()) reason << " color{" << color << "}";
     if (color.a < 1.0f) reason << " alpha=" << color.a;
     if (drawShadows()) reason << " shadowSettings.length=" << shadowSettings.length;
@@ -374,7 +375,7 @@ std::ostream& operator<<(std::ostream& out, const LayerSnapshot& obj) {
 }
 
 FloatRect LayerSnapshot::sourceBounds() const {
-    if (!externalTexture && !renderCommandBufferConsumer) {
+    if (!externalTexture && !renderCommandBuffer) {
         return geomLayerBounds;
     }
     return geomBufferSize.toFloatRect();
@@ -588,23 +589,19 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
         luts = requested.luts;
     }
 
-    if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferChanged) {
-        renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
-        geomUsesSourceCrop = hasBufferOrSidebandStream();
-    }
-    if (forceUpdate || requested.what & layer_state_t::eRenderCommandBufferFrameIdChanged) {
+    if (forceUpdate ||
+        requested.what &
+                (layer_state_t::eRenderCommandBufferChanged |
+                 layer_state_t::eRenderCommandBufferFrameIdChanged)) {
+        renderCommandBuffer = requested.renderCommandBuffer;
         renderCommandBufferFrameId = requested.renderCommandBufferFrameId;
-        // TODO(b/459526480): We should implement the barrier logic here and only
-        // acquire the target frame.
-        if (renderCommandBufferConsumer != nullptr) {
-            renderCommandBufferConsumer->consumerAcquire();
-        }
+        geomUsesSourceCrop = hasBufferOrSidebandStream();
     }
 
     if (forceUpdate || requested.what & layer_state_t::eRenderResourceTokenChanged) {
         renderResourceToken = requested.renderResourceToken;
     }
-    if (renderCommandBufferConsumer != nullptr) {
+    if (renderCommandBuffer != nullptr) {
         forceClientComposition = true;
     }
 }

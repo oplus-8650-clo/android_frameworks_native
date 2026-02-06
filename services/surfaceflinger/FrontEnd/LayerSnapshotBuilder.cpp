@@ -1016,8 +1016,12 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
-    if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderCommandBufferChanged) {
-        snapshot.renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+    if (forceUpdate ||
+        (requested.what &
+         (layer_state_t::eRenderCommandBufferChanged |
+          layer_state_t::eRenderCommandBufferFrameIdChanged))) {
+        snapshot.renderCommandBuffer = requested.renderCommandBuffer;
+        snapshot.renderCommandBufferFrameId = requested.renderCommandBufferFrameId;
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderResourceTokenChanged) {
@@ -1053,7 +1057,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
             snapshot.borderSettings.strokeWidth > 0 ||
             !snapshot.boxShadowSettings.boxShadows.empty() ||
-            snapshot.renderCommandBufferConsumer != nullptr || hasSmpte2094_50;
+            snapshot.renderCommandBuffer != nullptr || hasSmpte2094_50;
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
     snapshot.isOpaque = snapshot.contentOpaque &&
@@ -1302,8 +1306,9 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
 
     FloatRect parentBounds = parentSnapshot.geomLayerBounds;
     parentBounds = snapshot.localTransform.inverse().transform(parentBounds);
-    snapshot.geomLayerBounds =
-            requested.externalTexture || requested.renderCommandBufferConsumer ? snapshot.bufferSize.toFloatRect() : parentBounds;
+    snapshot.geomLayerBounds = requested.externalTexture || requested.renderCommandBuffer
+            ? snapshot.bufferSize.toFloatRect()
+            : parentBounds;
     snapshot.geomLayerCrop = parentBounds;
     if (!requested.crop.isEmpty()) {
         snapshot.geomLayerCrop = snapshot.geomLayerCrop.intersect(requested.crop);

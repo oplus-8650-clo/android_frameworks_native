@@ -30,10 +30,14 @@ public:
     RenderCommandBufferConsumer();
     virtual ~RenderCommandBufferConsumer();
 
-    RenderCommandBuffer* consumerAcquire();
-    void consumerRelease();
+    void consumerAcquire(uint64_t frameNumber);
 
-    RenderCommandBuffer* getCurrentBuffer() { return mCurrentBuffer; }
+    RenderCommandBuffer* getCurrentBuffer() {
+        if (mRenderRegion->mCommandBuffers.empty()) {
+            return nullptr;
+        }
+        return &mRenderRegion->mCommandBuffers.front();
+    }
 
     void adoptFdCommandBuffer(int fd);
 
@@ -43,19 +47,11 @@ public:
     void setContext(void* context, std::function<void(void*)> contextFreeCallback);
     void* getContext() { return mContext; }
 
-    // Used for replay
-    void setRenderCommandBuffer(RenderCommandBuffer* commandBuffer) {
-        mCommandBuffer = nullptr;
-        mCurrentBuffer = commandBuffer;
-    }
-
-    uint64_t getFrameNumber() { return mSharedRegionRenderCommands->mFrameNumber; }
+    uint64_t getFrameNumber() { return mRenderRegion->mFrameNumber; }
 
 private:
-    int mFdCommandBuffer = -1;
-    IpcRenderRegion* mSharedRegionRenderCommands;
-    LocklessTripleBuffer<RenderCommandBuffer>* mCommandBuffer;
-    RenderCommandBuffer* mCurrentBuffer = nullptr;
+    int mAshmemFdRenderRegion = -1;
+    IpcRenderRegion* mRenderRegion = nullptr;
 
     std::function<void(void*)> mContextFreeCallback;
     void* mContext = nullptr;

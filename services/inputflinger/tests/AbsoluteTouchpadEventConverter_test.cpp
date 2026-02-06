@@ -23,6 +23,7 @@
 #include <com_android_input_flags.h>
 #include <gtest/gtest.h>
 #include <input/Input.h>
+#include <input/ScopedFlagOverride.h>
 #include <linux/input-event-codes.h>
 #include <linux/input.h>
 #include <utils/StrongPointer.h>
@@ -1032,6 +1033,35 @@ TEST_F(AbsoluteTouchpadEventConverterTest, MultipleButtonsPressedDuringTouch_Rep
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
                                           WithActionButton(AMOTION_EVENT_BUTTON_SECONDARY),
                                           WithButtonState(0)))));
+}
+
+TEST_F(AbsoluteTouchpadEventConverterTest, ResetCancelsFingers) {
+    SCOPED_FLAG_OVERRIDE(cancel_touches_on_absolute_capture_release, true);
+    AbsoluteTouchpadEventConverter conv = createConverter();
+
+    processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
+    processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_X, 500);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_Y, 500);
+    processAxis(conv, EV_ABS, ABS_MT_SLOT, 1);
+    processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 2);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_X, 800);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_Y, 500);
+    processAxis(conv, EV_KEY, BTN_TOUCH, 1);
+    processAxis(conv, EV_KEY, BTN_TOOL_DOUBLETAP, 1);
+    EXPECT_THAT(processSync(conv),
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                                    WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
+                            VariantWith<NotifyMotionArgs>(WithMotionAction(
+                                    AMOTION_EVENT_ACTION_POINTER_DOWN |
+                                    1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT))));
+
+    EXPECT_THAT(conv.reset(ARBITRARY_TIME),
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_CANCEL), WithPointerCount(2),
+                              WithPointerCoords(0, 500, 500), WithPointerCoords(1, 800, 500),
+                              WithPointerToolType(0, ToolType::FINGER),
+                              WithPointerToolType(1, ToolType::FINGER)))));
 }
 
 } // namespace android

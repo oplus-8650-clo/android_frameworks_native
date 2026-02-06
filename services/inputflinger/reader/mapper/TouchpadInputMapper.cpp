@@ -431,6 +431,14 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
             case PointerCaptureMode::UNCAPTURED:
                 out += mGestureConverter.reset(when);
                 break;
+            case PointerCaptureMode::ABSOLUTE:
+                if (input_flags::cancel_touches_on_absolute_capture_release()) {
+                    out += mAbsoluteModeEventConverter.reset(when);
+                    // We've just had a period during which events weren't being sent to the
+                    // HardwareStateConverter, so we need to reset it.
+                    mStateConverter.reset();
+                }
+                break;
             case PointerCaptureMode::RELATIVE:
                 // mRelativeModeGestureConverter is stateless, and so doesn't need resetting, but we
                 // do need to re-enable three-finger swipes.
@@ -443,10 +451,12 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
         // Set up for the new capture mode.
         switch (mCaptureMode) {
             case PointerCaptureMode::ABSOLUTE:
-                mAbsoluteModeEventConverter.reset();
-                // We've just had a period during which events weren't being sent to the
-                // HardwareStateConverter, so we need to reset it.
-                mStateConverter.reset();
+                if (!input_flags::cancel_touches_on_absolute_capture_release()) {
+                    out += mAbsoluteModeEventConverter.reset(when);
+                    // We've just had a period during which events weren't being sent to the
+                    // HardwareStateConverter, so we need to reset it.
+                    mStateConverter.reset();
+                }
                 break;
             case PointerCaptureMode::RELATIVE:
                 // We don't use three-finger swipes in relative capture mode, so stop the Gestures
@@ -510,7 +520,7 @@ std::list<NotifyArgs> TouchpadInputMapper::reset(nsecs_t when) {
             out += mGestureConverter.reset(when);
             break;
         case PointerCaptureMode::ABSOLUTE:
-            mAbsoluteModeEventConverter.reset();
+            out += mAbsoluteModeEventConverter.reset(when);
             break;
         case PointerCaptureMode::RELATIVE:
             out += mRelativeModeGestureConverter.reset(when);

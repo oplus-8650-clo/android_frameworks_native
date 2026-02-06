@@ -78,7 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_max_level(log::LevelFilter::Debug),
     );
     debug!("UsbAuth service is starting...");
-    let device_manager = UsbDeviceAuthManager::new()?;
+    let use_interactive_policy = usb_flags_lib_rust::enable_usb_host_authorization();
+    let device_manager = UsbDeviceAuthManager::new(use_interactive_policy)?;
     let device_manager = Arc::new(Mutex::new(device_manager));
 
     let (mut watcher, event_stream) = Watcher::new().await?;
@@ -209,7 +210,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         let manager = Arc::new(Mutex::new(manager));
 
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
@@ -233,7 +235,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         let manager = Arc::new(Mutex::new(manager));
 
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
@@ -257,7 +260,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "defer with-interface any-of { 08:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         let manager = Arc::new(Mutex::new(manager));
 
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
@@ -281,7 +285,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "ask with-interface any-of { 08:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         let manager = Arc::new(Mutex::new(manager));
 
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");
@@ -304,7 +309,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         let manager = Arc::new(Mutex::new(manager));
 
         let device_path = mock_sys.path().join("bus/usb/devices/1-1");

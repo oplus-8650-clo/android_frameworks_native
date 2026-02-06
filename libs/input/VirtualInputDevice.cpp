@@ -20,7 +20,6 @@
 #include <android-base/result.h>
 #include <android/input.h>
 #include <android/keycodes.h>
-#include <android_companion_virtualdevice_flags.h>
 #include <fcntl.h>
 #include <input/Input.h>
 #include <input/InputEventLabels.h>
@@ -28,7 +27,6 @@
 #include <linux/uinput.h>
 
 #include <algorithm>
-#include <string>
 
 using android::base::unique_fd;
 
@@ -233,8 +231,6 @@ Result<void> setupGamepadAxes(const unique_fd& fd, bool registerTriggerAxes) {
 
 namespace android {
 
-namespace vd_flags = android::companion::virtualdevice::flags;
-
 /** Creates a new uinput device and assigns a file descriptor. */
 unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t productId,
                      const char* phys, DeviceType deviceType, std::optional<ui::Size> screenSize,
@@ -289,10 +285,8 @@ unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t product
             ioctl(fd, UI_SET_RELBIT, REL_Y);
             ioctl(fd, UI_SET_RELBIT, REL_WHEEL);
             ioctl(fd, UI_SET_RELBIT, REL_HWHEEL);
-            if (vd_flags::high_resolution_scroll()) {
-                ioctl(fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
-                ioctl(fd, UI_SET_RELBIT, REL_HWHEEL_HI_RES);
-            }
+            ioctl(fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
+            ioctl(fd, UI_SET_RELBIT, REL_HWHEEL_HI_RES);
             break;
         case DeviceType::TOUCHSCREEN:
             ioctl(fd, UI_SET_EVBIT, EV_ABS);
@@ -323,9 +317,7 @@ unique_fd openUinput(const char* readableName, int32_t vendorId, int32_t product
         case DeviceType::ROTARY_ENCODER:
             ioctl(fd, UI_SET_EVBIT, EV_REL);
             ioctl(fd, UI_SET_RELBIT, REL_WHEEL);
-            if (vd_flags::high_resolution_scroll()) {
-                ioctl(fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
-            }
+            ioctl(fd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
             break;
         default:
             ALOGE("Invalid input device type %d", static_cast<int32_t>(deviceType));
@@ -754,14 +746,6 @@ bool VirtualMouse::writeRelativeEvent(float relativeX, float relativeY,
 
 bool VirtualMouse::writeScrollEvent(float xAxisMovement, float yAxisMovement,
                                     std::chrono::nanoseconds eventTime) {
-    if (!vd_flags::high_resolution_scroll()) {
-        return writeInputEvent(EV_REL, REL_HWHEEL, static_cast<int32_t>(xAxisMovement),
-                               eventTime) &&
-                writeInputEvent(EV_REL, REL_WHEEL, static_cast<int32_t>(yAxisMovement),
-                                eventTime) &&
-                writeInputEvent(EV_SYN, SYN_REPORT, 0, eventTime);
-    }
-
     const auto highResScrollX =
             static_cast<int32_t>(xAxisMovement * kEvdevHighResScrollUnitsPerDetent);
     const auto highResScrollY =
@@ -878,6 +862,9 @@ bool VirtualTouchscreen::writeTouchEvent(int32_t pointerId, int32_t toolType, in
         if (!writeInputEvent(EV_ABS, ABS_MT_TOUCH_MAJOR, majorAxisSize, eventTime)) {
             return false;
         }
+    }
+    if (uinputAction == UinputAction::CANCEL) {
+        mActivePointers.reset(pointerId);
     }
     return writeInputEvent(EV_SYN, SYN_REPORT, 0, eventTime);
 }
@@ -1037,11 +1024,6 @@ VirtualRotaryEncoder::~VirtualRotaryEncoder() {}
 
 bool VirtualRotaryEncoder::writeScrollEvent(float scrollAmount,
                                             std::chrono::nanoseconds eventTime) {
-    if (!vd_flags::high_resolution_scroll()) {
-        return writeInputEvent(EV_REL, REL_WHEEL, static_cast<int32_t>(scrollAmount), eventTime) &&
-                writeInputEvent(EV_SYN, SYN_REPORT, 0, eventTime);
-    }
-
     const auto highResScrollAmount =
             static_cast<int32_t>(scrollAmount * kEvdevHighResScrollUnitsPerDetent);
     if (!writeInputEvent(EV_REL, REL_WHEEL_HI_RES, highResScrollAmount, eventTime)) {

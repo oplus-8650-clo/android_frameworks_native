@@ -25,6 +25,8 @@
 #include "LayerCreationArgs.h"
 #include "QueuedTransactionState.h"
 
+struct RenderCommandBuffer;
+
 namespace android::surfaceflinger::frontend {
 using namespace ftl::flag_operators;
 
@@ -146,6 +148,7 @@ struct RequestedLayerState : layer_state_t {
     ftl::Flags<RequestedLayerState::Changes> changes;
     bool bgColorLayer = false;
     nsecs_t lastUpdateTime = 0;
+    std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
 };
 
 } // namespace android::surfaceflinger::frontend

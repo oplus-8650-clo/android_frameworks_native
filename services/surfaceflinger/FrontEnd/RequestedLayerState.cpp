@@ -24,6 +24,7 @@
 
 #include <scheduler/Fps.h>
 
+#include <gui/RenderCommandBuffer.h>
 #include "Layer.h"
 #include "LayerCreationArgs.h"
 #include "LayerLog.h"
@@ -192,6 +193,18 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
     if (clientState.what & layer_state_t::eRenderCommandBufferChanged) {
         changes |= RequestedLayerState::Changes::Input | RequestedLayerState::Changes::Geometry |
                 RequestedLayerState::Changes::Buffer;
+    }
+
+    if (clientState.what &
+        (layer_state_t::eRenderCommandBufferChanged |
+         layer_state_t::eRenderCommandBufferFrameIdChanged)) {
+        if (renderCommandBufferConsumer) {
+            renderCommandBufferConsumer->consumerAcquire(renderCommandBufferFrameId);
+            if (RenderCommandBuffer* buffer = renderCommandBufferConsumer->getCurrentBuffer()) {
+                renderCommandBuffer =
+                        std::shared_ptr<RenderCommandBuffer>(renderCommandBufferConsumer, buffer);
+            }
+        }
     }
 
     if (clientState.what & layer_state_t::eRenderResourceTokenChanged) {
@@ -395,10 +408,10 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
 }
 
 void RequestedLayerState::getBufferDimensions(uint32_t& outWidth, uint32_t& outHeight) const {
-    if (renderCommandBufferConsumer) {
+    if (renderCommandBuffer) {
         int width = 0;
         int height = 0;
-        renderCommandBufferConsumer->getCurrentBuffer()->getFrameSize(width, height);
+        renderCommandBuffer->getFrameSize(width, height);
         outWidth = static_cast<uint32_t>(width);
         outHeight = static_cast<uint32_t>(height);
         return;
@@ -446,7 +459,7 @@ ui::Transform RequestedLayerState::getTransform(uint32_t displayRotationFlags) c
         destRect.bottom = destH;
     }
 
-    if (!externalTexture && !renderCommandBufferConsumer) {
+    if (!externalTexture && !renderCommandBuffer) {
         ui::Transform transform;
         transform.set(static_cast<float>(destRect.left), static_cast<float>(destRect.top));
         return transform;
@@ -521,7 +534,7 @@ half4 RequestedLayerState::getColor() const {
 }
 Rect RequestedLayerState::getBufferSize(uint32_t displayRotationFlags) const {
     // for buffer state layers we use the display frame size as the buffer size.
-    if (!externalTexture && !renderCommandBufferConsumer) {
+    if (!externalTexture && !renderCommandBuffer) {
         return Rect::INVALID_RECT;
     }
 
@@ -557,7 +570,7 @@ Rect RequestedLayerState::getBufferCrop() const {
     // this is the crop rectangle that applies to the buffer
     // itself (as opposed to the window)
 
-    bool hasBuffer = externalTexture != nullptr || renderCommandBufferConsumer != nullptr;
+    bool hasBuffer = externalTexture != nullptr || renderCommandBuffer != nullptr;
     if (!bufferCrop.isEmpty() && hasBuffer) {
         // if the buffer crop is defined and there's a valid buffer, intersect buffer size and crop
         // since the crop should never exceed the size of the buffer.
@@ -587,8 +600,8 @@ aidl::android::hardware::graphics::composer3::Composition RequestedLayerState::g
     if (sidebandStream.get()) {
         return Composition::SIDEBAND;
     }
-    if (renderCommandBufferConsumer) {
-        return Composition::DEVICE;
+    if (renderCommandBuffer) {
+        return Composition::CLIENT;
     }
     if (!externalTexture) {
         return Composition::SOLID_COLOR;
@@ -646,7 +659,8 @@ bool RequestedLayerState::needsInputInfo() const {
 }
 
 bool RequestedLayerState::hasBufferOrSidebandStream() const {
-    return ((sidebandStream != nullptr) || (externalTexture != nullptr)) || (renderCommandBufferConsumer != nullptr);
+    return ((sidebandStream != nullptr) || (externalTexture != nullptr)) ||
+            (renderCommandBuffer != nullptr);
 }
 
 bool RequestedLayerState::fillsColor() const {
@@ -660,7 +674,8 @@ bool RequestedLayerState::hasBlur() const {
 
 bool RequestedLayerState::hasFrameUpdate() const {
     return what & layer_state_t::CONTENT_DIRTY &&
-            (externalTexture || bgColorLayerId != UNASSIGNED_LAYER_ID || renderCommandBufferConsumer != nullptr);
+            (externalTexture || bgColorLayerId != UNASSIGNED_LAYER_ID ||
+             renderCommandBuffer != nullptr);
 }
 
 bool RequestedLayerState::hasReadyFrame() const {

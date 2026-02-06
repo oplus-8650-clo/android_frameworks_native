@@ -4519,7 +4519,6 @@ void SurfaceFlinger::incRefreshableDisplays() {
     if (FlagManager::getInstance().no_vsyncs_on_screen_off()) {
         mRefreshableDisplays++;
         if (mRefreshableDisplays == 1) {
-            ftl::FakeGuard guard(kMainThreadContext);
             mScheduler->omitVsyncDispatching(false);
         }
     }
@@ -4529,7 +4528,6 @@ void SurfaceFlinger::decRefreshableDisplays() {
     if (FlagManager::getInstance().no_vsyncs_on_screen_off()) {
         mRefreshableDisplays--;
         if (mRefreshableDisplays == 0) {
-            ftl::FakeGuard guard(kMainThreadContext);
             mScheduler->omitVsyncDispatching(true);
         }
     }
@@ -4824,17 +4822,24 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         processDisplayAdded(displayToken, currentState);
 
         if (currentState.isPhysical()) {
-            const auto display = getDisplayDeviceLocked(displayToken);
-            if (!mSkipPowerOnForQuiescent) {
-                setPhysicalDisplayPowerMode(display, hal::PowerMode::ON);
-            }
+            static_cast<void>(
+                    mScheduler->schedule([this, displayToken]() FTL_FAKE_GUARD(kMainThreadContext) {
+                        const auto display =
+                                (ftl::FakeGuard(mStateLock), getDisplayDeviceLocked(displayToken));
+                        if (!display) return;
 
-            if (display->getPhysicalId() == mFrontInternalDisplayId) {
-                if (mScheduler->designatePacesetterDisplay()) {
-                    onNewPacesetterDisplay();
-                }
-                onNewFrontInternalDisplay(nullptr, *display);
-            }
+                        if (!mSkipPowerOnForQuiescent) {
+                            setPhysicalDisplayPowerMode(display, hal::PowerMode::ON);
+                        }
+
+                        if (display->getPhysicalId() == mFrontInternalDisplayId) {
+                            if (mScheduler->designatePacesetterDisplay()) {
+                                MODE_TRANSITION_LOCK();
+                                onNewPacesetterDisplay();
+                            }
+                            onNewFrontInternalDisplay(nullptr, *display);
+                        }
+                    }));
         }
         return;
     }
@@ -6523,11 +6528,13 @@ void SurfaceFlinger::initializeDisplays() {
     }
 
     {
-        ftl::FakeGuard guard(mStateLock);
+        const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
 
         // In case of a restart, ensure all displays are off.
-        for (const auto& [id, display] : mPhysicalDisplays) {
-            setPhysicalDisplayPowerMode(getDisplayDeviceLocked(id), hal::PowerMode::OFF);
+        for (const auto& [_, display] : displays) {
+            if (display->isPhysical()) {
+                setPhysicalDisplayPowerMode(display, hal::PowerMode::OFF);
+            }
         }
 
         // Power on all displays. The primary display is first, so becomes the active display. Also,
@@ -6535,8 +6542,10 @@ void SurfaceFlinger::initializeDisplays() {
         // before responding to any Binder query from DisplayManager about display capabilities.
         // Additionally, do not turn on displays if the boot should be quiescent.
         if (!mSkipPowerOnForQuiescent) {
-            for (const auto& [id, display] : mPhysicalDisplays) {
-                setPhysicalDisplayPowerMode(getDisplayDeviceLocked(id), hal::PowerMode::ON);
+            for (const auto& [_, display] : displays) {
+                if (display->isPhysical()) {
+                    setPhysicalDisplayPowerMode(display, hal::PowerMode::ON);
+                }
             }
         }
     }
@@ -6579,9 +6588,10 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
         return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     }
 
-    const bool isInternalDisplay = mPhysicalDisplays.get(displayId)
-                                           .transform(&PhysicalDisplay::isInternal)
-                                           .value_or(false);
+    const bool isInternalDisplay = (ftl::FakeGuard(mStateLock),
+                                    mPhysicalDisplays.get(displayId)
+                                            .transform(&PhysicalDisplay::isInternal)
+                                            .value_or(false));
 
     const bool couldRefresh = display->isRefreshable();
     display->setPowerMode(mode);
@@ -6596,9 +6606,7 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
     applyOptimizationPolicy(__func__);
 
     if (mScheduler->setDisplayPowerMode(displayId, mode)) {
-        ConditionalLock lock(mModeTransitionMutex,
-                             FlagManager::getInstance()
-                                     .follower_arbitrary_refresh_rate_selection_combined());
+        MODE_TRANSITION_LOCK();
         onNewPacesetterDisplay();
     }
 
@@ -6611,7 +6619,8 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
 
     if (currentMode == hal::PowerMode::OFF) {
         // Turn on the display
-        const auto frontInternalDisplay = getFrontInternalDisplayLocked();
+        const auto frontInternalDisplay =
+                (ftl::FakeGuard(mStateLock), getFrontInternalDisplayLocked());
 
         // Detects the new front internal display when the inner or outer display of a foldable is
         // powered on. This condition relies on the above DisplayDevice::setPowerMode. If `display`
@@ -6658,7 +6667,8 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
 
         if (displayId == mFrontInternalDisplayId) {
             if (const auto display = findFrontInternalDisplay()) {
-                const auto frontInternalDisplay = getFrontInternalDisplayLocked();
+                const auto frontInternalDisplay =
+                        (ftl::FakeGuard(mStateLock), getFrontInternalDisplayLocked());
                 onNewFrontInternalDisplay(frontInternalDisplay.get(), *display);
             }
         }
@@ -6747,7 +6757,7 @@ void SurfaceFlinger::optimizeThreadScheduling(
     setSchedFifo(optimizeForPerformance, whence);
 }
 
-void SurfaceFlinger::applyOptimizationPolicy(const char* whence) {
+void SurfaceFlinger::applyOptimizationPolicy(const char* whence) FTL_FAKE_GUARD(mStateLock) {
     using OptimizationPolicy = gui::ISurfaceComposer::OptimizationPolicy;
 
     const bool optimizeForPerformance =
@@ -6795,10 +6805,8 @@ void SurfaceFlinger::setPowerMode(const sp<IBinder>& displayToken, int mode) {
             }
             ALOGE("Failed to set power mode %d for display token %p", mode, displayToken.get());
         } else if (display->isVirtual()) {
-            ftl::FakeGuard guard(mStateLock);
             setVirtualDisplayPowerMode(display, static_cast<hal::PowerMode>(mode));
         } else {
-            ftl::FakeGuard guard(mStateLock);
             if (FlagManager::getInstance().set_power_mode_async() &&
                 display->getCompositionDisplay()->supportsOffloadPresent()) {
                 ALOGD("Setting power mode %d asynchronously for a physical display with token %p",
@@ -7309,24 +7317,15 @@ void SurfaceFlinger::dumpRenderCommandBuffers(std::string& result) {
 
     int numDumps = 0;
     mLayerSnapshotBuilder.forEachSnapshot([&](const frontend::LayerSnapshot& snapshot) {
-        if (snapshot.renderCommandBufferConsumer != nullptr) {
+        if (snapshot.renderCommandBuffer != nullptr) {
             std::string filename_prefix = dump_output_path + std::to_string(numDumps) + "_";
             std::string rcb_filename = filename_prefix + "rcb.dump";
 
-            auto buffer = snapshot.renderCommandBufferConsumer->getCurrentBuffer();
+            snapshot.renderCommandBuffer->dumpToFile(rcb_filename.c_str());
 
-            if (buffer != nullptr) {
-                buffer->dumpToFile(
-                        rcb_filename.c_str());
-
-                dump_output_string << "  Layer: " << snapshot.name << " (sequence: "
-                                   << snapshot.sequence << ")\n";
-                dump_output_string << "    RenderCommandBuffer dumped to: " << rcb_filename << "\n";
-            } else {
-                dump_output_string << "  Layer: " << snapshot.name << " (sequence: "
-                                   << snapshot.sequence << ")\n";
-                dump_output_string << "    ERROR: RenderCommandBuffer is null.\n";
-            }
+            dump_output_string << "  Layer: " << snapshot.name
+                               << " (sequence: " << snapshot.sequence << ")\n";
+            dump_output_string << "    RenderCommandBuffer dumped to: " << rcb_filename << "\n";
             numDumps++;
         }
     });
@@ -9648,7 +9647,7 @@ void SurfaceFlinger::sample() {
     mRegionSamplingThread->onCompositionComplete(scheduleFrameTimeOpt);
 }
 
-sp<DisplayDevice> SurfaceFlinger::findFrontInternalDisplay() const {
+sp<DisplayDevice> SurfaceFlinger::findFrontInternalDisplay() const FTL_FAKE_GUARD(mStateLock) {
     if (mPhysicalDisplays.size() == 1) return nullptr;
 
     return findDisplay([this](const DisplayDevice& display) REQUIRES(mStateLock) {

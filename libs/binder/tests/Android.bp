@@ -950,6 +950,7 @@ cc_test {
         "packagemanager_aidl-cpp",
     ],
     static_libs: [
+        "apex_aidl_interface-cpp",
         "libprocpartition",
     ],
 

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <gui/LocklessTripleBuffer.h>
+#include <gui/LocklessStaticQueue.h>
 #include <log/log.h>
 #include <atomic>
 #include <string>
@@ -98,7 +98,7 @@ inline bool SetRSpan(RSpan<T>& span, RenderCommandBuffer* commandBuffer, const T
 }
 
 struct IpcRenderRegion {
-    LocklessTripleBuffer<RenderCommandBuffer> mCommandBuffers;
+    LocklessStaticQueue<RenderCommandBuffer, 8> mCommandBuffers;
     std::atomic<uint64_t> mFrameNumber;
 };
 

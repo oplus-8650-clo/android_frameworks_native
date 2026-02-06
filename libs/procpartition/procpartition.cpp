@@ -58,23 +58,15 @@ std::string getExe(pid_t pid) {
     return real;
 }
 
-Partition getPartitionFromPreinstalledPath(const std::string& path) {
-    if (android::base::StartsWith(path, "/system/")) {
-        return Partition::SYSTEM;
+Partition parseApexPartition(apex::ApexInfo::Partition partition) {
+    switch (partition) {
+      case apex::ApexInfo::Partition::SYSTEM: return Partition::SYSTEM;
+      case apex::ApexInfo::Partition::SYSTEM_EXT: return Partition::SYSTEM_EXT;
+      case apex::ApexInfo::Partition::PRODUCT: return Partition::PRODUCT;
+      case apex::ApexInfo::Partition::VENDOR: return Partition::VENDOR;
+      case apex::ApexInfo::Partition::ODM: return Partition::ODM;
+      default: return Partition::UNKNOWN;
     }
-    if (android::base::StartsWith(path, "/system_ext/")) {
-        return Partition::SYSTEM_EXT;
-    }
-    if (android::base::StartsWith(path, "/product/")) {
-        return Partition::PRODUCT;
-    }
-    if (android::base::StartsWith(path, "/vendor/")) {
-        return Partition::VENDOR;
-    }
-    if (android::base::StartsWith(path, "/odm/")) {
-        return Partition::ODM;
-    }
-    return Partition::UNKNOWN;
 }
 
 Partition parseApex(const std::string& s) {
@@ -95,12 +87,11 @@ Partition parseApex(const std::string& s) {
     }
 
     apexcache::ApexCache *instance = ApexCache::getInstance();
-    for (const auto& info: instance->getCache(false /*invalidate*/)) {
+    for (auto &info: instance->getCache(false /*invalidate*/)) {
         if (info.moduleName == apexName) {
-            return getPartitionFromPreinstalledPath(info.preinstalledModulePath);
+            return parseApexPartition(info.partition);
         }
     }
-    LOG(INFO) << "parseApex did not find apexName: " << apexName;
     return Partition::UNKNOWN;
 }
 

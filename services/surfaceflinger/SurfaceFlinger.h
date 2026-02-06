@@ -772,17 +772,18 @@ private:
 
     // Called on the main thread in response to setPowerMode()
     void setPhysicalDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
-            REQUIRES(mStateLock, kMainThreadContext);
+            EXCLUDES(mStateLock, mModeTransitionMutex) REQUIRES(kMainThreadContext);
+
     // Returns a future for the slow hardware operation which can run on any
     // thread and a finalizer whose function must be scheduled on the main
     // thread.
     [[nodiscard]] std::pair<ftl::Future<status_t>, ftl::FinalizerStd>
     setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& display, hal::PowerMode mode)
-            REQUIRES(mStateLock, kMainThreadContext);
+            EXCLUDES(mStateLock, mModeTransitionMutex) REQUIRES(kMainThreadContext);
     [[nodiscard]] ftl::FinalizerStd makePowerModeAsyncFinalizer(PhysicalDisplayId displayId,
                                                                 hal::PowerMode mode);
     void setVirtualDisplayPowerMode(const sp<DisplayDevice>& display, hal::PowerMode mode)
-            REQUIRES(mStateLock, kMainThreadContext);
+            REQUIRES(kMainThreadContext);
 
     // Adjusts thread scheduling according to the optimization policy
     static void optimizeThreadScheduling(
@@ -790,8 +791,7 @@ private:
 
     // Enables or disables power optimizations depending on whether there are displays that should
     // be optimized for performance.
-    void applyOptimizationPolicy(const char* whence) REQUIRES(kMainThreadContext)
-            REQUIRES(mStateLock);
+    void applyOptimizationPolicy(const char* whence) REQUIRES(kMainThreadContext);
 
     // Returns the preferred mode for PhysicalDisplayId if the Scheduler has selected one for that
     // display. Falls back to the display's defaultModeId otherwise.
@@ -1328,11 +1328,11 @@ private:
     void releaseVirtualDisplay(VirtualDisplayIdVariant displayId);
     void releaseVirtualDisplaySnapshot(VirtualDisplayId displayId);
 
-    sp<DisplayDevice> findFrontInternalDisplay() const REQUIRES(mStateLock, kMainThreadContext);
+    sp<DisplayDevice> findFrontInternalDisplay() const REQUIRES(kMainThreadContext);
 
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
                                    const DisplayDevice& newFrontInternalDisplay)
-            REQUIRES(mStateLock, kMainThreadContext);
+            REQUIRES(kMainThreadContext);
 
     void onNewPacesetterDisplay() REQUIRES(mStateLock, mModeTransitionMutex, kMainThreadContext);
 
@@ -1690,9 +1690,9 @@ private:
     bool mSkipPowerOnForQuiescent;
 
     // used for omitting vsync callbacks to apps when the display is not updatable
-    int mRefreshableDisplays GUARDED_BY(mStateLock) = 0;
-    void incRefreshableDisplays() REQUIRES(mStateLock);
-    void decRefreshableDisplays() REQUIRES(mStateLock);
+    int mRefreshableDisplays GUARDED_BY(kMainThreadContext) = 0;
+    void incRefreshableDisplays() REQUIRES(kMainThreadContext);
+    void decRefreshableDisplays() REQUIRES(kMainThreadContext);
 
     frontend::LayerLifecycleManager mLayerLifecycleManager GUARDED_BY(kMainThreadContext);
     frontend::LayerHierarchyBuilder mLayerHierarchyBuilder GUARDED_BY(kMainThreadContext);

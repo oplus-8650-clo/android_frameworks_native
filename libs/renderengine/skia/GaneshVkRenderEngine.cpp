@@ -60,8 +60,9 @@ std::unique_ptr<SkiaGpuContext> GaneshVkRenderEngine::createContext(
     auto driverVersion = vulkanInterface.driverVersion();
     GrContextOptions::PersistentCache& cache =
             ganeshPersistentCache(&driverVersion, sizeof(driverVersion));
-    return SkiaGpuContext::MakeVulkan_Ganesh(vulkanInterface.createSkiaVulkanBackendContext(),
-                                             cache);
+    return SkiaGpuContext::MakeVulkan_Ganesh(
+        vulkanInterface.createSkiaVulkanBackendContext(/*threadSafeVMA=*/false),
+        cache);
 }
 
 void GaneshVkRenderEngine::waitFenceImpl(SkiaGpuContext* context, base::borrowed_fd fenceFd) {

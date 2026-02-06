@@ -32,6 +32,7 @@
 #pragma clang diagnostic pop
 #include <SkColor.h>
 #include <SkDrawable.h>
+#include <SkSurface.h>
 // #include <SkGainmapInfo.h>
 #include <SkBitmap.h>
 #include <SkImage.h>
@@ -89,6 +90,7 @@ struct IPCClientResourceCache {
 struct IPCServerBitmap {
     sp<GraphicBuffer> buffer;
     sk_sp<SkImage> image;
+    sk_sp<SkSurface> surface;
 };
 
 struct IPCServerResourceCache {
@@ -478,4 +480,22 @@ struct DrawProxySurfaceControlOp final : IPCRenderBufferOp {
     void draw(SkCanvas* c, const SkMatrix&);
     std::string toString() const;
 };
+
+struct BeginRenderTargetOp final : IPCRenderBufferOp {
+    static const auto kType = TYPE_BEGINRENDERTARGET;
+    uint64_t bufferId;
+
+    static BeginRenderTargetOp* Create(RenderCommandBuffer* commandBuffer, uint64_t bufferId);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
+};
+
+struct EndRenderTargetOp final : IPCRenderBufferOp {
+    static const auto kType = TYPE_ENDRENDERTARGET;
+
+    static EndRenderTargetOp* Create(RenderCommandBuffer* commandBuffer);
+    void draw(SkCanvas* c, const SkMatrix&);
+    std::string toString() const;
+};
+
 } // namespace android

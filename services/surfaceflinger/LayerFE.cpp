@@ -201,9 +201,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     layerSettings.lutSourceIsHwc = mSnapshot->luts == nullptr;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
-    layerSettings.renderCommandBufferConsumer = mSnapshot->renderCommandBufferConsumer;
-    layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
+    layerSettings.renderCommandBuffer = mSnapshot->renderCommandBuffer;
     layerSettings.renderResourceCache = mSnapshot->renderResourceCache;
+    layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
 
     if (hasEffect() && !hasBufferOrSidebandStream()) {
         prepareEffectsClientComposition(layerSettings, targetSettings);

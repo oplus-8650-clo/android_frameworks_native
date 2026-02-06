@@ -69,6 +69,15 @@ public:
             std::unique_ptr<RpcTransportCtxFactory> rpcTransportCtxFactory);
 
     /**
+     * Get the UID of the process at the other end of this session
+     * and write it to uid.
+     *
+     * Returns true, if a valid uid present
+     *         false, otherwise
+     */
+    LIBBINDER_EXPORTED bool getClientUid(uid_t* uid) const;
+
+    /**
      * Set the maximum number of incoming threads allowed to be made (for things like callbacks).
      * By default, this is 0. This must be called before setting up this connection as a client.
      * Server sessions will inherits this value from RpcServer. Each thread will serve a
@@ -233,7 +242,7 @@ private:
     friend RpcServer;
     friend RpcServerTrusty;
     friend RpcState;
-    explicit RpcSession(std::unique_ptr<RpcTransportCtx> ctx);
+    explicit RpcSession(std::unique_ptr<RpcTransportCtx> ctx, std::optional<uid_t> uid);
 
     static constexpr size_t kDefaultMaxOutgoingConnections = 10;
 
@@ -386,6 +395,8 @@ private:
     std::unique_ptr<FdTrigger> mShutdownTrigger;
 
     std::unique_ptr<RpcState> mRpcBinderState;
+
+    std::optional<uid_t> mClientUid;
 
     RpcMutex mMutex; // for all below
 

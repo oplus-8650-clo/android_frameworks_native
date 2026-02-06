@@ -174,4 +174,7 @@ impl IBinderRpcTest for MyBinderRpcSession {
     fn blockingRecvInt(&self) -> Result<i32, Status> {
         todo!()
     }
+    fn getClientUid(&self) -> Result<i32, Status> {
+        todo!()
+    }
 }
