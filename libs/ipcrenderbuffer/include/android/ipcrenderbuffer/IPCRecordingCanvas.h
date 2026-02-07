@@ -52,6 +52,7 @@ class IPCRecordingCanvas : public SkCanvasVirtualEnforcer<SkNoDrawCanvas> {
 public:
     explicit IPCRecordingCanvas(IPCClientResourceCache& resourceCache);
 
+    bool canRecord();
     void startRecording();
     void endRecording();
 
@@ -107,6 +108,9 @@ public:
     void onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) override;
 
     //    void onDrawProxySurfaceControl(int id) override;
+
+    void beginRenderTarget(uint64_t bufferId);
+    void endRenderTarget();
 
     void storeSize(int width, int height);
 

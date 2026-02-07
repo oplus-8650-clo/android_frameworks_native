@@ -42,7 +42,7 @@ public:
                                             DeviceId deviceId);
     std::string dump() const;
     void populateMotionRanges(InputDeviceInfo& info) const;
-    void reset();
+    [[nodiscard]] std::list<NotifyArgs> reset(nsecs_t when);
     [[nodiscard]] std::list<NotifyArgs> process(const RawEvent& rawEvent);
 
 private:

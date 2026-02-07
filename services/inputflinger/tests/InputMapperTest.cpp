@@ -207,7 +207,7 @@ std::list<NotifyArgs> InputMapperTest::configureDevice(ConfigurationChanges chan
     if (!changes.any() ||
         (changes.any(InputReaderConfiguration::Change::DISPLAY_INFO |
                      InputReaderConfiguration::Change::POINTER_CAPTURE |
-                     InputReaderConfiguration::Change::DEVICE_TYPE))) {
+                     InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES))) {
         mReader->requestRefreshConfiguration(changes);
         mReader->loopOnce();
     }

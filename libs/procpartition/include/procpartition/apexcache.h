@@ -19,22 +19,18 @@
 #include <string>
 #include <vector>
 #include <android-base/macros.h>
+#include <android/apex/ApexInfo.h>
 
 namespace android {
 namespace apexcache {
 
-struct ApexInfo {
-    std::string moduleName;
-    std::string preinstalledModulePath;
-};
-
 class ApexCache {
     public:
         static ApexCache* getInstance();
-        const std::vector<ApexInfo>& getCache(bool invalidate);
+        const std::vector<apex::ApexInfo>& getCache(bool invalidate);
 
     private:
-        std::vector<ApexInfo> cache;
+        std::vector<apex::ApexInfo> cache;
 
         ApexCache();
         DISALLOW_COPY_AND_ASSIGN(ApexCache);

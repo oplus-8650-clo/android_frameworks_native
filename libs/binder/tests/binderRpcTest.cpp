@@ -770,6 +770,29 @@ TEST_P(BinderRpc, SendTooLargeVector) {
     EXPECT_EQ(OK, proc.rootBinder->pingBinder());
 }
 
+TEST_P(BinderRpc, PerSessionClientUid_Success) {
+    if (socketType() != SocketType::UNIX_RAW && socketType() != SocketType::UNIX) {
+        GTEST_SKIP() << "UID verification is only supported for UNIX sockets.";
+    }
+
+    auto proc = createRpcTestSocketServerProcess({});
+    uid_t uid = getuid();
+    int32_t remoteUid;
+    EXPECT_OK(proc.rootIface->getClientUid(&remoteUid));
+    EXPECT_EQ(uid, static_cast<uid_t>(remoteUid));
+}
+
+TEST_P(BinderRpc, PerSessionClientUid_Failure) {
+    if (socketType() != SocketType::VSOCK && socketType() != SocketType::INET) {
+        GTEST_SKIP() << "This test is for INET or VSOCK sockets only.";
+    }
+
+    auto proc = createRpcTestSocketServerProcess({});
+    int32_t remoteUid;
+    EXPECT_OK(proc.rootIface->getClientUid(&remoteUid));
+    EXPECT_EQ(-1, remoteUid);
+}
+
 TEST_P(BinderRpc, SessionWithIncomingThreadpoolDoesntLeak) {
     if (clientOrServerSingleThreaded()) {
         GTEST_SKIP() << "This test requires multiple threads";

@@ -56,6 +56,10 @@ const USB_DEVICES_PATH: &str = "bus/usb/devices/";
 /// Relative path to the static USB authorization policy file.
 const USB_AUTH_POLICY_CONF_RELATIVE_PATH: &str = "usb_auth/policy.conf";
 
+/// Relative path to the interactive USB authorization policy file.
+/// This requires a client to respond to policy directives.
+const USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH: &str = "usb_auth/interactive_policy.conf";
+
 /// Relative path to the internal devices configuration file.
 const USB_AUTH_INTERNAL_DEVICES_CONF_RELATIVE_PATH: &str = "usb_auth/internal_devices.conf";
 
@@ -154,8 +158,8 @@ impl UsbDeviceAuthManager {
     }
 
     /// Creates a new `UsbDeviceAuthManager` and performs initial setup.
-    pub fn new() -> Result<Self, Error> {
-        Self::with_paths("/sys", "/etc")
+    pub fn new(use_interactive_policy: bool) -> Result<Self, Error> {
+        Self::with_paths("/sys", "/etc", use_interactive_policy)
     }
 
     /// Creates a new `UsbDeviceAuthManager` with specified root directories and performs initial setup.
@@ -163,6 +167,7 @@ impl UsbDeviceAuthManager {
     pub fn with_paths<P: AsRef<Path>, Q: AsRef<Path>>(
         root_sys_dir_path: P,
         root_etc_dir_path: Q,
+        use_interactive_policy: bool,
     ) -> Result<Self, Error> {
         let mut manager = Self {
             processed_devices: Vec::new(),
@@ -177,8 +182,16 @@ impl UsbDeviceAuthManager {
         };
         debug!("Setting initial USB authorization state to deny all devices.");
         manager.set_default_to_deny_for_new_devices()?;
-        debug!("Loading static policy");
-        manager.load_static_policy()?;
+        if use_interactive_policy {
+            debug!("Attempting to use interactive policy");
+            if manager.load_interactive_policy().is_err() {
+                debug!("Interactive policy failed. Falling back to static policy.");
+                manager.load_static_policy()?;
+            }
+        } else {
+            debug!("Loading static policy");
+            manager.load_static_policy()?;
+        }
         debug!("Loading internal devices list");
         manager.load_internal_devices()?;
         debug!("System state set to Booted");
@@ -196,6 +209,15 @@ impl UsbDeviceAuthManager {
         } else {
             debug!("Internal devices file not found. Assuming no internal devices.");
         }
+        Ok(())
+    }
+    /// Loads the interactive USB policy from a file or falls back to the static policy.
+    fn load_interactive_policy(&mut self) -> Result<(), Error> {
+        debug!("Loading interactive USB policy");
+        let policy_file_path =
+            self.root_etc_dir.join(USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH);
+        self.policy = Parser::parse_rules_from_file(&policy_file_path)?.policy().clone();
+
         Ok(())
     }
     /// Loads the static USB policy from a file or creates a default one if the file does not exist.
@@ -611,7 +633,8 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         let authorized_default_path = mock_sys.path().join(USBCORE_AUTHORIZED_DEFAULT_PATH);
         assert_eq!(fs::read_to_string(authorized_default_path).unwrap(), "0");
@@ -635,7 +658,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         assert_eq!(manager.policy.all_rules.len(), 1);
         assert_eq!(manager.policy.all_rules[0].action, Action::Allow);
@@ -647,7 +671,7 @@ mod tests {
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
         let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         manager.processed_devices.push(UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "authorized".to_string(), ..Default::default() },
@@ -679,7 +703,7 @@ mod tests {
         fs::write(&policy_file, "defer when Booted").unwrap();
 
         let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         assert_eq!(manager.policy.all_rules.len(), 1);
 
         let device = UsbDeviceInfoWithState {

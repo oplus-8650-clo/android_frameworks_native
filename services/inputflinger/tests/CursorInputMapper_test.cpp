@@ -16,15 +16,12 @@
 
 #include "CursorInputMapper.h"
 
-#include <list>
 #include <optional>
 #include <string>
 #include <tuple>
-#include <variant>
 
 #include <android-base/logging.h>
 #include <android/configuration.h>
-#include <android_companion_virtualdevice_flags.h>
 #include <com_android_input_flags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -140,8 +137,6 @@ MATCHER_P(WithNegativeAxis, axis, "MotionEvent with a negative axis value") {
 
 } // namespace
 
-namespace vd_flags = android::companion::virtualdevice::flags;
-
 /**
  * Unit tests for CursorInputMapper.
  * These classes are named 'CursorInputMapperUnitTest...' to avoid name collision with the existing
@@ -205,7 +200,6 @@ protected:
 class CursorInputMapperUnitTest : public CursorInputMapperUnitTestBase {
 protected:
     void SetUp() override {
-        vd_flags::high_resolution_scroll(false);
         CursorInputMapperUnitTestBase::SetUp();
     }
 };
@@ -803,7 +797,6 @@ TEST_F(CursorInputMapperUnitTest, ProcessRegularScroll) {
 }
 
 TEST_F(CursorInputMapperUnitTest, ProcessHighResScroll) {
-    vd_flags::high_resolution_scroll(true);
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_WHEEL_HI_RES))
             .WillRepeatedly(Return(true));
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_HWHEEL_HI_RES))
@@ -821,7 +814,6 @@ TEST_F(CursorInputMapperUnitTest, ProcessHighResScroll) {
 }
 
 TEST_F(CursorInputMapperUnitTest, HighResScrollIgnoresRegularScroll) {
-    vd_flags::high_resolution_scroll(true);
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_WHEEL_HI_RES))
             .WillRepeatedly(Return(true));
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_HWHEEL_HI_RES))
@@ -858,7 +850,6 @@ TEST_F(CursorInputMapperUnitTest, ProcessReversedVerticalScroll) {
 
 TEST_F(CursorInputMapperUnitTest, ProcessHighResReversedVerticalScroll) {
     mReaderConfiguration.mouseReverseVerticalScrollingEnabled = true;
-    vd_flags::high_resolution_scroll(true);
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_WHEEL_HI_RES))
             .WillRepeatedly(Return(true));
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_HWHEEL_HI_RES))

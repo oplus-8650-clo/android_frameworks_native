@@ -326,6 +326,14 @@ Surface* SurfaceFromHandle(VkSurfaceKHR handle) {
     return reinterpret_cast<Surface*>(handle);
 }
 
+// Tracking for live surfaces, used by nativeWindowOnAcquiredCallback below.
+// Note that callbacks can be delivered as late as _during static deinitialization_
+// so this structure needs to live forever.
+struct {
+    std::unordered_set<Surface *> mSurfaces;
+    std::mutex mMutex;
+} live_surfaces [[clang::no_destroy]];
+
 bool IsSharedPresentMode(VkPresentModeKHR mode) {
     return mode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
         mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR;
@@ -335,6 +343,16 @@ static void nativeWindowOnAcquiredCallback(uint64_t /*bufferId*/,
                                            uint64_t frameId,
                                            void* data) {
     Surface* surface = static_cast<Surface*>(data);
+
+    // It is possible for callbacks to be delivered after the destruction
+    // of the associated surface. Ensure that the surface still lives
+    // before using it.
+    std::lock_guard lock(live_surfaces.mMutex);
+    if (!live_surfaces.mSurfaces.count(surface)) {
+        ALOGW("Dropping present callback for surface %p as the surface has been destroyed.", data);
+        return;
+    }
+
     surface->listener.onFramePresented(frameId);
 }
 
@@ -344,7 +362,8 @@ struct Swapchain {
               VkPresentModeKHR present_mode,
               int pre_transform_,
               int64_t refresh_duration_,
-              uint32_t num_private_data_slots)
+              uint32_t num_private_data_slots,
+              bool present_wait_enabled)
         : surface(surface_),
           num_images(num_images_),
           mailbox_mode(present_mode == VK_PRESENT_MODE_MAILBOX_KHR),
@@ -353,7 +372,8 @@ struct Swapchain {
           refresh_duration(refresh_duration_),
           acquire_next_image_timeout(-1),
           shared(IsSharedPresentMode(present_mode)),
-          private_data(num_private_data_slots) {
+          private_data(num_private_data_slots),
+          present_wait_enabled(present_wait_enabled) {
     }
 
     VkResult get_refresh_duration(uint64_t& outRefreshDuration)
@@ -381,6 +401,7 @@ struct Swapchain {
     nsecs_t acquire_next_image_timeout;
     bool shared;
     std::vector<uint64_t> private_data;
+    bool present_wait_enabled;
 
     struct Image {
         Image()
@@ -784,17 +805,12 @@ VkResult CreateAndroidSurfaceKHR(
         allocator->pfnFree(allocator->pUserData, surface);
         return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
     }
+
+    // Note: we don't attach the listener callbacks here; we only want to
+    // do this if a swapchain is created with VK_SWAPCHAIN_CREATE_PRESENT_WAIT_2_BIT_KHR.
     if (flags::vk_khr_present_wait2_gpu()) {
-        err = native_window_set_on_acquired_callback(
-            surface->window.get(), &nativeWindowOnAcquiredCallback, surface);
-        ALOGW_IF(err != android::OK,
-                 "native_window_set_on_acquired_callback failed: %s (%d)",
-                 strerror(-err), err);
-        err = native_window_set_on_dropped_callback(
-            surface->window.get(), &nativeWindowOnAcquiredCallback, surface);
-        ALOGW_IF(err != android::OK,
-                 "native_window_set_on_dropped_callback failed: %s (%d)",
-                 strerror(-err), err);
+        std::lock_guard lock(live_surfaces.mMutex);
+        live_surfaces.mSurfaces.insert(surface);
     }
 
     *out_surface = HandleFromSurface(surface);
@@ -810,6 +826,15 @@ void DestroySurfaceKHR(VkInstance instance,
     Surface* surface = SurfaceFromHandle(surface_handle);
     if (!surface)
         return;
+
+    if (flags::vk_khr_present_wait2_gpu()) {
+        // Remove the surface from the set of live surfaces.
+        // After this point, no async present callbacks will be
+        // delivered to this surface so we can safely clean it up.
+        std::lock_guard lock(live_surfaces.mMutex);
+        live_surfaces.mSurfaces.erase(surface);
+    }
+
     native_window_api_disconnect(surface->window.get(), NATIVE_WINDOW_API_EGL);
     ALOGV_IF(surface->swapchain_handle != VK_NULL_HANDLE,
              "destroyed VkSurfaceKHR 0x%" PRIx64
@@ -1956,18 +1981,25 @@ VkResult CreateSwapchainKHR(VkDevice device,
         ALOGW_IF(err != android::OK,
                  "native_window_api_connect_with_listener failed: %s (%d)",
                  strerror(-err), err);
-        if (flags::vk_khr_present_wait2_gpu()) {
-            err = native_window_set_on_acquired_callback(
+    }
+
+    bool present_wait_enabled =
+        (create_info->flags & VK_SWAPCHAIN_CREATE_PRESENT_WAIT_2_BIT_KHR);
+
+    if (flags::vk_khr_present_wait2_gpu() && present_wait_enabled) {
+        // If the caller wants present wait support, connect the callbacks.
+        // We do this regardless of whether we skipped the disconnect/reconnect
+        // cycle above, since CreateAndroidSurfaceKHR does not set them up.
+        err = native_window_set_on_acquired_callback(
                 window, &nativeWindowOnAcquiredCallback, &surface);
-            ALOGW_IF(err != android::OK,
-                     "native_window_set_on_acquired_callback failed: %s (%d)",
-                     strerror(-err), err);
-            err = native_window_set_on_dropped_callback(
+        ALOGW_IF(err != android::OK,
+                "native_window_set_on_acquired_callback failed: %s (%d)",
+                strerror(-err), err);
+        err = native_window_set_on_dropped_callback(
                 window, &nativeWindowOnAcquiredCallback, &surface);
-            ALOGW_IF(err != android::OK,
-                     "native_window_set_on_dropped_callback failed: %s (%d)",
-                     strerror(-err), err);
-        }
+        ALOGW_IF(err != android::OK,
+                "native_window_set_on_dropped_callback failed: %s (%d)",
+                strerror(-err), err);
     }
 
     err =
@@ -2253,7 +2285,8 @@ VkResult CreateSwapchainKHR(VkDevice device,
         Swapchain(surface, num_images, create_info->presentMode,
                   TranslateVulkanToNativeTransform(create_info->preTransform),
                   refresh_duration,
-                  GetData(device).num_preallocated_private_data_slots);
+                  GetData(device).num_preallocated_private_data_slots,
+                  present_wait_enabled);
     VkSwapchainImageCreateInfoANDROID swapchain_image_create = {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wold-style-cast"
@@ -2797,11 +2830,12 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                     swapchain, pGoogleTime->presentID, nativeFrameId,
                     pGoogleTime->desiredPresentTime, 0, false);
             }
-            if (flags::vk_khr_present_wait2_gpu() && presentId != 0) {
-                swapchain.surface.listener.associatePresentId(nativeFrameId,
-                                                              presentId);
-            }
-            if (flags::vk_khr_present_wait2_gpu()) {
+            if (flags::vk_khr_present_wait2_gpu() && swapchain.present_wait_enabled) {
+                if (presentId != 0) {
+                    swapchain.surface.listener.associatePresentId(nativeFrameId,
+                            presentId);
+                }
+
                 uint64_t frameId;
                 native_window_get_last_replaced_frame_id(window, &frameId);
                 if (frameId != 0) {

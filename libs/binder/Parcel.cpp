@@ -1215,8 +1215,9 @@ bool Parcel::enforceInterface(const char16_t* interface,
         // fuzzers skip this check, because it is for protecting the underlying ABI, but
         // we don't want it to reduce our coverage
         if (header != kHeader && !mServiceFuzzing) {
-            ALOGE("Expecting header 0x%x but found 0x%x. Mixing copies of libbinder?", kHeader,
-                  header);
+            ALOGE("Expecting header 0x%x but found 0x%x before position %zu. Mixing copies of "
+                  "libbinder?",
+                  kHeader, header, mDataPos);
             return false;
         }
 #else  // BINDER_WITH_KERNEL_IPC

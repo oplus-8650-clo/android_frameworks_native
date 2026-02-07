@@ -24,6 +24,7 @@ package {
 cc_library_static {
     name: "liblshal",
     shared_libs: [
+        "apex_aidl_interface-cpp",
         "libbase",
         "libbinder",
         "libbinderdebug",
@@ -58,6 +59,7 @@ cc_library_static {
 cc_defaults {
     name: "lshal_defaults",
     shared_libs: [
+        "apex_aidl_interface-cpp",
         "libbase",
         "libbinder",
         "libbinderdebug",

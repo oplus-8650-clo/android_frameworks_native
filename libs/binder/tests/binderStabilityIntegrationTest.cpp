@@ -57,7 +57,7 @@ TEST_P(BinderStabilityIntegrationTest, ExpectedStabilityForItsPartition) {
             level = Stability::Level::VENDOR;
             break;
         case Partition::UNKNOWN:
-            GTEST_SKIP() << "Not sure of partition of process.";
+            ADD_FAILURE() << "Not sure of partition of process.";
             return;
         default:
             ADD_FAILURE() << "Unrecognized partition for service: " << partition;

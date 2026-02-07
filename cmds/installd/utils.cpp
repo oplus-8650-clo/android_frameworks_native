@@ -56,6 +56,8 @@
 using android::base::Dirname;
 using android::base::EndsWith;
 using android::base::Fdopendir;
+using android::base::Split;
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
@@ -1462,6 +1464,235 @@ bool remove_file_at_fd(int fd, /*out*/ std::string* path) {
         return false;
     }
     return true;
+}
+
+bool is_path_normalized(std::string_view path) {
+    if (path.empty()) return true;
+
+    if (path.find("//") != std::string_view::npos) return false;
+
+    if (path.size() > 1 && path.back() == '/') return false;
+
+    size_t start = 0;
+    while (start <= path.size()) {
+        size_t end = path.find('/', start);
+        size_t len = (end == std::string_view::npos) ? path.size() - start : end - start;
+        std::string_view component = path.substr(start, len);
+
+        if (component == "." || component == "..") {
+            return false;
+        }
+
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+
+    return true;
+}
+
+// Splits an app data path into two sub-components: a trusted root path, and a package-specific path
+// Eg '/data/user/0/com.foo/bar' will be split in `/data/user/0` and '/com.foo/bar'
+std::pair<std::string, std::string> split_app_data_path(const char* uuid, userid_t userId,
+                                                        const std::string& path) {
+    if (!is_path_normalized(path)) {
+        LOG(ERROR) << "Rejecting non-normalized path: " << path;
+        return {};
+    }
+
+    std::vector<std::string> candidates = {
+            create_data_user_ce_path(uuid, userId),
+            create_data_user_de_path(uuid, userId),
+    };
+    if (userId == 0 && uuid == nullptr) {
+        // For user 0 and internal, create_data_user_ce returns the legacy '/data/data' path
+        candidates.push_back("/data/user/0");
+    }
+
+    std::string best_match;
+    for (const auto& cand : candidates) {
+        if (StartsWith(path, cand) && cand.length() > best_match.length()) {
+            best_match = cand;
+        }
+    }
+    if (best_match.empty()) {
+        return {};
+    }
+
+    // Return the root and the substring starting immediately after the root
+    return {best_match, path.substr(best_match.length())};
+}
+
+// Traverses a path recursively, starting from root. All components under root are
+// traversed not following symlinks. Optionally, if `create` is set, directories
+// under root that do not exist yet will be created.
+static unique_fd traverse_path_recursive(const std::string& path, const std::string& root,
+                                         bool create, mode_t mode, uid_t uid, gid_t gid,
+                                         bool stop_at_parent, std::string* basename) {
+    if (root.empty() || !StartsWith(path, root)) {
+        errno = EINVAL;
+        return unique_fd(-1);
+    }
+
+    unique_fd dfd(open(root.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+    if (dfd.get() < 0) return unique_fd(-1);
+
+    std::string suffix = path.substr(root.length());
+    if (suffix.empty() || suffix == "/") {
+        if (basename) *basename = "";
+        return dfd;
+    }
+
+    // Skip leading slash
+    size_t start = (suffix[0] == '/') ? 1 : 0;
+    std::vector<std::string> components = Split(suffix.substr(start), "/");
+    size_t count = components.size();
+    if (stop_at_parent) {
+        if (count == 0) {
+            errno = EINVAL;
+            return unique_fd(-1);
+        }
+        if (basename) *basename = components.back();
+        count--;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const auto& component = components[i];
+        if (component.empty()) continue;
+
+        bool created = false;
+        if (create) {
+            if (mkdirat(dfd.get(), component.c_str(), mode) == 0) {
+                created = true;
+            } else if (errno != EEXIST) {
+                return unique_fd(-1);
+            }
+        }
+
+        unique_fd next_fd(openat(dfd.get(), component.c_str(),
+                                 O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (next_fd.get() < 0) return unique_fd(-1);
+
+        if (created) {
+            if (fchown(next_fd.get(), uid, gid) != 0) {
+                PLOG(WARNING) << "Failed to fchown " << component;
+            }
+            if (fchmod(next_fd.get(), mode) != 0) {
+                PLOG(WARNING) << "Failed to fchmod " << component;
+            }
+        }
+        dfd = std::move(next_fd);
+    }
+    return dfd;
+}
+
+unique_fd open_path_recursive(const std::string& path, const std::string& root) {
+    return traverse_path_recursive(path, root, false, 0, -1, -1, false, nullptr);
+}
+
+unique_fd open_parent_recursive(const std::string& path, const std::string& root,
+                                std::string* basename) {
+    return traverse_path_recursive(path, root, false, 0, -1, -1, true, basename);
+}
+
+// Recursively creates directories, starting from root
+unique_fd mkdirs_recursive(const std::string& path, const std::string& root, uid_t uid, gid_t gid,
+                           mode_t mode) {
+    return traverse_path_recursive(path, root, true, mode, uid, gid, false, nullptr);
+}
+
+bool copy_simple_file(int src_fd, int dst_fd, uid_t uid, gid_t gid, mode_t mode, size_t size,
+                      std::function<void(const char* msg)> errorHandler) {
+    loff_t in_off = 0;
+    loff_t out_off = 0;
+    size_t remaining = size;
+    while (remaining > 0) {
+        ssize_t copied = copy_file_range(src_fd, &in_off, dst_fd, &out_off, remaining, 0);
+        if (copied < 0) {
+            errorHandler("Failed to copy_file_range");
+            return false;
+        }
+        if (copied == 0) break;
+        remaining -= copied;
+    }
+
+    if (fchown(dst_fd, uid, gid) != 0) {
+        errorHandler("Failed to fchown dest");
+        return false;
+    }
+    if (fchmod(dst_fd, mode & 07777) != 0) {
+        errorHandler("Failed to fchmod dest");
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Recursively chown the given fd and all its children.
+ */
+void chown_recursive(int fd, uid_t uid, gid_t gid, const std::string& absolute_path,
+                     std::vector<std::string>* failed_files) {
+    auto fail = [&](const std::string& path) { failed_files->push_back(path); };
+
+    if (fchown(fd, uid, gid) != 0) {
+        PLOG(WARNING) << "Failed to fchown fd " << fd << " at " << absolute_path;
+        fail(absolute_path);
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        return;
+    }
+
+    std::function<void(int, const std::string&)> chown_recursive_at;
+    chown_recursive_at = [&](int dfd, const std::string& parent_path) {
+        android::base::unique_fd dir_fd(dup(dfd));
+        if (dir_fd.get() < 0) {
+            PLOG(WARNING) << "dup failed";
+            fail(parent_path);
+            return;
+        }
+        DIR* d = Fdopendir(std::move(dir_fd));
+        if (d == nullptr) {
+            PLOG(WARNING) << "Failed to fdopendir";
+            fail(parent_path);
+            return;
+        }
+
+        struct dirent* de;
+        while ((de = readdir(d))) {
+            const char* name = de->d_name;
+            if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
+
+            std::string path = parent_path + "/" + name;
+            struct stat st;
+            if (fstatat(dfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+                PLOG(WARNING) << "Failed to stat " << name;
+                fail(path);
+                continue;
+            }
+
+            if (S_ISLNK(st.st_mode)) continue;
+
+            if (fchownat(dfd, name, uid, gid, AT_SYMLINK_NOFOLLOW) != 0) {
+                PLOG(WARNING) << "Failed to fchownat " << name;
+                fail(path);
+            }
+
+            if (S_ISDIR(st.st_mode)) {
+                android::base::unique_fd sub_fd(
+                        openat(dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+                if (sub_fd.get() != -1) {
+                    chown_recursive_at(sub_fd.get(), path);
+                } else {
+                    PLOG(WARNING) << "Failed to openat " << name;
+                    fail(path);
+                }
+            }
+        }
+        closedir(d);
+    };
+
+    chown_recursive_at(fd, absolute_path);
 }
 
 }  // namespace installd

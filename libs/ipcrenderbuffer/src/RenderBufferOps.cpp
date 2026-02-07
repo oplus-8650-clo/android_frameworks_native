@@ -19,6 +19,7 @@
 
 #include <SkColorFilter.h>
 #include <SkFontMgr.h>
+#include <SkSurface.h>
 
 #include "SkFontScanner_FreeType.h"
 #include "src/core/SkReadBuffer.h"
@@ -41,7 +42,7 @@ SkImageInfo fromShmemImageInfo(const ShmemImageInfo& info) {
     return SkImageInfo::Make(info.width, info.height, info.colorType, info.alphaType);
 }
 
-void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
+void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                       IPCRenderBufferOp* op, SkCanvas* canvas,
                       const std::function<void(int)>& renderProxyCallback) {
     switch (op->type) {
@@ -228,6 +229,11 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer
             renderProxyCallback(co->proxyId);
             break;
         }
+        case TYPE_BEGINRENDERTARGET:
+        case TYPE_ENDRENDERTARGET: {
+            // Handled by loop
+            break;
+        }
         default: {
             ALOGE("Unexpected op in RenderCommandBuffer");
             break;
@@ -285,20 +291,16 @@ bool isDrawingOp(uint32_t type) {
     }
 }
 
-bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
+bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
-    auto buffer = consumer->getCurrentBuffer();
-    if (buffer == nullptr) {
-        ALOGE("Failed to acquire RenderCommandBuffer for replay");
-        return false;
-    }
-
     bool foundFirstDrawingOp = false;
 
     if constexpr (DUMP_OPS) {
         ALOGE("Rendering command buffer");
     }
+
+    sk_sp<SkSurface> boundSurface = nullptr;
 
     for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
         if (!foundFirstDrawingOp && isDrawingOp(op->type)) {
@@ -319,25 +321,51 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
             ALOGE("Rendering op %s", opTypeToString(op->type).c_str());
             ALOGE("Details %s", opToString(op).c_str());
         }
-        renderOpToCanvas(cache, consumer, op, canvas, renderProxyCallback);
+
+        if (op->type == TYPE_BEGINRENDERTARGET) {
+            if (boundSurface) {
+                if constexpr (DUMP_OPS) {
+                    ALOGE("Nesting BeginRenderTargetOp is not supported");
+                }
+                return false;
+            }
+
+            if (cache) {
+                BeginRenderTargetOp* co = (BeginRenderTargetOp*)op;
+                auto it = cache->bitmaps.find(co->bufferId);
+                if (it != cache->bitmaps.end()) {
+                    boundSurface = it->second.surface;
+                } else {
+                    if constexpr (DUMP_OPS) {
+                        ALOGE("Failed to acquire buffer surface for %" PRIu64, co->bufferId);
+                    }
+                    return false;
+                }
+            } else {
+                if constexpr (DUMP_OPS) {
+                    ALOGE("IPC cache is null, BeginRenderTargetOp requires a non-null cache");
+                }
+                return false;
+            }
+
+        } else if (op->type == TYPE_ENDRENDERTARGET) {
+            if (!boundSurface) {
+                if constexpr (DUMP_OPS) {
+                    ALOGE("Encountered EndRenderTargetOp but no BeginRenderTargetOp was "
+                          "submitted");
+                }
+                return false;
+            }
+            boundSurface = nullptr;
+        } else {
+            renderOpToCanvas(cache, buffer, op, boundSurface ? boundSurface->getCanvas() : canvas,
+                             renderProxyCallback);
+        }
     }
     if constexpr (DUMP_OPS) {
         ALOGE("Done rendering command buffer");
     }
     return true;
-}
-
-void resetRenderCommandBufferForReplay(IPCServerResourceCache* cache,
-                                       RenderCommandBufferConsumer* consumer) {
-    auto buffer = consumer->consumerAcquire();
-    if (buffer == nullptr) {
-        ALOGE("Failed to acquire RenderCommandBuffer for replay");
-        return;
-    }
-
-    for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
-        //  TODO:
-    }
 }
 
 std::string shmemPaintToString(const ShmemPaint& paint) {
@@ -850,7 +878,12 @@ DrawImageRectOp* DrawImageRectOp::Create(RenderCommandBuffer* commandBuffer, uin
 
 void DrawImageRectOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache) {
     auto it = resourceCache.bitmaps.find(bitmapId);
-    LOG_ALWAYS_FATAL_IF(it == resourceCache.bitmaps.end(), "Bitmap not found in cache");
+    if (it == resourceCache.bitmaps.end()) {
+        // This currently only happens when a process shuts down.
+        // There may be a frame remaining that references bitmaps which were destroyed.
+        ALOGE("Bitmap not found in cache");
+        return;
+    }
     SkPaint p;
     const SkPaint* paintPtr = hasPaint ? &(p = fromShmemPaint(paint)) : nullptr;
     c->drawImageRect(it->second.image, src, dst, sampling, paintPtr, constraint);
@@ -1068,6 +1101,34 @@ void DrawProxySurfaceControlOp::draw(SkCanvas* c, const SkMatrix&) {
 
 std::string DrawProxySurfaceControlOp::toString() const {
     return "DrawProxySurfaceControlOp";
+}
+
+BeginRenderTargetOp* BeginRenderTargetOp::Create(RenderCommandBuffer* commandBuffer,
+                                                 uint64_t bufferId) {
+    BeginRenderTargetOp* op = commandBuffer->allocAligned<BeginRenderTargetOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    op->bufferId = bufferId;
+    return op;
+}
+
+void BeginRenderTargetOp::draw(SkCanvas* c, const SkMatrix&) {}
+
+std::string BeginRenderTargetOp::toString() const {
+    return "BeginRenderTargetOp";
+}
+
+EndRenderTargetOp* EndRenderTargetOp::Create(RenderCommandBuffer* commandBuffer) {
+    EndRenderTargetOp* op = commandBuffer->allocAligned<EndRenderTargetOp>();
+    OP_REQUIRE(op);
+    op->type = kType;
+    return op;
+}
+
+void EndRenderTargetOp::draw(SkCanvas* c, const SkMatrix&) {}
+
+std::string EndRenderTargetOp::toString() const {
+    return "EndRenderTargetOp";
 }
 
 } // namespace android

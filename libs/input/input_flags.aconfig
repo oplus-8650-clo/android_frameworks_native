@@ -43,6 +43,16 @@ flag {
 }
 
 flag {
+  name: "cancel_touches_on_absolute_capture_release"
+  namespace: "input"
+  description: "Send a cancellation event if there are touches on a touchpad when leaving absolute pointer capture mode"
+  bug: "481649058"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"
@@ -228,5 +238,5 @@ flag {
     name: "enable_anr_warning_callback_input_dispatcher"
     namespace: "system_performance"
     description: "Enables a callback that warns an application when it is at risk of an ANR for input dispatcher."
-    bug: "459887078"
+    bug: "481062299"
 }

@@ -64,23 +64,25 @@ rust_binary {
     init_rc: ["usbauthservice.rc"],
     rustlibs: [
         "libusbauthservice_core",
+        "libusb_flags_lib_rust",
     ],
     prefer_rlib: true,
 }
 
-rust_test_host {
+rust_test {
     name: "usbauthservice_test",
     crate_name: "usbauthservice",
     defaults: ["libusbauthservice_defaults"],
     srcs: ["usbauthservice.rs"],
     rustlibs: [
         "libusbauthservice_core",
+        "libusb_flags_lib_rust",
     ],
     test_suites: ["general-tests"],
     test_options: {
         unit_test: true,
     },
-    compile_multilib: "both",
+    compile_multilib: "first",
 }
 
 rust_binary {
@@ -122,4 +124,11 @@ prebuilt_etc {
     src: "config/desktop_auth_policy.conf",
     sub_dir: "usb_auth",
     filename: "policy.conf",
+}
+
+prebuilt_etc {
+    name: "desktop_interactive_auth_policy",
+    src: "config/desktop_interactive_auth_policy.conf",
+    sub_dir: "usb_auth",
+    filename: "interactive_policy.conf",
 }

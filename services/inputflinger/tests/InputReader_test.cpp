@@ -2633,8 +2633,11 @@ using TouchNavigationIntegrationTest = InputReaderIntegrationTest;
 
 TEST_F(TouchNavigationIntegrationTest, DoesNotRequireAssociatedDisplay) {
     // There are no configured displays.
-    mFakePolicy->addDeviceTypeAssociation(INPUT_PORT, "touchNavigation");
-    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DEVICE_TYPE);
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(INPUT_PORT, configuration);
+    mReader->requestRefreshConfiguration(
+            InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES);
 
     auto device = createUinputDevice<UinputTouchScreen>(Rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
                                                         INPUT_PORT);
@@ -2655,8 +2658,11 @@ TEST_F(TouchNavigationIntegrationTest, DoesNotRequireAssociatedDisplay) {
 
 TEST_F(TouchNavigationIntegrationTest, DisplayAssociationChange) {
     // There are initially no configured displays.
-    mFakePolicy->addDeviceTypeAssociation(INPUT_PORT, "touchNavigation");
-    mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::DEVICE_TYPE);
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(INPUT_PORT, configuration);
+    mReader->requestRefreshConfiguration(
+            InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES);
 
     auto device = createUinputDevice<UinputTouchScreen>(Rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
                                                         INPUT_PORT);
@@ -2936,7 +2942,8 @@ TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToA
     ASSERT_TRUE(
         mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value()
     );
-    ASSERT_EQ(0, mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+    ASSERT_EQ(AMOTION_EVENT_AXIS_X,
+              mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
 }
 
 TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToAxisY) {
@@ -2951,7 +2958,86 @@ TEST_F(InputDeviceTest, Configure_PrimaryDirectionalMotionAxisViewBehaviorSetToA
     ASSERT_TRUE(
         mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value()
     );
-    ASSERT_EQ(1, mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+    ASSERT_EQ(AMOTION_EVENT_AXIS_Y,
+              mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+}
+
+TEST_F(InputDeviceTest, Configure_SmoothScrollViewBehaviorFromConfigurationOverride) {
+    InputDeviceConfigurationOverride configuration{};
+    InputDeviceViewBehavior viewBehavior{};
+    viewBehavior.shouldSmoothScroll = true;
+    configuration.viewBehavior = viewBehavior;
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_TRUE(mDevice->getDeviceInfo().getViewBehavior().shouldSmoothScroll.has_value());
+    ASSERT_TRUE(mDevice->getDeviceInfo().getViewBehavior().shouldSmoothScroll.value());
+}
+
+TEST_F(InputDeviceTest,
+       Configure_PrimaryDirectionalMotionAxisViewBehaviorFromConfigurationOverride) {
+    InputDeviceConfigurationOverride configuration{};
+    InputDeviceViewBehavior viewBehavior{};
+    viewBehavior.primaryDirectionalMotionAxis = AMOTION_EVENT_AXIS_Y;
+    configuration.viewBehavior = viewBehavior;
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_TRUE(
+            mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value());
+    ASSERT_EQ(AMOTION_EVENT_AXIS_Y,
+              mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
+}
+
+TEST_F(InputDeviceTest, Configure_SmoothScrollViewBehaviorFromConfigurationOverrideIgnored) {
+    mFakeEventHub->addConfigurationProperty(EVENTHUB_ID, "device.viewBehavior_smoothScroll", "0");
+    InputDeviceConfigurationOverride configuration{};
+    InputDeviceViewBehavior viewBehavior{};
+    viewBehavior.shouldSmoothScroll = true;
+    configuration.viewBehavior = viewBehavior;
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_TRUE(mDevice->getDeviceInfo().getViewBehavior().shouldSmoothScroll.has_value());
+    ASSERT_FALSE(mDevice->getDeviceInfo().getViewBehavior().shouldSmoothScroll.value());
+}
+
+TEST_F(InputDeviceTest,
+       Configure_PrimaryDirectionalMotionAxisViewBehaviorFromConfigurationOverrideIgnored) {
+    mFakeEventHub->addConfigurationProperty(EVENTHUB_ID,
+                                            "device.viewBehavior_primaryDirectionalMotionAxis",
+                                            "X");
+    InputDeviceConfigurationOverride configuration{};
+    InputDeviceViewBehavior viewBehavior{};
+    viewBehavior.primaryDirectionalMotionAxis = AMOTION_EVENT_AXIS_Y;
+    configuration.viewBehavior = viewBehavior;
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
+    mDevice->addMapper<FakeInputMapper>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
+                                        AINPUT_SOURCE_KEYBOARD);
+
+    std::list<NotifyArgs> unused =
+            mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
+                               /*changes=*/{});
+
+    ASSERT_TRUE(
+            mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.has_value());
+    ASSERT_EQ(AMOTION_EVENT_AXIS_X,
+              mDevice->getDeviceInfo().getViewBehavior().primaryDirectionalMotionAxis.value());
 }
 
 TEST_F(InputDeviceTest, WakeDevice_AddsWakeFlagToProcessNotifyArgs) {
@@ -3687,12 +3773,14 @@ TEST_F(SingleTouchInputMapperTest, DeviceTypeChange_RecalculatesRawToDisplayTran
                         AllOf(WithMotionAction(AMOTION_EVENT_ACTION_DOWN),
                               WithCoords(toDisplayX(x), toDisplayY(y))))));
 
-    // Add device type association after the device was created.
-    mFakePolicy->addDeviceTypeAssociation(DEVICE_LOCATION, "touchNavigation");
+    // Add device configuration association after the device was created.
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
     // Send update to the mapper.
     std::list<NotifyArgs> unused =
             mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
-                               InputReaderConfiguration::Change::DEVICE_TYPE /*changes*/);
+                               InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES);
 
     args.clear();
     args += processDown(mapper, x, y);
@@ -5280,7 +5368,9 @@ TEST_F(SingleTouchInputMapperTest, StylusButtonMotionEventsDisabled) {
 }
 
 TEST_F(SingleTouchInputMapperTest, WhenDeviceTypeIsSetToTouchNavigation_setsCorrectType) {
-    mFakePolicy->addDeviceTypeAssociation(DEVICE_LOCATION, "touchNavigation");
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
     prepareDisplay(ui::ROTATION_0);
     prepareButtons();
     prepareAxes(POSITION);
@@ -5300,13 +5390,15 @@ TEST_F(SingleTouchInputMapperTest, WhenDeviceTypeIsChangedToTouchNavigation_upda
     // Ensure that the device is created as a touchscreen, not touch navigation.
     ASSERT_EQ(AINPUT_SOURCE_TOUCHSCREEN, mapper.getSources());
 
-    // Add device type association after the device was created.
-    mFakePolicy->addDeviceTypeAssociation(DEVICE_LOCATION, "touchNavigation");
+    // Add device configuration association after the device was created.
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
 
     // Send update to the mapper.
     std::list<NotifyArgs> unused2 =
             mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
-                               InputReaderConfiguration::Change::DEVICE_TYPE /*changes*/);
+                               InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES);
 
     // Check whether device type update was successful.
     ASSERT_EQ(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD, mDevice->getSources());
@@ -5324,13 +5416,15 @@ TEST_F(SingleTouchInputMapperTest,
     // Ensure that the device is created as a touchscreen, not touch navigation.
     ASSERT_EQ(AINPUT_SOURCE_TOUCHSCREEN, mapper.getSources());
 
-    // Add device type association after the device was created.
-    mFakePolicy->addDeviceTypeAssociation(DEVICE_LOCATION, "touchNavigation");
+    // Add device configuration association after the device was created.
+    InputDeviceConfigurationOverride configuration{};
+    configuration.deviceType = "touchNavigation";
+    mFakePolicy->addDeviceConfigurationOverride(DEVICE_LOCATION, configuration);
 
     // Send update to the mapper.
     std::list<NotifyArgs> unused2 =
             mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
-                               InputReaderConfiguration::Change::DEVICE_TYPE);
+                               InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES);
 
     // Check whether device type update was successful.
     ASSERT_EQ(AINPUT_SOURCE_TOUCH_NAVIGATION | AINPUT_SOURCE_TOUCHPAD, mDevice->getSources());

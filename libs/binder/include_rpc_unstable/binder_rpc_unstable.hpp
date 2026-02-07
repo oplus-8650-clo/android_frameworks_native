@@ -182,4 +182,10 @@ void ARpcSession_setMaxOutgoingConnections(ARpcSession* session, size_t connecti
 
 // Decrements the refcount of the underlying RpcSession object.
 void ARpcSession_free(ARpcSession* session);
+
+// Fetch the UID (if present) of the client process from the session object and
+// write it to `uid`
+// Returns true, if valid UID is present
+//         false, otherwise.
+bool ARpcSession_getClientUid(ARpcSession* session, uid_t* uid);
 }

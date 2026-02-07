@@ -50,6 +50,7 @@
 namespace android {
 
 struct IPCServerResourceCache;
+class RenderCommandBuffer;
 
 namespace renderengine {
 
@@ -178,7 +179,7 @@ struct LayerSettings {
     std::shared_ptr<gui::DisplayLuts> luts;
 
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
-    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+    std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
     bool lutSourceIsHwc = false;
@@ -364,6 +365,9 @@ static inline void PrintTo(const LayerSettings& settings, ::std::ostream* os,
     if (settings.luts) {
         *os << newline << ".luts = ";
         PrintTo(settings.luts, os);
+    }
+    if (settings.renderCommandBuffer) {
+        *os << newline << ".renderCommandBuffer = " << settings.renderCommandBuffer.get();
     }
 
     *os << IndentedNewline(currentIndent) << "}";

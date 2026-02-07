@@ -619,10 +619,10 @@ protected:
         bool mNeedsDroppedNotify;
 
         std::mutex mMutex;
-        ANativeWindow_OnAcquiredCallback mOnAcquiredCallback GUARDED_BY(mMutex);
-        void* mOnAcquiredCallbackData GUARDED_BY(mMutex);
-        ANativeWindow_OnDroppedCallback mOnDroppedCallback GUARDED_BY(mMutex);
-        void* mOnDroppedCallbackData GUARDED_BY(mMutex);
+        ANativeWindow_OnAcquiredCallback mOnAcquiredCallback GUARDED_BY(mMutex) = nullptr;
+        void* mOnAcquiredCallbackData GUARDED_BY(mMutex) = nullptr;
+        ANativeWindow_OnDroppedCallback mOnDroppedCallback GUARDED_BY(mMutex) = nullptr;
+        void* mOnDroppedCallbackData GUARDED_BY(mMutex) = nullptr;
     };
 
     class ProducerDeathListenerProxy : public IBinder::DeathRecipient {

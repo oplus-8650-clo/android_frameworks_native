@@ -26,23 +26,19 @@
 #include <android/ipcrenderbuffer/RenderBufferOps.h>
 #include <android/ipcrenderbuffer/RenderBufferHelpers.h>
 
-#include <gui/RenderCommandBuffer.h>
-#include <gui/RenderCommandBufferConsumer.h>
-
-#include <fstream>
-#include <memory>
 #include <getopt.h>
+#include <gui/RenderCommandBuffer.h>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
+#include <memory>
 
 using namespace android;
 
-bool renderCommandBufferToReplayCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
-                                 SkCanvas* canvas,
-                                 const std::function<void(int)>& renderProxyCallback,
-                                 bool dumpOps, bool noBitmaps) {
-    auto buffer = consumer->consumerAcquire();
-
+bool renderCommandBufferToReplayCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
+                                       SkCanvas* canvas,
+                                       const std::function<void(int)>& renderProxyCallback,
+                                       bool dumpOps, bool noBitmaps) {
     bool foundFirstDrawingOp = false;
 
     if (dumpOps) {
@@ -64,7 +60,7 @@ bool renderCommandBufferToReplayCanvas(IPCServerResourceCache* cache, RenderComm
                 LOG_ALWAYS_FATAL("Bitmap rendering not yet supported in replay");
             }
         } else {
-            renderOpToCanvas(cache, consumer, op, canvas, renderProxyCallback);
+            renderOpToCanvas(cache, op, canvas, renderProxyCallback);
         }
     }
     return true;
@@ -121,14 +117,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::shared_ptr<RenderCommandBufferConsumer> consumer =
-            std::make_shared<RenderCommandBufferConsumer>();
-
-    consumer->setRenderCommandBuffer(loadedCommandBuffer.get());
-
-
-    IPCServerResourceCache cache;
-    SkImageInfo info = SkImageInfo::MakeN32Premul(loadedCommandBuffer->mWidth, loadedCommandBuffer->mHeight);
+    SkImageInfo info = SkImageInfo::MakeN32Premul(512, 512); // Example size
     const size_t minRowBytes = info.minRowBytes();
     const size_t size = info.computeMinByteSize();
     SkPMColor* pixels = new SkPMColor[size];
@@ -145,9 +134,9 @@ int main(int argc, char** argv) {
     canvas->clear(SK_ColorWHITE); // Example background
 
     // Replay the render commands
-    std::function<void(int)> renderProxyCallback = [](int) {};
-    renderCommandBufferToReplayCanvas(&cache, consumer.get(),
-                                canvas, renderProxyCallback, dumpOps, noBitmaps); // Pass the canvas obtained from the surface
+    IPCServerResourceCache cache;
+    renderCommandBufferToCanvas(&cache, loadedCommandBuffer.get(), canvas,
+                                [&](int) {}); // Pass the canvas obtained from the surface
 
     // Now you can display the surface's image or save it to a file.
     // For example, to save to a PNG:

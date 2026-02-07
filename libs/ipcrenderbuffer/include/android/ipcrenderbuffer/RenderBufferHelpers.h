@@ -16,15 +16,13 @@
 #pragma once
 
 #include <android/ipcrenderbuffer/RenderBufferOps.h>
-#include <gui/RenderCommandBufferConsumer.h>
+#include <gui/RenderCommandBuffer.h>
 
 namespace android {
-void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
-                      IPCRenderBufferOp* op, SkCanvas* canvas,
+void renderOpToCanvas(IPCServerResourceCache* cache, IPCRenderBufferOp* op, SkCanvas* canvas,
                       const std::function<void(int)>& renderProxyCallback);
-bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBufferConsumer* consumer,
+bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback);
-void resetRenderCommandBufferForReplay(IPCServerResourceCache* cache,
-                                       RenderCommandBufferConsumer* consumer);
+void resetRenderCommandBufferForReplay(IPCServerResourceCache* cache, RenderCommandBuffer* buffer);
 } // namespace android

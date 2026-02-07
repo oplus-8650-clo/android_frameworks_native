@@ -327,4 +327,9 @@ void ARpcSession_setMaxOutgoingConnections(ARpcSession* handle, size_t connectio
     auto session = handleToStrongPointer<RpcSession>(handle);
     session->setMaxOutgoingConnections(connections);
 }
+
+bool ARpcSession_getClientUid(ARpcSession* handle, uid_t* uid) {
+    auto session = handleToStrongPointer<RpcSession>(handle);
+    return session->getClientUid(uid);
+}
 }

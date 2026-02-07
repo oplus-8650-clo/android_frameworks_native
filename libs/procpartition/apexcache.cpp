@@ -17,12 +17,11 @@
 #include <procpartition/apexcache.h>
 
 #include <android-base/logging.h>
-#include <tinyxml2.h>
+#include <android/apex/IApexService.h>
+#include <binder/IServiceManager.h>
 
 namespace android {
 namespace apexcache {
-
-using namespace tinyxml2;
 
 ApexCache* ApexCache::getInstance() {
     static ApexCache *instance = new ApexCache();
@@ -31,32 +30,19 @@ ApexCache* ApexCache::getInstance() {
 
 ApexCache::ApexCache() {}
 
-const std::vector<ApexInfo>& ApexCache::getCache(bool invalidate) {
+const std::vector<apex::ApexInfo>& ApexCache::getCache(bool invalidate) {
     if (invalidate) {
         cache.clear();
     }
     if (cache.empty()) {
-        XMLDocument doc;
-        if (doc.LoadFile("/apex/apex-info-list.xml") != XML_SUCCESS) {
-            LOG(ERROR) << "Failed to load /apex/apex-info-list.xml";
-            return cache;
-        }
-
-        XMLElement* root = doc.FirstChildElement("apex-info-list");
-        if (root == nullptr) {
-            LOG(ERROR) << "Missing apex-info-list root element";
-            return cache;
-        }
-
-        for (XMLElement* child = root->FirstChildElement("apex-info");
-             child != nullptr; child = child->NextSiblingElement("apex-info")) {
-            ApexInfo info;
-            const char* moduleName = child->Attribute("moduleName");
-            if (moduleName) info.moduleName = moduleName;
-
-            const char* preinstalledModulePath = child->Attribute("preinstalledModulePath");
-            if (preinstalledModulePath) info.preinstalledModulePath = preinstalledModulePath;
-            cache.push_back(info);
+        sp<IServiceManager> sm = android::defaultServiceManager();
+        sp<IBinder> binder = sm->waitForService(String16("apexservice"));
+        sp<apex::IApexService> service =
+            android::interface_cast<apex::IApexService>(binder);
+        android::binder::Status status = service->getActivePackages(&cache);
+        if (!status.isOk()) {
+            LOG(ERROR) << "Failed to get active packages: "
+                       << status.exceptionMessage().c_str();
         }
     }
     return cache;

@@ -18,12 +18,15 @@
 
 #include <optional>
 #include <sstream>
+#include <vector>
 
 #include <android-base/stringprintf.h>
 #include <com_android_input_flags.h>
 #include <input/PrintTools.h>
 #include <linux/input-event-codes.h>
 #include <log/log_main.h>
+
+namespace input_flags = com::android::input::flags;
 
 namespace android {
 
@@ -166,11 +169,28 @@ void AbsoluteTouchpadEventConverter::tryAddRawMotionRangeWithRelative(InputDevic
     }
 }
 
-void AbsoluteTouchpadEventConverter::reset() {
+std::list<NotifyArgs> AbsoluteTouchpadEventConverter::reset(nsecs_t when) {
+    std::list<NotifyArgs> out;
+    if (input_flags::cancel_touches_on_absolute_capture_release() &&
+        !mPointerIdForSlotNumber.empty()) {
+        size_t pointerCount = mPointerIdsInUse.count();
+        std::vector<PointerCoords> coords;
+        std::vector<PointerProperties> properties;
+        coords.reserve(pointerCount);
+        properties.reserve(pointerCount);
+        for (const auto [slotNumber, pointerId] : mPointerIdForSlotNumber) {
+            coords.push_back(makePointerCoordsForSlot(slotNumber));
+            properties.push_back({.id = pointerId, .toolType = ToolType::FINGER});
+        }
+
+        out.push_back(makeMotionArgs(when, /*readTime=*/when, AMOTION_EVENT_ACTION_CANCEL, coords,
+                                     properties, /*actionButton=*/0, AMOTION_EVENT_FLAG_CANCELED));
+    }
     mCursorButtonAccumulator.reset(mDeviceContext);
     mDownTime = 0;
     mPointerIdsInUse.reset();
     mPointerIdForSlotNumber.clear();
+    return out;
 }
 
 std::list<NotifyArgs> AbsoluteTouchpadEventConverter::process(const RawEvent& rawEvent) {

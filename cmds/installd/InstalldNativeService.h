@@ -37,6 +37,7 @@ namespace android {
 namespace installd {
 
 using IFsveritySetupAuthToken = android::os::IInstalld::IFsveritySetupAuthToken;
+using IAppDataOperationCallback = android::os::IInstalld::IAppDataOperationCallback;
 
 class InstalldNativeService : public BinderService<InstalldNativeService>, public os::BnInstalld {
 public:
@@ -224,6 +225,17 @@ public:
     binder::Status enableFsverity(const android::sp<IFsveritySetupAuthToken>& authToken,
                                   const std::string& filePath, const std::string& packageName,
                                   int32_t* _aidl_return);
+
+    binder::Status copyAppDataPath(const std::optional<std::string>& uuid,
+                                   const std::string& fromPath, const std::string& toPath,
+                                   int32_t userId, int32_t appId, const std::string& seInfo,
+                                   int32_t flags,
+                                   const android::sp<IAppDataOperationCallback>& callback);
+    binder::Status moveAppDataPath(const std::optional<std::string>& uuid,
+                                   const std::string& fromPath, const std::string& toPath,
+                                   int32_t userId, int32_t appId, const std::string& seInfo,
+                                   int32_t flags,
+                                   const android::sp<IAppDataOperationCallback>& callback);
 
 private:
     std::recursive_mutex mLock;
