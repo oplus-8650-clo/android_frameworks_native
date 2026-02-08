@@ -65,8 +65,6 @@
 
 #include <android/ipcrenderbuffer/RenderBufferDebugUtils.h>
 #include <android/ipcrenderbuffer/RenderBufferOpTypes.h>
-#include <android/ipcrenderbuffer/RenderBufferShmemImageInfo.h>
-#include <android/ipcrenderbuffer/RenderBufferShmemPaint.h>
 
 #define IPCRENDERBUFFER_UNIMPLEMENTED_IS_FATAL 0
 #ifdef IPCRENDERRBUFFER_UNIMPLEMENTED_IS_FATAL
@@ -96,6 +94,10 @@ struct IPCServerBitmap {
 struct IPCServerResourceCache {
     sk_sp<SkFontMgr> fontManager;
     std::map<uint64_t, IPCServerBitmap> bitmaps;
+};
+
+struct ShmemPaint {
+    RSpan<uint8_t> data;
 };
 
 // Derived from RecordingCanvas.cpp

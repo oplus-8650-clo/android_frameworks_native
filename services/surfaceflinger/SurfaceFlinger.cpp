@@ -3113,13 +3113,17 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
 
     // Determine if any displays, either physical or virtual, are on so that
     // power hints may be reported for performance boosts.
-    const bool hasDisplayWithPowerModeOn =
-            FTL_FAKE_GUARD(mStateLock, hasDisplay([](const DisplayDevice& display) {
-                               return display.getPowerMode() == hal::PowerMode::ON;
-                           }));
+
+    bool shouldEnablePowerHintSession = mOptimizeForPerformance.load();
+    if (!FlagManager::getInstance().align_adpf_with_sf_opt_policy()) {
+        shouldEnablePowerHintSession =
+                FTL_FAKE_GUARD(mStateLock, hasDisplay([](const DisplayDevice& display) {
+                                   return display.getPowerMode() == hal::PowerMode::ON;
+                               }));
+    }
 
     // Save this once per commit + composite to ensure consistency.
-    mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && hasDisplayWithPowerModeOn;
+    mPowerHintSessionEnabled = mPowerAdvisor->usePowerHintSession() && shouldEnablePowerHintSession;
     if (mPowerHintSessionEnabled) {
         mPowerAdvisor->setCommitStart(pacesetterFrameTargetPtr->frameBeginTime());
         mPowerAdvisor->setExpectedPresentTime(pacesetterFrameTargetPtr->expectedPresentTime());
@@ -4509,7 +4513,9 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
     display->setProjection(state.orientation, state.layerStackSpaceRect,
                            state.orientedDisplaySpaceRect);
     display->setDisplayName(state.displayName);
-    display->setOptimizationPolicy(state.optimizationPolicy);
+    if (state.optimizationPolicy == gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower) {
+        display->enableForceOptimizationPolicyForPower();
+    }
     display->setFlags(state.flags);
 
     return display;
@@ -4859,7 +4865,11 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
             }
         }
         if (currentState.flags != drawingState.flags) {
+            auto prevOptimizationPolicy = display->getOptimizationPolicy();
             display->setFlags(currentState.flags);
+            if (prevOptimizationPolicy != display->getOptimizationPolicy()) {
+                applyOptimizationPolicy(__func__);
+            }
         }
 
         const auto updateDisplaySize = [&]() REQUIRES(mStateLock) {
@@ -5176,7 +5186,10 @@ void SurfaceFlinger::requestDisplayModes(std::vector<display::DisplayModeRequest
 }
 
 void SurfaceFlinger::notifyCpuLoadUp() {
-    mPowerAdvisor->notifyCpuLoadUp();
+    if (!FlagManager::getInstance().align_adpf_with_sf_opt_policy() ||
+        mOptimizeForPerformance.load()) {
+        mPowerAdvisor->notifyCpuLoadUp();
+    }
 }
 
 void SurfaceFlinger::onChoreographerAttached() {
@@ -6763,11 +6776,17 @@ void SurfaceFlinger::applyOptimizationPolicy(const char* whence) FTL_FAKE_GUARD(
     const bool optimizeForPerformance =
             std::any_of(mDisplays.begin(), mDisplays.end(), [](const auto& pair) {
                 const auto& display = pair.second;
-                return display->isPoweredOn() &&
+                const bool displayPoweredOn =
+                        FlagManager::getInstance().align_adpf_with_sf_opt_policy()
+                        ? display->getPowerMode() == hal::PowerMode::ON
+                        : display->isPoweredOn();
+                return displayPoweredOn &&
                         display->getOptimizationPolicy() ==
                         OptimizationPolicy::optimizeForPerformance;
             });
-
+    if (FlagManager::getInstance().align_adpf_with_sf_opt_policy()) {
+        mOptimizeForPerformance = optimizeForPerformance;
+    }
     optimizeThreadScheduling(whence,
                              optimizeForPerformance ? OptimizationPolicy::optimizeForPerformance
                                                     : OptimizationPolicy::optimizeForPower);

@@ -21,8 +21,6 @@
 #include <SkM44.h>
 #include <SkRect.h>
 
-#include <android/ipcrenderbuffer/RenderBufferShmemPaint.h>
-
 struct SkRect;
 class SkM44;
 namespace android {
