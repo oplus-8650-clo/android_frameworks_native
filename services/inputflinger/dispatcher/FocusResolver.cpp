@@ -208,6 +208,9 @@ std::optional<FocusResolver::FocusChanges> FocusResolver::updateFocusedWindow(
 }
 
 std::string FocusResolver::dumpFocusedWindows() const {
+    // When changing the format of the text output by this function, also update
+    // com.android.compatibility.common.util.WindowUtil in the CTS utils, which parses this dump to
+    // improve failure messages for waitForFocus calls.
     if (mFocusedWindowTokenByDisplay.empty()) {
         return INDENT "FocusedWindows: <none>\n";
     }

@@ -18,11 +18,8 @@
 
 #include <list>
 #include <string>
-#include <tuple>
-#include <variant>
 
 #include <android-base/logging.h>
-#include <android_companion_virtualdevice_flags.h>
 #include <com_android_input_flags.h>
 #include <flag_macros.h>
 #include <gtest/gtest.h>
@@ -86,8 +83,6 @@ DisplayViewport createSecondaryViewport() {
 }
 
 } // namespace
-
-namespace vd_flags = android::companion::virtualdevice::flags;
 
 /**
  * Unit tests for RotaryEncoderInputMapper.
@@ -163,7 +158,6 @@ TEST_F(RotaryEncoderInputMapperTest, ProcessRegularScroll) {
 }
 
 TEST_F(RotaryEncoderInputMapperTest, ProcessHighResScroll) {
-    vd_flags::high_resolution_scroll(true);
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_WHEEL_HI_RES))
             .WillRepeatedly(Return(true));
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);
@@ -177,7 +171,6 @@ TEST_F(RotaryEncoderInputMapperTest, ProcessHighResScroll) {
 }
 
 TEST_F(RotaryEncoderInputMapperTest, HighResScrollIgnoresRegularScroll) {
-    vd_flags::high_resolution_scroll(true);
     EXPECT_CALL(mMockEventHub, hasRelativeAxis(EVENTHUB_ID, REL_WHEEL_HI_RES))
             .WillRepeatedly(Return(true));
     mMapper = createInputMapper<RotaryEncoderInputMapper>(*mDeviceContext, mReaderConfiguration);

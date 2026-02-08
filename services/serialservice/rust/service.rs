@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
 
     {
         let _span = tracing::span!(tracing::Level::TRACE, "create_native_serial");
-        binder::add_service(
+        binder::register_lazy_service(
             "native_serial",
             BnSerialManager::new_async_binder(
                 SerialManager::new().await,

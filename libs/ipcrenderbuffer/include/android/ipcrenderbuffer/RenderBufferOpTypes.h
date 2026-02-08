@@ -60,6 +60,8 @@ enum RenderBufferOpType {
     TYPE_DRAWSKMESH = 38,
     TYPE_DRAWMESH = 39,
     TYPE_DRAWPROXYSURFACECONTROL = 40,
+    TYPE_BEGINRENDERTARGET = 41,
+    TYPE_ENDRENDERTARGET = 42,
 };
 
 } // namespace android

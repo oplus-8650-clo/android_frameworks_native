@@ -49,15 +49,21 @@ sk_sp<SkSurface> IPCRecordingCanvas::onNewSurface(const SkImageInfo&, const SkSu
     return nullptr;
 }
 
+bool IPCRecordingCanvas::canRecord() {
+    return mRenderCommandBufferProducer->canRecord();
+}
+
 void IPCRecordingCanvas::startRecording() {
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer != nullptr, "Already recording");
-    mCurrentRenderCommandBuffer = mRenderCommandBufferProducer->acquire();
+    mCurrentRenderCommandBuffer = mRenderCommandBufferProducer->startRecording();
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr,
+                        "User should check canRecord() first");
     mCurrentRenderCommandBuffer->setFrameSize(mWidth, mHeight);
 }
 
 void IPCRecordingCanvas::endRecording() {
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    mRenderCommandBufferProducer->release();
+    mRenderCommandBufferProducer->finishRecordingAndPostFrame();
     mCurrentRenderCommandBuffer = nullptr;
 }
 
@@ -300,7 +306,12 @@ void IPCRecordingCanvas::onDrawImage2(const SkImage* image, SkScalar x, SkScalar
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
     auto it = mResourceCache.bitmaps.find(image->uniqueID());
-    LOG_ALWAYS_FATAL_IF(it == mResourceCache.bitmaps.end(), "Bitmap not found in cache");
+    if (it == mResourceCache.bitmaps.end()) {
+        // This currently only happens when a process shuts down.
+        // There may be a frame remaining that references bitmaps which were destroyed.
+        ALOGE("Bitmap not found in cache");
+        return;
+    }
     auto op = DrawImageOp::Create(mCurrentRenderCommandBuffer, it->second.id, x, y, sampling, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
@@ -372,6 +383,22 @@ void IPCRecordingCanvas::onDrawAtlas2(const SkImage*, const SkRSXform[], const S
 void IPCRecordingCanvas::onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) {
     IPC_CANVAS_TRACE_CALL;
     ALOGE("onDrawShadowRec Not implemented");
+}
+
+void IPCRecordingCanvas::beginRenderTarget(uint64_t bufferId) {
+    IPC_CANVAS_TRACE_CALL;
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto op = BeginRenderTargetOp::Create(mCurrentRenderCommandBuffer, bufferId);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
+}
+
+void IPCRecordingCanvas::endRenderTarget() {
+    IPC_CANVAS_TRACE_CALL;
+    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
+    auto op = EndRenderTargetOp::Create(mCurrentRenderCommandBuffer);
+    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
+    mCurrentRenderCommandBuffer->pushOp(op);
 }
 
 } // namespace android

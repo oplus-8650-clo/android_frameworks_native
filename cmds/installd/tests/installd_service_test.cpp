@@ -34,6 +34,8 @@
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <future>
+#include <thread>
 
 #include <android/content/pm/IPackageManagerNative.h>
 #include <android_installd_flags.h>
@@ -98,6 +100,8 @@ static constexpr const uid_t kTestPccAppId = kTestAppId + 20000;
 const uid_t kTestPccAppUid = multiuser_get_uid(kTestUserId, kTestPccAppId);
 
 const gid_t kTestAppUid = multiuser_get_uid(kTestUserId, kTestAppId);
+static constexpr const int32_t kSecondaryUserId = 10;
+const gid_t kSecondaryAppUid = multiuser_get_uid(kSecondaryUserId, kTestAppId);
 const gid_t kTestCacheGid = multiuser_get_cache_gid(kTestUserId, kTestAppId);
 const uid_t kTestSdkSandboxUid = multiuser_get_sdk_sandbox_uid(kTestUserId, kTestAppId);
 
@@ -2087,6 +2091,572 @@ TEST_F(DestroyPccDirectoriesTest, DestroyPccDirectories_DoesNotAffectAppData) {
     EXPECT_FALSE(PathExists(de_pcc_path));
     EXPECT_TRUE(PathExists(ce_app_path));
     EXPECT_TRUE(PathExists(de_app_path));
+}
+
+class MockAppDataOperationCallback : public android::os::IInstalld::BnAppDataOperationCallback {
+public:
+    std::promise<void> mPromise;
+    int mStatus = -1;
+    std::string mMessage;
+    std::vector<std::optional<std::string>> mFailedFiles;
+
+    binder::Status onStatusChanged(
+            int status, const std::optional<std::string>& message,
+            const std::optional<std::vector<std::optional<std::string>>>& failedFiles) override {
+        if (failedFiles) mFailedFiles = *failedFiles;
+        if ((status == STATUS_SUCCESS || status == STATUS_FAILURE) && mStatus == -1) {
+            mStatus = status;
+            if (message) mMessage = *message;
+            mPromise.set_value();
+        }
+        return binder::Status::ok();
+    }
+    void waitForCompletion() { mPromise.get_future().wait(); }
+};
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_Symlink) {
+    const std::string fromPath = "user/0/from_copy";
+    const std::string toPath = "user/0/to_copy";
+    const std::string targetPath = "/data/local/tmp/symlink_target.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+    unlink(targetPath.c_str());
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // Create the target file and write some data to it
+    {
+        std::ofstream ofs(targetPath);
+        ofs << "important data";
+    }
+    chmod(targetPath.c_str(), 0600);
+    struct stat st_before;
+    ASSERT_EQ(0, stat(targetPath.c_str(), &st_before));
+
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+    mkdir(toPath + "/from_copy", kTestAppUid, kTestAppUid, 0700);
+    std::string symlinkPath = get_full_path(toPath) + "/from_copy/file.txt";
+    ASSERT_EQ(0, symlink(targetPath.c_str(), symlinkPath.c_str()));
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+
+    // Verify target file was not truncated
+    struct stat st_after;
+    ASSERT_EQ(0, stat(targetPath.c_str(), &st_after));
+    EXPECT_EQ(st_before.st_size, st_after.st_size);
+
+    // Verify it failed for that file
+    bool found = false;
+    for (const auto& f : callback->mFailedFiles) {
+        if (f && *f == get_full_path(fromPath) + "/file.txt") {
+            found = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found);
+
+    unlink(targetPath.c_str());
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_InvalidPath) {
+    const std::string fromPath = "/system/bin/sh";
+    const std::string toPath = "to_copy_invalid";
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // The call itself returns ok() (oneway), but callback receives failure.
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, fromPath, get_full_path(toPath), kTestUserId,
+                                         kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_AcceptNonLegacyPathForUser0_Internal) {
+    auto callback = sp<MockAppDataOperationCallback>::make();
+    // Use std::nullopt for uuid to test internal storage validation
+    std::string fromPath = "/data/user/0/from_copy_internal";
+    std::string toPath = "/data/user/0/to_copy_internal";
+
+    ASSERT_TRUE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
+                                         "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+
+    // If validation passed, it would try to copy. Since /data/user/0/from_copy_internal doesn't
+    // exist, copy_app_data will notify STATUS_FAILURE with "App data root does not exist: ...".
+    // If validation failed, it would be "Path ... is not valid for user 0"
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_EQ(callback->mMessage, "App data root does not exist: /data/user/0/from_copy_internal");
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Success) {
+    const std::string fromPath = "user/0/from_copy";
+    const std::string toPath = "user/0/to_copy";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_copy"));
+    EXPECT_TRUE(exists(toPath + "/from_copy/file.txt"));
+    EXPECT_TRUE(exists(fromPath)); // Source should still exist
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_TargetExists) {
+    const std::string fromPath = "user/0/from_copy";
+    const std::string toPath = "user/0/to_copy";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // Pre-create target dir and a file that should be overwritten
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+    mkdir(toPath + "/from_copy", kTestAppUid, kTestAppUid, 0700);
+    touch(toPath + "/from_copy/file.txt", kTestAppUid, kTestAppUid, 0600);
+    touch(toPath + "/from_copy/other.txt", kTestAppUid, kTestAppUid, 0600);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_copy"));
+    EXPECT_TRUE(exists(toPath + "/from_copy/file.txt"));
+    EXPECT_TRUE(exists(toPath + "/from_copy/other.txt")); // Should be preserved
+    EXPECT_TRUE(exists(fromPath));
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_NonNormalizedPath) {
+    auto callback = sp<MockAppDataOperationCallback>::make();
+    std::string fromPath = "/data/user/0/../system";
+    std::string toPath = "/data/user/0/to_copy";
+
+    // '..' is rejected immediately by Binder interface validation (shady path)
+    ASSERT_FALSE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
+                                          "default", 0, callback)
+                         .isOk());
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_RedundantPath) {
+    auto callback = sp<MockAppDataOperationCallback>::make();
+    std::string fromPath = "/data/user/0//from_copy";
+    std::string toPath = "/data/user/0/to_copy";
+
+    // '//' passes Binder validation but should be rejected by internal normalization check
+    ASSERT_TRUE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
+                                         "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Fail_NonNormalizedPath) {
+    auto callback = sp<MockAppDataOperationCallback>::make();
+    std::string fromPath = "/data/user/0/from_move";
+    std::string toPath = "/data/user/0/./to_move";
+
+    // '/./' passes Binder validation but should be rejected by internal normalization check
+    ASSERT_TRUE(service->moveAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
+                                         "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+}
+
+class MockAppDataOperationProgressCallback
+      : public android::os::IInstalld::BnAppDataOperationCallback {
+public:
+    std::promise<void> mPromise;
+    int mStatus = -1;
+    std::vector<std::pair<int64_t, int64_t>> mProgress; // <filesProcessed, bytesProcessed>
+
+    binder::Status onStatusChanged(
+            int status, const std::optional<std::string>& message,
+            const std::optional<std::vector<std::optional<std::string>>>& failedFiles) override {
+        (void)message;
+        (void)failedFiles;
+        if (status == STATUS_SUCCESS || status == STATUS_FAILURE) {
+            mStatus = status;
+            mPromise.set_value();
+        }
+        return binder::Status::ok();
+    }
+
+    void waitForCompletion() { mPromise.get_future().wait(); }
+};
+
+TEST_F(ServiceTest, MoveAppDataPath_Success) {
+    const std::string fromPath = "user/0/from_move";
+    const std::string toPath = "user/0/to_move";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_move"));
+    EXPECT_TRUE(exists(toPath + "/from_move/file.txt"));
+    EXPECT_FALSE(exists(fromPath)); // Source should be gone
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_TargetExists_EmptyDir) {
+    const std::string fromPath = "user/0/from_move";
+    const std::string toPath = "user/0/to_move";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // Pre-create empty target dir
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+    mkdir(toPath + "/from_move", kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_move"));
+    EXPECT_TRUE(exists(toPath + "/from_move/file.txt"));
+    EXPECT_FALSE(exists(fromPath));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_TargetExists_NotEmptyDir) {
+    const std::string fromPath = "user/0/from_move";
+    const std::string toPath = "user/0/to_move";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // Pre-create non-empty target dir
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+    mkdir(toPath + "/from_move", kTestAppUid, kTestAppUid, 0700);
+    touch(toPath + "/from_move/existing.txt", kTestAppUid, kTestAppUid, 0600);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    // renameat() fails with ENOTEMPTY if target is a non-empty directory
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_TRUE(exists(fromPath)); // Source should still exist
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_FileToDir) {
+    const std::string fromPath = "user/0/from_copy_file_dir";
+    const std::string toPath = "user/0/to_copy_file_dir";
+    const std::string toFile = toPath + "/file.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source file
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
+
+    // Create dest dir
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Copy file to directory
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toFile));
+    EXPECT_TRUE(exists(srcFile));
+    EXPECT_EQ(kTestAppUid, stat_uid(toFile.c_str()));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_FileToDir) {
+    const std::string fromPath = "user/0/from_move_file_dir";
+    const std::string toPath = "user/0/to_move_file_dir";
+    const std::string toFile = toPath + "/file.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source file
+    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+
+    // Create dest dir
+    mkdir(toPath, kSystemUid, kSystemUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move file to directory
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toFile));
+    EXPECT_FALSE(exists(srcFile));
+    EXPECT_EQ(kTestAppUid, stat_uid(toFile.c_str()));
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_SubdirCreated) {
+    const std::string fromPath = "user/0/from_copy_subdir";
+    const std::string toRoot = "user/0/to_copy_root";
+    const std::string toPath = toRoot + "/new_subdir";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toRoot), true);
+
+    // Create source file
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
+
+    // Create target root (the package directory) but NOT the subdir
+    mkdir(toRoot, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Copy file to non-existent subdir within existing root
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath));
+    EXPECT_TRUE(exists(toPath + "/file.txt"));
+    EXPECT_EQ(kTestAppUid, stat_uid(toPath.c_str()));
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_NoTargetRoot) {
+    const std::string fromPath = "user/0/from_copy_no_root";
+    const std::string toPath = "user/0/to_copy_no_root";
+    const std::string toFile = toPath + "/file.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source file
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
+
+    // Note: we do NOT create toPath here.
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Copy file to non-existent root
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_FALSE(exists(toPath));
+    EXPECT_FALSE(exists(toFile));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_SubdirCreated) {
+    const std::string fromPath = "user/0/from_move_subdir";
+    const std::string toRoot = "user/0/to_move_root";
+    const std::string toPath = toRoot + "/new_subdir";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toRoot), true);
+
+    // Create source file
+    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+
+    // Create target root but NOT the subdir
+    mkdir(toRoot, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move file to non-existent subdir within existing root
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath));
+    EXPECT_TRUE(exists(toPath + "/file.txt"));
+    EXPECT_FALSE(exists(srcFile));
+    EXPECT_EQ(kTestAppUid, stat_uid(toPath.c_str()));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Fail_NoTargetRoot) {
+    const std::string fromPath = "user/0/from_move_no_root";
+    const std::string toPath = "user/0/to_move_no_root";
+    const std::string toFile = toPath + "/file.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source file
+    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+
+    // Note: we do NOT create toPath here.
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move file to non-existent root
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_FALSE(exists(toPath));
+    EXPECT_FALSE(exists(toFile));
+    EXPECT_TRUE(exists(srcFile)); // Source should still exist
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_DirToDir) {
+    const std::string fromPath = "user/0/from_move_dir_dir";
+    const std::string toPath = "user/0/to_move_dir_dir";
+    const std::string nestedDir = toPath + "/from_move_dir_dir";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source dir with a file
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    touch(fromPath + "/file.txt", kTestAppUid, kTestAppUid, 0600);
+
+    // Note: for 'Move INTO' semantics, we can pre-create toPath
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move directory into directory
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(nestedDir));
+    EXPECT_TRUE(exists(nestedDir + "/file.txt"));
+    EXPECT_FALSE(exists(fromPath));
+    EXPECT_EQ(kTestAppUid, stat_uid(nestedDir.c_str()));
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Success_SecondaryUser) {
+    const std::string fromPath = StringPrintf("user/%d/from_copy", kSecondaryUserId);
+    const std::string toPath = StringPrintf("user/%d/to_copy", kSecondaryUserId);
+
+    system(StringPrintf("mkdir -p %s",
+                        get_full_path(StringPrintf("user/%d", kSecondaryUserId)).c_str())
+                   .c_str());
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kSecondaryAppUid, kSecondaryAppUid, 0700);
+    touch(fromPath + "/file.txt", kSecondaryAppUid, kSecondaryAppUid, 0600);
+    mkdir(toPath, kSecondaryAppUid, kSecondaryAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kSecondaryUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_copy"));
+    EXPECT_TRUE(exists(toPath + "/from_copy/file.txt"));
+    EXPECT_EQ(kSecondaryAppUid, stat_uid((toPath + "/from_copy/file.txt").c_str()));
+    EXPECT_TRUE(exists(fromPath));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Success_SecondaryUser) {
+    const std::string fromPath = StringPrintf("user/%d/from_move", kSecondaryUserId);
+    const std::string toPath = StringPrintf("user/%d/to_move", kSecondaryUserId);
+
+    system(StringPrintf("mkdir -p %s",
+                        get_full_path(StringPrintf("user/%d", kSecondaryUserId)).c_str())
+                   .c_str());
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    mkdir(fromPath, kSecondaryAppUid, kSecondaryAppUid, 0700);
+    touch(fromPath + "/file.txt", kSecondaryAppUid, kSecondaryAppUid, 0600);
+    mkdir(toPath, kSecondaryAppUid, kSecondaryAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kSecondaryUserId, kTestAppId, "default", 0, callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_SUCCESS);
+    EXPECT_TRUE(exists(toPath + "/from_move"));
+    EXPECT_TRUE(exists(toPath + "/from_move/file.txt"));
+    EXPECT_EQ(kSecondaryAppUid, stat_uid((toPath + "/from_move/file.txt").c_str()));
+    EXPECT_FALSE(exists(fromPath));
 }
 
 }  // namespace installd

@@ -16,8 +16,10 @@
 
 #include "VulkanInterface.h"
 
+#include <include/android/vk/AndroidVulkanMemoryAllocator.h>
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/vk/VulkanBackendContext.h>
+#include <include/gpu/vk/VulkanMemoryAllocator.h>
 
 #include <android-base/stringprintf.h>
 #include <common/ThreadStateCrashLogger.h>
@@ -34,7 +36,8 @@ namespace skia {
 
 using base::StringAppendF;
 
-VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
+VulkanBackendContext
+VulkanInterface::createSkiaVulkanBackendContext(bool threadSafeVMA) {
     VulkanBackendContext backendContext;
     backendContext.fInstance = mInstance;
     backendContext.fPhysicalDevice = mPhysicalDevice;
@@ -48,6 +51,8 @@ VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
     backendContext.fProtectedContext = mIsProtected ? Protected::kYes : Protected::kNo;
     backendContext.fDeviceLostContext = this; // VulkanInterface is long-lived
     backendContext.fDeviceLostProc = onVkDeviceFault;
+    SkiaVMA::Options opts{.fThreadSafe = threadSafeVMA};
+    backendContext.fMemoryAllocator = SkiaVMA::Make(backendContext, opts);
     return backendContext;
 };
 

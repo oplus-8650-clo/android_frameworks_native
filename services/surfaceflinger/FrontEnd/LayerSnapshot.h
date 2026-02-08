@@ -28,6 +28,8 @@
 #include "android-base/stringprintf.h"
 #include "compositionengine/LayerFE.h"
 
+struct RenderCommandBuffer;
+
 namespace android::surfaceflinger::frontend {
 
 struct RoundedCornerState {
@@ -153,7 +155,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     // True when the surfaceDamage is recognized as a small area update.
     bool isSmallDirty = false;
 
-    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+    std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
     sp<IBinder> renderResourceToken;
     // Populated when renderResourceToken changes.
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;

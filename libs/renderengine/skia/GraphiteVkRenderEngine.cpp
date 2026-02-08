@@ -119,13 +119,14 @@ std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
             graphitePersistentPipelineStorage(&driverVersion, sizeof(driverVersion),
                                               vulkanInterface.isProtected());
 
-    return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(),
-                                               persistentStorage,
-                                               SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
-                                                      mRuntimeEffectManager.mKnownEffects.size()),
-                                               vulkanInterface.isProtected()
-                                                       ? &mProtectedPipelineCallbackHandler
-                                                       : &mPipelineCallbackHandler);
+    return SkiaGpuContext::MakeVulkan_Graphite(
+        vulkanInterface.createSkiaVulkanBackendContext(/*threadSafeVMA=*/true),
+        persistentStorage,
+        SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
+                mRuntimeEffectManager.mKnownEffects.size()),
+        vulkanInterface.isProtected()
+                ? &mProtectedPipelineCallbackHandler
+                : &mPipelineCallbackHandler);
 }
 
 void GraphiteVkRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {

@@ -51,7 +51,8 @@ using namespace android::binder::impl;
 using android::binder::borrowed_fd;
 using android::binder::unique_fd;
 
-RpcSession::RpcSession(std::unique_ptr<RpcTransportCtx> ctx) : mCtx(std::move(ctx)) {
+RpcSession::RpcSession(std::unique_ptr<RpcTransportCtx> ctx, std::optional<uid_t> uid)
+      : mCtx(std::move(ctx)), mClientUid(uid) {
     LOG_RPC_DETAIL("RpcSession created %p", this);
 
     mRpcBinderState = std::make_unique<RpcState>();
@@ -72,7 +73,16 @@ sp<RpcSession> RpcSession::make() {
 sp<RpcSession> RpcSession::make(std::unique_ptr<RpcTransportCtxFactory> rpcTransportCtxFactory) {
     auto ctx = rpcTransportCtxFactory->newClientCtx();
     if (ctx == nullptr) return nullptr;
-    return sp<RpcSession>::make(std::move(ctx));
+    return sp<RpcSession>::make(std::move(ctx), std::nullopt);
+}
+
+bool RpcSession::getClientUid(uid_t* uid) const {
+    LOG_ALWAYS_FATAL_IF(uid == nullptr, "getClientUid requires a non-null uid pointer.");
+    if (mClientUid.has_value()) {
+        *uid = mClientUid.value();
+        return true;
+    }
+    return false;
 }
 
 void RpcSession::setMaxIncomingThreads(size_t threads) {

@@ -44,6 +44,13 @@
 
 namespace android {
 
+// Represents the overrides to the .idc properties for an input device. Typically, this is used for
+// virtual input devices which do not have any physical .idc file.
+struct InputDeviceConfigurationOverride {
+    std::optional<std::string> deviceType;
+    std::optional<InputDeviceViewBehavior> viewBehavior;
+};
+
 // --- InputReaderConfiguration ---
 
 /*
@@ -81,8 +88,8 @@ struct InputReaderConfiguration {
         // The set of disabled input devices (disabledDevices) has changed.
         ENABLED_STATE = 1u << 9,
 
-        // The device type has been updated.
-        DEVICE_TYPE = 1u << 10,
+        // The overrides for the .idc properties of the device have been updated.
+        DEVICE_CONFIGURATION_OVERRIDES = 1u << 10,
 
         // The keyboard layout association has changed.
         KEYBOARD_LAYOUT_ASSOCIATION = 1u << 11,
@@ -131,9 +138,11 @@ struct InputReaderConfiguration {
     // Used to determine which DisplayViewport should be tied to which InputDevice.
     std::unordered_map<std::string, std::string> inputDeviceDescriptorToDisplayUniqueIdAssociations;
 
-    // The associations between input device ports device types.
-    // This is used to determine which device type and source should be tied to which InputDevice.
-    std::unordered_map<std::string, std::string> deviceTypeAssociations;
+    // The associations between input device ports to overrides on .idc properties. Typically, these
+    // are used for virtual input devices which do not have any physical .idc file. If an input
+    // device has an actual physical .idc file, then this override would be ignored for that input
+    // device.
+    std::unordered_map<std::string, InputDeviceConfigurationOverride> deviceConfigurationOverrides;
 
     // The map from the input device physical port location to the input device layout info.
     // Can be used to determine the layout of the keyboard device.

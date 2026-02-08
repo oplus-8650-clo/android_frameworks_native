@@ -184,7 +184,7 @@ public:
         mIPCRecordingCanvas.startRecording();
         doDraw(&mIPCRecordingCanvas);
         mIPCRecordingCanvas.endRecording();
-        renderCommandBufferToCanvas(&mServerCache, &mRenderCommandBufferConsumer,
+        renderCommandBufferToCanvas(&mServerCache, mRenderCommandBufferConsumer.getCurrentBuffer(),
                                     mIPCCanvasBackend.canvas, [&](int) {});
     }
 
@@ -447,5 +447,38 @@ TEST_F(IPCRecordingCanvasTest, DrawVertices) {
     ASSERT_TRUE(compareRendering(drawVertices, "DrawVertices"));
 }
 #endif
+
+TEST_F(IPCRecordingCanvasTest, RenderTarget) {
+    const uint32_t width = 100;
+    const uint32_t height = 100;
+
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(width, height));
+
+    // Register in Server Cache
+    uint64_t bufferId = 1234;
+    mServerCache.bitmaps[bufferId] = IPCServerBitmap{nullptr, nullptr, surface};
+
+    // Register in Client Cache
+    uint32_t imageId = 5678;
+    mClientCache.bitmaps[imageId] = IPCClientBitmap{bufferId};
+
+    // Record
+    mIPCRecordingCanvas.startRecording();
+    mIPCRecordingCanvas.beginRenderTarget(bufferId);
+    mIPCRecordingCanvas.drawColor(SK_ColorRED);
+    mIPCRecordingCanvas.endRenderTarget();
+    mIPCRecordingCanvas.endRecording();
+
+    // Replay
+    renderCommandBufferToCanvas(&mServerCache, mRenderCommandBufferConsumer.getCurrentBuffer(),
+                                mIPCCanvasBackend.canvas, [&](int) {});
+
+    // Verify
+    sk_sp<SkSurface> expectedSurface =
+            SkSurfaces::Raster(SkImageInfo::MakeN32Premul(width, height));
+    expectedSurface->getCanvas()->clear(SK_ColorRED);
+
+    ASSERT_TRUE(compareSurfaces(expectedSurface, surface, "RenderTarget"));
+}
 
 } // namespace android

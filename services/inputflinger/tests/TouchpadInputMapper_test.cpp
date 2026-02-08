@@ -20,13 +20,12 @@
 #include <gtest/gtest.h>
 #include <input/AccelerationCurve.h>
 #include <input/Input.h>
+#include <input/ScopedFlagOverride.h>
 
 #include <log/log.h>
-#include <list>
 #include <optional>
 #include <thread>
 #include "InputMapperTest.h"
-#include "NotifyArgs.h"
 #include "TestConstants.h"
 #include "TestEventMatchers.h"
 #include "include/gestures.h"
@@ -440,6 +439,43 @@ TEST_F(TouchpadInputMapperTest, ThreeFingerSwipeDisabledDuringRelativeCapture) {
 
     ASSERT_THAT(getGestureProperty("Three Finger Swipe Enable")->getBoolValues(),
                 ElementsAre(true));
+}
+
+TEST_F(TouchpadInputMapperTest, ExitingAbsoluteCaptureCancelsFingers) {
+    SCOPED_FLAG_OVERRIDE(cancel_touches_on_absolute_capture_release, true);
+    // Enter absolute capture mode and put some fingers down.
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::ABSOLUTE;
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    process(EV_ABS, ABS_MT_SLOT, 0);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 1);
+    process(EV_ABS, ABS_MT_POSITION_X, 500);
+    process(EV_ABS, ABS_MT_POSITION_Y, 500);
+    process(EV_ABS, ABS_MT_SLOT, 1);
+    process(EV_ABS, ABS_MT_TRACKING_ID, 2);
+    process(EV_ABS, ABS_MT_POSITION_X, 800);
+    process(EV_ABS, ABS_MT_POSITION_Y, 500);
+    process(EV_KEY, BTN_TOUCH, 1);
+    process(EV_KEY, BTN_TOOL_DOUBLETAP, 1);
+    setScanCodeState(KeyState::DOWN, {BTN_TOUCH, BTN_TOOL_DOUBLETAP});
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectDeviceReset(WithDeviceId(DEVICE_ID));
+    mFakeListener.expectMotion(WithMotionAction(ACTION_DOWN));
+    mFakeListener.expectMotion(WithMotionAction(AMOTION_EVENT_ACTION_POINTER_DOWN |
+                                                (1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT)));
+
+    // Leave capture mode and check the state is reset.
+    mReaderConfiguration.pointerCaptureRequest.mode = PointerCaptureMode::UNCAPTURED;
+    reconfigureMapper(systemTime(SYSTEM_TIME_MONOTONIC), mReaderConfiguration,
+                      InputReaderConfiguration::Change::POINTER_CAPTURE);
+
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_CANCEL),
+                                     WithPointerCount(2), WithPointerCoords(0, 500, 500),
+                                     WithPointerCoords(1, 800, 500),
+                                     WithPointerToolType(0, ToolType::FINGER),
+                                     WithPointerToolType(1, ToolType::FINGER)));
+    mFakeListener.expectDeviceReset(WithDeviceId(DEVICE_ID));
 }
 
 TEST_F(TouchpadInputMapperTest, TouchpadHardwareState) {

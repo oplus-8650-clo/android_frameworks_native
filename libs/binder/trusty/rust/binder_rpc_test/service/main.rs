@@ -75,6 +75,9 @@ impl IBinderRpcTest for TestService {
         let ss = [s, s].concat();
         Ok(ss)
     }
+    fn getClientUid(&self) -> Result<i32, Status> {
+        Ok(-1)
+    }
     fn getClientPort(&self) -> Result<i32, Status> {
         Ok(self.port)
     }

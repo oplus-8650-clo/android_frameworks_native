@@ -1139,6 +1139,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetRenderBuffer) {
 
     IPCClientResourceCache clientCache;
     auto canvas = IPCRecordingCanvas(clientCache);
+    canvas.storeSize(layerSize, layerSize);
     canvas.startRecording();
     canvas.drawColor(0xFFB0E0E6, SkBlendMode::kSrc);
 
@@ -1232,6 +1233,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
 
     // Command recording
     auto canvas = IPCRecordingCanvas(clientCache);
+    canvas.storeSize(width, height);
     canvas.startRecording();
     canvas.drawImage(image.get(), 0, 0, SkSamplingOptions());
     canvas.endRecording();
@@ -1249,6 +1251,83 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
     // Verify output
     auto shot = getScreenCapture();
     shot->expectBufferMatchesImageFromFile(Rect(0, 0, width, height), "testdata/DrawFractal.png");
+
+    // Unregister the buffer
+    gui::GraphicBuffersUnregisterInfo unregisterInfo;
+    unregisterInfo.renderResourceToken = renderResourceToken;
+    unregisterInfo.bufferIds.push_back(buffer->getId());
+    ComposerServiceAIDL::getComposerService()->unregisterGraphicBuffers(unregisterInfo);
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBufferRenderTarget) {
+    if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
+        return;
+    }
+
+    const uint32_t width = 256;
+    const uint32_t height = 256;
+
+    sp<SurfaceControl> layer;
+    ASSERT_NO_FATAL_FAILURE(layer = createLayer("renderTargetLayer", width, height));
+
+    // Create GraphicBuffer with HW_TEXTURE | HW_RENDER
+    sp<GraphicBuffer> buffer = sp<GraphicBuffer>::make(width, height, PIXEL_FORMAT_RGBA_8888, 1,
+                                                       GraphicBuffer::USAGE_HW_TEXTURE |
+                                                               GraphicBuffer::USAGE_HW_RENDER |
+                                                               GraphicBuffer::USAGE_SW_WRITE_OFTEN,
+                                                       "renderTargetBuffer");
+    ASSERT_NE(nullptr, buffer);
+
+    sk_sp<SkImage> image =
+            SkImages::DeferredFromAHardwareBuffer(buffer->toAHardwareBuffer(), kOpaque_SkAlphaType);
+
+    // Register the buffer with SurfaceFlinger
+    auto renderResourceToken = sp<BBinder>::make();
+    gui::GraphicBuffersRegisterInfo registerInfo;
+    registerInfo.renderResourceToken = renderResourceToken;
+    registerInfo.buffers.push_back(buffer);
+    ComposerServiceAIDL::getComposerService()->registerGraphicBuffers(registerInfo);
+
+    // Populate the cache
+    IPCClientResourceCache clientCache;
+    uint32_t imageId = image->uniqueID();
+    clientCache.bitmaps[imageId] = IPCClientBitmap{buffer->getId()};
+
+    auto canvas = IPCRecordingCanvas(clientCache);
+    canvas.storeSize(width, height);
+    canvas.startRecording();
+
+    // Draw a pretty picture offscreen
+    canvas.beginRenderTarget(buffer->getId());
+    canvas.drawColor(0xFFFDF5E6);
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    paint.setColor(0xFFFF7F50);
+    canvas.drawCircle(width / 3.0f, height / 3.0f, 60, paint);
+    paint.setColor(0xFF4682B4);
+    canvas.drawCircle(2 * width / 3.0f, 2 * height / 3.0f, 80, paint);
+    paint.setColor(0xFFFFD700);
+    canvas.drawCircle(width / 2.0f, height / 2.0f, 40, paint);
+    canvas.endRenderTarget();
+
+    // Draw the result of the render target onto the main canvas
+    canvas.drawColor(SK_ColorWHITE);
+    canvas.drawImage(image.get(), 0, 0, SkSamplingOptions());
+
+    canvas.endRecording();
+
+    // Set buffer and apply transaction
+    Transaction()
+            .setLayer(layer, mLayerZBase + 1)
+            .setRenderResourceToken(layer, renderResourceToken)
+            .setCrop(layer, Rect(0, 0, width, height))
+            .setRenderCommandBuffer(layer, canvas.getRenderCommandBufferProducer())
+            .setRenderCommandBufferFrameId(layer, 1)
+            .apply(true);
+
+    auto shot = getScreenCapture();
+    shot->expectBufferMatchesImageFromFile(Rect(0, 0, width, height),
+                                           "testdata/RegisterGraphicBufferRenderTarget.png");
 
     // Unregister the buffer
     gui::GraphicBuffersUnregisterInfo unregisterInfo;

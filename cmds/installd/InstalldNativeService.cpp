@@ -16,6 +16,7 @@
 
 #include "InstalldNativeService.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fts.h>
 #include <inttypes.h>
@@ -84,6 +85,7 @@
 
 #define GRANULAR_LOCKS
 
+using android::base::Fdopendir;
 using android::base::ParseUint;
 using android::base::Split;
 using android::base::StringPrintf;
@@ -4419,6 +4421,357 @@ binder::Status InstalldNativeService::enableFsverity(const sp<IFsveritySetupAuth
     } else {
         *_aidl_return = 0;
     }
+    return ok();
+}
+
+// PinnedPath holds an opened file descriptor to the parent directory of a path
+// that has been verified to not contain any symlinks. This allows users of this
+// structure to safely perform operations on the full path, by only having to verify
+// that the basename itself is not a symlink.
+//
+// fd: file descriptor to the parent directory.
+// name: basename of the file/directory within that parent.
+// path: the full absolute path as a string (primarily for logging).
+// appDataPath: the full absolute path of the app's data directory
+struct PinnedPath {
+    android::base::unique_fd fd;
+    std::string name;
+    std::string path;
+    std::string appDataPath;
+};
+
+static std::optional<PinnedPath> verify_app_data_source(
+        const std::optional<std::string>& uuid, const std::string& from, int userId,
+        std::function<void(int, const std::string&)> notifyError) {
+    const char* uuid_ptr = uuid ? uuid->c_str() : nullptr;
+    auto [root, suffix] = split_app_data_path(uuid_ptr, userId, from);
+    if (root.empty() || suffix.empty()) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to split app data path: " + from);
+        return std::nullopt;
+    }
+
+    std::string appDataPath = root;
+    if (suffix.size() > 1 && suffix[0] == '/') {
+        size_t pos = suffix.find('/', 1);
+        if (pos != std::string::npos) {
+            appDataPath += suffix.substr(0, pos);
+        } else {
+            appDataPath += suffix;
+        }
+    }
+
+    struct stat st;
+    if (stat(appDataPath.c_str(), &st) != 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "App data root does not exist: " + appDataPath);
+        return std::nullopt;
+    }
+
+    std::string baseName;
+    android::base::unique_fd dfd = open_parent_recursive(from, root, &baseName);
+    if (dfd.get() < 0) {
+        if (errno == ENOENT) {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source does not exist");
+        } else {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                        "Failed to open source parent dir: " + from + ": " + strerror(errno));
+        }
+        return std::nullopt;
+    }
+
+    // Final check for the last component
+    if (fstatat(dfd.get(), baseName.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source does not exist");
+        } else {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Failed to stat source");
+        }
+        return std::nullopt;
+    }
+
+    if (S_ISLNK(st.st_mode)) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source is a symbolic link");
+        return std::nullopt;
+    }
+
+    return PinnedPath{std::move(dfd), baseName, from, appDataPath};
+}
+
+static std::optional<PinnedPath> setup_app_data_target(
+        const std::optional<std::string>& uuid, const std::string& from, const std::string& to,
+        int32_t userId, int32_t uid, std::function<void(int, const std::string&)> notifyError) {
+    const char* uuid_ = uuid ? uuid->c_str() : nullptr;
+    auto [root, suffix] = split_app_data_path(uuid_, userId, to);
+    if (root.empty() || suffix.empty()) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to split app data path: " + to);
+        return std::nullopt;
+    }
+
+    std::string appDataPath = root;
+    if (suffix.size() > 1 && suffix[0] == '/') {
+        size_t pos = suffix.find('/', 1);
+        if (pos != std::string::npos) {
+            appDataPath += suffix.substr(0, pos);
+        } else {
+            appDataPath += suffix;
+        }
+    }
+
+    struct stat st;
+    if (stat(appDataPath.c_str(), &st) != 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "App data root does not exist: " + appDataPath);
+        return std::nullopt;
+    }
+    mode_t mode = 0771;
+
+    android::base::unique_fd dfd = mkdirs_recursive(to, root, uid, uid, mode);
+    if (dfd.get() < 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to create dest dir: " + to + ": " + strerror(errno));
+        return std::nullopt;
+    }
+
+    std::string baseName = android::base::Basename(from);
+    return PinnedPath{std::move(dfd), baseName, to + "/" + baseName, appDataPath};
+}
+
+static void copy_app_data_recursive(int src_dfd, int dst_dfd, const char* name,
+                                    const std::string& absolute_path, uid_t uid,
+                                    std::vector<std::string>* failed_files) {
+    auto fail = [&](const char* msg) {
+        PLOG(WARNING) << msg << " " << name;
+        failed_files->push_back(absolute_path);
+    };
+
+    struct stat st;
+    if (fstatat(src_dfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        fail("Failed to stat");
+        return;
+    }
+
+    if (S_ISLNK(st.st_mode)) return;
+
+    if (S_ISDIR(st.st_mode)) {
+        if (mkdirat(dst_dfd, name, st.st_mode & 07777) != 0 && errno != EEXIST) {
+            fail("Failed to mkdirat");
+            return;
+        }
+        unique_fd sub_src_fd(
+                openat(src_dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (sub_src_fd.get() < 0) {
+            fail("Failed to openat src");
+            return;
+        }
+        unique_fd sub_dst_fd(
+                openat(dst_dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (sub_dst_fd.get() < 0) {
+            fail("Failed to openat dst");
+            return;
+        }
+        bool failed = false;
+        if (fchown(sub_dst_fd.get(), uid, uid) != 0) {
+            PLOG(WARNING) << "Failed to fchown " << absolute_path;
+            failed = true;
+        }
+        if (fchmod(sub_dst_fd.get(), st.st_mode & 07777) != 0) {
+            PLOG(WARNING) << "Failed to fchmod " << absolute_path;
+            failed = true;
+        }
+        if (failed) {
+            failed_files->push_back(absolute_path);
+        }
+
+        DIR* d = Fdopendir(std::move(sub_src_fd));
+        if (d == nullptr) {
+            PLOG(WARNING) << "Failed to fdopendir";
+            failed_files->push_back(absolute_path);
+            return;
+        }
+        struct dirent* de;
+        while ((de = readdir(d))) {
+            const char* child_name = de->d_name;
+            if (strcmp(child_name, ".") == 0 || strcmp(child_name, "..") == 0) continue;
+            std::string child_absolute_path = absolute_path + "/" + child_name;
+            copy_app_data_recursive(dirfd(d), sub_dst_fd.get(), child_name, child_absolute_path,
+                                    uid, failed_files);
+        }
+        closedir(d);
+    } else if (S_ISREG(st.st_mode)) {
+        unique_fd file_src_fd(openat(src_dfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (file_src_fd.get() < 0) {
+            fail("Failed to openat src file");
+            return;
+        }
+        unique_fd file_dst_fd(
+                openat(dst_dfd, name, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600));
+        if (file_dst_fd.get() < 0) {
+            fail("Failed to openat dst file");
+            return;
+        }
+        if (!copy_simple_file(file_src_fd.get(), file_dst_fd.get(), uid, uid, st.st_mode,
+                              st.st_size, [&](const char* msg) { fail(msg); })) {
+            return;
+        }
+    }
+}
+
+static void copy_app_data(const std::optional<std::string>& uuid, const std::string& from,
+                          const std::string& to, int32_t userId, int32_t appId,
+                          const std::string& seInfo, int32_t flags,
+                          android::sp<IAppDataOperationCallback> callback) {
+    (void)flags;
+
+    auto notifyStatus = [&](int status, const std::string& msg,
+                            const std::vector<std::string>& failedFiles) {
+        if (callback) {
+            std::vector<std::optional<std::string>> aidlFailedFiles;
+            for (const auto& f : failedFiles) {
+                aidlFailedFiles.push_back(std::make_optional(f));
+            }
+            callback->onStatusChanged(status, msg, std::make_optional(aidlFailedFiles));
+        }
+    };
+    auto notifyError = [&](int s, const std::string& m) { notifyStatus(s, m, {from}); };
+
+    uid_t uid = multiuser_get_uid(userId, appId);
+
+    notifyStatus(IAppDataOperationCallback::STATUS_RUNNING, "", {});
+
+    // See comments on move_app_data below for security considerations
+    auto source = verify_app_data_source(uuid, from, userId, notifyError);
+    if (!source) return;
+
+    auto target = setup_app_data_target(uuid, from, to, userId, uid, notifyError);
+    if (!target) return;
+
+    std::vector<std::string> failed_files;
+    copy_app_data_recursive(source->fd.get(), target->fd.get(), source->name.c_str(), from, uid,
+                            &failed_files);
+
+    if (selinux_android_restorecon_pkgdir(target->appDataPath.c_str(), seInfo.c_str(), uid,
+                                          SELINUX_ANDROID_RESTORECON_RECURSE) < 0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Restorecon failed", failed_files);
+    } else if (!failed_files.empty()) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Some files failed to copy",
+                     failed_files);
+    } else {
+        notifyStatus(IAppDataOperationCallback::STATUS_SUCCESS, "", failed_files);
+    }
+}
+
+static void move_app_data(const std::optional<std::string>& uuid, const std::string& from,
+                          const std::string& to, int32_t userId, int32_t appId,
+                          const std::string& seInfo, int32_t flags,
+                          android::sp<IAppDataOperationCallback> callback) {
+    (void)flags;
+
+    auto notifyStatus = [&](int status, const std::string& msg,
+                            const std::vector<std::string>& failedFiles) {
+        if (callback) {
+            std::vector<std::optional<std::string>> aidlFailedFiles;
+            for (const auto& f : failedFiles) {
+                aidlFailedFiles.push_back(std::make_optional(f));
+            }
+            callback->onStatusChanged(status, msg, std::make_optional(aidlFailedFiles));
+        }
+    };
+    auto notifyError = [&](int s, const std::string& m) { notifyStatus(s, m, {from}); };
+
+    uid_t uid = multiuser_get_uid(userId, appId);
+
+    notifyStatus(IAppDataOperationCallback::STATUS_RUNNING, "", {});
+
+    // Moving app data by a highly privileged component like installd is a delicate operation.
+    // The main risk stems from the fact that unprivileged apps are allowed to use symlinks.
+    // This can create attack vectors such as the app having a file in its own data directory
+    // point to a file belonging to another app, and then having installd 'migrate' it,
+    // thereby granting the package access to the file.
+    //
+    // The code here prevents that by the following:
+    //
+    // 1. It verifies the source path is normalized and does not contain any symlinks;
+    //    it does that using file-descriptor pinning, which prevents TOCTOU attacks - eg
+    //    a file being changed to a symlink *after* we'd concluced that it wasn't a symlink
+    //
+    // 2. It sets up the target path in much the same way - creating directories when needed,
+    //    but never following any symlinks.
+    //
+    // 3. We must recursively chown the target path to the correct uid; again,
+    //    we carefully traverse the path to not follow any symlinks.
+    //
+    // 4. Finally, selinux_android_restorecon is called; since restorecon itself resolves
+    //    paths fully, it will just apply the correct context according to the path and the
+    //    passed in label.
+    //
+    // Note that we do fully trust the passed in paths and appId parameters, as this is only
+    // callable from system UIDs. The thing we cannot trust is the files under those paths.
+
+    // Verify the source
+    auto source = verify_app_data_source(uuid, from, userId, notifyError);
+    if (!source) return;
+
+    // Setup the target
+    auto target = setup_app_data_target(uuid, from, to, userId, uid, notifyError);
+    if (!target) return;
+
+    // Do an atomic rename
+    if (renameat(source->fd.get(), source->name.c_str(), target->fd.get(), source->name.c_str()) !=
+        0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE,
+                     "Rename failed: " + std::string(strerror(errno)), {from});
+        return;
+    }
+
+    // Fix up the permissions recursively
+    std::vector<std::string> failed_files;
+    {
+        android::base::unique_fd fd(
+                openat(target->fd.get(), source->name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (fd.get() >= 0) {
+            chown_recursive(fd.get(), uid, uid, target->path, &failed_files);
+        } else {
+            PLOG(WARNING) << "Failed to open moved data for chown";
+            failed_files.push_back(target->path);
+        }
+    }
+
+    if (selinux_android_restorecon_pkgdir(target->appDataPath.c_str(), seInfo.c_str(), uid,
+                                          SELINUX_ANDROID_RESTORECON_RECURSE) < 0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Restorecon failed", failed_files);
+    } else if (!failed_files.empty()) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Some files failed to chown",
+                     failed_files);
+    } else {
+        notifyStatus(IAppDataOperationCallback::STATUS_SUCCESS, "", failed_files);
+    }
+}
+
+binder::Status InstalldNativeService::copyAppDataPath(
+        const std::optional<std::string>& uuid, const std::string& fromPath,
+        const std::string& toPath, int32_t userId, int32_t appId, const std::string& seInfo,
+        int32_t flags, const android::sp<IAppDataOperationCallback>& callback) {
+    ENFORCE_UID(AID_SYSTEM);
+    CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_PATH(fromPath);
+    CHECK_ARGUMENT_PATH(toPath);
+    std::thread t(copy_app_data, uuid, fromPath, toPath, userId, appId, seInfo, flags, callback);
+    t.detach();
+    return ok();
+}
+
+binder::Status InstalldNativeService::moveAppDataPath(
+        const std::optional<std::string>& uuid, const std::string& fromPath,
+        const std::string& toPath, int32_t userId, int32_t appId, const std::string& seInfo,
+        int32_t flags, const android::sp<IAppDataOperationCallback>& callback) {
+    ENFORCE_UID(AID_SYSTEM);
+    CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_PATH(fromPath);
+    CHECK_ARGUMENT_PATH(toPath);
+    std::thread t(move_app_data, uuid, fromPath, toPath, userId, appId, seInfo, flags, callback);
+    t.detach();
     return ok();
 }
 

@@ -110,8 +110,11 @@ public:
         return mCompositionDisplay;
     }
 
-    bool isVirtual() const;
     bool isPrimary() const { return mIsPrimary; }
+
+    bool isPhysical() const { return !isVirtual(); }
+    bool isVirtual() const;
+
     bool isGpuVirtualDisplay() const {
         return std::holds_alternative<GpuVirtualDisplayId>(getDisplayIdVariant());
     }
