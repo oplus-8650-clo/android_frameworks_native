@@ -11,6 +11,16 @@ flag {
 } # adpf_gpu_sf
 
 flag {
+  name: "align_adpf_with_sf_opt_policy"
+  namespace: "window_surfaces"
+  description: "Align ADPF with SF optimization policy"
+  bug: "477953599"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # align_adpf_with_sf_opt_policy
+
+flag {
   name: "arr_setframerate_api"
   namespace: "core_graphics"
   description: "New SDK Surface#setFrameRate API and Surface.FrameRateParams for Android 16"

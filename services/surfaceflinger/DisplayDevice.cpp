@@ -345,7 +345,8 @@ void DisplayDevice::dump(utils::Dumper& dumper) const {
 
     dumper.dump("name"sv, '"' + mDisplayName + '"');
     dumper.dump("powerMode"sv, mPowerMode);
-    dumper.dump("optimizationPolicy"sv, mOptimizationPolicy);
+    dumper.dump("forceOptimizationPolicyForPower"sv, mForceOptimizationPolicyForPower);
+    dumper.dump("optimizationPolicy"sv, getOptimizationPolicy());
 
     if (mRefreshRateSelector) {
         mRefreshRateSelector->dump(dumper);
@@ -373,12 +374,17 @@ void DisplayDevice::setSecure(bool secure) {
 }
 
 gui::ISurfaceComposer::OptimizationPolicy DisplayDevice::getOptimizationPolicy() const {
-    return mOptimizationPolicy;
+    if (mForceOptimizationPolicyForPower) {
+        return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower;
+    }
+    if (mFlags & eOptimizationPolicyPower) {
+        return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower;
+    }
+    return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPerformance;
 }
 
-void DisplayDevice::setOptimizationPolicy(
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy) {
-    mOptimizationPolicy = optimizationPolicy;
+void DisplayDevice::enableForceOptimizationPolicyForPower() {
+    mForceOptimizationPolicyForPower = true;
 }
 
 const Rect DisplayDevice::getBounds() const {

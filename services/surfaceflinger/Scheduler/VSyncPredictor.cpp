@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <numeric>
 #include <sstream>
 
@@ -146,6 +147,8 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp, VsyncTimeSource source
     SFTRACE_CALL();
 
     std::lock_guard lock(mMutex);
+
+    calculateVsyncStability(timestamp);
 
     if (!validate(timestamp)) {
         // VSR could elect to ignore the incongruent timestamp or resetModel(). If ts is ignored,
@@ -668,6 +671,8 @@ void VSyncPredictor::clearTimestamps(bool clearTimelines) {
         mLastTimestampIndex = 0;
     }
 
+    mVsyncErrors.clear();
+
     mIdealPeriod = Period::fromNs(idealPeriod());
     if (mTimelines.empty()) {
         mLastCommittedVsync = TimePoint::fromNs(0);
@@ -690,6 +695,60 @@ void VSyncPredictor::clearTimestamps(bool clearTimelines) {
 bool VSyncPredictor::needsMoreSamples() const {
     std::lock_guard lock(mMutex);
     return mTimestamps.size() < getMinSamplesRequiredForPrediction();
+}
+
+void VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) {
+    // Find the most recent valid timestamp as a reference point for the interval.
+    nsecs_t lastTimestamp = 0;
+    if (!mTimestamps.empty()) {
+        lastTimestamp = mTimestamps[mLastTimestampIndex];
+    } else if (mKnownTimestamp) {
+        lastTimestamp = *mKnownTimestamp;
+    }
+
+    if (lastTimestamp != 0) {
+        // If this is the first sample after a long idle period, the delta will be large and
+        // the stability calculation will be meaningless. Clear the history in this case.
+        if (!isVsyncWithinThreshold(timestamp, lastTimestamp)) {
+            mVsyncErrors.clear();
+            return;
+        }
+
+        const nsecs_t delta = timestamp - lastTimestamp;
+        const nsecs_t ideal = idealPeriod();
+        if (ideal > 0) {
+            // Normalization. Find the nearest multiple of the ideal period that fits into the
+            // observed delta.
+            const int64_t n = (delta + ideal / 2) / ideal;
+            if (n > 0) {
+                // Calculate the variance between the observed timestamp and the theoretical ideal.
+                const nsecs_t error = delta - (n * ideal);
+                traceInt64("VSP-HwErrorNs", error);
+
+                // Only use consecutive samples (n == 1) for the stability metric.
+                // This isolates immediate jitter from cumulative drift over skipped frames (n > 1).
+                if (n == 1) {
+                    mVsyncErrors.next() = error;
+
+                    // Calculate Standard Deviation. High stddev indicates an inconsistent or
+                    // jittery hardware signal, which makes prediction models unreliable.
+                    if (mVsyncErrors.size() >= kAbsoluteMinSamplesForPrediction) {
+                        double sum = 0;
+                        for (size_t i = 0; i < mVsyncErrors.size(); i++) {
+                            sum += static_cast<double>(mVsyncErrors[i]);
+                        }
+                        const double mean = sum / mVsyncErrors.size();
+                        double sumSqDiff = 0;
+                        for (size_t i = 0; i < mVsyncErrors.size(); i++) {
+                            sumSqDiff += std::pow(static_cast<double>(mVsyncErrors[i]) - mean, 2);
+                        }
+                        const double stddev = std::sqrt(sumSqDiff / mVsyncErrors.size());
+                        traceInt64("VSP-StabStdNs", static_cast<int64_t>(stddev));
+                    }
+                }
+            }
+        }
+    }
 }
 
 void VSyncPredictor::resetModel() {

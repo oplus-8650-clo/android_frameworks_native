@@ -28,6 +28,8 @@
 #pragma clang diagnostic pop
 #include <SkColorSpace.h>
 #include <SkImage.h>
+#include <SkRuntimeEffect.h>
+#include <SkString.h>
 #include <android/hardware_buffer.h>
 #include <android/ipcrenderbuffer/RenderBufferHelpers.h>
 #include <gui/GraphicBuffersRegisterInfo.h>
@@ -1170,6 +1172,61 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, SetRenderBuffer) {
     auto shot = getScreenCapture();
     shot->expectBufferMatchesImageFromFile(Rect(0, 0, layerSize, layerSize),
                                            "testdata/SetRenderBuffer.png");
+}
+
+TEST_P(LayerTypeAndRenderTypeTransactionTest, SetRenderBufferWithShader) {
+    if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
+        return;
+    }
+
+    const uint32_t layerSize = 256;
+    sp<SurfaceControl> layer;
+    ASSERT_NO_FATAL_FAILURE(layer = createLayer("shader layer", 0, 0));
+
+    IPCClientResourceCache clientCache;
+    auto canvas = IPCRecordingCanvas(clientCache);
+    canvas.storeSize(layerSize, layerSize);
+
+    // Animate over 3 frames
+    canvas.startRecording();
+    canvas.drawColor(SK_ColorBLACK);
+
+    auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(R"(
+        uniform float2 iResolution;
+        vec4 main(vec2 fragCoord) {
+            vec2 uv = fragCoord / iResolution.xy;
+            float v = 0.0;
+            vec2 c = uv * 2.0 - 1.0;
+            v += sin((c.x));
+            v += sin((c.y)/2.0);
+            v += sin((c.x+c.y)/2.0);
+            v += sqrt(c.x*c.x+c.y*c.y+1.0);
+            v = v/2.0;
+            vec3 col = vec3(sin(3.14*v), cos(3.14*v), -sin(3.14*v));
+            return vec4(col * 0.5 + 0.5, 1.0);
+        }
+    )"));
+    ASSERT_NE(nullptr, effect);
+
+    SkRuntimeShaderBuilder builder(effect);
+    builder.uniform("iResolution") = SkV2{(float)layerSize, (float)layerSize};
+
+    SkPaint paint;
+    paint.setShader(builder.makeShader());
+    canvas.drawRect(SkRect::MakeWH(layerSize, layerSize), paint);
+    canvas.endRecording();
+
+    Transaction()
+            .setLayer(layer, mLayerZBase + 1)
+            .setRenderCommandBuffer(layer, canvas.getRenderCommandBufferProducer())
+            .setRenderCommandBufferFrameId(layer, 1)
+            .setCrop(layer, Rect(0, 0, layerSize, layerSize))
+            .apply(true);
+
+    // Verify output
+    auto shot = getScreenCapture();
+    shot->expectBufferMatchesImageFromFile(Rect(0, 0, layerSize, layerSize),
+                                           "testdata/SetRenderBufferWithShader.png");
 }
 
 TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
