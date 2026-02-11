@@ -26,8 +26,6 @@
 #include <SurfaceFlingerProperties.h>
 #include <android-base/properties.h>
 #include <android/dlext.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <configstore/Utils.h>
 #include <graphicsenv/GraphicsEnv.h>
 #include <log/log.h>
 #include <sys/prctl.h>
@@ -44,8 +42,6 @@
 #include <com_android_graphics_libvulkan_flags.h>
 #include "stubhal.h"
 
-using namespace android::hardware::configstore;
-using namespace android::hardware::configstore::V1_0;
 using namespace com::android::graphics::libvulkan;
 
 extern "C" android_namespace_t* android_get_exported_namespace(const char*);

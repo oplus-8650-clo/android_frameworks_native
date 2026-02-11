@@ -20,12 +20,10 @@
 #include <android/gui/IActivePictureListener.h>
 #include <android/gui/IDisplayEventConnection.h>
 #include <android/gui/ISurfaceComposer.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
 #include <android/hardware_buffer.h>
 #include <android/native_window.h>
 #include <binder/ProcessState.h>
 #include <com_android_graphics_libgui_flags.h>
-#include <configstore/Utils.h>
 #include <gui/AidlUtil.h>
 #include <gui/BufferItemConsumer.h>
 #include <gui/BufferQueue.h>
@@ -70,9 +68,6 @@
 namespace android {
 
 using namespace std::chrono_literals;
-// retrieve wide-color and hdr settings from configstore
-using namespace android::hardware::configstore;
-using namespace android::hardware::configstore::V1_0;
 using aidl::android::hardware::graphics::common::DisplayDecorationSupport;
 using gui::IDisplayEventConnection;
 using gui::IRegionSamplingListener;

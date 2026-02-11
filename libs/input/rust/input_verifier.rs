@@ -239,13 +239,14 @@ impl InputVerifier {
 
     /// Process a pointer movement event from an InputDevice.
     /// If the event is not valid, we return an error string that describes the issue.
-    pub fn process_movement(&mut self, event: NotifyMotionArgs<'_>) -> Result<(), String> {
+    /// On success, returns true if the verifier is now empty (no pointers touching or hovering).
+    pub fn process_movement(&mut self, event: NotifyMotionArgs<'_>) -> Result<bool, String> {
         let is_captured_source = self.verify_captured_events
             && (event.source.is_from_class(SourceClass::Position)
                 || event.source == Source::MouseRelative);
         if !(event.source.is_from_class(SourceClass::Pointer) || is_captured_source) {
             // Skip unsupported source types.
-            return Ok(());
+            return Ok(self.is_empty());
         }
         if self.should_log {
             info!(
@@ -443,7 +444,13 @@ impl InputVerifier {
         if verify_down_time {
             self.down_time_by_device.insert(event.device_id, event.down_time_nanos);
         }
-        Ok(())
+        Ok(self.is_empty())
+    }
+
+    /// Returns true if there are no touching pointers and no hovering pointers for any device.
+    pub fn is_empty(&self) -> bool {
+        self.touching_pointer_ids_by_device.is_empty()
+            && self.hovering_pointer_ids_by_device.is_empty()
     }
 
     /// Notify the verifier that the device has been reset, which will cause the verifier to erase
@@ -523,6 +530,53 @@ mod tests {
             "Test", /*should_log*/ false, /*verify_buttons*/ true,
             /*verify_down_times*/ true, /*verify_captured_events*/ true,
         )
+    }
+
+    #[test]
+    /**
+     * The function is_empty() should return false if there is currently a touching or a hovering
+     * pointer, and return true if there aren't any active gestures.
+     */
+    fn is_empty() {
+        let mut verifier = make_test_verifier();
+        assert!(verifier.is_empty());
+
+        let pointer_properties = Vec::from([RustPointerProperties { id: 0 }]);
+        let result = verifier.process_movement(NotifyMotionArgs {
+            action: MotionAction::Down,
+            pointer_properties: &pointer_properties,
+            ..BASE_EVENT
+        });
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+        assert!(!verifier.is_empty());
+
+        let result = verifier.process_movement(NotifyMotionArgs {
+            action: MotionAction::Up,
+            pointer_properties: &pointer_properties,
+            ..BASE_EVENT
+        });
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        assert!(verifier.is_empty());
+
+        let result = verifier.process_movement(NotifyMotionArgs {
+            action: MotionAction::HoverEnter,
+            pointer_properties: &pointer_properties,
+            ..BASE_EVENT
+        });
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+        assert!(!verifier.is_empty());
+
+        let result = verifier.process_movement(NotifyMotionArgs {
+            action: MotionAction::HoverExit,
+            pointer_properties: &pointer_properties,
+            ..BASE_EVENT
+        });
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        assert!(verifier.is_empty());
     }
 
     #[test]

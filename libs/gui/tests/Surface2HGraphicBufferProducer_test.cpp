@@ -839,4 +839,167 @@ TEST_F(Surface2HGraphicBufferProducerTest, DetachNextBuffer_NoFreeBuffer_Returns
     EXPECT_EQ(HStatus::NO_MEMORY, status);
 }
 
+// Native Method Tests
+
+TEST_F(Surface2HGraphicBufferProducerTest, GetConsumerUsage_Succeeds) {
+    uint64_t usage = 0;
+    status_t status = mHGBP->getConsumerUsage(&usage);
+    EXPECT_EQ(NO_ERROR, status);
+    EXPECT_EQ(kDefaultUsage, usage);
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, GetConsumerUsage_InvalidArgs) {
+    status_t status = mHGBP->getConsumerUsage(nullptr);
+    EXPECT_EQ(BAD_VALUE, status);
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, AttachGraphicBuffer_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+    status_t status = mHGBP->attachGraphicBuffer(&slot, buffer);
+    EXPECT_EQ(NO_ERROR, status);
+    EXPECT_GE(slot, 0);
+    EXPECT_LT(slot, BufferQueueDefs::NUM_BUFFER_SLOTS);
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, AttachGraphicBuffer_InvalidArgs) {
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+
+    EXPECT_EQ(BAD_VALUE, mHGBP->attachGraphicBuffer(nullptr, buffer));
+    EXPECT_EQ(BAD_VALUE, mHGBP->attachGraphicBuffer(&slot, nullptr));
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, QueueGraphicBuffer_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+    ASSERT_EQ(NO_ERROR, mHGBP->attachGraphicBuffer(&slot, buffer));
+
+    SurfaceQueueBufferInput input;
+    input.timestamp = 12345;
+    input.isAutoTimestamp = 0;
+    input.dataSpace = HAL_DATASPACE_UNKNOWN;
+    input.crop = Rect(1, 1);
+    input.transform = 0;
+    input.fence = Fence::NO_FENCE;
+
+    SurfaceQueueBufferOutput output;
+    status_t status = mHGBP->queueGraphicBuffer(slot, input, &output);
+    EXPECT_EQ(NO_ERROR, status);
+
+    BufferItem item;
+    EXPECT_EQ(NO_ERROR, mConsumer->acquireBuffer(&item, 0));
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, CancelBufferSimple_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+    ASSERT_EQ(NO_ERROR, mHGBP->attachGraphicBuffer(&slot, buffer));
+
+    status_t status = mHGBP->cancelBufferSimple(slot, Fence::NO_FENCE);
+    EXPECT_EQ(NO_ERROR, status);
+}
+
+// Interaction Tests
+
+TEST_F(Surface2HGraphicBufferProducerTest, NativeAttach_HidlQueue_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+    ASSERT_EQ(NO_ERROR, mHGBP->attachGraphicBuffer(&slot, buffer));
+
+    HGraphicBufferProducer::QueueBufferInput qInput{};
+    qInput.timestamp = 12345;
+    qInput.isAutoTimestamp = false;
+    qInput.dataSpace = static_cast<int32_t>(HDataSpace::UNKNOWN);
+    qInput.crop[0] = 0;
+    qInput.crop[1] = 0;
+    qInput.crop[2] = 1;
+    qInput.crop[3] = 1;
+    qInput.transform = 0;
+    qInput.fence = ::android::hardware::hidl_handle();
+
+    auto [queueBufferStatus, queueBufferOutput] = queueBuffer(slot, qInput);
+    EXPECT_EQ(HStatus::OK, queueBufferStatus);
+
+    BufferItem item;
+    EXPECT_EQ(NO_ERROR, mConsumer->acquireBuffer(&item, 0));
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, HidlDequeue_NativeQueue_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    HGraphicBufferProducer::DequeueBufferInput input{};
+    input.width = 1;
+    input.height = 1;
+    auto [dequeueStatus, slot, dequeueOutput] = dequeueBuffer(input);
+    ASSERT_EQ(HStatus::OK, dequeueStatus);
+
+    SurfaceQueueBufferInput qInput;
+    qInput.timestamp = 12345;
+    qInput.isAutoTimestamp = 0;
+    qInput.dataSpace = HAL_DATASPACE_UNKNOWN;
+    qInput.crop = Rect(1, 1);
+    qInput.transform = 0;
+    qInput.fence = Fence::NO_FENCE;
+
+    SurfaceQueueBufferOutput output;
+    status_t status = mHGBP->queueGraphicBuffer(slot, qInput, &output);
+    EXPECT_EQ(NO_ERROR, status);
+
+    BufferItem item;
+    EXPECT_EQ(NO_ERROR, mConsumer->acquireBuffer(&item, 0));
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, HidlDequeue_NativeCancel_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    HGraphicBufferProducer::DequeueBufferInput input{};
+    input.width = 1;
+    input.height = 1;
+    auto [dequeueStatus, slot, dequeueOutput] = dequeueBuffer(input);
+    ASSERT_EQ(HStatus::OK, dequeueStatus);
+
+    status_t status = mHGBP->cancelBufferSimple(slot, Fence::NO_FENCE);
+    EXPECT_EQ(NO_ERROR, status);
+}
+
+TEST_F(Surface2HGraphicBufferProducerTest, NativeAttach_HidlCancel_Succeeds) {
+    sp<TestHProducerListener> listener = sp<TestHProducerListener>::make();
+    auto [connectStatus, connectOutput] = connect(listener, HConnectionType::CPU, false);
+    ASSERT_EQ(HStatus::OK, connectStatus);
+
+    sp<GraphicBuffer> buffer =
+            new GraphicBuffer(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1, kDefaultUsage);
+    int slot = -1;
+    ASSERT_EQ(NO_ERROR, mHGBP->attachGraphicBuffer(&slot, buffer));
+
+    HStatus status = cancelBuffer(slot, ::android::hardware::hidl_handle());
+    EXPECT_EQ(HStatus::OK, status);
+}
+
 } // namespace android

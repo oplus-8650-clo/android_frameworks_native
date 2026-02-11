@@ -21,8 +21,6 @@
 #include <SurfaceFlingerProperties.h>
 #include <android-base/properties.h>
 #include <android/dlext.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <configstore/Utils.h>
 #include <dlfcn.h>
 #include <graphicsenv/GraphicsEnv.h>
 
@@ -34,9 +32,6 @@
 #include "egl_object.h"
 #include "egl_tls.h"
 #include "private/EGL/display.h"
-
-using namespace android::hardware::configstore;
-using namespace android::hardware::configstore::V1_0;
 
 namespace android {
 

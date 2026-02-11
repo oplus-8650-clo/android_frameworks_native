@@ -293,6 +293,8 @@ private:
 
         void setDisplayInfos(const std::vector<android::gui::DisplayInfo>& displayInfos);
 
+        bool hasDisplay(ui::LogicalDisplayId displayId) const;
+
         void removeDisplay(ui::LogicalDisplayId displayId);
 
         void setMaximumObscuringOpacityForTouch(float opacity);

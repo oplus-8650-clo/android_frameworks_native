@@ -138,8 +138,6 @@ cc_library_shared {
     ],
     export_header_lib_headers: ["vulkan_headers"],
     shared_libs: [
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore-utils",
         "libziparchive",
         "libhardware",
         "libsync",

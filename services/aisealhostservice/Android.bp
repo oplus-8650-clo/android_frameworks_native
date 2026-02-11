@@ -12,6 +12,7 @@ rust_binary {
         "aisealhostservice_aidl-rust",
         "aiseal_internal_service_aidl-rust",
         "android.os.permissions_aidl-rust",
+        "android.system.virtualizationcommon-rust",
         "android.system.virtualizationservice-rust",
         "libandroid_logger",
         "libanyhow",

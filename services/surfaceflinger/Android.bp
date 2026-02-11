@@ -118,9 +118,6 @@ cc_defaults {
     shared_libs: [
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore@1.1",
         "android.hardware.graphics.allocator@2.0",
         "android.hardware.graphics.allocator@3.0",
         "android.hardware.graphics.common@1.2",
@@ -222,15 +219,9 @@ cc_library_headers {
     export_static_lib_headers: ["libserviceutils"],
 
     shared_libs: [
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore@1.1",
         "libbinder_ndk",
     ],
     export_shared_lib_headers: [
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore@1.1",
         "libbinder_ndk",
     ],
 }
@@ -347,8 +338,6 @@ cc_defaults {
         "-DLOG_TAG=\"SurfaceFlinger\"",
     ],
     shared_libs: [
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
         "android.hardware.graphics.allocator@2.0",
         "android.hardware.graphics.allocator@3.0",
         "libbinder",
@@ -414,9 +403,6 @@ cc_library_shared {
         "SurfaceFlingerProperties.cpp",
     ],
     shared_libs: [
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore@1.1",
         "android.hardware.graphics.common@1.2",
         "libhidlbase",
         "liblog",
