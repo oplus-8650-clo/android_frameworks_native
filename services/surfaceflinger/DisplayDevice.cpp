@@ -40,7 +40,6 @@
 #include <compositionengine/RenderSurface.h>
 #include <compositionengine/RenderSurfaceCreationArgs.h>
 #include <compositionengine/impl/OutputCompositionState.h>
-#include <configstore/Utils.h>
 #include <ftl/concat.h>
 #include <log/log.h>
 #include <scheduler/Fps.h>

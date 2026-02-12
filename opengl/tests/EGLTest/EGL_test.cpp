@@ -18,9 +18,7 @@
 #include <gmock/gmock.h>
 
 #include <SurfaceFlingerProperties.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
 
-#include <configstore/Utils.h>
 #include <utils/String8.h>
 
 #include <EGL/egl.h>
@@ -47,10 +45,6 @@ bool hasEglExtension(EGLDisplay dpy, const char* extensionName) {
 namespace android {
 
 #define EGL_UNSIGNED_TRUE static_cast<EGLBoolean>(EGL_TRUE)
-
-// retrieve wide-color setting from configstore
-using namespace android::hardware::configstore;
-using namespace android::hardware::configstore::V1_0;
 
 #define METADATA_SCALE(x) (static_cast<EGLint>(x * EGL_METADATA_SCALING_EXT))
 

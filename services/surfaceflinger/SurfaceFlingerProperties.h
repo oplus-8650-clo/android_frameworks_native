@@ -18,7 +18,6 @@
 #define SURFACEFLINGERPROPERTIES_H_
 
 #include <SurfaceFlingerProperties.sysprop.h>
-#include <android/hardware/configstore/1.1/ISurfaceFlingerConfigs.h>
 #include <android/hardware/graphics/common/1.2/types.h>
 #include <ui/ConfigStoreTypes.h>
 

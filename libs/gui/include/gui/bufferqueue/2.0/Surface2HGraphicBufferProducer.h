@@ -43,6 +43,13 @@ class Surface2HGraphicBufferProducer : public HGraphicBufferProducer {
 public:
     Surface2HGraphicBufferProducer(const sp<Surface>& base);
 
+    status_t getConsumerUsage(uint64_t* outUsage);
+    status_t attachGraphicBuffer(int* outSlot, const sp<GraphicBuffer>& buffer);
+    status_t queueGraphicBuffer(int slot, const SurfaceQueueBufferInput& input,
+                                SurfaceQueueBufferOutput* output);
+    status_t cancelBufferSimple(int slot, const sp<::android::Fence>& fence);
+
+    // HGraphicBufferProducer:
     virtual Return<HStatus> setMaxDequeuedBufferCount(int32_t maxDequeuedBuffers) override;
 
     virtual Return<void> requestBuffer(int32_t slot, requestBuffer_cb _hidl_cb) override;

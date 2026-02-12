@@ -32,6 +32,9 @@ use aisealhostservice_aidl::aidl::android::aiseal::IAiSealHostService::{
     BnAiSealHostService, IAiSealHostService,
 };
 use android_os_permissions_aidl::aidl::android::os::IPermissionController::IPermissionController;
+use android_system_virtualizationcommon::aidl::android::system::virtualizationcommon::{
+    ICEStoreKEK::{BnCEStoreKEK, ICEStoreKEK},
+};
 use android_system_virtualizationservice::aidl::android::system::virtualizationservice::{
     CpuOptions::CpuOptions,
     CpuOptions::CpuTopology::CpuTopology,
@@ -50,6 +53,10 @@ use binder::{
 use log::{error, info, warn};
 use rustutils::android::{users::AID_ROOT, users::AID_SYSTEM};
 use std::collections::HashMap;
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use vmclient::{DeathReason, ErrorCode, VmInstance, VmWaitError};
@@ -369,13 +376,68 @@ impl AiSealInternalService {
 }
 
 impl IAiSealInternalService for AiSealInternalService {
-    fn onUserUnlocking(&self, user_id: i32) -> binder::Result<()> {
+    fn onUserUnlocking(&self, user_id: i32, kek_file: &str) -> binder::Result<()> {
         info!("onUserUnlocking {user_id}");
-        Ok(())
+        let Some(guest_agent) = self.instance.vm.getGuestAgent()? else {
+            return Err(anyhow!("No guest agent"))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        };
+        let kek = CEStoreKEK::new_binder(kek_file);
+        guest_agent.userUnlocked(user_id, &kek)
     }
 
     fn onUserStopped(&self, user_id: i32) -> binder::Result<()> {
         info!("onUserStopped {user_id}");
+        Ok(())
+    }
+}
+
+struct CEStoreKEK {
+    kek_file: String,
+}
+
+impl Interface for CEStoreKEK {}
+
+impl CEStoreKEK {
+    fn new_binder(kek_file: &str) -> Strong<dyn ICEStoreKEK> {
+        BnCEStoreKEK::new_binder(
+            CEStoreKEK { kek_file: kek_file.to_owned() },
+            BinderFeatures::default(),
+        )
+    }
+}
+
+impl ICEStoreKEK for CEStoreKEK {
+    fn getKEK(&self) -> binder::Result<std::option::Option<Vec<u8>>> {
+        match fs::read(&self.kek_file) {
+            Ok(data) => Ok(Some(data)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn onKEKCreated(&self, key: &[u8]) -> binder::Result<()> {
+        if let Err(e) = fs::create_dir_all(Path::new(&self.kek_file).parent().unwrap()) {
+            return Err(format!("Can't create directories for {}: {}", self.kek_file, e))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        }
+
+        let mut f = match File::create(&self.kek_file) {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(format!("Can't create kek file {}: {}", self.kek_file, e))
+                    .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+            }
+        };
+
+        if let Err(e) = f.write_all(key) {
+            return Err(format!("Can't write kek file {}: {}", self.kek_file, e))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        }
+
+        if let Err(e) = f.sync_all() {
+            return Err(format!("Can't sync kek file {}: {}", self.kek_file, e))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        }
         Ok(())
     }
 }

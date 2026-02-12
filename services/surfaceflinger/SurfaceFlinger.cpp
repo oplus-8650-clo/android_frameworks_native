@@ -46,9 +46,6 @@
 #include <android/configuration.h>
 #include <android/gui/IDisplayEventConnection.h>
 #include <android/gui/StaticDisplayInfo.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <android/hardware/configstore/1.1/ISurfaceFlingerConfigs.h>
-#include <android/hardware/configstore/1.1/types.h>
 #include <android/native_window.h>
 #include <android/os/IInputFlinger.h>
 #include <binder/IPCThreadState.h>
@@ -72,7 +69,6 @@
 #include <compositionengine/impl/DisplayColorProfile.h>
 #include <compositionengine/impl/OutputCompositionState.h>
 #include <compositionengine/impl/OutputLayerCompositionState.h>
-#include <configstore/Utils.h>
 #include <cutils/compiler.h>
 #include <cutils/properties.h>
 #include <fmt/format.h>
@@ -226,8 +222,6 @@ using namespace std::chrono_literals;
 using namespace std::string_literals;
 using namespace std::string_view_literals;
 
-using namespace hardware::configstore;
-using namespace hardware::configstore::V1_0;
 using namespace sysprop;
 using ftl::Flags;
 using namespace ftl::flag_operators;

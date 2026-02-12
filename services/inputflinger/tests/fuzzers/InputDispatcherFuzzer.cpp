@@ -47,7 +47,7 @@ public:
         NotifyMotionArgs args = generateFuzzedMotionArgs(mIdGenerator, mFdp, MAX_RANDOM_DISPLAYS);
         auto [it, _] = mVerifiers.emplace(args.displayId, "Fuzz Verifier");
         InputVerifier& verifier = it->second;
-        const Result<void> result =
+        const Result<bool> result =
                 verifier.processMovement(args.deviceId, args.eventTime, args.source, args.action,
                                          args.actionButton, args.getPointerCount(),
                                          args.pointerProperties.data(), args.pointerCoords.data(),

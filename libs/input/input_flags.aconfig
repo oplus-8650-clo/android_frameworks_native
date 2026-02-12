@@ -134,16 +134,6 @@ flag {
 }
 
 flag {
-  name: "allow_transfer_of_entire_gesture"
-  namespace: "input"
-  description: "When calling 'transferTouchGesture', the entire gesture (including new POINTER_DOWN events from the same device) will be automatically transferred to the destination window"
-  bug: "397979572"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "show_pointers_for_partial_screenshare"
   namespace: "input"
   description: "Show touch and pointer indicators when mirroring a single task"

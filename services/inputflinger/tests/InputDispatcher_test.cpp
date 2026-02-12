@@ -1247,56 +1247,6 @@ TEST_F(InputDispatcherTest, MultiDeviceTouchTransferWithWallpaperWindows) {
 }
 
 /**
- * If a window has requested touch to be transferred, only the current pointers should be
- * transferred.
- *
- * Subsequent pointers should still go through the normal hit testing.
- *
- * In this test, we are invoking 'transferTouchGesture' with the parameter 'transferEntireGesture'
- * set to true, but that value doesn't make any difference, since the flag is disabled. This test
- * will be removed once that flag is fully rolled out.
- */
-TEST_F(InputDispatcherTest, TouchTransferDoesNotSendEntireGesture_legacy) {
-    SCOPED_FLAG_OVERRIDE(allow_transfer_of_entire_gesture, false);
-    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
-    sp<FakeWindowHandle> topWindow =
-            sp<FakeWindowHandle>::make(application, mDispatcher, "Top window",
-                                       ui::LogicalDisplayId::DEFAULT);
-
-    sp<FakeWindowHandle> bottomWindow =
-            sp<FakeWindowHandle>::make(application, mDispatcher, "Bottom window",
-                                       ui::LogicalDisplayId::DEFAULT);
-
-    mDispatcher->onWindowInfosChanged(
-            {{*topWindow->getInfo(), *bottomWindow->getInfo()}, {}, 0, 0});
-
-    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
-                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
-                                      .build());
-    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
-
-    // Transfer touch from the top window to the bottom window.
-    // The actual value of parameter 'transferEntireGesture' doesn't matter, since the flag is off.
-    ASSERT_TRUE(mDispatcher->transferTouchGesture(topWindow->getToken(), bottomWindow->getToken(),
-                                                  /*isDragDrop=*/false,
-                                                  /*transferEntireGesture=*/true));
-    topWindow->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
-    bottomWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
-
-    // When the second pointer goes down, it will hit the top window, and should be delivered there
-    // as a new pointer.
-    mDispatcher->notifyMotion(MotionArgsBuilder(POINTER_1_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
-                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
-                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(60).y(60))
-                                      .build());
-    topWindow->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
-    const std::map<int32_t, PointF> expectedPointers{{0, PointF{50, 50}}};
-    bottomWindow->consumeMotionEvent(
-            AllOf(WithMotionAction(ACTION_MOVE), WithPointers(expectedPointers)));
-    bottomWindow->assertNoEvents();
-}
-
-/**
  * If a window has requested touch to be transferred, the current pointers should be transferred.
  *
  * If the window did not request the "entire gesture" to be transferred, subsequent pointers should
@@ -8722,6 +8672,36 @@ TEST_F(InputDispatcherTest, DisplayRemoved) {
     // When a display is removed window loses focus.
     mDispatcher->displayRemoved(ui::LogicalDisplayId::DEFAULT);
     window->consumeFocusEvent(false);
+}
+
+/**
+ * Currently, `displayRemoved` call can come in to the dispatcher at any point, even if there's
+ * an active gesture. Ensure that the dispatcher handles this condition correctly.
+ * This test reproduces a crash caused by the InputVerifier.
+ */
+TEST_F(InputDispatcherTest, RemoveDisplayWhileGestureIsActive) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    constexpr ui::LogicalDisplayId SECOND_DISPLAY{1};
+    sp<FakeWindowHandle> window =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "window", SECOND_DISPLAY);
+    mDispatcher->onWindowInfosChanged({{*window->getInfo()}, {}, 0, 0});
+
+    // Start a gesture on the second display.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(110).y(110))
+                                      .displayId(SECOND_DISPLAY)
+                                      .build());
+    window->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    // Remove the second display.
+    mDispatcher->displayRemoved(SECOND_DISPLAY);
+
+    // Finish the gesture on the second display.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(1, ToolType::FINGER).x(110).y(110))
+                                      .displayId(SECOND_DISPLAY)
+                                      .build());
+    window->consumeMotionEvent(WithMotionAction(ACTION_CANCEL));
 }
 
 /**

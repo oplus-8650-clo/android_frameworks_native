@@ -47,12 +47,13 @@ class InputVerifier {
 public:
     InputVerifier(const std::string& name);
 
-    android::base::Result<void> processMovement(DeviceId deviceId, nsecs_t eventTime,
+    android::base::Result<bool> processMovement(DeviceId deviceId, nsecs_t eventTime,
                                                 int32_t source, int32_t action,
                                                 int32_t actionButton, uint32_t pointerCount,
                                                 const PointerProperties* pointerProperties,
                                                 const PointerCoords* pointerCoords, int32_t flags,
                                                 int32_t buttonState, nsecs_t downTime);
+    bool isEmpty() const;
     std::string dump() const;
 
     void resetDevice(DeviceId deviceId);

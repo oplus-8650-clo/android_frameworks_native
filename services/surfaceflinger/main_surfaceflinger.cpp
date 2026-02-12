@@ -23,14 +23,12 @@
 #include <sched.h>
 
 #include <android/frameworks/displayservice/1.0/IDisplayService.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
 #include <android/hardware/graphics/allocator/2.0/IAllocator.h>
 #include <android/hardware/graphics/allocator/3.0/IAllocator.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
 #include <common/FlagManager.h>
-#include <configstore/Utils.h>
 #include <displayservice/DisplayService.h>
 #include <errno.h>
 #include <hidl/LegacySupport.h>
@@ -42,8 +40,6 @@
 using namespace android;
 
 static status_t startGraphicsAllocatorService() {
-    using android::hardware::configstore::getBool;
-    using android::hardware::configstore::V1_0::ISurfaceFlingerConfigs;
     if (!android::sysprop::start_graphics_allocator_service(false)) {
         return OK;
     }

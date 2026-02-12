@@ -32,10 +32,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <android/hardware/configstore/1.1/ISurfaceFlingerConfigs.h>
 #include <common/trace.h>
-#include <configstore/Utils.h>
 #include <ftl/concat.h>
 #include <ftl/enum.h>
 #include <ftl/fake_guard.h>

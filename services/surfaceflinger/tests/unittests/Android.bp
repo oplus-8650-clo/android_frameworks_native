@@ -141,9 +141,6 @@ cc_defaults {
 // QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     ],
     shared_libs: [
-        "android.hardware.configstore-utils",
-        "android.hardware.configstore@1.0",
-        "android.hardware.configstore@1.1",
         "android.hardware.graphics.allocator@2.0",
         "android.hardware.graphics.allocator@3.0",
         "android.hardware.graphics.common@1.2",
