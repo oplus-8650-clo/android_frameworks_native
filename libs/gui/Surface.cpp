@@ -1380,12 +1380,10 @@ status_t Surface::queueBufferImpl(const sp<GraphicBuffer>& buffer, const sp<Fenc
         igbpInput.slot = slot;
     }
     nsecs_t now = systemTime();
-// QTI_BEGIN: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     if (mQtiSurfaceExtn) {
         mQtiSurfaceExtn->qtiTrackTransaction(mNextFrameNumber, now);
     }
 
-// QTI_END: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     // Drop the lock temporarily while we touch the underlying producer. In the case of a local
     // BufferQueue, the following should be allowable:
     //
@@ -3253,11 +3251,9 @@ int Surface::setAutoPrerotation(bool autoPrerotation) {
     status_t err = mGraphicBufferProducer->setAutoPrerotation(autoPrerotation);
     if (err == NO_ERROR) {
         mAutoPrerotation = autoPrerotation;
-         /* QTI_BEGIN */
         if (mQtiSurfaceGPPExtn) {
             mQtiSurfaceGPPExtn->setAutoPrerotation(autoPrerotation);
         }
-        /* QTI_END */
     }
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setAutoPrerotation(%d) returned %s", autoPrerotation,
                  strerror(-err));
