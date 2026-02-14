@@ -821,8 +821,7 @@ private:
             compositionengine::CompositionRefreshArgs& refreshArgs, bool cursorOnly)
             REQUIRES(kMainThreadContext);
 
-    void moveSnapshotsFromCompositionArgs(compositionengine::CompositionRefreshArgs& refreshArgs,
-                                          const std::vector<std::pair<Layer*, LayerFE*>>& layers)
+    void moveSnapshotsFromCompositionArgs(const std::vector<std::pair<Layer*, LayerFE*>>& layers)
             REQUIRES(kMainThreadContext);
     std::vector<std::pair<Layer*, LayerFE*>> copyMergedSnapshots(
             compositionengine::CompositionRefreshArgs& refreshArgs) REQUIRES(kMainThreadContext);
@@ -835,8 +834,8 @@ private:
     void updateInputFlinger(VsyncId vsyncId, TimePoint frameTime) REQUIRES(kMainThreadContext);
     void persistDisplayBrightness(bool needsComposite) REQUIRES(kMainThreadContext);
     void buildWindowInfos(std::vector<gui::WindowInfo>& outWindowInfos,
-                          std::vector<gui::DisplayInfo>& outDisplayInfos)
-            REQUIRES(kMainThreadContext);
+                          std::vector<gui::DisplayInfo>& outDisplayInfos,
+                          std::vector<int32_t>& outVisibleWindowIds) REQUIRES(kMainThreadContext);
     void commitInputWindowCommands() REQUIRES(mStateLock);
     void updateCursorAsync() REQUIRES(kMainThreadContext);
 
@@ -964,6 +963,9 @@ private:
 
         std::function<bool(const frontend::LayerSnapshot&, bool& outStopTraversal)>
                 snapshotFilterFn{nullptr};
+
+        // A bitmask for filtering layers that have specific screen capture flags.
+        uint32_t exclusionMask;
     };
 
     /*
@@ -1459,7 +1461,6 @@ private:
 
     std::atomic_bool mMustComposite = false;
     std::atomic_bool mGeometryDirty = false;
-    std::atomic_bool mOptimizeForPerformance = false;
 
     // constant members (no synchronization needed for access)
     const nsecs_t mBootTime = systemTime();
@@ -1728,7 +1729,8 @@ private:
     bool mFrontEndDisplayInfosChanged GUARDED_BY(kMainThreadContext) = false;
 
     // WindowInfo ids visible during the last commit.
-    std::unordered_set<int32_t> mVisibleWindowIds GUARDED_BY(kMainThreadContext);
+    std::vector<int32_t> mVisibleWindowIds GUARDED_BY(kMainThreadContext);
+    std::vector<int32_t> mLastVisibleWindowIds GUARDED_BY(kMainThreadContext);
 
     // Mirroring
     // Map of displayid to mirrorRoot
@@ -1782,13 +1784,8 @@ private:
     void sfdo_resetForcedPacesetter();
 
     // Partition displays: physical for main thread, virtual for offloaded.
-    struct RefreshArgsPartition {
-        compositionengine::CompositionRefreshArgs mainThreadRefreshArgs;
-        std::optional<compositionengine::CompositionRefreshArgs> offloadedRefreshArgs;
-    };
-    RefreshArgsPartition addOutputsToRefreshArgs(
-            PhysicalDisplayId pacesetterId,
-            const compositionengine::CompositionRefreshArgs& refreshArgs,
+    std::optional<compositionengine::CompositionRefreshArgs> addOutputsToRefreshArgs(
+            PhysicalDisplayId pacesetterId, compositionengine::CompositionRefreshArgs& refreshArgs,
             const scheduler::FrameTargeters& frameTargeters);
     std::future<void> offloadGpuCompositedDisplays(
             compositionengine::CompositionRefreshArgs offloadedRefreshArgs);

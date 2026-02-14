@@ -1485,8 +1485,9 @@ void Scheduler::demotePacesetterDisplay(PromotionParams params) {
         }
     }
 
-    const PhysicalDisplayId pacesetterId = FTL_FAKE_GUARD(mDisplayLock, *mPacesetterDisplayId);
-    mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, false);
+    if (const auto pacesetterIdOpt = FTL_FAKE_GUARD(mDisplayLock, mPacesetterDisplayId)) {
+        mSchedulerCallback.enableLayerCachingTexturePool(*pacesetterIdOpt, false);
+    }
 
     // Clear state that depends on the pacesetter's RefreshRateSelector.
     std::scoped_lock lock(mPolicyLock);

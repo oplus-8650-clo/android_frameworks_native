@@ -70,14 +70,24 @@ struct TestableRefreshRateSelector : RefreshRateSelector {
         return *RefreshRateSelector::getActiveModeLocked().modePtr;
     }
 
-    ftl::NonNull<DisplayModePtr> getMinSupportedRefreshRate() const {
+    ftl::NonNull<DisplayModePtr> getConfigGroupMinSupportedRefreshRate() const {
         std::lock_guard lock(mLock);
-        return ftl::as_non_null(mMinRefreshRateModeIt->second);
+        return ftl::as_non_null(mConfigGroupMinRefreshRateModeIt->second);
     }
 
-    ftl::NonNull<DisplayModePtr> getMaxSupportedRefreshRate() const {
+    ftl::NonNull<DisplayModePtr> getConfigGroupMaxSupportedRefreshRate() const {
         std::lock_guard lock(mLock);
-        return ftl::as_non_null(mMaxRefreshRateModeIt->second);
+        return ftl::as_non_null(mConfigGroupMaxRefreshRateModeIt->second);
+    }
+
+    ftl::NonNull<DisplayModePtr> getGlobalMinSupportedRefreshRate() const {
+        std::lock_guard lock(mLock);
+        return ftl::as_non_null(mGlobalMinRefreshRateModeIt->second);
+    }
+
+    ftl::NonNull<DisplayModePtr> getGlobalMaxSupportedRefreshRate() const {
+        std::lock_guard lock(mLock);
+        return ftl::as_non_null(mGlobalMaxRefreshRateModeIt->second);
     }
 
     ftl::NonNull<DisplayModePtr> getMinRefreshRateByPolicy() const {
@@ -455,8 +465,8 @@ TEST_P(RefreshRateSelectorTest, createFrameRateModesWithinPeakFrameRate) {
 TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap) {
     auto selector = createSelector(kModes_60_90, kModeId60);
 
-    const auto minRate = selector.getMinSupportedRefreshRate();
-    const auto performanceRate = selector.getMaxSupportedRefreshRate();
+    const auto minRate = selector.getGlobalMinSupportedRefreshRate();
+    const auto performanceRate = selector.getGlobalMaxSupportedRefreshRate();
 
     EXPECT_EQ(kMode60, minRate);
     EXPECT_EQ(kMode90, performanceRate);
@@ -471,53 +481,74 @@ TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap) {
 TEST_P(RefreshRateSelectorTest, twoModes_storesONeRefreshRateMap_differentGroups) {
     auto selector = createSelector(kModes_60_90_G1, kModeId60);
 
-    auto minRate = selector.getMinRefreshRateByPolicy();
-    auto performanceRate = selector.getMaxSupportedRefreshRate();
+    auto configGroupMinRate = selector.getConfigGroupMinSupportedRefreshRate();
+    auto configGroupPerformanceRate = selector.getConfigGroupMaxSupportedRefreshRate();
+    auto globalMinRate = selector.getGlobalMinSupportedRefreshRate();
+    auto globalPerformanceRate = selector.getGlobalMaxSupportedRefreshRate();
     auto minRateByPolicy = selector.getMinRefreshRateByPolicy();
     auto performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
 
-    EXPECT_EQ(kMode60, minRate);
+    EXPECT_EQ(kMode60, configGroupMinRate);
+    EXPECT_EQ(kMode60, globalMinRate);
     EXPECT_EQ(kMode60, minRateByPolicy);
-    EXPECT_EQ(kMode60, performanceRate);
+    EXPECT_EQ(kMode60, configGroupPerformanceRate);
+    EXPECT_EQ(kMode90_G1, globalPerformanceRate);
     EXPECT_EQ(kMode60, performanceRateByPolicy);
+
 
     EXPECT_EQ(SetPolicyResult::Changed,
               selector.setDisplayManagerPolicy({kModeId90, {60_Hz, 90_Hz}}));
     selector.setActiveMode(kModeId90, 90_Hz);
 
-    minRate = selector.getMinRefreshRateByPolicy();
-    performanceRate = selector.getMaxSupportedRefreshRate();
+    configGroupMinRate = selector.getConfigGroupMinSupportedRefreshRate();
+    configGroupPerformanceRate = selector.getConfigGroupMaxSupportedRefreshRate();
+    globalMinRate = selector.getGlobalMinSupportedRefreshRate();
+    globalPerformanceRate = selector.getGlobalMaxSupportedRefreshRate();
     minRateByPolicy = selector.getMinRefreshRateByPolicy();
     performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
 
-    EXPECT_EQ(kMode90_G1, minRate);
+    EXPECT_EQ(kMode90_G1, configGroupMinRate);
+    EXPECT_EQ(kMode60, globalMinRate);
     EXPECT_EQ(kMode90_G1, minRateByPolicy);
-    EXPECT_EQ(kMode90_G1, performanceRate);
+    EXPECT_EQ(kMode90_G1, configGroupPerformanceRate);
+    EXPECT_EQ(kMode90_G1, globalPerformanceRate);
     EXPECT_EQ(kMode90_G1, performanceRateByPolicy);
 }
 
 TEST_P(RefreshRateSelectorTest, twoModes_storesFullRefreshRateMap_differentResolutions) {
     auto selector = createSelector(kModes_60_90_4K, kModeId60);
 
-    const auto minRate = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate = selector.getMaxSupportedRefreshRate();
-    const auto minRate60 = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate60 = selector.getMaxRefreshRateByPolicy();
+    auto configGroupMinRate = selector.getConfigGroupMinSupportedRefreshRate();
+    auto configGroupPerformanceRate = selector.getConfigGroupMaxSupportedRefreshRate();
+    auto globalMinRate = selector.getGlobalMinSupportedRefreshRate();
+    auto globalPerformanceRate = selector.getGlobalMaxSupportedRefreshRate();
+    auto minRateByPolicy = selector.getMinRefreshRateByPolicy();
+    auto performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
 
-    EXPECT_EQ(kMode60, minRate);
-    EXPECT_EQ(kMode60, minRate60);
-    EXPECT_EQ(kMode60, performanceRate60);
+    EXPECT_EQ(kMode60, configGroupMinRate);
+    EXPECT_EQ(kMode60, globalMinRate);
+    EXPECT_EQ(kMode60, minRateByPolicy);
+    EXPECT_EQ(kMode60, performanceRateByPolicy);
+    EXPECT_EQ(kMode90_4K, configGroupPerformanceRate);
+    EXPECT_EQ(kMode90_4K, globalPerformanceRate);
 
     EXPECT_EQ(SetPolicyResult::Changed,
               selector.setDisplayManagerPolicy({kModeId90, {60_Hz, 90_Hz}}));
     selector.setActiveMode(kModeId90, 90_Hz);
 
-    const auto minRate90 = selector.getMinRefreshRateByPolicy();
-    const auto performanceRate90 = selector.getMaxRefreshRateByPolicy();
+    configGroupMinRate = selector.getConfigGroupMinSupportedRefreshRate();
+    configGroupPerformanceRate = selector.getConfigGroupMaxSupportedRefreshRate();
+    globalMinRate = selector.getGlobalMinSupportedRefreshRate();
+    globalPerformanceRate = selector.getGlobalMaxSupportedRefreshRate();
+    minRateByPolicy = selector.getMinRefreshRateByPolicy();
+    performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
 
-    EXPECT_EQ(kMode90_4K, performanceRate);
-    EXPECT_EQ(kMode90_4K, minRate90);
-    EXPECT_EQ(kMode90_4K, performanceRate90);
+    EXPECT_EQ(kMode60, configGroupMinRate);
+    EXPECT_EQ(kMode60, globalMinRate);
+    EXPECT_EQ(kMode90_4K, minRateByPolicy);
+    EXPECT_EQ(kMode90_4K, performanceRateByPolicy);
+    EXPECT_EQ(kMode90_4K, configGroupPerformanceRate);
+    EXPECT_EQ(kMode90_4K, globalPerformanceRate);
 }
 
 TEST_P(RefreshRateSelectorTest, twoModes_policyChange) {
@@ -4405,8 +4436,8 @@ TEST_P(RefreshRateSelectorTest, singleMinMaxRateForVrr) {
     auto selector = createSelector(kVrrMode_120, kModeId120);
     EXPECT_TRUE(selector.supportsFrameRateOverride());
 
-    const auto minRate = selector.getMinSupportedRefreshRate();
-    const auto performanceRate = selector.getMaxSupportedRefreshRate();
+    const auto minRate = selector.getConfigGroupMinSupportedRefreshRate();
+    const auto performanceRate = selector.getConfigGroupMaxSupportedRefreshRate();
     const auto minRateByPolicy = selector.getMinRefreshRateByPolicy();
     const auto performanceRateByPolicy = selector.getMaxRefreshRateByPolicy();
 

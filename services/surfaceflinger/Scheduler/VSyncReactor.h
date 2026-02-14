@@ -30,6 +30,8 @@
 #include "VSyncTracker.h"
 #include "VsyncController.h"
 
+#define VSYNC_PREDICTION_ERROR_REPORT "VsyncPredictionError" // used for metrics - do not change
+
 namespace android::scheduler {
 
 class Clock;
@@ -59,7 +61,36 @@ public:
 
     void dump(std::string& result) const final;
 
+    /*
+     * A helper struct to report the VSync prediction accuracy.
+     * Used for metrics - do not change.
+     */
+    struct ModelAccuracyMetric {
+        VSyncTracker::ModelAccuracy accuracy;
+        VSyncTracker::VsyncTimeSource source;
+        bool modeChangeInProgress;
+        bool accepted;
+
+        std::string to_string() const {
+            return base::StringPrintf("error= %.2f, actual= %.2f, predicted= %.2f, "
+                                      "VsyncTimeSource= %s, VsyncPeriod= %.2f, "
+                                      "VsyncPeriodsElapsed= %.2f, modeChangeInProgress= %d, "
+                                      "accepted= %d",
+                                      static_cast<float>(accuracy.modelErrorNs) / 1e6f,
+                                      static_cast<float>(accuracy.actualVsync) / 1e6f,
+                                      static_cast<float>(accuracy.predictedVsync) / 1e6f,
+                                      ftl::enum_string(source).c_str(),
+                                      static_cast<float>(accuracy.idealPeriod) / 1e6f,
+                                      accuracy.vsyncPeriodsElapsed, modeChangeInProgress, accepted);
+        }
+    };
+
 private:
+    void reportModelAccuracyMetric(VSyncTracker::ModelAccuracy accuracy,
+                                   VSyncTracker::VsyncTimeSource source, bool accepted) const
+            REQUIRES(mMutex);
+    bool addVsyncTimestampLocked(nsecs_t timestamp, VSyncTracker::VsyncTimeSource source)
+            REQUIRES(mMutex);
     void setIgnorePresentFencesInternal(bool ignore) REQUIRES(mMutex);
     void updateIgnorePresentFencesInternal() REQUIRES(mMutex);
     void startPeriodTransitionInternal(ftl::NonNull<DisplayModePtr>) REQUIRES(mMutex);

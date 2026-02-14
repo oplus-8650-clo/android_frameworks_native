@@ -37,7 +37,7 @@ public:
         handler->add(op, label, uniqueKeyHash, fromPrecompile, std::move(androidStyleKey));
     }
 
-    PipelineCallbackHandler();
+    PipelineCallbackHandler(bool storeSerializedKeys = false);
 
     void beginWarmup() EXCLUDES(mMutex);
     void endWarmup() EXCLUDES(mMutex);
@@ -51,25 +51,25 @@ public:
              uint32_t uniqueKeyHash, bool fromPrecompile, sk_sp<SkData> androidStyleKey)
             EXCLUDES(mMutex);
 
-    void reset() EXCLUDES(mMutex);
-
     void report(const char* label, std::string& result) EXCLUDES(mMutex);
 
-private:
+protected:
     std::mutex mMutex;
 
     // This is held as a unique_ptr in 'mMap' to simplify sorting in report() and to provide
     // a stable std::string* for the PipelineKey to use.
     struct PipelineData {
         explicit PipelineData(const std::string& label, std::chrono::milliseconds creationTime,
-                              bool fromPrecompile, bool fromWarmup)
+                              sk_sp<SkData> serializedKey, bool fromPrecompile, bool fromWarmup)
               : mLabel(label),
                 mCreationTime(creationTime),
+                mSerializedKey(std::move(serializedKey)),
                 mUses(fromPrecompile ? 0 : (fromWarmup ? 0 : 1)),
                 mFromPrecompile(fromPrecompile),
                 mFromWarmup(fromWarmup) {}
         const std::string mLabel;
         const std::chrono::milliseconds mCreationTime;
+        const sk_sp<SkData> mSerializedKey;
         uint32_t mUses;
         const bool mFromPrecompile;
         const bool mFromWarmup;
@@ -93,9 +93,10 @@ private:
     };
 
     const std::chrono::time_point<std::chrono::steady_clock> mStartTime;
-    bool mInWarmup GUARDED_BY(mMutex) = false;
     std::unordered_map<PipelineKey, std::unique_ptr<PipelineData>, PipelineKey> mMap
             GUARDED_BY(mMutex);
+    bool mInWarmup GUARDED_BY(mMutex) = false;
+    const bool mStoreSerializedKeys;
 };
 
 } // namespace android::renderengine::skia

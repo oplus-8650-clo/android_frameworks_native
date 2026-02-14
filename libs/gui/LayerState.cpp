@@ -261,6 +261,8 @@ status_t layer_state_t::write(Parcel& output) const
         SAFE_PARCEL(output.writeUint64, renderCommandBufferFrameId);
     }
 
+    SAFE_PARCEL(output.writeUint32, compositionFilterFlag);
+
     return NO_ERROR;
 }
 
@@ -461,6 +463,7 @@ status_t layer_state_t::read(const Parcel& input)
         SAFE_PARCEL(input.readNullableStrongBinder, &renderResourceToken);
         SAFE_PARCEL(input.readUint64, &renderCommandBufferFrameId);
     }
+    SAFE_PARCEL(input.readUint32, &compositionFilterFlag);
     return NO_ERROR;
 }
 
@@ -908,6 +911,10 @@ void layer_state_t::merge(const layer_state_t& other) {
             renderResourceToken = other.renderResourceToken;
         }
     }
+    if (other.what & eCompositionFilterFlagChanged) {
+        what |= eCompositionFilterFlagChanged;
+        compositionFilterFlag = other.compositionFilterFlag;
+    }
     if ((other.what & what) != other.what) {
         ALOGE("Unmerged SurfaceComposer Transaction properties. LayerState::merge needs updating? "
               "other.what=0x%" PRIX64 " what=0x%" PRIX64 " unmerged flags=0x%" PRIX64,
@@ -1008,6 +1015,7 @@ uint64_t layer_state_t::diff(const layer_state_t& other) const {
 
         if (other.what & eRenderResourceTokenChanged) diff |= eRenderResourceTokenChanged;
     }
+    CHECK_DIFF(diff, eCompositionFilterFlagChanged, other, compositionFilterFlag);
 
     return diff;
 }

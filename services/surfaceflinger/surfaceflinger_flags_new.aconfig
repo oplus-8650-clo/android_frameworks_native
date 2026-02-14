@@ -39,6 +39,16 @@ flag {
 } # arr_surfacecontrol_setframerate_api
 
 flag {
+  name: "bugfix_layer_caching_color_inversion_flickering"
+  namespace: "core_graphics"
+  description: "Fixes the flickering when turning on color inversion and the layer caching"
+  bug: "404903019"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # bugfix_layer_caching_color_inversion_flickering
+
+flag {
   name: "bugfix_resize_virtual_display_surfaces"
   namespace: "core_graphics"
   description: "Surfaces should be resized when virtual display size is set"
@@ -498,3 +508,4 @@ flag {
 } # window_blur_kawase2_preallocate_buffers
 
 # IMPORTANT - please keep alphabetize to reduce merge conflicts
+

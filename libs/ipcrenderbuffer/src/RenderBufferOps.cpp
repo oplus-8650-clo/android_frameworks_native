@@ -1004,7 +1004,7 @@ DrawPointsOp* DrawPointsOp::Create(RenderCommandBuffer* commandBuffer, SkCanvas:
 }
 
 void DrawPointsOp::draw(SkCanvas* c, const SkMatrix&) {
-    c->drawPoints(mode, points.size, points.data.get(), fromShmemPaint(paint));
+    c->drawPoints(mode, {points.data.get(), points.size}, fromShmemPaint(paint));
 }
 std::string DrawPointsOp::toString() const {
     return "DrawPointsOp";

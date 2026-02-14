@@ -273,6 +273,7 @@ struct layer_state_t {
         eRenderCommandBufferFrameIdChanged = 0x10000000'00000000,
         eRenderResourceTokenChanged = 0x20000000'00000000,
         eDesiredMaxHdrHeadroomChanged = 0x40000000'00000000,
+        eCompositionFilterFlagChanged = 0x80000000'00000000,
     };
 
     layer_state_t();
@@ -341,7 +342,8 @@ struct layer_state_t {
             layer_state_t::eFrameRateSelectionStrategyChanged |
             layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFixedTransformHintChanged |
             layer_state_t::eSystemContentPriorityChanged |
-            layer_state_t::eDesiredMaxHdrHeadroomChanged;
+            layer_state_t::eDesiredMaxHdrHeadroomChanged |
+            layer_state_t::eCompositionFilterFlagChanged;
 
     // Changes affecting data sent to input.
     static constexpr uint64_t INPUT_CHANGES = layer_state_t::eAlphaChanged |
@@ -536,6 +538,9 @@ struct layer_state_t {
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
     uint64_t renderCommandBufferFrameId;
     sp<IBinder> renderResourceToken;
+    // Composition filter flag contains additional metadata of a layer, which affects its
+    // visibility.
+    uint32_t compositionFilterFlag = 0u;
 
 protected:
     struct NotDefaultComparableState {

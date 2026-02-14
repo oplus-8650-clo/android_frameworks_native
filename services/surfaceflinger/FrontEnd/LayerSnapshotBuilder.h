@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "FrontEnd/DisplayInfo.h"
 #include "FrontEnd/LayerLifecycleManager.h"
 #include "LayerHierarchy.h"
@@ -72,6 +74,7 @@ public:
         LayerSnapshot rootSnapshot = getRootSnapshot();
         caching::MergeableHierarchyManager* mergeableHierarchyManager = nullptr;
         RenderResourceCache* renderResourceCache = nullptr;
+        uint32_t exclusionMask = 0;
     };
     LayerSnapshotBuilder();
 

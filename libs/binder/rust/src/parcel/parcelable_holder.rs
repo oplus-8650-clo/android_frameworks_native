@@ -24,9 +24,12 @@ use crate::parcel::{
     NULL_PARCELABLE_FLAG,
 };
 
+use alloc::string::String;
+use alloc::sync::Arc;
+use core::any::Any;
+use core::fmt::Debug;
+use core::marker::PhantomData;
 use downcast_rs::{impl_downcast, DowncastSync};
-use std::any::Any;
-use std::sync::Arc;
 
 /// Metadata that `ParcelableHolder` needs for all parcelables.
 ///
@@ -44,9 +47,9 @@ pub trait ParcelableMetadata {
     }
 }
 
-trait AnyParcelable: DowncastSync + Parcelable + std::fmt::Debug {}
+trait AnyParcelable: DowncastSync + Parcelable + Debug {}
 impl_downcast!(sync AnyParcelable);
-impl<T> AnyParcelable for T where T: DowncastSync + Parcelable + std::fmt::Debug {}
+impl<T> AnyParcelable for T where T: DowncastSync + Parcelable + Debug {}
 
 #[derive(Debug, Clone)]
 enum ParcelableHolderData {
@@ -72,7 +75,7 @@ pub struct ParcelableHolder<STABILITY: StabilityType> {
     // `ParcelableHolder` even for that getter method.
     data: Mutex<ParcelableHolderData>,
 
-    _stability_phantom: std::marker::PhantomData<STABILITY>,
+    _stability_phantom: PhantomData<STABILITY>,
 }
 
 impl<STABILITY: StabilityType> ParcelableHolder<STABILITY> {
@@ -96,7 +99,7 @@ impl<STABILITY: StabilityType> ParcelableHolder<STABILITY> {
     /// Set the parcelable contained in this `ParcelableHolder`.
     pub fn set_parcelable<T>(&mut self, p: Arc<T>) -> Result<(), StatusCode>
     where
-        T: Any + Parcelable + ParcelableMetadata + std::fmt::Debug + Send + Sync,
+        T: Any + Parcelable + ParcelableMetadata + Debug + Send + Sync,
     {
         if STABILITY::VALUE > p.get_stability() {
             return Err(StatusCode::BAD_VALUE);
@@ -123,7 +126,7 @@ impl<STABILITY: StabilityType> ParcelableHolder<STABILITY> {
     ///   with the correct descriptor
     pub fn get_parcelable<T>(&self) -> Result<Option<Arc<T>>, StatusCode>
     where
-        T: Any + Parcelable + ParcelableMetadata + Default + std::fmt::Debug + Send + Sync,
+        T: Any + Parcelable + ParcelableMetadata + Default + Debug + Send + Sync,
     {
         let parcelable_desc = T::get_descriptor();
         let mut data = panic_if_poisoned!(self.data.lock());

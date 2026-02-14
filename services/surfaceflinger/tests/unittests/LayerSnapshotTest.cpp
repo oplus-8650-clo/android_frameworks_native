@@ -2576,4 +2576,40 @@ TEST_F(LayerSnapshotTest, systemContentPriorityPassedToChildLayers) {
     EXPECT_EQ(getSnapshot({.id = 1221})->systemContentPriority, 2);
 }
 
+TEST_F(LayerSnapshotTest, ExclusionMaskFiltersLayers) {
+    // Set composition filter flag for layer 11
+    std::vector<QueuedTransactionState> transactions;
+    transactions.emplace_back();
+    transactions.back().states.push_back({});
+    transactions.back().states.front().state.what = layer_state_t::eCompositionFilterFlagChanged;
+    transactions.back().states.front().state.compositionFilterFlag = 1u << 2;
+    transactions.back().states.front().layerId = 11;
+    transactions.back().states.front().state.layerId = 11;
+    mLifecycleManager.applyTransactions(transactions);
+
+    // Update with exclusion mask that matches the flag
+    LayerSnapshotBuilder::Args args{.root = mHierarchyBuilder.getHierarchy(),
+                                    .layerLifecycleManager = mLifecycleManager,
+                                    .includeMetadata = false,
+                                    .displays = mFrontEndDisplayInfos,
+                                    .globalShadowSettings = globalShadowSettings,
+                                    .supportsBlur = true,
+                                    .supportedLayerGenericMetadata = {},
+                                    .genericLayerMetadataKeyMap = {},
+                                    .exclusionMask = 1u << 2};
+    update(mSnapshotBuilder, args);
+
+    // Layer 11 should be hidden by policy
+    EXPECT_TRUE(getSnapshot(11)->isHiddenByPolicyFromParent);
+    // Children should also be hidden
+    EXPECT_TRUE(getSnapshot(111)->isHiddenByPolicyFromParent);
+
+    // Update with exclusion mask that DOES NOT match
+    args.exclusionMask = 1u << 3;
+    update(mSnapshotBuilder, args);
+
+    // Layer 11 should NOT be hidden by policy
+    EXPECT_FALSE(getSnapshot(11)->isHiddenByPolicyFromParent);
+}
+
 } // namespace android::surfaceflinger::frontend

@@ -19,6 +19,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <common/FlagManager.h>
 #include <common/trace.h>
 #include <compositionengine/impl/OutputCompositionState.h>
 #include <compositionengine/impl/planner/CachedSet.h>
@@ -167,11 +168,18 @@ void CachedSet::render(renderengine::RenderEngine& renderEngine, TexturePool& te
     const ui::Transform::RotationFlags orientation =
             ui::Transform::toRotationFlags(outputState.framebufferSpace.getOrientation());
 
+    mat4 colorTransform;
+    if (FlagManager::getInstance().bugfix_layer_caching_color_inversion_flickering()) {
+        colorTransform = deviceHandlesColorTransform ? outputState.colorTransformMatrix : mat4();
+    } else {
+        colorTransform = outputState.colorTransformMatrix;
+    }
+
     renderengine::DisplaySettings displaySettings{
             .physicalDisplay = outputState.framebufferSpace.getContent(),
             .clip = viewport,
             .outputDataspace = outputDataspace,
-            .colorTransform = outputState.colorTransformMatrix,
+            .colorTransform = colorTransform,
             .deviceHandlesColorTransform = deviceHandlesColorTransform,
             .orientation = orientation,
             .targetLuminanceNits = outputState.displayBrightnessNits,

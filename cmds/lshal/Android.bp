@@ -31,13 +31,13 @@ cc_library_static {
         "libcutils",
         "libutils",
         "libhidlbase",
-        "libhidl-gen-hash",
-        "libhidl-gen-utils",
         "libvintf",
         "packagemanager_aidl-cpp",
     ],
     static_libs: [
         "libprocpartition",
+        "libhidl-gen-hash",
+        "libhidl-gen-utils",
     ],
     srcs: [
         "DebugCommand.cpp",

@@ -48,9 +48,7 @@ public:
                    size_t minimumSamplesForPrediction, uint32_t outlierTolerancePercent);
     ~VSyncPredictor();
 
-    bool addVsyncTimestamp(nsecs_t timestamp,
-                           VsyncTimeSource source = VsyncTimeSource::Unknown) final
-            EXCLUDES(mMutex);
+    bool addVsyncTimestamp(nsecs_t timestamp) final EXCLUDES(mMutex);
     nsecs_t nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
                                          std::optional<nsecs_t> lastVsyncOpt = {}) final
             EXCLUDES(mMutex);
@@ -68,25 +66,7 @@ public:
         nsecs_t intercept;
     };
 
-    struct ModelAccuracy {
-        nsecs_t modelErrorNs;
-        nsecs_t actualVsync;
-        nsecs_t predictedVsync;
-        nsecs_t idealPeriod;
-        double vsyncPeriodsElapsed;
-        VsyncTimeSource source;
-
-        std::string to_string() const {
-            return base::StringPrintf("error= %.2f, actual= %.2f, predicted= %.2f, "
-                                      "VsyncTimeSource= %s, VsyncPeriod= %.2f, "
-                                      "VsyncPeriodsElapsed= %.2f",
-                                      static_cast<float>(modelErrorNs) / 1e6f,
-                                      static_cast<float>(actualVsync) / 1e6f,
-                                      static_cast<float>(predictedVsync) / 1e6f,
-                                      ftl::enum_string(source).c_str(),
-                                      static_cast<float>(idealPeriod) / 1e6f, vsyncPeriodsElapsed);
-        }
-    };
+    ModelAccuracy getModelAccuracy(nsecs_t timestamp) const final EXCLUDES(mMutex);
 
     VSyncPredictor::Model getVSyncPredictionModel() const EXCLUDES(mMutex);
 
@@ -170,8 +150,7 @@ private:
     size_t next(size_t i) const REQUIRES(mMutex);
     bool validate(nsecs_t timestamp) const REQUIRES(mMutex);
     Model getVSyncPredictionModelLocked() const REQUIRES(mMutex);
-    ModelAccuracy getModelAccuracyLocked(nsecs_t knownVsync, VsyncTimeSource) const
-            REQUIRES(mMutex);
+    ModelAccuracy getModelAccuracyLocked(nsecs_t knownVsync) const REQUIRES(mMutex);
     nsecs_t snapToVsync(nsecs_t timePoint) const REQUIRES(mMutex);
     void calculateVsyncStability(nsecs_t timestamp) REQUIRES(mMutex);
     Period minFramePeriodLocked() const REQUIRES(mMutex);

@@ -505,7 +505,7 @@ void DisplayDevice::enableRefreshRateOverlay(bool enable, bool setByHwc, Fps ref
         features |= RefreshRateOverlay::Features::SetByHwc;
     }
 
-    const auto fpsRange = mRefreshRateSelector->getSupportedRefreshRateRange();
+    const auto fpsRange = mRefreshRateSelector->getGlobalSupportedRefreshRateRange();
     mRefreshRateOverlay = RefreshRateOverlay::create(fpsRange, features);
     if (mRefreshRateOverlay) {
         mRefreshRateOverlay->setLayerStack(getLayerStack());

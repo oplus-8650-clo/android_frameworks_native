@@ -65,13 +65,28 @@ public:
      * is used to correct the model's internal phase and period.
      *
      * \param [in] timestamp    The timestamp (in nanoseconds) when the vsync signal occurred.
-     * \param [in] source       The origin of the timestamp, as defined by the `VsyncTimeSource`
-     * enum.
      * \return                  True if the timestamp was consistent with the internal model,
      *                          False otherwise.
      */
-    virtual bool addVsyncTimestamp(nsecs_t timestamp,
-                                   VsyncTimeSource source = VsyncTimeSource::Unknown) = 0;
+    virtual bool addVsyncTimestamp(nsecs_t timestamp) = 0;
+
+    struct ModelAccuracy {
+        nsecs_t modelErrorNs;
+        nsecs_t actualVsync;
+        nsecs_t predictedVsync;
+        nsecs_t idealPeriod;
+        double vsyncPeriodsElapsed;
+    };
+
+    /*
+     * Evaluates the model's accuracy by comparing a known VSync timestamp against the prediction
+     * the model would have made for that event. This is a query-only function and does not
+     * affect the internal state of the tracker.
+     *
+     * \param [in] timestamp    A known VSync timestamp to compare against the model.
+     * \return                  A struct containing error metrics and timing context.
+     */
+    virtual ModelAccuracy getModelAccuracy(nsecs_t timestamp) const = 0;
 
     /*
      * Access the next anticipated vsync time such that the anticipated time >= timePoint.

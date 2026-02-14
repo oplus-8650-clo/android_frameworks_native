@@ -143,7 +143,7 @@ Period VSyncPredictor::minFramePeriodLocked() const {
     return Period::fromNs(slope * mNumVsyncsForFrame);
 }
 
-bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp, VsyncTimeSource source) {
+bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
     SFTRACE_CALL();
 
     std::lock_guard lock(mMutex);
@@ -172,11 +172,6 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp, VsyncTimeSource source
         SFTRACE_FORMAT_INSTANT("timestamp rejected. mKnownTimestamp was %.2fms ago",
                                (mClock->now() - *mKnownTimestamp) / 1e6f);
         return false;
-    }
-
-    {
-        const auto accuracy = getModelAccuracyLocked(timestamp, source);
-        SFTRACE_FORMAT("VsyncPredictionError(ms): %s", accuracy.to_string().c_str());
     }
 
     if (mTimestamps.size() != kHistorySize) {
@@ -422,8 +417,12 @@ nsecs_t VSyncPredictor::nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
     return vsyncOpt->ns();
 }
 
-VSyncPredictor::ModelAccuracy VSyncPredictor::getModelAccuracyLocked(nsecs_t knownVsync,
-                                                                     VsyncTimeSource source) const {
+VSyncTracker::ModelAccuracy VSyncPredictor::getModelAccuracy(nsecs_t timestamp) const {
+    std::lock_guard lock(mMutex);
+    return getModelAccuracyLocked(timestamp);
+}
+
+VSyncTracker::ModelAccuracy VSyncPredictor::getModelAccuracyLocked(nsecs_t knownVsync) const {
     const nsecs_t predictedVsync = snapToVsync(knownVsync - idealPeriod() / 2);
     const nsecs_t modelErrorNs = std::abs(predictedVsync - knownVsync);
 
@@ -436,11 +435,7 @@ VSyncPredictor::ModelAccuracy VSyncPredictor::getModelAccuracyLocked(nsecs_t kno
             ? static_cast<double>(knownVsync - *lastVsync) / static_cast<double>(idealPeriod())
             : 0.0;
 
-    ALOGV("%s : error=%" PRId64 ", actualVsync=%" PRId64 ", inputtime=%" PRId64
-          ", predictedVsync=%" PRId64 ", period=%" PRId64 ", vsyncPeriodsElapsed=%.2f ",
-          __func__, modelErrorNs, knownVsync, knownVsync - idealPeriod() / 2, predictedVsync,
-          idealPeriod(), vsyncPeriodsElapsed);
-    return {modelErrorNs, knownVsync, predictedVsync, idealPeriod(), vsyncPeriodsElapsed, source};
+    return {modelErrorNs, knownVsync, predictedVsync, idealPeriod(), vsyncPeriodsElapsed};
 }
 
 /*

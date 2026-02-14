@@ -341,7 +341,7 @@ TEST_F(IPCRecordingCanvasTest, DrawPoints) {
         paint.setStrokeWidth(10);
         paint.setStrokeCap(SkPaint::kRound_Cap);
         SkPoint points[] = {{20, 20}, {100, 20}, {100, 100}, {20, 100}};
-        c->drawPoints(SkCanvas::kPolygon_PointMode, 4, points, paint);
+        c->drawPoints(SkCanvas::kPolygon_PointMode, points, paint);
     };
     ASSERT_TRUE(compareRendering(drawPoints, "DrawPoints"));
 }
@@ -491,7 +491,7 @@ TEST_F(IPCRecordingCanvasTest, DashedLine) {
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(10);
         float intervals[] = {10.0f, 20.0f};
-        paint.setPathEffect(SkDashPathEffect::Make(intervals, 2, 0));
+        paint.setPathEffect(SkDashPathEffect::Make(intervals, 0));
         c->drawLine(50, 50, 450, 450, paint);
     };
     ASSERT_TRUE(compareRendering(drawDashedLine, "DashedLine"));

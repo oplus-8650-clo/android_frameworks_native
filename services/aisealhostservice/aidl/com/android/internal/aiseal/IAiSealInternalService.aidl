@@ -15,8 +15,6 @@
  */
 package com.android.internal.aiseal;
 
-import android.system.virtualizationcommon.ICEStoreKEK;
-
 /**
  * An internal service system_server can communicate with.
  */

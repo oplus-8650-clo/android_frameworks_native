@@ -112,7 +112,7 @@ protected:
                      kPendingLimit, false /* supportKernelIdleTimer */) {
         ON_CALL(*mMockClock, now()).WillByDefault(Return(mFakeNow));
         ON_CALL(*mMockTracker, currentPeriod()).WillByDefault(Return(period));
-        ON_CALL(*mMockTracker, addVsyncTimestamp(_, _)).WillByDefault(Return(true));
+        ON_CALL(*mMockTracker, addVsyncTimestamp(_)).WillByDefault(Return(true));
     }
 
     std::shared_ptr<mock::VSyncTracker> mMockTracker;
@@ -144,22 +144,22 @@ TEST_F(VSyncReactorTest, addingInvalidFenceSignalsNeedsMoreInfo) {
 }
 
 TEST_F(VSyncReactorTest, addingSignalledFenceAddsToTracker) {
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime, _));
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime));
     EXPECT_FALSE(mReactor.addPresentFence(generateSignalledFenceWithTime(mDummyTime)));
 }
 
 TEST_F(VSyncReactorTest, addingPendingFenceAddsSignalled) {
     nsecs_t anotherDummyTime = 2919019201;
 
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(0);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(0);
     auto pendingFence = generatePendingFence();
     EXPECT_FALSE(mReactor.addPresentFence(pendingFence));
     Mock::VerifyAndClearExpectations(mMockTracker.get());
 
     signalFenceWithTime(pendingFence, mDummyTime);
 
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime, _));
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(anotherDummyTime, _));
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime));
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(anotherDummyTime));
     EXPECT_FALSE(mReactor.addPresentFence(generateSignalledFenceWithTime(anotherDummyTime)));
 }
 
@@ -178,7 +178,7 @@ TEST_F(VSyncReactorTest, limitsPendingFences) {
     }
 
     for (auto i = fences.size() - kPendingLimit; i < fences.size(); i++) {
-        EXPECT_CALL(*mMockTracker, addVsyncTimestamp(fakeTimes[i], _));
+        EXPECT_CALL(*mMockTracker, addVsyncTimestamp(fakeTimes[i]));
     }
 
     for (auto i = 0u; i < fences.size(); i++) {
@@ -189,7 +189,7 @@ TEST_F(VSyncReactorTest, limitsPendingFences) {
 
 TEST_F(VSyncReactorTest, ignoresPresentFencesWhenToldTo) {
     static constexpr size_t aFewTimes = 8;
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime, _)).Times(1);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(mDummyTime)).Times(1);
 
     mReactor.setIgnorePresentFences(true);
     for (auto i = 0; i < aFewTimes; i++) {
@@ -202,7 +202,7 @@ TEST_F(VSyncReactorTest, ignoresPresentFencesWhenToldTo) {
 
 TEST_F(VSyncReactorTest, ignoresProperlyAfterAPeriodConfirmation) {
     bool periodFlushed = true;
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(3);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(3);
     nsecs_t const newPeriod = 5000;
 
     mReactor.onDisplayModeChanged(displayMode(newPeriod), false);
@@ -284,7 +284,7 @@ TEST_F(VSyncReactorTest, changingToAThirdPeriodWillWaitForLastPeriod) {
 }
 
 TEST_F(VSyncReactorTest, reportedBadTimestampFromPredictorWillReactivateHwVSync) {
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _))
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_))
             .WillOnce(Return(false))
             .WillOnce(Return(true))
             .WillOnce(Return(true));
@@ -303,7 +303,7 @@ TEST_F(VSyncReactorTest, reportedBadTimestampFromPredictorWillReactivateHwVSync)
 }
 
 TEST_F(VSyncReactorTest, reportedBadTimestampFromPredictorWillReactivateHwVSyncPendingFence) {
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _))
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_))
             .Times(2)
             .WillOnce(Return(false))
             .WillOnce(Return(true));
@@ -342,7 +342,7 @@ TEST_F(VSyncReactorTest, addResyncSampleTypical) {
     nsecs_t const fakeTimestamp = 3032;
     bool periodFlushed = false;
 
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(fakeTimestamp, _));
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(fakeTimestamp));
     EXPECT_FALSE(mReactor.addHwVsyncTimestamp(fakeTimestamp, std::nullopt, &periodFlushed,
                                               VsyncTimeSource::HwVsyncCallback));
     EXPECT_FALSE(periodFlushed);
@@ -428,7 +428,7 @@ TEST_F(VSyncReactorTest, hwVsyncIsRequestedForTracker) {
             .Times(1)
             .InSequence(seq)
             .WillRepeatedly(Return(false));
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(numSamplesWithNewPeriod);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(numSamplesWithNewPeriod);
 
     EXPECT_TRUE(mReactor.addHwVsyncTimestamp(time += period, std::nullopt, &periodFlushed,
                                              VsyncTimeSource::HwVsyncCallback));
@@ -455,7 +455,7 @@ TEST_F(VSyncReactorTest, hwVsyncturnsOffOnConfirmationWhenTrackerDoesntRequest) 
             .Times(1)
             .InSequence(seq)
             .WillRepeatedly(Return(false));
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(3);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(3);
 
     EXPECT_TRUE(mReactor.addHwVsyncTimestamp(time += period, std::nullopt, &periodFlushed,
                                              VsyncTimeSource::HwVsyncCallback));
@@ -482,7 +482,7 @@ TEST_F(VSyncReactorTest, hwVsyncIsRequestedForTrackerMultiplePeriodChanges) {
             .Times(1)
             .InSequence(seq)
             .WillRepeatedly(Return(false));
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(8);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(8);
 
     EXPECT_TRUE(mReactor.addHwVsyncTimestamp(time += period, std::nullopt, &periodFlushed,
                                              VsyncTimeSource::HwVsyncCallback));
@@ -507,7 +507,7 @@ TEST_F(VSyncReactorTest, hwVsyncIsRequestedForTrackerMultiplePeriodChanges) {
 
 TEST_F(VSyncReactorTest, periodChangeWithGivenVsyncPeriod) {
     bool periodFlushed = true;
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(4);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(4);
 
     nsecs_t const newPeriod = 5000;
     mReactor.onDisplayModeChanged(displayMode(newPeriod), false);
@@ -532,7 +532,7 @@ TEST_F(VSyncReactorTest, periodIsMeasuredIfIgnoringComposer) {
                          *mMockTracker, kPendingLimit, true /* supportKernelIdleTimer */);
 
     bool periodFlushed = true;
-    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_, _)).Times(6);
+    EXPECT_CALL(*mMockTracker, addVsyncTimestamp(_)).Times(6);
 
     // First, set the same period, which should only be confirmed when we receive two
     // matching callbacks
