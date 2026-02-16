@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Technologies, Inc. are provided under the following license:
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
@@ -763,9 +763,9 @@ void OutputLayer::writeOutputIndependentPerFrameStateToHWC(
 
     QtiOutputExtension::qtiSetLayerType(hwcLayer, outputIndependentState.qtiLayerClass,
                               getLayerFE().getDebugName());
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     qtiWritePrivacyRegionsToHWC(hwcLayer, outputIndependentState);
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 }
 
 void OutputLayer::writeSolidColorStateToHWC(HWC2::Layer* hwcLayer,
