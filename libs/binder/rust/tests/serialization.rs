@@ -17,6 +17,8 @@
 //! Included as a module in the binder crate internal tests for internal API
 //! access.
 
+extern crate alloc;
+
 use binder::declare_binder_interface;
 use binder::{
     BinderFeatures, ExceptionCode, Interface, ParcelFileDescriptor, SpIBinder, Status, StatusCode,

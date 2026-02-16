@@ -582,6 +582,11 @@ status_t RpcState::getSessionId(const sp<RpcSession::RpcConnection>& connection,
     return reply.readByteVector(sessionIdOut);
 }
 
+static std::string functionNameLog(const sp<IBinder>& binder, size_t code) {
+    return binder->localBinder() ? binder->localBinder()->getFunctionNameAndCode(code)
+                                 : "UNKNOWN_FUNCTION_NAME, code: " + std::to_string(code);
+}
+
 status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
                             const sp<IBinder>& binder, uint32_t code, const Parcel& data,
                             const sp<RpcSession>& session, Parcel* reply, uint32_t flags) {
@@ -592,12 +597,8 @@ status_t RpcState::transact(const sp<RpcSession::RpcConnection>& connection,
         status != OK) {
         // TODO(b/414720799): this log is added to debug this bug, but it could be a bit noisy, and
         // we may only want to log it from some cases moving forward.
-        std::string functionName = binder->localBinder()
-                ? binder->localBinder()->getFunctionName(code)
-                : "#" + std::to_string(code);
-        ALOGE("RPC protocol error during call to binder: %p, function: %s, code: %" PRIu32
-              ", status: %s",
-              binder.get(), functionName.c_str(), code, statusToString(status).c_str());
+        ALOGE("RPC protocol error during call to binder: %p, function: %s, status: %s",
+              binder.get(), functionNameLog(binder, code).c_str(), statusToString(status).c_str());
         return status;
     }
 
@@ -610,12 +611,9 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
                                     Parcel* reply, uint32_t flags) {
     std::string errorMsg;
     if (status_t status = validateParcel(session, data, &errorMsg); status != OK) {
-        std::string functionName = maybeBinder && maybeBinder->localBinder()
-                ? maybeBinder->localBinder()->getFunctionName(code)
-                : "#" + std::to_string(code);
-        ALOGE("Refusing to send RPC on binder %p, function: %s, code: %" PRIu32
-              ": Parcel %p failed validation: %s",
-              maybeBinder.get(), functionName.c_str(), code, &data, errorMsg.c_str());
+        ALOGE("Refusing to send RPC on binder %p, function: %s: Parcel %p failed validation: %s",
+              maybeBinder.get(), functionNameLog(maybeBinder, code).c_str(), &data,
+              errorMsg.c_str());
         return status;
     }
 
@@ -678,12 +676,8 @@ status_t RpcState::transactInternal(const sp<RpcSession::RpcConnection>& connect
 
     if (bodySize >= binder::kRpcTransactionLimitBytes - sizeof(RpcWireHeader)) {
         // fail here rather than having client allocate a huge amount of data
-        std::string functionName = maybeBinder && maybeBinder->localBinder()
-                ? maybeBinder->localBinder()->getFunctionName(code)
-                : "#" + std::to_string(code);
-        ALOGE("Transaction for function %s, code: %" PRIu32 ", too large: %" PRIu32
-              " body size bytes.",
-              functionName.c_str(), code, bodySize);
+        ALOGE("Transaction for function %s, too large: %" PRIu32 " body size bytes.",
+              functionNameLog(maybeBinder, code).c_str(), bodySize);
         return FAILED_TRANSACTION;
     }
 
@@ -1339,11 +1333,9 @@ processTransactInternalTailCall:
     // case, so if the bug repros again, we prove that there are missing logs. Try the negative
     // as well to be extra careful. TODO - delete this code anytime in the future.
     if (replyStatus == NO_MEMORY || replyStatus == ENOMEM) {
-        std::string functionName = target && target->localBinder()
-                ? target->localBinder()->getFunctionName(transaction->code)
-                : "#" + std::to_string(transaction->code);
-        ALOGE("Replying to transaction function: %s, code: %" PRIu32 ", error: %s.",
-              functionName.c_str(), transaction->code, statusToString(replyStatus).c_str());
+        ALOGE("Replying to transaction function: %s, error: %s.",
+              functionNameLog(target, transaction->code).c_str(),
+              statusToString(replyStatus).c_str());
     }
 
     auto* rpcFields = reply.maybeRpcFields();
@@ -1371,12 +1363,8 @@ processTransactInternalTailCall:
         // entire packet, as +/- a few bytes doesn't matter, this would work even
         // if those are combined, and it errs on making the packet here slightly
         // smaller.
-        std::string functionName = target && target->localBinder()
-                ? target->localBinder()->getFunctionName(transaction->code)
-                : "#" + std::to_string(transaction->code);
-        ALOGE("Reply transaction for function %s, code: %" PRIu32 ", too large: %" PRIu32
-              " body size bytes.",
-              functionName.c_str(), transaction->code, bodySize);
+        ALOGE("Reply transaction for function %s, too large: %" PRIu32 " body size bytes.",
+              functionNameLog(target, transaction->code).c_str(), bodySize);
         reply.setDataSize(0);
         objectTableSpan.clear();
         replyStatus = FAILED_TRANSACTION; // match kernel binder

@@ -3107,8 +3107,7 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
 
     // Determine if any displays, either physical or virtual, are on so that
     // power hints may be reported for performance boosts.
-
-    bool shouldEnablePowerHintSession = mOptimizeForPerformance.load();
+    bool shouldEnablePowerHintSession = true;
     if (!FlagManager::getInstance().align_adpf_with_sf_opt_policy()) {
         shouldEnablePowerHintSession =
                 FTL_FAKE_GUARD(mStateLock, hasDisplay([](const DisplayDevice& display) {
@@ -3237,13 +3236,10 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
     return mustComposite && CC_LIKELY(mBootStage != BootStage::BOOTLOADER);
 }
 
-SurfaceFlinger::RefreshArgsPartition SurfaceFlinger::addOutputsToRefreshArgs(
+std::optional<compositionengine::CompositionRefreshArgs> SurfaceFlinger::addOutputsToRefreshArgs(
         PhysicalDisplayId pacesetterId,
-        const compositionengine::CompositionRefreshArgs& refreshArgs,
+        compositionengine::CompositionRefreshArgs& mainThreadRefreshArgs,
         const scheduler::FrameTargeters& frameTargeters) {
-    compositionengine::CompositionRefreshArgs mainThreadRefreshArgs = refreshArgs;
-    compositionengine::CompositionRefreshArgs offloadedRefreshArgs = refreshArgs;
-
     const auto& pacesetterTarget = frameTargeters.get(pacesetterId)->get()->target();
     const auto& displays = FTL_FAKE_GUARD(mStateLock, mDisplays);
 
@@ -3291,6 +3287,9 @@ SurfaceFlinger::RefreshArgsPartition SurfaceFlinger::addOutputsToRefreshArgs(
         mainThreadRefreshArgs.frameTargets.try_emplace(id, &targeter->target());
     }
 
+    // Lazily initialize offloadedRefreshArgs which is a less-commonly used mode.
+    std::optional<compositionengine::CompositionRefreshArgs> offloadedRefreshArgs;
+
     const bool canOffloadGpuComposition =
             FlagManager::getInstance().offload_gpu_composition() && mRenderEngine->isThreaded();
     for (const auto& [_, display] : displays) {
@@ -3314,23 +3313,24 @@ SurfaceFlinger::RefreshArgsPartition SurfaceFlinger::addOutputsToRefreshArgs(
         // client composition to avoid performance issue.
         if (canOffloadGpuComposition && !anyMainThreadClientComposition &&
             display->isGpuVirtualDisplay()) {
-            offloadedRefreshArgs.outputs.push_back(display->getCompositionDisplay());
+            if (!offloadedRefreshArgs) {
+                // Initialize the offloadedRefreshArgs now that it is known to be needed.
+                offloadedRefreshArgs = mainThreadRefreshArgs;
+                offloadedRefreshArgs->outputs.clear();
+                offloadedRefreshArgs->frameTargets.clear();
+
+                // Populate properties for offload thread
+                offloadedRefreshArgs->hasTrustedPresentationListener = false;
+                offloadedRefreshArgs->bufferIdsToUncache = {};
+            }
+            offloadedRefreshArgs->outputs.push_back(display->getCompositionDisplay());
 
         } else {
             mainThreadRefreshArgs.outputs.push_back(display->getCompositionDisplay());
         }
     }
 
-    // Populate properties for offload thread
-    if (offloadedRefreshArgs.outputs.empty()) {
-        return {.mainThreadRefreshArgs = std::move(mainThreadRefreshArgs),
-                .offloadedRefreshArgs = std::nullopt};
-    }
-    offloadedRefreshArgs.hasTrustedPresentationListener = false;
-    offloadedRefreshArgs.bufferIdsToUncache = {};
-
-    return {.mainThreadRefreshArgs = std::move(mainThreadRefreshArgs),
-            .offloadedRefreshArgs = offloadedRefreshArgs};
+    return offloadedRefreshArgs;
 }
 
 std::future<void> SurfaceFlinger::offloadGpuCompositedDisplays(
@@ -3415,23 +3415,23 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     const auto presentTime = systemTime();
     refreshArgs.refreshStartTime = presentTime;
 
-    auto [mainThreadRefreshArgs, optionalOffloadedRefreshArgs] =
+    auto optionalOffloadedRefreshArgs =
             addOutputsToRefreshArgs(pacesetterId, refreshArgs, frameTargeters);
 
     //mQtiSFExtnIntf->qtiSetDisplayElapseTime(refreshArgs.earliestPrsesentTime);
 
     constexpr bool kCursorOnly = false;
     const auto layers = mLayerSnapshotBuilder.hasMergedSnapshots()
-            ? copyMergedSnapshots(mainThreadRefreshArgs)
-            : addLayerSnapshotsToCompositionArgs(mainThreadRefreshArgs, kCursorOnly);
-    // setVisibleRegionDirtyIfNeeded(mainThreadRefreshArgs);
+            ? copyMergedSnapshots(refreshArgs)
+            : addLayerSnapshotsToCompositionArgs(refreshArgs, kCursorOnly);
+    // setVisibleRegionDirtyIfNeeded(refreshArgs);
 
-    prepareLayersForComposition(mainThreadRefreshArgs, kCursorOnly, layers);
+    prepareLayersForComposition(refreshArgs, kCursorOnly, layers);
 
     for (auto& [layer, layerFE] : layers) {
         validateForReadback(layerFE);
     }
-    setupOutputsForReadback(mainThreadRefreshArgs.outputs);
+    setupOutputsForReadback(refreshArgs.outputs);
 
     std::vector<std::pair<Layer*, LayerFE*>> offloadedLayers;
     if (optionalOffloadedRefreshArgs) {
@@ -3442,11 +3442,11 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     }
 
     std::unordered_set<uint32_t> mainThreadLayerStacks;
-    for (auto& output : mainThreadRefreshArgs.outputs) {
+    for (auto& output : refreshArgs.outputs) {
         mainThreadLayerStacks.insert(output->getState().layerFilter.layerStack.id);
     }
 
-    mainThreadRefreshArgs.layersWithQueuedFrames.reserve(mLayersWithQueuedFrames.size());
+    refreshArgs.layersWithQueuedFrames.reserve(mLayersWithQueuedFrames.size());
     if (optionalOffloadedRefreshArgs) {
         optionalOffloadedRefreshArgs->layersWithQueuedFrames.reserve(
                 mLayersWithQueuedFrames.size());
@@ -3459,7 +3459,7 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
                 (layerFE->mSnapshot != nullptr &&
                  layerFE->mSnapshot->outputFilter.layerStack != ui::UNASSIGNED_LAYER_STACK &&
                  mainThreadLayerStacks.count(layerFE->mSnapshot->outputFilter.layerStack.id))) {
-                mainThreadRefreshArgs.layersWithQueuedFrames.push_back(layerFE);
+                refreshArgs.layersWithQueuedFrames.push_back(layerFE);
             } else {
                 optionalOffloadedRefreshArgs->layersWithQueuedFrames.push_back(layerFE);
             }
@@ -3481,13 +3481,12 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
                 offloadGpuCompositedDisplays(std::move(*optionalOffloadedRefreshArgs));
     }
 
-    mCompositionEngine->present(mainThreadRefreshArgs);
+    mCompositionEngine->present(refreshArgs);
 
-    finalizeReadback(mainThreadRefreshArgs.outputs);
+    finalizeReadback(refreshArgs.outputs);
 
     ftl::Flags<adpf::Workload> compositedWorkload;
-    if (mainThreadRefreshArgs.updatingGeometryThisFrame ||
-        mainThreadRefreshArgs.updatingOutputGeometryThisFrame) {
+    if (refreshArgs.updatingGeometryThisFrame || refreshArgs.updatingOutputGeometryThisFrame) {
         compositedWorkload |= adpf::Workload::VISIBLE_REGION;
     }
     if (mFrontEndDisplayInfosChanged) {
@@ -3587,11 +3586,11 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     }
 
     if (!mLayerSnapshotBuilder.hasMergedSnapshots()) {
-        moveSnapshotsFromCompositionArgs(refreshArgs, layers);
+        moveSnapshotsFromCompositionArgs(layers);
     }
     if (optionalOffloadedRefreshArgs) {
         offloadedCompositionFuture->wait();
-        moveSnapshotsFromCompositionArgs(*optionalOffloadedRefreshArgs, offloadedLayers);
+        moveSnapshotsFromCompositionArgs(offloadedLayers);
     }
     mTimeStats->recordFrameDuration(pacesetterTarget.frameBeginTime().ns(), systemTime());
 
@@ -4997,22 +4996,15 @@ void SurfaceFlinger::updateInputFlinger(VsyncId vsyncId, TimePoint frameTime) {
     std::vector<WindowInfo> windowInfos;
     std::vector<DisplayInfo> displayInfos;
     bool updateWindowInfo = false;
+    bool visibleWindowsChanged = false;
     if (mUpdateInputInfo) {
         mUpdateInputInfo = false;
         updateWindowInfo = true;
-        buildWindowInfos(windowInfos, displayInfos);
-    }
-
-    std::unordered_set<int32_t> visibleWindowIds;
-    for (WindowInfo& windowInfo : windowInfos) {
-        if (!windowInfo.inputConfig.test(WindowInfo::InputConfig::NOT_VISIBLE)) {
-            visibleWindowIds.insert(windowInfo.id);
+        buildWindowInfos(windowInfos, displayInfos, mVisibleWindowIds);
+        if (mVisibleWindowIds != mLastVisibleWindowIds) {
+            visibleWindowsChanged = true;
+            std::swap(mLastVisibleWindowIds, mVisibleWindowIds);
         }
-    }
-    bool visibleWindowsChanged = false;
-    if (visibleWindowIds != mVisibleWindowIds) {
-        visibleWindowsChanged = true;
-        mVisibleWindowIds = std::move(visibleWindowIds);
     }
 
     BackgroundExecutor::getInstance().sendCallbacks(
@@ -5079,14 +5071,18 @@ void SurfaceFlinger::persistDisplayBrightness(bool needsComposite) {
 }
 
 void SurfaceFlinger::buildWindowInfos(std::vector<WindowInfo>& outWindowInfos,
-                                      std::vector<DisplayInfo>& outDisplayInfos) {
+                                      std::vector<DisplayInfo>& outDisplayInfos,
+                                      std::vector<int32_t>& outVisibleWindowIds) {
     static size_t sNumWindowInfos = 0;
     outWindowInfos.reserve(sNumWindowInfos);
-    sNumWindowInfos = 0;
+    outVisibleWindowIds.clear();
 
     mLayerSnapshotBuilder.forEachInputSnapshot(
-            [&outWindowInfos](const frontend::LayerSnapshot& snapshot) {
+            [&outWindowInfos, &outVisibleWindowIds](const frontend::LayerSnapshot& snapshot) {
                 outWindowInfos.push_back(snapshot.inputInfo);
+                if (!snapshot.inputInfo.inputConfig.test(WindowInfo::InputConfig::NOT_VISIBLE)) {
+                    outVisibleWindowIds.push_back(snapshot.inputInfo.id);
+                }
             });
 
     sNumWindowInfos = outWindowInfos.size();
@@ -5109,7 +5105,7 @@ void SurfaceFlinger::updateCursorAsync() {
     constexpr bool kCursorOnly = true;
     const auto layers = addLayerSnapshotsToCompositionArgs(refreshArgs, kCursorOnly);
     mCompositionEngine->updateCursorAsync(refreshArgs);
-    moveSnapshotsFromCompositionArgs(refreshArgs, layers);
+    moveSnapshotsFromCompositionArgs(layers);
 }
 
 void SurfaceFlinger::requestHardwareVsync(PhysicalDisplayId displayId, bool enable) {
@@ -5180,10 +5176,7 @@ void SurfaceFlinger::requestDisplayModes(std::vector<display::DisplayModeRequest
 }
 
 void SurfaceFlinger::notifyCpuLoadUp() {
-    if (!FlagManager::getInstance().align_adpf_with_sf_opt_policy() ||
-        mOptimizeForPerformance.load()) {
-        mPowerAdvisor->notifyCpuLoadUp();
-    }
+    mPowerAdvisor->notifyCpuLoadUp();
 }
 
 void SurfaceFlinger::onChoreographerAttached() {
@@ -6779,7 +6772,7 @@ void SurfaceFlinger::applyOptimizationPolicy(const char* whence) FTL_FAKE_GUARD(
                         OptimizationPolicy::optimizeForPerformance;
             });
     if (FlagManager::getInstance().align_adpf_with_sf_opt_policy()) {
-        mOptimizeForPerformance = optimizeForPerformance;
+        mPowerAdvisor->setOptimizeForPerformance(optimizeForPerformance);
     }
     optimizeThreadScheduling(whence,
                              optimizeForPerformance ? OptimizationPolicy::optimizeForPerformance
@@ -8503,25 +8496,26 @@ void SurfaceFlinger::captureDisplay(const DisplayCaptureArgs& args,
         return;
     }
 
-    ScreenshotArgs screenshotArgs{.captureTypeVariant = args.displayToken,
-                                  .snapshotRequest =
-                                          SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
-                                                                      captureArgs.uid)},
-                                                              .excludeLayerIds =
-                                                                      excludeLayerIds.value()},
-                                  .sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop),
-                                  .size = ui::Size(args.width, args.height),
-                                  .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
-                                  .disableBlur = false,
-                                  .isGrayscale = captureArgs.grayscale,
-                                  .isSecure =
-                                          captureArgs.secureLayerMode == SecureLayerMode::Capture,
-                                  .includeProtected = captureArgs.protectedLayerMode ==
-                                          ProtectedLayerMode::Capture,
-                                  .preserveDisplayColors = captureArgs.preserveDisplayColors,
-                                  .requireDpuReadback =
-                                          captureArgs.captureMode == CaptureMode::RequireOptimized,
-                                  .debugName = "ScreenCapture"};
+    ScreenshotArgs
+            screenshotArgs{.captureTypeVariant = args.displayToken,
+                           .snapshotRequest =
+                                   SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
+                                                               captureArgs.uid)},
+                                                       .excludeLayerIds = excludeLayerIds.value(),
+                                                       .exclusionMask = static_cast<uint32_t>(
+                                                               captureArgs.exclusionMask)},
+                           .sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop),
+                           .size = ui::Size(args.width, args.height),
+                           .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
+                           .disableBlur = false,
+                           .isGrayscale = captureArgs.grayscale,
+                           .isSecure = captureArgs.secureLayerMode == SecureLayerMode::Capture,
+                           .includeProtected =
+                                   captureArgs.protectedLayerMode == ProtectedLayerMode::Capture,
+                           .preserveDisplayColors = captureArgs.preserveDisplayColors,
+                           .requireDpuReadback =
+                                   captureArgs.captureMode == CaptureMode::RequireOptimized,
+                           .debugName = "ScreenCapture"};
 
     captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
                         captureListener);
@@ -8592,28 +8586,28 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
         return;
     }
 
-    ScreenshotArgs screenshotArgs{.captureTypeVariant = LayerHandle::getLayerId(args.layerHandle),
-                                  .snapshotRequest =
-                                          SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
-                                                                      captureArgs.uid)},
-                                                              .rootLayerId =
-                                                                      LayerHandle::getLayerId(
-                                                                              args.layerHandle),
-                                                              .excludeLayerIds =
-                                                                      excludeLayerIds.value(),
-                                                              .childrenOnly = args.childrenOnly},
-                                  .sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop),
-                                  .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
-                                  .frameScaleX = captureArgs.frameScaleX,
-                                  .frameScaleY = captureArgs.frameScaleY,
-                                  .disableBlur = false,
-                                  .isGrayscale = captureArgs.grayscale,
-                                  .isSecure =
-                                          captureArgs.secureLayerMode == SecureLayerMode::Capture,
-                                  .includeProtected = captureArgs.protectedLayerMode ==
-                                          ProtectedLayerMode::Capture,
-                                  .preserveDisplayColors = captureArgs.preserveDisplayColors,
-                                  .debugName = "ScreenCapture"};
+    ScreenshotArgs
+            screenshotArgs{.captureTypeVariant = LayerHandle::getLayerId(args.layerHandle),
+                           .snapshotRequest =
+                                   SnapshotRequestArgs{.uid = gui::Uid{static_cast<uid_t>(
+                                                               captureArgs.uid)},
+                                                       .rootLayerId = LayerHandle::getLayerId(
+                                                               args.layerHandle),
+                                                       .excludeLayerIds = excludeLayerIds.value(),
+                                                       .childrenOnly = args.childrenOnly,
+                                                       .exclusionMask = static_cast<uint32_t>(
+                                                               captureArgs.exclusionMask)},
+                           .sourceCrop = gui::aidl_utils::fromARect(captureArgs.sourceCrop),
+                           .dataspace = static_cast<ui::Dataspace>(captureArgs.dataspace),
+                           .frameScaleX = captureArgs.frameScaleX,
+                           .frameScaleY = captureArgs.frameScaleY,
+                           .disableBlur = false,
+                           .isGrayscale = captureArgs.grayscale,
+                           .isSecure = captureArgs.secureLayerMode == SecureLayerMode::Capture,
+                           .includeProtected =
+                                   captureArgs.protectedLayerMode == ProtectedLayerMode::Capture,
+                           .preserveDisplayColors = captureArgs.preserveDisplayColors,
+                           .debugName = "ScreenCapture"};
 
     captureScreenCommon(screenshotArgs, static_cast<ui::PixelFormat>(captureArgs.pixelFormat),
                         captureListener);
@@ -9618,7 +9612,8 @@ status_t SurfaceFlinger::getMaxAcquiredBufferCount(int* buffers) const {
     if (!getHwComposer().isHeadless()) {
         const sp<const DisplayDevice> display = getPacesetterDisplay();
         if (display) {
-            maxRefreshRate = display->refreshRateSelector().getSupportedRefreshRateRange().max;
+            maxRefreshRate = display->refreshRateSelector().
+                getConfigGroupSupportedRefreshRateRange().max;
         }
     }
 
@@ -9863,7 +9858,6 @@ void SurfaceFlinger::setVisibleRegionDirtyIfNeeded(
 }
 
 void SurfaceFlinger::moveSnapshotsFromCompositionArgs(
-        compositionengine::CompositionRefreshArgs& refreshArgs,
         const std::vector<std::pair<Layer*, LayerFE*>>& layers) {
     std::vector<std::unique_ptr<frontend::LayerSnapshot>>& snapshots =
             mLayerSnapshotBuilder.getSnapshots();
@@ -9988,7 +9982,7 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args)
     };
 
     std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
-    if (args.rootLayerId || !args.excludeLayerIds.empty()) {
+    if (args.rootLayerId || !args.excludeLayerIds.empty() || args.exclusionMask) {
         // Create and update LayerSnapshotBuilder args before iterating through snapshots
         frontend::LayerSnapshotBuilder::Args
                 builderArgs{.root = args.rootLayerId
@@ -10010,7 +10004,8 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args)
                             .genericLayerMetadataKeyMap = getGenericLayerMetadataKeyMap(),
                             .skipRoundCornersWhenProtected =
                                     !getRenderEngine().supportsProtectedContent(),
-                            .renderResourceCache = mIpcCache.get()};
+                            .renderResourceCache = mIpcCache.get(),
+                            .exclusionMask = args.exclusionMask};
         if (args.rootLayerId) {
             if (builderArgs.root.hasLayerCycle()) {
                 return base::unexpected(BAD_VALUE);

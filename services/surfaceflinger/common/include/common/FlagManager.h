@@ -57,6 +57,7 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
     bool align_adpf_with_sf_opt_policy() const;
+    bool bugfix_layer_caching_color_inversion_flickering() const;
     bool bugfix_resize_virtual_display_surfaces() const;
     bool bugfix_virtual_display_refresh_rate() const;
     bool color_transform_translation() const;

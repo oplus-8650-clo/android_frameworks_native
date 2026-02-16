@@ -473,11 +473,10 @@ status_t BBinder::transact(
     }
 
     if (data.dataSize() > binder::kLogTransactionsOverBytes) {
-        ALOGW("Large data transaction of %zu bytes, interface descriptor %s, function: %s, code: "
-              "%" PRIu32 ", flags: "
+        ALOGW("Large data transaction of %zu bytes, interface descriptor %s, function: %s, flags: "
               "%d",
               data.dataSize(), String8(getInterfaceDescriptor()).c_str(),
-              getFunctionName(code).c_str(), code, flags);
+              getFunctionNameAndCode(code).c_str(), flags);
     }
 
     status_t err = NO_ERROR;
@@ -513,9 +512,9 @@ status_t BBinder::transact(
         reply->setDataPosition(0);
         if (reply->dataSize() > binder::kLogTransactionsOverBytes) {
             ALOGW("Large reply transaction of %zu bytes, interface descriptor %s, function: %s, "
-                  "code: %" PRIu32 ", flags: %d",
+                  "flags: %d",
                   reply->dataSize(), String8(getInterfaceDescriptor()).c_str(),
-                  getFunctionName(code).c_str(), code, flags);
+                  getFunctionNameAndCode(code).c_str(), flags);
         }
     }
 
@@ -543,9 +542,9 @@ status_t BBinder::transact(
 
     const uint64_t transactionMs = to_ms(std::chrono::steady_clock::now() - startTime);
     if (transactionMs > 1000lu) {
-        ALOGW("Binder transaction to %s, function: %s, code: %" PRIu32 ", took %" PRIu64
+        ALOGW("Binder transaction to %s, function: %s, took %" PRIu64
               "ms. Data bytes: %zu Reply bytes: %zu Flags: %d",
-              String8(getInterfaceDescriptor()).c_str(), getFunctionName(code).c_str(), code,
+              String8(getInterfaceDescriptor()).c_str(), getFunctionNameAndCode(code).c_str(),
               transactionMs, data.dataSize(), reply ? reply->dataSize() : 0u, flags);
     }
 
@@ -661,29 +660,45 @@ void BBinder::setTransactionCodeMap(const TransactionCodeData* data) {
     mPackedData.setTransactionCodeMap(data);
 }
 
-std::string BBinder::getFunctionName(size_t code) {
+std::optional<std::string> BBinder::tryGetFunctionName(size_t code) {
     const TransactionCodeData* transactionData = mPackedData.getTransactionCodeMap();
     if (transactionData == nullptr) {
-        return UNKNOWN_CODE + std::to_string(code);
+        return std::nullopt;
     }
 
     const uint32_t count = transactionData->count;
     const char* const* functionNames = transactionData->names;
     if (count == 0 || functionNames == nullptr) {
-        return UNKNOWN_CODE + std::to_string(code);
+        return std::nullopt;
     }
 
     if (code < FIRST_CALL_TRANSACTION || (code - FIRST_CALL_TRANSACTION) >= count) {
-        return UNKNOWN_CODE + std::to_string(code);
+        return std::nullopt;
     }
 
     const size_t index = code - FIRST_CALL_TRANSACTION;
     const char* functionName = functionNames[index];
     if (functionName == nullptr) {
-        return UNKNOWN_CODE + std::to_string(code);
+        return std::nullopt;
     }
 
     return functionName;
+}
+
+std::string BBinder::getFunctionName(size_t code) {
+    auto name = tryGetFunctionName(code);
+    if (name == std::nullopt) {
+        return UNKNOWN_CODE + std::to_string(code);
+    }
+    return std::move(*name);
+}
+
+std::string BBinder::getFunctionNameAndCode(size_t code) {
+    auto name = tryGetFunctionName(code);
+    if (name == std::nullopt) {
+        return "UNKNOWN_FUNCTION_NAME, code: " + std::to_string(code);
+    }
+    return *name + ", code: " + std::to_string(code);
 }
 
 void BBinder::setStability(int16_t level) {

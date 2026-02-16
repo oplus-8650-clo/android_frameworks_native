@@ -342,6 +342,10 @@ public:
             nsecs_t* outDisplayPresentTime, nsecs_t* outDequeueReadyTime,
             nsecs_t* outReleaseTime);
 
+    // Pass through to IGraphicBufferProducer::getFrameTimestamps, ignoring the cached data.
+    // Please avoid using. Do NOT use with getFrameTimestamps.
+    status_t getFrameEventHistoryDelta(FrameEventHistoryDelta* delta);
+
     status_t getWideColorSupport(bool* supported) __attribute__((__deprecated__));
     status_t getHdrSupport(bool* supported) __attribute__((__deprecated__));
 

@@ -1630,8 +1630,7 @@ void SkiaRenderEngine::drawShadow(SkCanvas* canvas,
     // DrawShadow expects the light pos in device space.
     // Shadow settings is in layer space (which is our current canvas transform).
     SkMatrix deviceFromLayer = canvas->getTotalMatrix();
-    SkPoint lightPos = {settings.lightPos.x, settings.lightPos.y}; // lightPos is in layer space
-    deviceFromLayer.mapPoints(&lightPos, 1);                       // lightPos is in device space
+    SkPoint lightPos = deviceFromLayer.mapPoint({settings.lightPos.x, settings.lightPos.y});
 
     SkShadowUtils::DrawShadow(canvas, SkPath::RRect(casterRRect), SkPoint3::Make(0, 0, casterZ),
                               SkPoint3{lightPos.fX, lightPos.fY, settings.lightPos.z},

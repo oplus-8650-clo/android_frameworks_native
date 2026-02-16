@@ -2524,6 +2524,19 @@ void SurfaceComposerClient::Transaction::setDisplaySize(const sp<IBinder>& token
     s.what |= DisplayState::eDisplaySizeChanged;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setCompositionFilterFlag(
+        const sp<SurfaceControl>& sc, uint32_t compositionFilterFlag) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::eCompositionFilterFlagChanged;
+    s->compositionFilterFlag = compositionFilterFlag;
+    registerSurfaceControlForCallback(sc);
+    return *this;
+}
+
 // copied from FrameTimelineInfo::merge()
 void SurfaceComposerClient::Transaction::mergeFrameTimelineInfo(FrameTimelineInfo& t,
                                                                 const FrameTimelineInfo& other) {

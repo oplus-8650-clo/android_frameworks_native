@@ -271,10 +271,16 @@ public:
     RankedFrameRates getRankedFrameRates(const std::vector<LayerRequirement>&, GlobalSignals,
                                          Fps pacesetterFps = {}) const EXCLUDES(mLock);
 
-    FpsRange getSupportedRefreshRateRange() const EXCLUDES(mLock) {
+    FpsRange getConfigGroupSupportedRefreshRateRange() const EXCLUDES(mLock) {
         std::lock_guard lock(mLock);
-        return {mMinRefreshRateModeIt->second->getPeakFps(),
-                mMaxRefreshRateModeIt->second->getPeakFps()};
+        return {mConfigGroupMinRefreshRateModeIt->second->getPeakFps(),
+                mConfigGroupMaxRefreshRateModeIt->second->getPeakFps()};
+    }
+
+    FpsRange getGlobalSupportedRefreshRateRange() const EXCLUDES(mLock) {
+        std::lock_guard lock(mLock);
+        return {mGlobalMinRefreshRateModeIt->second->getPeakFps(),
+                mGlobalMaxRefreshRateModeIt->second->getPeakFps()};
     }
 
     ftl::Optional<FrameRateMode> onKernelTimerChanged(ftl::Optional<DisplayModeId> desiredModeIdOpt,
@@ -526,8 +532,10 @@ private:
 
     ftl::Optional<FrameRateMode> mActiveModeOpt GUARDED_BY(mLock);
 
-    DisplayModeIterator mMinRefreshRateModeIt GUARDED_BY(mLock);
-    DisplayModeIterator mMaxRefreshRateModeIt GUARDED_BY(mLock);
+    DisplayModeIterator mConfigGroupMinRefreshRateModeIt GUARDED_BY(mLock);
+    DisplayModeIterator mConfigGroupMaxRefreshRateModeIt GUARDED_BY(mLock);
+    DisplayModeIterator mGlobalMinRefreshRateModeIt GUARDED_BY(mLock);
+    DisplayModeIterator mGlobalMaxRefreshRateModeIt GUARDED_BY(mLock);
 
     // Display modes that satisfy the Policy's ranges, filtered and sorted by refresh rate.
     std::vector<FrameRateMode> mPrimaryFrameRates GUARDED_BY(mLock);

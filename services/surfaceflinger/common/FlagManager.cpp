@@ -154,6 +154,7 @@ void FlagManager::dump(std::string& result) const {
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
+    DUMP_ACONFIG_FLAG(bugfix_layer_caching_color_inversion_flickering);
     DUMP_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces);
     DUMP_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved);
     DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
@@ -313,6 +314,8 @@ FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(align_adpf_with_sf_opt_policy, "");
+FLAG_MANAGER_ACONFIG_FLAG(bugfix_layer_caching_color_inversion_flickering,
+                          "debug.sf.layer_caching_color_inversion_flickering_fix");
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces, "");
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate, "");
 FLAG_MANAGER_ACONFIG_FLAG(color_transform_translation, "");

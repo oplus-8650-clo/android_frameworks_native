@@ -27,16 +27,17 @@ use crate::parcel::{
 };
 use crate::sys;
 
-use std::cmp::Ordering;
-use std::ffi::c_void;
+use alloc::sync::Arc;
+use core::cmp::Ordering;
+use core::ffi::c_void;
+use core::fmt;
+use core::mem;
+use core::ptr;
+
 #[cfg(feature = "std")]
 use std::ffi::CString;
-use std::fmt;
-use std::mem;
 #[cfg(feature = "std")]
 use std::os::fd::AsRawFd;
-use std::ptr;
-use std::sync::Arc;
 
 /// A strong reference to a Binder remote object.
 ///

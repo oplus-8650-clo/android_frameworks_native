@@ -5,7 +5,6 @@ package {
 aidl_interface {
     name: "aiseal_internal_service_aidl",
     srcs: ["com/**/*.aidl"],
-    imports: ["android.system.virtualizationcommon"],
     unstable: true,
     backend: {
         java: {

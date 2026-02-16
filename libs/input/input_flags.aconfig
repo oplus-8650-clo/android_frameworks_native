@@ -155,14 +155,6 @@ flag {
 }
 
 flag {
-  name: "enable_input_policy_profile"
-  namespace: "input"
-  description: "Apply input policy profile for input threads."
-  bug: "347122505"
-  is_fixed_read_only: true
-}
-
-flag {
   name: "set_input_device_kernel_wake"
   namespace: "input"
   description: "Set input device's power/wakeup sysfs node"

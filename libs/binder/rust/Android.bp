@@ -147,39 +147,35 @@ rust_library {
         "android_ndk_compat_symbols",
     ],
     min_sdk_version: "33",
-}
-
-// TODO: b/425915863 - actually set no_stdlibs: true
-// once full support for no_std has been implemented.
-// For now, this target gives us a build with the std
-// feature omitted to help test as we go.
-rust_library {
-    name: "libbinder_rs_nostd",
-    crate_name: "binder",
-    srcs: ["src/lib.rs"],
-    rustlibs: [
-        "libdowncast_rs_nostd",
-        "liblog_rust_nostd",
-        "libspin_nostd",
-    ],
-    cfgs: [
-        "single_threaded",
-    ],
-    features: [
-        "android_ndk_compat_symbols",
-    ],
-    host_supported: false,
-    visibility: [
-        ":__subpackages__",
-        "//system/tools/aidl:__subpackages__",
-    ],
-    no_std_rlibs: [
-        "libbinder_ndk_sys",
-        "libbinder_rs_ndk_compat",
-        "libstatic_assertions",
-        "libzerocopy",
-        "liblibc",
-    ],
+    // The no_std version of libbinder_rs is enabled in a mode that
+    // allows testing the no_std support of the lib and rust AIDL
+    // backend. This currently has shared lib deps and enables kernel binder,
+    // both of which are unlikely to work for targets that require no_std support.
+    // As of the time of this writing, such targets are not using soong to build
+    // binder so this is not a concerrn.
+    no_std: {
+        enabled: true,
+        features: [
+            "android_ndk_compat_symbols",
+            // Needed for testing no_std on Android where
+            // most meaningful integration tests are using
+            // kernel binder and service manager for service discovery.
+            "kernel_ipc",
+        ],
+        cfgs: [
+            "single_threaded",
+        ],
+        rustlibs: [
+            "libbinder_ndk_sys",
+            "libbinder_rs_ndk_compat",
+            "libdowncast_rs_nostd",
+            "liblibc",
+            "liblog_rust",
+            "libspin",
+            "libstatic_assertions",
+            "libzerocopy",
+        ],
+    },
 }
 
 rust_library {

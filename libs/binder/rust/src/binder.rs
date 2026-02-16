@@ -21,20 +21,23 @@ use crate::parcel::{BorrowedParcel, Parcel};
 use crate::proxy::{DeathRecipient, SpIBinder, WpIBinder};
 use crate::sys;
 
+use alloc::boxed::Box;
+use alloc::ffi::CString;
+use alloc::string::String;
+use core::borrow::Borrow;
+use core::cmp::Ordering;
+use core::convert::TryFrom;
+use core::ffi::{c_char, c_void, CStr};
+use core::fmt;
+use core::marker::PhantomData;
+use core::ops::Deref;
+use core::ptr;
 use downcast_rs::{impl_downcast, DowncastSync};
-use std::borrow::Borrow;
-use std::cmp::Ordering;
-use std::convert::TryFrom;
-use std::ffi::{c_void, CStr, CString};
-use std::fmt;
+
 #[cfg(feature = "std")]
 use std::io::{Read, Write};
-use std::marker::PhantomData;
-use std::ops::Deref;
 #[cfg(feature = "std")]
 use std::os::fd::AsRawFd;
-use std::os::raw::c_char;
-use std::ptr;
 
 #[cfg(feature = "android_ndk_compat_symbols")]
 use binder_rs_ndk_compat::set_transaction_code_to_function_name_map;
@@ -238,7 +241,7 @@ pub trait Remotable: Send + Sync + 'static {
 /// which can be safely shared across threads.
 #[allow(dead_code)]
 pub struct FunctionNames<const LEN: usize> {
-    pub(crate) arr: [*const std::ffi::c_char; LEN],
+    pub(crate) arr: [*const core::ffi::c_char; LEN],
 }
 
 // SAFETY: The `FunctionNames` struct only contains pointers to C strings
@@ -249,8 +252,8 @@ impl<const LEN: usize> FunctionNames<LEN> {
     /// Creates a new `FunctionNames` instance from an array of C-string slices.
     ///
     /// This function is `const`, so it can be used in static initializers.
-    pub const fn new(strs: [&'static std::ffi::CStr; LEN]) -> Self {
-        let mut arr = [std::ptr::null(); LEN];
+    pub const fn new(strs: [&'static core::ffi::CStr; LEN]) -> Self {
+        let mut arr = [core::ptr::null(); LEN];
         let mut i = 0;
         while i < LEN {
             arr[i] = strs[i].as_ptr();
@@ -1124,26 +1127,26 @@ macro_rules! declare_binder_interface {
                 $descriptor
             }
 
-            fn from_binder(mut binder: $crate::SpIBinder) -> std::result::Result<Self, $crate::StatusCode> {
+            fn from_binder(mut binder: $crate::SpIBinder) -> core::result::Result<Self, $crate::StatusCode> {
                 Ok(Self { binder, $($fname: $finit),* })
             }
         }
 
         #[doc = $native_doc]
         #[repr(transparent)]
-        pub struct $native(Box<dyn $interface + Sync + Send + 'static>);
+        pub struct $native(alloc::boxed::Box<dyn $interface + Sync + Send + 'static>);
 
         impl $native {
             /// Create a new binder service.
             pub fn new_binder<T: $interface + Sync + Send + 'static>(inner: T, features: $crate::BinderFeatures) -> $crate::Strong<dyn $interface> {
                 #[cfg(not(android_ndk))]
-                let mut binder = $crate::binder_impl::Binder::new_with_stability($native(Box::new(inner)), $stability);
+                let mut binder = $crate::binder_impl::Binder::new_with_stability($native(alloc::boxed::Box::new(inner)), $stability);
                 #[cfg(android_ndk)]
-                let mut binder = $crate::binder_impl::Binder::new($native(Box::new(inner)));
+                let mut binder = $crate::binder_impl::Binder::new($native(alloc::boxed::Box::new(inner)));
 
                 #[cfg(not(any(android_vndk, android_ndk)))]
                 $crate::binder_impl::IBinderInternal::set_requesting_sid(&mut binder, features.set_requesting_sid);
-                $crate::Strong::new(Box::new(binder))
+                $crate::Strong::new(alloc::boxed::Box::new(binder))
             }
 
             /// Tries to downcast the interface to another type.
@@ -1169,7 +1172,7 @@ macro_rules! declare_binder_interface {
                 $descriptor
             }
 
-            fn on_transact(&self, code: $crate::binder_impl::TransactionCode, data: &$crate::binder_impl::BorrowedParcel<'_>, reply: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn on_transact(&self, code: $crate::binder_impl::TransactionCode, data: &$crate::binder_impl::BorrowedParcel<'_>, reply: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 match $on_transact(&*self.0, code, data, reply) {
                     // The C++ backend converts UNEXPECTED_NULL into an exception
                     Err($crate::StatusCode::UNEXPECTED_NULL) => {
@@ -1188,33 +1191,47 @@ macro_rules! declare_binder_interface {
             $crate::on_shell_command_impl!();
 
             fn get_class() -> $crate::binder_impl::InterfaceClass {
-                static CLASS: std::sync::OnceLock<$crate::binder_impl::InterfaceClass> =
-                    std::sync::OnceLock::new();
+                static CLASS_INIT: $crate::binder_impl::Once = $crate::binder_impl::Once::new();
+                static mut CLASS: Option<$crate::binder_impl::InterfaceClass> = None;
 
-                *CLASS.get_or_init(|| {
+                CLASS_INIT.call_once(|| {
                     // This optional block will expand if `functionNames` are provided.
                     $(
-                        const STRS: [&'static std::ffi::CStr; {[$($fn),*].len()}] = [$($fn),*];
+                        const STRS: [&'static core::ffi::CStr; {[$($fn),*].len()}] = [$($fn),*];
 
                         static FUNCTION_NAMES: $crate::binder_impl::FunctionNames<{STRS.len()}> =
                             $crate::binder_impl::FunctionNames::new(STRS);
 
-                        // The 'return' here exits the closure early with the correct value.
-                        return $crate::binder_impl::InterfaceClass::new_with_function_names::<
-                            $crate::binder_impl::Binder<$native>,
-                            { FUNCTION_NAMES.len() },
-                        >(&FUNCTION_NAMES);
+                            // SAFETY: This assignment is guarded by the CLASS_INIT `once` variable
+                            // and is thread safe because it can only be executed once.
+                            unsafe {
+                                CLASS = Some($crate::binder_impl::InterfaceClass::new_with_function_names::<
+                                    $crate::binder_impl::Binder<$native>,
+                                    { FUNCTION_NAMES.len() },
+                                >(&FUNCTION_NAMES));
+
+                                // The 'return' here exits the closure early with the correct value.
+                                return;
+                            }
                     )?
 
                     // This code only executes if the optional block above did not expand.
                     // It becomes the return value of the closure.
-                    $crate::binder_impl::InterfaceClass::new::<$crate::binder_impl::Binder<$native>>()
-                })
+                    // SAFETY: This assignment is guarded by the CLASS_INIT `once` variable
+                    // and is thread safe because it can only be executed once.
+                    unsafe {
+                        CLASS = Some($crate::binder_impl::InterfaceClass::new::<$crate::binder_impl::Binder<$native>>());
+                    }
+                });
+
+                // SAFETY: This assignment is guarded by the CLASS_INIT `once` variable
+                // and is thread safe because it can only be executed once.
+                unsafe { CLASS.unwrap() }
             }
         }
 
         impl $crate::FromIBinder for dyn $interface {
-            fn try_from(mut ibinder: $crate::SpIBinder) -> std::result::Result<$crate::Strong<dyn $interface>, $crate::StatusCode> {
+            fn try_from(mut ibinder: $crate::SpIBinder) -> core::result::Result<$crate::Strong<dyn $interface>, $crate::StatusCode> {
                 use $crate::binder_impl::AssociateClass;
 
                 let existing_class = ibinder.get_class();
@@ -1227,20 +1244,20 @@ macro_rules! declare_binder_interface {
                         // associated object as remote, because we can't cast it
                         // into a Rust service object without a matching class
                         // pointer.
-                        return Ok($crate::Strong::new(Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
+                        return Ok($crate::Strong::new(alloc::boxed::Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
                     }
                 }
 
                 if ibinder.associate_class(<$native as $crate::binder_impl::Remotable>::get_class()) {
-                    let service: std::result::Result<$crate::binder_impl::Binder<$native>, $crate::StatusCode> =
-                        std::convert::TryFrom::try_from(ibinder.clone());
+                    let service: core::result::Result<$crate::binder_impl::Binder<$native>, $crate::StatusCode> =
+                        core::convert::TryFrom::try_from(ibinder.clone());
                     if let Ok(service) = service {
                         // We were able to associate with our expected class and
                         // the service is local.
-                        return Ok($crate::Strong::new(Box::new(service)));
+                        return Ok($crate::Strong::new(alloc::boxed::Box::new(service)));
                     } else {
                         // Service is remote
-                        return Ok($crate::Strong::new(Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
+                        return Ok($crate::Strong::new(alloc::boxed::Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
                     }
                 }
 
@@ -1252,26 +1269,26 @@ macro_rules! declare_binder_interface {
         where
             dyn $interface: $crate::Interface
         {
-            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 let binder = $crate::Interface::as_binder(self);
                 parcel.write(&binder)
             }
         }
 
         impl $crate::binder_impl::SerializeOption for dyn $interface + '_ {
-            fn serialize_option(this: Option<&Self>, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn serialize_option(this: Option<&Self>, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 parcel.write(&this.map($crate::Interface::as_binder))
             }
         }
 
-        impl std::fmt::Debug for dyn $interface + '_ {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl core::fmt::Debug for dyn $interface + '_ {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.pad(stringify!($interface))
             }
         }
 
         /// Convert a &dyn $interface to Strong<dyn $interface>
-        impl std::borrow::ToOwned for dyn $interface {
+        impl alloc::borrow::ToOwned for dyn $interface {
             type Owned = $crate::Strong<dyn $interface>;
             fn to_owned(&self) -> Self::Owned {
                 self.as_binder().into_interface()
@@ -1282,7 +1299,7 @@ macro_rules! declare_binder_interface {
         $(
         // Async interface trait implementations.
         impl<P: $crate::BinderAsyncPool + 'static> $crate::FromIBinder for dyn $async_interface<P> {
-            fn try_from(mut ibinder: $crate::SpIBinder) -> std::result::Result<$crate::Strong<dyn $async_interface<P>>, $crate::StatusCode> {
+            fn try_from(mut ibinder: $crate::SpIBinder) -> core::result::Result<$crate::Strong<dyn $async_interface<P>>, $crate::StatusCode> {
                 use $crate::binder_impl::AssociateClass;
 
                 let existing_class = ibinder.get_class();
@@ -1295,13 +1312,13 @@ macro_rules! declare_binder_interface {
                         // associated object as remote, because we can't cast it
                         // into a Rust service object without a matching class
                         // pointer.
-                        return Ok($crate::Strong::new(Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
+                        return Ok($crate::Strong::new(alloc::boxed::Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
                     }
                 }
 
                 if ibinder.associate_class(<$native as $crate::binder_impl::Remotable>::get_class()) {
-                    let service: std::result::Result<$crate::binder_impl::Binder<$native>, $crate::StatusCode> =
-                        std::convert::TryFrom::try_from(ibinder.clone());
+                    let service: core::result::Result<$crate::binder_impl::Binder<$native>, $crate::StatusCode> =
+                        core::convert::TryFrom::try_from(ibinder.clone());
                     $(
                     // This part is only generated if the user of the macro specifies that the
                     // trait has an `try_into_local_async` implementation.
@@ -1318,7 +1335,7 @@ macro_rules! declare_binder_interface {
                     }
                     )?
                     // Treat service as remote.
-                    return Ok($crate::Strong::new(Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
+                    return Ok($crate::Strong::new(alloc::boxed::Box::new(<$proxy as $crate::binder_impl::Proxy>::from_binder(ibinder)?)));
                 }
 
                 Err($crate::StatusCode::BAD_TYPE.into())
@@ -1326,26 +1343,26 @@ macro_rules! declare_binder_interface {
         }
 
         impl<P: $crate::BinderAsyncPool + 'static> $crate::binder_impl::Serialize for dyn $async_interface<P> + '_ {
-            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 let binder = $crate::Interface::as_binder(self);
                 parcel.write(&binder)
             }
         }
 
         impl<P: $crate::BinderAsyncPool + 'static> $crate::binder_impl::SerializeOption for dyn $async_interface<P> + '_ {
-            fn serialize_option(this: Option<&Self>, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn serialize_option(this: Option<&Self>, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 parcel.write(&this.map($crate::Interface::as_binder))
             }
         }
 
-        impl<P: $crate::BinderAsyncPool + 'static> std::fmt::Debug for dyn $async_interface<P> + '_ {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl<P: $crate::BinderAsyncPool + 'static> core::fmt::Debug for dyn $async_interface<P> + '_ {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.pad(stringify!($async_interface))
             }
         }
 
         /// Convert a &dyn $async_interface to Strong<dyn $async_interface>
-        impl<P: $crate::BinderAsyncPool + 'static> std::borrow::ToOwned for dyn $async_interface<P> {
+        impl<P: $crate::BinderAsyncPool + 'static> alloc::borrow::ToOwned for dyn $async_interface<P> {
             type Owned = $crate::Strong<dyn $async_interface<P>>;
             fn to_owned(&self) -> Self::Owned {
                 self.as_binder().into_interface()
@@ -1397,8 +1414,8 @@ macro_rules! declare_binder_enum {
             }
         }
 
-        impl std::fmt::Debug for $enum {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl core::fmt::Debug for $enum {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 match self.0 {
                     $($value => f.write_str(stringify!($name)),)*
                     _ => f.write_fmt(format_args!("{}", self.0))
@@ -1407,14 +1424,14 @@ macro_rules! declare_binder_enum {
         }
 
         impl $crate::binder_impl::Serialize for $enum {
-            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
+            fn serialize(&self, parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
                 parcel.write(&self.0)
             }
         }
 
         impl $crate::binder_impl::SerializeArray for $enum {
-            fn serialize_array(slice: &[Self], parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<(), $crate::StatusCode> {
-                let v: Vec<$backing> = slice.iter().map(|x| x.0).collect();
+            fn serialize_array(slice: &[Self], parcel: &mut $crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<(), $crate::StatusCode> {
+                let v: alloc::vec::Vec<$backing> = slice.iter().map(|x| x.0).collect();
                 <$backing as $crate::binder_impl::SerializeArray>::serialize_array(&v[..], parcel)
             }
         }
@@ -1424,14 +1441,14 @@ macro_rules! declare_binder_enum {
             fn uninit() -> Self::UninitType { Self::UninitType::default() }
             fn from_init(value: Self) -> Self::UninitType { value }
 
-            fn deserialize(parcel: &$crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<Self, $crate::StatusCode> {
+            fn deserialize(parcel: &$crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<Self, $crate::StatusCode> {
                 parcel.read().map(Self)
             }
         }
 
         impl $crate::binder_impl::DeserializeArray for $enum {
-            fn deserialize_array(parcel: &$crate::binder_impl::BorrowedParcel<'_>) -> std::result::Result<Option<Vec<Self>>, $crate::StatusCode> {
-                let v: Option<Vec<$backing>> =
+            fn deserialize_array(parcel: &$crate::binder_impl::BorrowedParcel<'_>) -> core::result::Result<Option<alloc::vec::Vec<Self>>, $crate::StatusCode> {
+                let v: Option<alloc::vec::Vec<$backing>> =
                     <$backing as $crate::binder_impl::DeserializeArray>::deserialize_array(parcel)?;
                 Ok(v.map(|v| v.into_iter().map(Self).collect()))
             }
@@ -1458,40 +1475,40 @@ macro_rules! declare_binder_enum {
             }
         }
 
-        impl std::ops::BitOr for $enum {
+        impl core::ops::BitOr for $enum {
             type Output = Self;
             fn bitor(self, rhs: Self) -> Self {
                 Self(self.0 | rhs.0)
             }
         }
 
-        impl std::ops::BitOrAssign for $enum {
+        impl core::ops::BitOrAssign for $enum {
             fn bitor_assign(&mut self, rhs: Self) {
                 self.0 = self.0 | rhs.0;
             }
         }
 
-        impl std::ops::BitAnd for $enum {
+        impl core::ops::BitAnd for $enum {
             type Output = Self;
             fn bitand(self, rhs: Self) -> Self {
                 Self(self.0 & rhs.0)
             }
         }
 
-        impl std::ops::BitAndAssign for $enum {
+        impl core::ops::BitAndAssign for $enum {
             fn bitand_assign(&mut self, rhs: Self) {
                 self.0 = self.0 & rhs.0;
             }
         }
 
-        impl std::ops::BitXor for $enum {
+        impl core::ops::BitXor for $enum {
             type Output = Self;
             fn bitxor(self, rhs: Self) -> Self {
                 Self(self.0 ^ rhs.0)
             }
         }
 
-        impl std::ops::BitXorAssign for $enum {
+        impl core::ops::BitXorAssign for $enum {
             fn bitxor_assign(&mut self, rhs: Self) {
                 self.0 = self.0 ^ rhs.0;
             }

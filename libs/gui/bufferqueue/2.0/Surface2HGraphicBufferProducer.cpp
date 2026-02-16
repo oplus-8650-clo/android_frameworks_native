@@ -187,6 +187,18 @@ status_t Surface2HGraphicBufferProducer::cancelBufferSimple(int slot,
     return ret;
 }
 
+void Surface2HGraphicBufferProducer::enableFrameTimestamps(bool enable) {
+    std::scoped_lock _l(mMutex);
+    mEnableFrameTimestamps = enable;
+    mBase->enableFrameTimestamps(enable);
+}
+
+status_t Surface2HGraphicBufferProducer::getFrameTimestamps(uint64_t frameNumber,
+                                                            nsecs_t* outLatchTime) {
+    return mBase->getFrameTimestamps(frameNumber, nullptr, nullptr, outLatchTime, nullptr, nullptr,
+                                     nullptr, nullptr, nullptr, nullptr);
+}
+
 Return<HStatus> Surface2HGraphicBufferProducer::setMaxDequeuedBufferCount(
         int32_t maxDequeuedBuffers) {
     // Since we only provide NUM_BUFFER_SLOTS buffers, we can't allow more than that.
@@ -413,6 +425,8 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
         return {};
     }
 
+    std::scoped_lock _l(mMutex);
+
     SurfaceQueueBufferInput sInput{
             .dataSpace = static_cast<android_dataspace>(hInput.dataSpace),
             .crop = {},
@@ -421,7 +435,7 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
             .stickyTransform = static_cast<uint32_t>(hInput.stickyTransform),
             .timestamp = hInput.timestamp,
             .isAutoTimestamp = hInput.isAutoTimestamp,
-            .getFrameTimestamps = false,
+            .getFrameTimestamps = mEnableFrameTimestamps,
     };
     // Convert crop.
     if (!h2b(hInput.crop, &sInput.crop)) {
@@ -441,7 +455,6 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
         return {};
     }
 
-    std::scoped_lock _l(mMutex);
     sp<GraphicBuffer> buffer = mSlotToInfo[slot].buffer;
     if (!buffer) {
         _hidl_cb(HStatus::BAD_VALUE, QueueBufferOutput{});

@@ -39,12 +39,14 @@ class StubTracker : public VSyncTracker {
 public:
     StubTracker(nsecs_t period) : mPeriod(period) {}
 
-    bool addVsyncTimestamp(nsecs_t, VsyncTimeSource) final { return true; }
+    bool addVsyncTimestamp(nsecs_t) final { return true; }
 
     nsecs_t currentPeriod() const final {
         std::lock_guard lock(mMutex);
         return mPeriod;
     }
+
+    ModelAccuracy getModelAccuracy(nsecs_t) const final { return {0, 0, 0, 0, 0}; }
 
     Period minFramePeriod() const final { return Period::fromNs(currentPeriod()); }
     void resetModel() final {}
