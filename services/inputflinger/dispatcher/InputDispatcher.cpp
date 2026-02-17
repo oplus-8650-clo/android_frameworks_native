@@ -979,6 +979,13 @@ void InputDispatcher::dispatchOnce() {
             nextWakeupTime = LLONG_MIN;
         }
 
+        // Process ANR warning if we are close to ANR warning window.
+        const nsecs_t nextAnrWarningCheck =
+                com::android::input::flags::enable_anr_warning_callback_input_dispatcher()
+                ? processNoFocusedWindowAnrWarningLocked()
+                : LLONG_MAX;
+        nextWakeupTime = std::min(nextWakeupTime, nextAnrWarningCheck);
+
         // If we are still waiting for ack on some events,
         // we might have to wake up earlier to check if an app is anr'ing.
         const nsecs_t nextAnrCheck = processAnrsLocked();
@@ -1028,6 +1035,57 @@ void InputDispatcher::processNoFocusedWindowAnrLocked() {
         return; // We now have a focused window. No need for ANR.
     }
     onAnrLocked(mNoFocusedWindowAnrState->applicationHandle);
+}
+
+/**
+ * Processes a potential "No Focused Window" ANR and sends a warning if the timeout
+ * is approaching.
+ *
+ * This function checks if we are waiting for a focused window and if the ANR timeout
+ * is close. If the remaining time is within half of the total timeout duration, it
+ * triggers an ANR warning by calling warnNoFocusedWindowAnrLocked.
+ *
+ * Returns the time at which the next check for a "No Focused Window" ANR warning
+ *         should occur. Returns LLONG_MAX if there's no pending ANR state or if the warning has
+ * already been triggered.
+ */
+nsecs_t InputDispatcher::processNoFocusedWindowAnrWarningLocked() {
+    // We have a focused window target or ANR warning already triggered, nothing further to do.
+    if (!mNoFocusedWindowAnrState.has_value() || mNoFocusedWindowAnrState->anrWarningTriggered) {
+        return LLONG_MAX;
+    }
+
+    const nsecs_t currentTime = now();
+
+    // Notify apps at the 50% timeout window about imminent ANR.
+    const std::chrono::nanoseconds anrWarningWindow = mNoFocusedWindowAnrState->timeoutDuration / 2;
+    const std::chrono::nanoseconds timeoutDurationRemaining =
+            std::chrono::nanoseconds(mNoFocusedWindowAnrState->timeoutEndTime - currentTime);
+
+    // Warn apps if within the ANR warning window.
+    if (timeoutDurationRemaining <= anrWarningWindow) {
+        const auto elapsedDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                mNoFocusedWindowAnrState->timeoutDuration - timeoutDurationRemaining);
+        warnNoFocusedWindowAnrLocked(mNoFocusedWindowAnrState->applicationHandle,
+                                     mNoFocusedWindowAnrState->eventId, elapsedDuration,
+                                     mNoFocusedWindowAnrState->timeoutDuration);
+        mNoFocusedWindowAnrState->anrWarningTriggered = true;
+        return LLONG_MIN;
+    }
+
+    // return the earliest time we want to trigger ANR warning.
+    return mNoFocusedWindowAnrState->timeoutEndTime - anrWarningWindow.count();
+}
+
+void InputDispatcher::warnNoFocusedWindowAnrLocked(
+        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+        std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration) {
+    auto command = [this, app = inputApplicationHandle, eventId, elapsedDuration,
+                    timeoutDuration]() REQUIRES(mLock) {
+        scoped_unlock unlock(mLock);
+        mPolicy.warnNoFocusedWindowAnr(app, eventId, elapsedDuration, timeoutDuration);
+    };
+    postCommandLocked(std::move(command));
 }
 
 /**
@@ -2835,12 +2893,14 @@ void InputDispatcher::finishDragAndDrop(ui::LogicalDisplayId displayId, float x,
     sp<WindowInfoHandle> dropWindow =
             mWindowInfos.findTouchedWindowAt(displayId, x, y, isStylus, /*ignoreWindow=*/
                                              mDragState->dragWindow);
+    vec2 raw = mWindowInfos.getDisplayTransform(displayId).transform(x, y);
+
     if (dropWindow) {
         vec2 local = dropWindow->getInfo()->transform.transform(x, y);
-        sendDropWindowCommandLocked(dropWindow->getToken(), local.x, local.y);
+        sendDropWindowCommandLocked(dropWindow->getToken(), local, raw);
     } else {
         ALOGW("No window found when drop.");
-        sendDropWindowCommandLocked(nullptr, 0, 0);
+        sendDropWindowCommandLocked(nullptr, {0, 0}, raw);
     }
     mDragState.reset();
 }
@@ -2918,7 +2978,7 @@ void InputDispatcher::addDragEventLocked(const MotionEntry& entry) {
             break;
         case AMOTION_EVENT_ACTION_CANCEL: {
             ALOGD("Receiving cancel when drag and drop.");
-            sendDropWindowCommandLocked(nullptr, 0, 0);
+            sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0}, /*rawLocation=*/{0, 0});
             mDragState.reset();
             break;
         }
@@ -3024,8 +3084,7 @@ void InputDispatcher::DispatcherTouchState::addPointerWindowTarget(
                    << ", windowInfo->globalScaleFactor=" << windowInfo.globalScaleFactor;
     }
     ui::Transform transform = windowInfo.transform;
-    if (input_flags::use_topology_aware_flag() &&
-        !windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE) &&
+    if (!windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE) &&
         pointerDisplayId.has_value() && windowInfo.displayId != pointerDisplayId.value()) {
         transform = transform *
                 (mWindowInfos.getDisplayTransform(windowInfo.displayId).inverse() *
@@ -3477,7 +3536,7 @@ void InputDispatcher::enqueueDispatchEntryLocked(const std::shared_ptr<Connectio
                 bool shouldCreateNewMotionEntry = resolvedAction != motionEntry.action;
 
                 ui::LogicalDisplayId resolvedDisplayId = motionEntry.displayId;
-                if (input_flags::use_topology_aware_flag() && !connection->isFocusMonitor) {
+                if (!connection->isFocusMonitor) {
                     const WindowInfo& windowInfo = *inputTarget.windowHandle->getInfo();
                     if (motionEntry.displayId.isValid() &&
                         motionEntry.displayId != windowInfo.displayId &&
@@ -4232,7 +4291,8 @@ void InputDispatcher::synthesizeCancellationEventsForConnectionLocked(
                         LOG(INFO) << __func__
                                   << ": Canceling drag and drop because the pointers for the drag "
                                      "window are being canceled.";
-                        sendDropWindowCommandLocked(nullptr, /*x=*/0, /*y=*/0);
+                        sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0},
+                                                    /*rawLocation=*/{0, 0});
                         mDragState.reset();
                     }
                     mTouchStates
@@ -5276,8 +5336,7 @@ ui::Transform InputDispatcher::DispatcherWindowInfo::getRawTransform(
         // Sending pointer to a different display than the window. This is a
         // cross-display drag gesture, use the new display's transform if window is topology aware.
         // Otherwise use the window's display coordinate space.
-        if (!input_flags::use_topology_aware_flag() ||
-            windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
+        if (windowInfo.inputConfig.test(WindowInfo::InputConfig::DISPLAY_TOPOLOGY_AWARE)) {
             return getDisplayTransform(*pointerDisplayId);
         } else {
             // If the window is not topology aware it will receive event in its own display's
@@ -5608,7 +5667,7 @@ void InputDispatcher::setInputWindowsLocked(
         std::find(windowHandles.begin(), windowHandles.end(), mDragState->dragWindow) ==
                 windowHandles.end()) {
         ALOGI("Drag window went away: %s", mDragState->dragWindow->getName().c_str());
-        sendDropWindowCommandLocked(nullptr, 0, 0);
+        sendDropWindowCommandLocked(nullptr, /*location=*/{0, 0}, /*rawLocation=*/{0, 0});
         mDragState.reset();
     }
 
@@ -6629,10 +6688,11 @@ void InputDispatcher::sendFocusChangedCommandLocked(const sp<IBinder>& oldToken,
     postCommandLocked(std::move(command));
 }
 
-void InputDispatcher::sendDropWindowCommandLocked(const sp<IBinder>& token, float x, float y) {
-    auto command = [this, token, x, y]() REQUIRES(mLock) {
+void InputDispatcher::sendDropWindowCommandLocked(const sp<IBinder>& token, vec2 location,
+                                                  vec2 rawLocation) {
+    auto command = [this, token, location, rawLocation]() REQUIRES(mLock) {
         scoped_unlock unlock(mLock);
-        mPolicy.notifyDropWindow(token, x, y);
+        mPolicy.notifyDropWindow(token, location, rawLocation);
     };
     postCommandLocked(std::move(command));
 }

@@ -204,9 +204,12 @@ struct layer_state_t {
         // possible. This is the case when the SurfaceControl is the root SurfaceControl
         // owned by ViewRootImpl.
         eRecoverableFromBufferStuffing = 0x2000,
+        // Disables the client-drawn rounded corners optimization by sending a zero radius
+        // to the client.
+        eRoundedCornerOptDisabled = 0x4000,
     };
 
-    enum {
+    enum : uint64_t {
         ePositionChanged = 0x00000001,
         eLayerChanged = 0x00000002,
         eTrustedPresentationInfoChanged = 0x00000004,
@@ -269,6 +272,7 @@ struct layer_state_t {
         eRenderCommandBufferChanged = 0x8000000'00000000,
         eRenderCommandBufferFrameIdChanged = 0x10000000'00000000,
         eRenderResourceTokenChanged = 0x20000000'00000000,
+        eDesiredMaxHdrHeadroomChanged = 0x40000000'00000000,
     };
 
     layer_state_t();
@@ -319,7 +323,8 @@ struct layer_state_t {
             layer_state_t::eAppContentPriorityChanged | layer_state_t::eBorderSettingsChanged |
             layer_state_t::eBoxShadowSettingsChanged |
             layer_state_t::eRenderCommandBufferFrameIdChanged |
-            layer_state_t::eRenderCommandBufferChanged;
+            layer_state_t::eRenderCommandBufferChanged |
+            layer_state_t::eDesiredMaxHdrHeadroomChanged;
 
     // Changes which invalidates the layer's visible region in CE.
     static constexpr uint64_t CONTENT_DIRTY = layer_state_t::CONTENT_CHANGES |
@@ -335,7 +340,8 @@ struct layer_state_t {
             layer_state_t::eFrameRateChanged | layer_state_t::eFrameRateCategoryChanged |
             layer_state_t::eFrameRateSelectionStrategyChanged |
             layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFixedTransformHintChanged |
-            layer_state_t::eSystemContentPriorityChanged;
+            layer_state_t::eSystemContentPriorityChanged |
+            layer_state_t::eDesiredMaxHdrHeadroomChanged;
 
     // Changes affecting data sent to input.
     static constexpr uint64_t INPUT_CHANGES = layer_state_t::eAlphaChanged |
@@ -502,6 +508,7 @@ struct layer_state_t {
     bool dimmingEnabled;
     float currentHdrSdrRatio = 1.f;
     float desiredHdrSdrRatio = 1.f;
+    float maxDesiredHdrSdrRatio = 0.f;
 
     // Enhance the quality of the buffer contents by configurating a picture processing pipeline
     // with values as specified by this picture profile.

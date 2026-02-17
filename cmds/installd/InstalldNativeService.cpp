@@ -16,6 +16,7 @@
 
 #include "InstalldNativeService.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fts.h>
 #include <inttypes.h>
@@ -84,6 +85,7 @@
 
 #define GRANULAR_LOCKS
 
+using android::base::Fdopendir;
 using android::base::ParseUint;
 using android::base::Split;
 using android::base::StringPrintf;
@@ -814,8 +816,8 @@ static binder::Status createAppDataDirs(const std::string& path, int32_t uid, in
 binder::Status InstalldNativeService::createAppDataLocked(
         const std::optional<std::string>& uuid, const std::string& packageName, int32_t userId,
         int32_t flags, int32_t appId, int32_t previousAppId, const std::string& seInfo,
-        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
-        int32_t previousPccId) {
+        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode,
+        int64_t* pccCeDataInode, int64_t* pccDeDataInode, int32_t pccId, int32_t previousPccId) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -827,6 +829,8 @@ binder::Status InstalldNativeService::createAppDataLocked(
     // Assume invalid inode unless filled in below
     if (ceDataInode != nullptr) *ceDataInode = -1;
     if (deDataInode != nullptr) *deDataInode = -1;
+    if (pccCeDataInode != nullptr) *pccCeDataInode = -1;
+    if (pccDeDataInode != nullptr) *pccDeDataInode = -1;
 
     int32_t uid = multiuser_get_uid(userId, appId);
 
@@ -875,7 +879,8 @@ binder::Status InstalldNativeService::createAppDataLocked(
         // Prepare the PCC sibling directory.
         status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
                                                   cacheGid, seInfo, targetMode, projectIdApp,
-                                                  projectIdCache, /* isCeStorage */ true);
+                                                  projectIdCache, /* isCeStorage */ true,
+                                                  pccCeDataInode);
 
         if (!status.isOk()) {
             return status;
@@ -905,7 +910,8 @@ binder::Status InstalldNativeService::createAppDataLocked(
 
         status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
                                                   cacheGid, seInfo, targetMode, projectIdApp,
-                                                  projectIdCache, /* isCeStorage */ false);
+                                                  projectIdCache, /* isCeStorage */ false,
+                                                  pccDeDataInode);
         if (!status.isOk()) {
             return status;
         }
@@ -980,15 +986,16 @@ binder::Status InstalldNativeService::createSdkSandboxDataPackageDirectory(
 binder::Status InstalldNativeService::createAppData(
         const std::optional<std::string>& uuid, const std::string& packageName, int32_t userId,
         int32_t flags, int32_t appId, int32_t previousAppId, const std::string& seInfo,
-        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode, int32_t pccId,
-        int32_t previousPccId) {
+        int32_t targetSdkVersion, int64_t* ceDataInode, int64_t* deDataInode,
+        int64_t* pccCeDataInode, int64_t* pccDeDataInode, int32_t pccId, int32_t previousPccId) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
     CHECK_ARGUMENT_PACKAGE_NAME(packageName);
     LOCK_PACKAGE_USER();
     return createAppDataLocked(uuid, packageName, userId, flags, appId, previousAppId, seInfo,
-                               targetSdkVersion, ceDataInode, deDataInode, pccId, previousPccId);
+                               targetSdkVersion, ceDataInode, deDataInode, pccCeDataInode,
+                               pccDeDataInode, pccId, previousPccId);
 }
 
 binder::Status InstalldNativeService::createAppData(
@@ -1000,11 +1007,16 @@ binder::Status InstalldNativeService::createAppData(
 
     int64_t ceDataInode = -1;
     int64_t deDataInode = -1;
+    int64_t pccCeDataInode = -1;
+    int64_t pccDeDataInode = -1;
     auto status = createAppData(args.uuid, args.packageName, args.userId, args.flags, args.appId,
                                 args.previousAppId, args.seInfo, args.targetSdkVersion,
-                                &ceDataInode, &deDataInode, args.pccId, args.previousPccId);
+                                &ceDataInode, &deDataInode, &pccCeDataInode, &pccDeDataInode,
+                                args.pccId, args.previousPccId);
     _aidl_return->ceDataInode = ceDataInode;
     _aidl_return->deDataInode = deDataInode;
+    _aidl_return->pccCeDataInode = pccCeDataInode;
+    _aidl_return->pccDeDataInode = pccDeDataInode;
     _aidl_return->exceptionCode = status.exceptionCode();
     _aidl_return->exceptionMessage = status.exceptionMessage();
     return ok();
@@ -1206,7 +1218,9 @@ binder::Status InstalldNativeService::clearAppProfiles(const std::string& packag
 }
 
 binder::Status InstalldNativeService::clearAppData(const std::optional<std::string>& uuid,
-        const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode) {
+                                                   const std::string& packageName, int32_t userId,
+                                                   int32_t flags, int64_t ceDataInode,
+                                                   int64_t pccCeDataInode) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -1223,9 +1237,8 @@ binder::Status InstalldNativeService::clearAppData(const std::optional<std::stri
 
         if (res.isOk()) {
             const std::string pccPackageName = packageName + kPccDataSuffix;
-            // TODO(b/http://b/460401607) : Track inode for PCC Directories
             auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
-                                                            /* ce_data_inode= */ 0);
+                                                            pccCeDataInode);
             res = clearCeDirectoryLocked(pccPath, flags);
         }
     }
@@ -1383,7 +1396,9 @@ binder::Status InstalldNativeService::deleteReferenceProfile(const std::string& 
 }
 
 binder::Status InstalldNativeService::destroyAppData(const std::optional<std::string>& uuid,
-        const std::string& packageName, int32_t userId, int32_t flags, int64_t ceDataInode) {
+                                                     const std::string& packageName, int32_t userId,
+                                                     int32_t flags, int64_t ceDataInode,
+                                                     int64_t pccCeDataInode) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
@@ -1401,9 +1416,8 @@ binder::Status InstalldNativeService::destroyAppData(const std::optional<std::st
         }
 
         const std::string pccPackageName = packageName + kPccDataSuffix;
-        // TODO(b/460401607) : Track inode for PCC Directories
         auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
-                                                        /* ce_data_inode= */ 0);
+                                                        /* ce_data_inode= */ pccCeDataInode);
         if (res.isOk() && rename_delete_dir_contents_and_dir(pccPath) != 0) {
             res = error("Failed to delete " + pccPath);
         }
@@ -1748,7 +1762,8 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
 
     // ce_data_inode is not needed when FLAG_CLEAR_CACHE_ONLY is set.
     binder::Status clear_cache_result =
-            clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CACHE_ONLY, 0);
+            clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CACHE_ONLY,
+                         /* ceDataInode=*/0, /*pccCeDataInode=*/0);
     if (!clear_cache_result.isOk()) {
         // It should be fine to continue snapshot if we for some reason failed
         // to clear cache.
@@ -1758,7 +1773,7 @@ binder::Status InstalldNativeService::snapshotAppData(const std::optional<std::s
     // ce_data_inode is not needed when FLAG_CLEAR_CODE_CACHE_ONLY is set.
     binder::Status clear_code_cache_result =
             clearAppData(volumeUuid, packageName, userId, storageFlags | FLAG_CLEAR_CODE_CACHE_ONLY,
-                         0);
+                         /* ceDataInode=*/0, /*pccCeDataInode=*/0);
     if (!clear_code_cache_result.isOk()) {
         // It should be fine to continue snapshot if we for some reason failed
         // to clear code_cache.
@@ -1874,8 +1889,8 @@ binder::Status InstalldNativeService::restoreAppDataSnapshot(
     // It's fine to pass 0 as ceDataInode here, because restoreAppDataSnapshot
     // can only be called when user unlocks the phone, meaning that CE user data
     // is decrypted.
-    binder::Status res =
-            clearAppData(volumeUuid, packageName, userId, storageFlags, 0 /* ceDataInode */);
+    binder::Status res = clearAppData(volumeUuid, packageName, userId, storageFlags,
+                                      0 /* ceDataInode */, 0 /* pccCeDataInode */);
     if (!res.isOk()) {
         return res;
     }
@@ -2133,7 +2148,7 @@ binder::Status InstalldNativeService::moveCompleteApp(const std::optional<std::s
 
         if (!createAppDataLocked(toUuid, packageName, userId, FLAG_STORAGE_CE | FLAG_STORAGE_DE,
                                  appId, /* previousAppId */ -1, seInfo, targetSdkVersion, nullptr,
-                                 nullptr, pccId, /* previousPccId */ 0)
+                                 nullptr, nullptr, nullptr, pccId, /* previousPccId */ 0)
                      .isOk()) {
             res = error("Failed to create package target");
             goto fail;
@@ -3708,7 +3723,7 @@ binder::Status InstalldNativeService::restoreconSdkDataLocked(
 binder::Status InstalldNativeService::createOrDeletePccDirectoryLocked(
         const char* volumeUuid, userid_t userId, const char* packageName, int32_t pccId,
         int32_t previousPccId, int32_t cacheGid, const std::string& seInfo, mode_t targetMode,
-        long projectIdApp, long projectIdCache, bool isCeStorage) {
+        long projectIdApp, long projectIdCache, bool isCeStorage, int64_t* pccDataInode) {
     binder::Status res = ok();
 
     const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
@@ -3735,11 +3750,55 @@ binder::Status InstalldNativeService::createOrDeletePccDirectoryLocked(
                 return res;
             }
         }
+        if (pccDataInode != nullptr) {
+            ino_t result;
+            if (get_path_inode(pccPath, &result) != 0) {
+                return error("Failed to get_path_inode for " + pccPath);
+            }
+            *pccDataInode = static_cast<uint64_t>(result);
+        }
     } else {
         // If no pccId is provided, ensure the directory is cleaned up.
         if (rename_delete_dir_contents_and_dir(pccPath) != 0) {
             res = error("Failed to delete " + pccPath);
             return res;
+        }
+    }
+
+    return res;
+}
+
+binder::Status InstalldNativeService::destroyPccData(const std::optional<std::string>& uuid,
+                                                     const std::string& packageName, int32_t userId,
+                                                     int32_t flags, int64_t ceDataInode) {
+    ENFORCE_UID(AID_SYSTEM);
+    ENFORCE_VALID_USER(userId);
+    CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_PACKAGE_NAME(packageName);
+
+    LOCK_PACKAGE_USER();
+
+    const char* uuid_ = uuid ? uuid->c_str() : nullptr;
+    const std::string pccPackageName = packageName + kPccDataSuffix;
+
+    binder::Status res = ok();
+
+    if (flags & FLAG_STORAGE_CE) {
+        auto pccPath = create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str(),
+                                                        ceDataInode);
+
+        if (rename_delete_dir_contents_and_dir(pccPath, /* ignore_if_missing= */ true) != 0) {
+            PLOG(ERROR) << "Failed to delete PCC CE directory: " << pccPath;
+            res = error("Failed to delete PCC CE directory: " + pccPath);
+        }
+    }
+
+    if (flags & FLAG_STORAGE_DE) {
+        auto pccPath = create_data_user_de_package_path(uuid_, userId, pccPackageName.c_str());
+
+        if (rename_delete_dir_contents_and_dir(pccPath, /* ignore_if_missing= */ true) != 0) {
+            PLOG(ERROR) << "Failed to delete PCC DE directory: " << pccPath;
+            res = error("Failed to delete PCC DE directory: " + pccPath);
         }
     }
 
@@ -4362,6 +4421,357 @@ binder::Status InstalldNativeService::enableFsverity(const sp<IFsveritySetupAuth
     } else {
         *_aidl_return = 0;
     }
+    return ok();
+}
+
+// PinnedPath holds an opened file descriptor to the parent directory of a path
+// that has been verified to not contain any symlinks. This allows users of this
+// structure to safely perform operations on the full path, by only having to verify
+// that the basename itself is not a symlink.
+//
+// fd: file descriptor to the parent directory.
+// name: basename of the file/directory within that parent.
+// path: the full absolute path as a string (primarily for logging).
+// appDataPath: the full absolute path of the app's data directory
+struct PinnedPath {
+    android::base::unique_fd fd;
+    std::string name;
+    std::string path;
+    std::string appDataPath;
+};
+
+static std::optional<PinnedPath> verify_app_data_source(
+        const std::optional<std::string>& uuid, const std::string& from, int userId,
+        std::function<void(int, const std::string&)> notifyError) {
+    const char* uuid_ptr = uuid ? uuid->c_str() : nullptr;
+    auto [root, suffix] = split_app_data_path(uuid_ptr, userId, from);
+    if (root.empty() || suffix.empty()) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to split app data path: " + from);
+        return std::nullopt;
+    }
+
+    std::string appDataPath = root;
+    if (suffix.size() > 1 && suffix[0] == '/') {
+        size_t pos = suffix.find('/', 1);
+        if (pos != std::string::npos) {
+            appDataPath += suffix.substr(0, pos);
+        } else {
+            appDataPath += suffix;
+        }
+    }
+
+    struct stat st;
+    if (stat(appDataPath.c_str(), &st) != 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "App data root does not exist: " + appDataPath);
+        return std::nullopt;
+    }
+
+    std::string baseName;
+    android::base::unique_fd dfd = open_parent_recursive(from, root, &baseName);
+    if (dfd.get() < 0) {
+        if (errno == ENOENT) {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source does not exist");
+        } else {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                        "Failed to open source parent dir: " + from + ": " + strerror(errno));
+        }
+        return std::nullopt;
+    }
+
+    // Final check for the last component
+    if (fstatat(dfd.get(), baseName.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source does not exist");
+        } else {
+            notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Failed to stat source");
+        }
+        return std::nullopt;
+    }
+
+    if (S_ISLNK(st.st_mode)) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE, "Source is a symbolic link");
+        return std::nullopt;
+    }
+
+    return PinnedPath{std::move(dfd), baseName, from, appDataPath};
+}
+
+static std::optional<PinnedPath> setup_app_data_target(
+        const std::optional<std::string>& uuid, const std::string& from, const std::string& to,
+        int32_t userId, int32_t uid, std::function<void(int, const std::string&)> notifyError) {
+    const char* uuid_ = uuid ? uuid->c_str() : nullptr;
+    auto [root, suffix] = split_app_data_path(uuid_, userId, to);
+    if (root.empty() || suffix.empty()) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to split app data path: " + to);
+        return std::nullopt;
+    }
+
+    std::string appDataPath = root;
+    if (suffix.size() > 1 && suffix[0] == '/') {
+        size_t pos = suffix.find('/', 1);
+        if (pos != std::string::npos) {
+            appDataPath += suffix.substr(0, pos);
+        } else {
+            appDataPath += suffix;
+        }
+    }
+
+    struct stat st;
+    if (stat(appDataPath.c_str(), &st) != 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "App data root does not exist: " + appDataPath);
+        return std::nullopt;
+    }
+    mode_t mode = 0771;
+
+    android::base::unique_fd dfd = mkdirs_recursive(to, root, uid, uid, mode);
+    if (dfd.get() < 0) {
+        notifyError(IAppDataOperationCallback::STATUS_FAILURE,
+                    "Failed to create dest dir: " + to + ": " + strerror(errno));
+        return std::nullopt;
+    }
+
+    std::string baseName = android::base::Basename(from);
+    return PinnedPath{std::move(dfd), baseName, to + "/" + baseName, appDataPath};
+}
+
+static void copy_app_data_recursive(int src_dfd, int dst_dfd, const char* name,
+                                    const std::string& absolute_path, uid_t uid,
+                                    std::vector<std::string>* failed_files) {
+    auto fail = [&](const char* msg) {
+        PLOG(WARNING) << msg << " " << name;
+        failed_files->push_back(absolute_path);
+    };
+
+    struct stat st;
+    if (fstatat(src_dfd, name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        fail("Failed to stat");
+        return;
+    }
+
+    if (S_ISLNK(st.st_mode)) return;
+
+    if (S_ISDIR(st.st_mode)) {
+        if (mkdirat(dst_dfd, name, st.st_mode & 07777) != 0 && errno != EEXIST) {
+            fail("Failed to mkdirat");
+            return;
+        }
+        unique_fd sub_src_fd(
+                openat(src_dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (sub_src_fd.get() < 0) {
+            fail("Failed to openat src");
+            return;
+        }
+        unique_fd sub_dst_fd(
+                openat(dst_dfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (sub_dst_fd.get() < 0) {
+            fail("Failed to openat dst");
+            return;
+        }
+        bool failed = false;
+        if (fchown(sub_dst_fd.get(), uid, uid) != 0) {
+            PLOG(WARNING) << "Failed to fchown " << absolute_path;
+            failed = true;
+        }
+        if (fchmod(sub_dst_fd.get(), st.st_mode & 07777) != 0) {
+            PLOG(WARNING) << "Failed to fchmod " << absolute_path;
+            failed = true;
+        }
+        if (failed) {
+            failed_files->push_back(absolute_path);
+        }
+
+        DIR* d = Fdopendir(std::move(sub_src_fd));
+        if (d == nullptr) {
+            PLOG(WARNING) << "Failed to fdopendir";
+            failed_files->push_back(absolute_path);
+            return;
+        }
+        struct dirent* de;
+        while ((de = readdir(d))) {
+            const char* child_name = de->d_name;
+            if (strcmp(child_name, ".") == 0 || strcmp(child_name, "..") == 0) continue;
+            std::string child_absolute_path = absolute_path + "/" + child_name;
+            copy_app_data_recursive(dirfd(d), sub_dst_fd.get(), child_name, child_absolute_path,
+                                    uid, failed_files);
+        }
+        closedir(d);
+    } else if (S_ISREG(st.st_mode)) {
+        unique_fd file_src_fd(openat(src_dfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (file_src_fd.get() < 0) {
+            fail("Failed to openat src file");
+            return;
+        }
+        unique_fd file_dst_fd(
+                openat(dst_dfd, name, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600));
+        if (file_dst_fd.get() < 0) {
+            fail("Failed to openat dst file");
+            return;
+        }
+        if (!copy_simple_file(file_src_fd.get(), file_dst_fd.get(), uid, uid, st.st_mode,
+                              st.st_size, [&](const char* msg) { fail(msg); })) {
+            return;
+        }
+    }
+}
+
+static void copy_app_data(const std::optional<std::string>& uuid, const std::string& from,
+                          const std::string& to, int32_t userId, int32_t appId,
+                          const std::string& seInfo, int32_t flags,
+                          android::sp<IAppDataOperationCallback> callback) {
+    (void)flags;
+
+    auto notifyStatus = [&](int status, const std::string& msg,
+                            const std::vector<std::string>& failedFiles) {
+        if (callback) {
+            std::vector<std::optional<std::string>> aidlFailedFiles;
+            for (const auto& f : failedFiles) {
+                aidlFailedFiles.push_back(std::make_optional(f));
+            }
+            callback->onStatusChanged(status, msg, std::make_optional(aidlFailedFiles));
+        }
+    };
+    auto notifyError = [&](int s, const std::string& m) { notifyStatus(s, m, {from}); };
+
+    uid_t uid = multiuser_get_uid(userId, appId);
+
+    notifyStatus(IAppDataOperationCallback::STATUS_RUNNING, "", {});
+
+    // See comments on move_app_data below for security considerations
+    auto source = verify_app_data_source(uuid, from, userId, notifyError);
+    if (!source) return;
+
+    auto target = setup_app_data_target(uuid, from, to, userId, uid, notifyError);
+    if (!target) return;
+
+    std::vector<std::string> failed_files;
+    copy_app_data_recursive(source->fd.get(), target->fd.get(), source->name.c_str(), from, uid,
+                            &failed_files);
+
+    if (selinux_android_restorecon_pkgdir(target->appDataPath.c_str(), seInfo.c_str(), uid,
+                                          SELINUX_ANDROID_RESTORECON_RECURSE) < 0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Restorecon failed", failed_files);
+    } else if (!failed_files.empty()) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Some files failed to copy",
+                     failed_files);
+    } else {
+        notifyStatus(IAppDataOperationCallback::STATUS_SUCCESS, "", failed_files);
+    }
+}
+
+static void move_app_data(const std::optional<std::string>& uuid, const std::string& from,
+                          const std::string& to, int32_t userId, int32_t appId,
+                          const std::string& seInfo, int32_t flags,
+                          android::sp<IAppDataOperationCallback> callback) {
+    (void)flags;
+
+    auto notifyStatus = [&](int status, const std::string& msg,
+                            const std::vector<std::string>& failedFiles) {
+        if (callback) {
+            std::vector<std::optional<std::string>> aidlFailedFiles;
+            for (const auto& f : failedFiles) {
+                aidlFailedFiles.push_back(std::make_optional(f));
+            }
+            callback->onStatusChanged(status, msg, std::make_optional(aidlFailedFiles));
+        }
+    };
+    auto notifyError = [&](int s, const std::string& m) { notifyStatus(s, m, {from}); };
+
+    uid_t uid = multiuser_get_uid(userId, appId);
+
+    notifyStatus(IAppDataOperationCallback::STATUS_RUNNING, "", {});
+
+    // Moving app data by a highly privileged component like installd is a delicate operation.
+    // The main risk stems from the fact that unprivileged apps are allowed to use symlinks.
+    // This can create attack vectors such as the app having a file in its own data directory
+    // point to a file belonging to another app, and then having installd 'migrate' it,
+    // thereby granting the package access to the file.
+    //
+    // The code here prevents that by the following:
+    //
+    // 1. It verifies the source path is normalized and does not contain any symlinks;
+    //    it does that using file-descriptor pinning, which prevents TOCTOU attacks - eg
+    //    a file being changed to a symlink *after* we'd concluced that it wasn't a symlink
+    //
+    // 2. It sets up the target path in much the same way - creating directories when needed,
+    //    but never following any symlinks.
+    //
+    // 3. We must recursively chown the target path to the correct uid; again,
+    //    we carefully traverse the path to not follow any symlinks.
+    //
+    // 4. Finally, selinux_android_restorecon is called; since restorecon itself resolves
+    //    paths fully, it will just apply the correct context according to the path and the
+    //    passed in label.
+    //
+    // Note that we do fully trust the passed in paths and appId parameters, as this is only
+    // callable from system UIDs. The thing we cannot trust is the files under those paths.
+
+    // Verify the source
+    auto source = verify_app_data_source(uuid, from, userId, notifyError);
+    if (!source) return;
+
+    // Setup the target
+    auto target = setup_app_data_target(uuid, from, to, userId, uid, notifyError);
+    if (!target) return;
+
+    // Do an atomic rename
+    if (renameat(source->fd.get(), source->name.c_str(), target->fd.get(), source->name.c_str()) !=
+        0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE,
+                     "Rename failed: " + std::string(strerror(errno)), {from});
+        return;
+    }
+
+    // Fix up the permissions recursively
+    std::vector<std::string> failed_files;
+    {
+        android::base::unique_fd fd(
+                openat(target->fd.get(), source->name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (fd.get() >= 0) {
+            chown_recursive(fd.get(), uid, uid, target->path, &failed_files);
+        } else {
+            PLOG(WARNING) << "Failed to open moved data for chown";
+            failed_files.push_back(target->path);
+        }
+    }
+
+    if (selinux_android_restorecon_pkgdir(target->appDataPath.c_str(), seInfo.c_str(), uid,
+                                          SELINUX_ANDROID_RESTORECON_RECURSE) < 0) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Restorecon failed", failed_files);
+    } else if (!failed_files.empty()) {
+        notifyStatus(IAppDataOperationCallback::STATUS_FAILURE, "Some files failed to chown",
+                     failed_files);
+    } else {
+        notifyStatus(IAppDataOperationCallback::STATUS_SUCCESS, "", failed_files);
+    }
+}
+
+binder::Status InstalldNativeService::copyAppDataPath(
+        const std::optional<std::string>& uuid, const std::string& fromPath,
+        const std::string& toPath, int32_t userId, int32_t appId, const std::string& seInfo,
+        int32_t flags, const android::sp<IAppDataOperationCallback>& callback) {
+    ENFORCE_UID(AID_SYSTEM);
+    CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_PATH(fromPath);
+    CHECK_ARGUMENT_PATH(toPath);
+    std::thread t(copy_app_data, uuid, fromPath, toPath, userId, appId, seInfo, flags, callback);
+    t.detach();
+    return ok();
+}
+
+binder::Status InstalldNativeService::moveAppDataPath(
+        const std::optional<std::string>& uuid, const std::string& fromPath,
+        const std::string& toPath, int32_t userId, int32_t appId, const std::string& seInfo,
+        int32_t flags, const android::sp<IAppDataOperationCallback>& callback) {
+    ENFORCE_UID(AID_SYSTEM);
+    CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_PATH(fromPath);
+    CHECK_ARGUMENT_PATH(toPath);
+    std::thread t(move_app_data, uuid, fromPath, toPath, userId, appId, seInfo, flags, callback);
+    t.detach();
     return ok();
 }
 

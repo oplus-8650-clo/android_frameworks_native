@@ -648,7 +648,7 @@ typedef void (*AIBinder_DeathRecipient_onBinderDied)(void* cookie) __INTRODUCED_
  * See also AIBinder_linkToDeath/AIBinder_unlinkToDeath.
  *
  * WARNING: Make sure the lifetime of this cookie is long enough. If it is dynamically
- * allocated, it should be deleted with AIBinder_DeathRecipient_setOnUnlinked.
+ * allocated, it should be deleted inside of AIBinder_DeathRecipient_onBinderUnlinked.
  *
  * Available since API level 33.
  *
@@ -662,7 +662,7 @@ typedef void (*AIBinder_DeathRecipient_onBinderUnlinked)(void* cookie) __INTRODU
  * Available since API level 29.
  *
  * WARNING: Make sure the lifetime of this cookie is long enough. If it is dynamically
- * allocated, it should be deleted with AIBinder_DeathRecipient_setOnUnlinked.
+ * allocated, it should be deleted inside of AIBinder_DeathRecipient_onBinderUnlinked.
  *
  * \param onBinderDied the callback to call when this death recipient is invoked.
  *
@@ -936,7 +936,7 @@ typedef void (*AIBinder_FrozenStateChangeCallback_onStateChanged)(void* cookie, 
  * See also AIBinder_addFrozenStateChangeCallback/AIBinder_removeFrozenStateChangeCallback.
  *
  * WARNING: Make sure the lifetime of this cookie is long enough. If it is dynamically
- * allocated, it should be deleted with AIBinder_FrozenStateChangeCallback_setOnUnlinked.
+ * allocated, it should be deleted inside of AIBinder_FrozenStateChangeCallback_onBinderUnlinked.
  *
  * Available since API level 37.
  *

@@ -791,7 +791,7 @@ void Layer::callReleaseBufferCallback(const sp<ITransactionCompletedListener>& l
     }
 }
 
-sp<CallbackHandle> Layer::findCallbackHandle() {
+CallbackHandle* Layer::findCallbackHandle() {
     // If we are displayed on multiple displays in a single composition cycle then we would
     // need to do careful tracking to enable the use of the mLastClientCompositionFence.
     //  For example we can only use it if all the displays are client comp, and we need
@@ -819,19 +819,17 @@ sp<CallbackHandle> Layer::findCallbackHandle() {
     // buffer. It replaces the buffer in the second transaction. The buffer in the second
     // transaction will now no longer be presented so it is released immediately and the third
     // transaction doesn't need a previous release fence.
-    sp<CallbackHandle> ch;
     for (auto& handle : mDrawingState.callbackHandles) {
-        if (handle->releasePreviousBuffer && mPreviousReleaseBufferEndpoint == handle->listener) {
-            ch = handle;
-            break;
+        if (handle.releasePreviousBuffer && mPreviousReleaseBufferEndpoint == handle.listener) {
+            return &handle;
         }
     }
-    return ch;
+    return nullptr;
 }
 
 void Layer::prepareReleaseCallbacks(ftl::Future<FenceResult> futureFenceResult,
                                     ui::LayerStack layerStack) {
-    sp<CallbackHandle> ch = findCallbackHandle();
+    CallbackHandle* ch = findCallbackHandle();
 
     if (ch != nullptr) {
         ch->previousReleaseCallbackId = mPreviousReleaseCallbackId;
@@ -857,26 +855,27 @@ void Layer::prepareReleaseCallbacks(ftl::Future<FenceResult> futureFenceResult,
 }
 
 void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
-    for (const auto& handle : mDrawingState.callbackHandles) {
-        handle->bufferReleaseChannel = mBufferReleaseChannel;
-        handle->transformHint = mTransformHint;
-        handle->cornerRadii = mCornerRadii;
-        handle->dequeueReadyTime = dequeueReadyTime;
-        handle->currentMaxAcquiredBufferCount =
+    for (auto& handle : mDrawingState.callbackHandles) {
+        handle.bufferReleaseChannel = mBufferReleaseChannel;
+        handle.transformHint = mTransformHint;
+        handle.cornerRadii = mCornerRadii;
+        handle.dequeueReadyTime = dequeueReadyTime;
+        handle.currentMaxAcquiredBufferCount =
                 mFlinger->getMaxAcquiredBufferCountForCurrentRefreshRate(mOwnerUid);
         SFTRACE_FORMAT_INSTANT("releasePendingBuffer %s - %" PRIu64, getDebugName(),
-                               handle->previousReleaseCallbackId.framenumber);
+                               handle.previousReleaseCallbackId.framenumber);
     }
 
     for (auto& handle : mDrawingState.callbackHandles) {
-        if (handle->releasePreviousBuffer && mPreviousReleaseBufferEndpoint == handle->listener) {
-            handle->previousReleaseCallbackId = mPreviousReleaseCallbackId;
+        if (handle.releasePreviousBuffer && mPreviousReleaseBufferEndpoint == handle.listener) {
+            handle.previousReleaseCallbackId = mPreviousReleaseCallbackId;
             break;
         }
     }
 
-    mFlinger->getTransactionCallbackInvoker().addCallbackHandles(mDrawingState.callbackHandles);
-    mDrawingState.callbackHandles = {};
+    mFlinger->getTransactionCallbackInvoker().addCallbackHandles(
+            std::move(mDrawingState.callbackHandles));
+    mDrawingState.callbackHandles.clear();
 }
 
 bool Layer::setTransform(uint32_t transform) {
@@ -1117,6 +1116,14 @@ bool Layer::setDesiredHdrHeadroom(float desiredRatio) {
     return true;
 }
 
+bool Layer::setDesiredMaxHdrHeadroom(float maxDesiredHdrSdrRatio) {
+    if (mDrawingState.maxDesiredHdrSdrRatio == maxDesiredHdrSdrRatio) return false;
+    mDrawingState.maxDesiredHdrSdrRatio = maxDesiredHdrSdrRatio;
+    mFlinger->mHdrLayerInfoChanged = true;
+    setTransactionFlags(eTransactionNeeded);
+    return true;
+}
+
 bool Layer::setSidebandStream(const sp<NativeHandle>& sidebandStream, const FrameTimelineInfo& info,
                               nsecs_t postTime, gui::GameMode gameMode,
                               int32_t systemContentPriority) REQUIRES(mFlinger->mStateLock) {
@@ -1144,7 +1151,7 @@ bool Layer::setSidebandStream(const sp<NativeHandle>& sidebandStream, const Fram
     return true;
 }
 
-bool Layer::setTransactionCompletedListeners(const std::vector<sp<CallbackHandle>>& handles,
+bool Layer::setTransactionCompletedListeners(std::vector<CallbackHandle> handles,
                                              bool willPresent) {
     // If there is no handle, we will not send a callback so reset mReleasePreviousBuffer and return
     if (handles.empty()) {
@@ -1152,39 +1159,37 @@ bool Layer::setTransactionCompletedListeners(const std::vector<sp<CallbackHandle
         return false;
     }
 
-    std::deque<sp<CallbackHandle>> remainingHandles;
-    for (const auto& handle : handles) {
-        // If this transaction set a buffer on this layer, release its previous buffer
-        handle->releasePreviousBuffer = mReleasePreviousBuffer;
-
-        // If this layer will be presented in this frame
-        if (willPresent) {
+    if (willPresent) {
+        for (auto& handle : handles) {
+            // If this transaction set a buffer on this layer, release its previous buffer
+            handle.releasePreviousBuffer = mReleasePreviousBuffer;
             // If this transaction set an acquire fence on this layer, set its acquire time
-            handle->acquireTimeOrFence = mCallbackHandleAcquireTimeOrFence;
-            handle->frameNumber = mDrawingState.frameNumber;
-            handle->previousFrameNumber = mDrawingState.previousFrameNumber;
-            handle->previousBuffer = mDrawingState.previousBuffer;
-            if (mPreviousReleaseBufferEndpoint == handle->listener) {
+            handle.acquireTimeOrFence = mCallbackHandleAcquireTimeOrFence;
+            handle.frameNumber = mDrawingState.frameNumber;
+            handle.previousFrameNumber = mDrawingState.previousFrameNumber;
+            handle.previousBuffer = mDrawingState.previousBuffer;
+            if (mPreviousReleaseBufferEndpoint == handle.listener) {
                 // Add fence from previous screenshot now so that it can be dispatched to the
                 // client.
                 for (auto& [_, future] : mAdditionalPreviousReleaseFences) {
-                    handle->fenceMerger.addFuture(std::move(future));
+                    handle.fenceMerger.addFuture(std::move(future));
                 }
                 mAdditionalPreviousReleaseFences.clear();
             }
-            // Store so latched time and release fence can be set
-            mDrawingState.callbackHandles.push_back(handle);
-
-        } else { // If this layer will NOT need to be relatched and presented this frame
-            // Queue this handle to be notified below.
-            remainingHandles.push_back(handle);
         }
-    }
-
-    if (!remainingHandles.empty()) {
-        // Notify the transaction completed threads these handles are done. These are only the
-        // handles that were not added to the mDrawingState, which will be notified later.
-        mFlinger->getTransactionCallbackInvoker().addCallbackHandles(remainingHandles);
+        // Store so latched time and release fence can be set
+        mDrawingState.callbackHandles.reserve(mDrawingState.callbackHandles.size() +
+                                              handles.size());
+        mDrawingState.callbackHandles.insert(mDrawingState.callbackHandles.end(),
+                                             std::make_move_iterator(handles.begin()),
+                                             std::make_move_iterator(handles.end()));
+    } else {
+        for (auto& handle : handles) {
+            // If this transaction set a buffer on this layer, release its previous buffer
+            handle.releasePreviousBuffer = mReleasePreviousBuffer;
+        }
+        // Notify the transaction completed threads these handles are done.
+        mFlinger->getTransactionCallbackInvoker().addCallbackHandles(std::move(handles));
     }
 
     mReleasePreviousBuffer = false;
@@ -1234,8 +1239,8 @@ bool Layer::fenceHasSignaled() const {
 }
 
 void Layer::onPreComposition(nsecs_t refreshStartTime) {
-    for (const auto& handle : mDrawingState.callbackHandles) {
-        handle->refreshStartTime = refreshStartTime;
+    for (auto& handle : mDrawingState.callbackHandles) {
+        handle.refreshStartTime = refreshStartTime;
     }
 }
 
@@ -1261,15 +1266,15 @@ void Layer::updateTexImage(nsecs_t latchTime, nsecs_t expectedPresentTime, bool 
     if (!s.buffer) {
         if (bgColorOnly || mBufferInfo.mBuffer) {
             for (auto& handle : mDrawingState.callbackHandles) {
-                handle->latchTime = latchTime;
+                handle.latchTime = latchTime;
             }
         }
         return;
     }
 
     for (auto& handle : mDrawingState.callbackHandles) {
-        if (handle->frameNumber == mDrawingState.frameNumber) {
-            handle->latchTime = latchTime;
+        if (handle.frameNumber == mDrawingState.frameNumber) {
+            handle.latchTime = latchTime;
         }
     }
 
@@ -1297,10 +1302,8 @@ void Layer::updateTexImage(nsecs_t latchTime, nsecs_t expectedPresentTime, bool 
         mDrawingState.bufferSurfaceFrameTX.reset();
     }
 
-    std::deque<sp<CallbackHandle>> remainingHandles;
-    mFlinger->getTransactionCallbackInvoker()
-            .addOnCommitCallbackHandles(mDrawingState.callbackHandles, remainingHandles);
-    mDrawingState.callbackHandles = remainingHandles;
+    mFlinger->getTransactionCallbackInvoker().addOnCommitCallbackHandles(
+            mDrawingState.callbackHandles);
 }
 
 void Layer::gatherBufferInfo() {
@@ -1448,9 +1451,9 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
     // composition.
     if (!mBufferInfo.mFrameLatencyNeeded) return;
 
-    for (const auto& handle : mDrawingState.callbackHandles) {
-        handle->gpuCompositionDoneFence = glDoneFence;
-        handle->compositorTiming = compositorTiming;
+    for (auto& handle : mDrawingState.callbackHandles) {
+        handle.gpuCompositionDoneFence = glDoneFence;
+        handle.compositorTiming = compositorTiming;
     }
 
     // Update mDeprecatedFrameTracker.

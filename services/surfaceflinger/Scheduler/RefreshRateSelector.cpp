@@ -363,9 +363,7 @@ struct RefreshRateSelector::RefreshRateScoreComparator {
     bool operator()(const RefreshRateScore& lhs, const RefreshRateScore& rhs) const {
         const auto& [frameRateMode, overallScore, _] = lhs;
 
-        std::string name = to_string(frameRateMode);
-
-        ALOGV("%s sorting scores %.2f", name.c_str(), overallScore);
+        ALOGV("%s sorting scores %.2f", to_string(frameRateMode).c_str(), overallScore);
 
         if (!ScoredFrameRate::scoresEqual(overallScore, rhs.overallScore)) {
             return overallScore > rhs.overallScore;
@@ -607,7 +605,7 @@ LayerRequirementPtrs filterLayersForOutput(
         const std::vector<RefreshRateSelector::LayerRequirement>& layers,
         LayerFilter outputFilter) {
     const bool allowArbitraryFollowerRates =
-            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
     LayerRequirementPtrs filteredLayers;
     for (const auto& layer : layers) {
         if (!allowArbitraryFollowerRates ||
@@ -631,7 +629,7 @@ auto RefreshRateSelector::getRankedFrameRatesLocked(const std::vector<LayerRequi
     const auto& activeMode = *getActiveModeLocked().modePtr;
 
     if (pacesetterFps.isValid() &&
-        !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection()) {
+        !FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined()) {
         ALOGV("Follower display");
 
         const auto ranking = rankFrameRates(activeMode.getGroup(), RefreshRateOrder::Descending,
@@ -1614,11 +1612,15 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
     const auto filterRefreshRates = [&](const FpsRanges& ranges,
                                         const char* rangeName) REQUIRES(mLock) {
         const auto filterModes = [&](const DisplayMode& mode) {
+            bool hdrOutputTypeMatches = FlagManager::getInstance().enable_user_preferred_hdr_mode()
+                    ? mode.getHdrOutputType() == defaultMode->getHdrOutputType()
+                    : true;
             return mode.getResolution() == defaultMode->getResolution() &&
                     mode.getDpi() == defaultMode->getDpi() &&
                     (policy->allowGroupSwitching || mode.getGroup() == defaultMode->getGroup()) &&
                     ranges.physical.includes(mode.getPeakFps()) &&
-                    (supportsFrameRateOverride() || ranges.render.includes(mode.getPeakFps()));
+                    (supportsFrameRateOverride() || ranges.render.includes(mode.getPeakFps())) &&
+                    hdrOutputTypeMatches;
         };
 
         auto frameRateModes = createFrameRateModes(*policy, filterModes, ranges.render);

@@ -1300,6 +1300,10 @@ Error HidlComposer::setDisplayMode(Display, Config, bool) {
     return Error::UNSUPPORTED;
 }
 
+Error HidlComposer::setDisplayModes(const std::vector<std::pair<Display, Config>>&, bool) {
+    return Error::UNSUPPORTED;
+}
+
 // Composer HAL 2.4
 
 Error HidlComposer::getDisplayCapabilities(Display display,

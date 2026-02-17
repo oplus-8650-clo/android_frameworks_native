@@ -333,6 +333,8 @@ public:
     virtual Error getDisplayKnownVsyncSample(Display display,
                                              composer3::VsyncSample* outVsyncSample) = 0;
     virtual Error setDisplayMode(Display display, Config modeId, bool seamless) = 0;
+    virtual Error setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                                  bool seamless) = 0;
 };
 
 } // namespace Hwc2

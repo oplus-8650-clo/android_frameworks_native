@@ -93,10 +93,6 @@ TimePoint VsyncSchedule::vsyncDeadlineAfter(TimePoint timePoint,
                                                            [](TimePoint t) { return t.ns(); })));
 }
 
-nsecs_t VsyncSchedule::getModelAccuracyInNs(nsecs_t knownVsync) const {
-    return mTracker->getModelAccuracyInNs(knownVsync);
-}
-
 void VsyncSchedule::dump(std::string& out) const {
     utils::Dumper dumper(out);
     {
@@ -157,7 +153,8 @@ void VsyncSchedule::onDisplayModeChanged(ftl::NonNull<DisplayModePtr> modePtr, b
     enableHardwareVsyncLocked();
 }
 
-bool VsyncSchedule::addResyncSample(TimePoint timestamp, ftl::Optional<Period> hwcVsyncPeriod) {
+bool VsyncSchedule::addResyncSample(TimePoint timestamp, ftl::Optional<Period> hwcVsyncPeriod,
+                                    VSyncTracker::VsyncTimeSource source) {
     bool needsHwVsync = false;
     bool periodFlushed = false;
     {
@@ -165,7 +162,7 @@ bool VsyncSchedule::addResyncSample(TimePoint timestamp, ftl::Optional<Period> h
         if (mHwVsyncState == HwVsyncState::Enabled) {
             needsHwVsync = mController->addHwVsyncTimestamp(timestamp.ns(),
                                                             hwcVsyncPeriod.transform(&Period::ns),
-                                                            &periodFlushed);
+                                                            &periodFlushed, source);
         }
     }
     if (needsHwVsync) {
@@ -220,6 +217,10 @@ void VsyncSchedule::setPendingHardwareVsyncState(bool enabled) {
 
 bool VsyncSchedule::getPendingHardwareVsyncState() const {
     return mPendingHwVsyncState == HwVsyncState::Enabled;
+}
+
+bool VsyncSchedule::isModeChangeInProgress() const {
+    return mController->isModeChangeInProgress();
 }
 
 } // namespace android::scheduler

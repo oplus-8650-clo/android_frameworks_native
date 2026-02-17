@@ -243,7 +243,7 @@ struct LayerFECompositionState {
     bool dimmingEnabled{true};
 
     float currentHdrSdrRatio = 1.f;
-    float desiredHdrSdrRatio = 1.f;
+    float desiredHdrSdrRatio = 0.f;
 
     // A picture profile handle refers to a PictureProfile configured on the display, which is a
     // set of parameters that configures the picture processing hardware that is used to enhance

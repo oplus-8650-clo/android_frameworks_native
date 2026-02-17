@@ -17,6 +17,7 @@
 #include <cutils/ashmem.h>
 #include <cutils/log.h>
 #include <gui/RenderCommandBufferProducer.h>
+#include <inttypes.h>
 
 #include <sys/mman.h>
 
@@ -48,37 +49,33 @@ bool createSharedMemoryRegion(int* fd, void** sharedMemory, size_t size) {
 }
 
 RenderCommandBufferProducer::RenderCommandBufferProducer() {
-    if (!createSharedMemoryRegion(&mAshmemFdRenderCommands, &mSharedRegionRenderCommands,
-                                  sizeof(LocklessTripleBuffer<RenderCommandBuffer>))) {
+    if (!createSharedMemoryRegion(&mAshmemFdRenderRegion, (void**)(&(mRenderRegion)),
+                                  sizeof(IpcRenderRegion))) {
         LOG_ALWAYS_FATAL("Failed to create shared memory region for RenderCommandBufferProducer");
     }
-    mCommandBuffer = new (mSharedRegionRenderCommands) LocklessTripleBuffer<RenderCommandBuffer>();
-
-    // mHardwareBufferCacheToken = new BBinder();
+    mRenderRegion = new ((void*)mRenderRegion) IpcRenderRegion();
 }
 
 RenderCommandBufferProducer::~RenderCommandBufferProducer() {
-    ::munmap(mSharedRegionRenderCommands, sizeof(LocklessTripleBuffer<RenderCommandBuffer>));
-    close(mAshmemFdRenderCommands);
+    ::munmap(mRenderRegion, sizeof(IpcRenderRegion));
+    close(mAshmemFdRenderRegion);
 }
 
 int RenderCommandBufferProducer::getFd() {
-    return mAshmemFdRenderCommands;
+    return mAshmemFdRenderRegion;
 }
 
-void RenderCommandBufferProducer::startRecording() {
-    LOG_ALWAYS_FATAL_IF(mCurrentBuffer != nullptr, "Unbalanced calls to start/finish recording");
-    mCurrentBuffer = mCommandBuffer->producerAcquire();
-    mCurrentBuffer->reset();
+RenderCommandBuffer* RenderCommandBufferProducer::startRecording() {
+    RenderCommandBuffer* buffer = &mRenderRegion->mCommandBuffers.getWriteSlot();
+    buffer->reset();
+    return buffer;
 }
-void RenderCommandBufferProducer::finishRecording() {
-    LOG_ALWAYS_FATAL_IF(mCurrentBuffer == nullptr, "Unbalanced calls to start/finish recording");
-    mCommandBuffer->producerRelease();
-    mCurrentBuffer = nullptr;
+void RenderCommandBufferProducer::finishRecordingAndPostFrame() {
+    mRenderRegion->mCommandBuffers.pushBack();
 }
 
 status_t RenderCommandBufferProducer::writeToParcel(Parcel* parcel) const {
-    SAFE_PARCEL(parcel->writeDupFileDescriptor, mAshmemFdRenderCommands);
+    SAFE_PARCEL(parcel->writeDupFileDescriptor, mAshmemFdRenderRegion);
     return NO_ERROR;
 }
 

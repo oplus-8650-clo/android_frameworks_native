@@ -276,7 +276,8 @@ TouchpadInputMapper::TouchpadInputMapper(InputDeviceContext& deviceContext,
         mTimerProvider(*getContext()),
         mStateConverter(deviceContext, mMotionAccumulator),
         mGestureConverter(*getContext(), deviceContext, getDeviceId()),
-        mCapturedEventConverter(*getContext(), deviceContext, mMotionAccumulator, getDeviceId()),
+        mAbsoluteModeEventConverter(*getContext(), deviceContext, mMotionAccumulator,
+                                    getDeviceId()),
         mRelativeModeGestureConverter(*getContext(), getDeviceId()),
         mMetricsId(metricsIdFromInputDeviceIdentifier(deviceContext.getDeviceIdentifier())) {
     if (std::optional<RawAbsoluteAxisInfo> slotAxis =
@@ -326,7 +327,7 @@ void TouchpadInputMapper::populateDeviceInfo(InputDeviceInfo& info) {
             mGestureConverter.populateMotionRanges(info);
             break;
         case PointerCaptureMode::ABSOLUTE:
-            mCapturedEventConverter.populateMotionRanges(info);
+            mAbsoluteModeEventConverter.populateMotionRanges(info);
             break;
         case PointerCaptureMode::RELATIVE:
             mRelativeModeGestureConverter
@@ -349,7 +350,7 @@ void TouchpadInputMapper::dump(std::string& dump) {
     dump += INDENT3 "Timer provider:\n";
     dump += addLinePrefix(mTimerProvider.dump(), INDENT4);
     dump += INDENT3 "Captured event converter:\n";
-    dump += addLinePrefix(mCapturedEventConverter.dump(), INDENT4);
+    dump += addLinePrefix(mAbsoluteModeEventConverter.dump(), INDENT4);
     dump += INDENT3 "Relative mode gesture converter:\n";
     dump += addLinePrefix(mRelativeModeGestureConverter.dump(), INDENT4);
     dump += StringPrintf(INDENT3 "DisplayId: %s\n",
@@ -430,6 +431,14 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
             case PointerCaptureMode::UNCAPTURED:
                 out += mGestureConverter.reset(when);
                 break;
+            case PointerCaptureMode::ABSOLUTE:
+                if (input_flags::cancel_touches_on_absolute_capture_release()) {
+                    out += mAbsoluteModeEventConverter.reset(when);
+                    // We've just had a period during which events weren't being sent to the
+                    // HardwareStateConverter, so we need to reset it.
+                    mStateConverter.reset();
+                }
+                break;
             case PointerCaptureMode::RELATIVE:
                 // mRelativeModeGestureConverter is stateless, and so doesn't need resetting, but we
                 // do need to re-enable three-finger swipes.
@@ -442,10 +451,12 @@ std::list<NotifyArgs> TouchpadInputMapper::reconfigure(nsecs_t when,
         // Set up for the new capture mode.
         switch (mCaptureMode) {
             case PointerCaptureMode::ABSOLUTE:
-                mCapturedEventConverter.reset();
-                // We've just had a period during which events weren't being sent to the
-                // HardwareStateConverter, so we need to reset it.
-                mStateConverter.reset();
+                if (!input_flags::cancel_touches_on_absolute_capture_release()) {
+                    out += mAbsoluteModeEventConverter.reset(when);
+                    // We've just had a period during which events weren't being sent to the
+                    // HardwareStateConverter, so we need to reset it.
+                    mStateConverter.reset();
+                }
                 break;
             case PointerCaptureMode::RELATIVE:
                 // We don't use three-finger swipes in relative capture mode, so stop the Gestures
@@ -509,7 +520,7 @@ std::list<NotifyArgs> TouchpadInputMapper::reset(nsecs_t when) {
             out += mGestureConverter.reset(when);
             break;
         case PointerCaptureMode::ABSOLUTE:
-            mCapturedEventConverter.reset();
+            out += mAbsoluteModeEventConverter.reset(when);
             break;
         case PointerCaptureMode::RELATIVE:
             out += mRelativeModeGestureConverter.reset(when);
@@ -531,7 +542,7 @@ void TouchpadInputMapper::resetGestureInterpreter(nsecs_t when) {
 
 std::list<NotifyArgs> TouchpadInputMapper::process(const RawEvent& rawEvent) {
     if (mCaptureMode == PointerCaptureMode::ABSOLUTE) {
-        return mCapturedEventConverter.process(rawEvent);
+        return mAbsoluteModeEventConverter.process(rawEvent);
     }
     if (mMotionAccumulator.getActiveSlotsCount() == 0) {
         mGestureStartTime = rawEvent.when;

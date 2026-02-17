@@ -10800,6 +10800,125 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow) {
     ASSERT_TRUE(mDispatcher->waitForIdle());
 }
 
+// We have a focused application, but no focused window, ANR warning flag is disabled.
+TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWarningDisabled) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, false);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // taps on the window work as normal
+    const auto touchingPointer =
+            PointerBuilder(/*id=*/0, ToolType::FINGER).x(WINDOW_LOCATION.x).y(WINDOW_LOCATION.y);
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(touchingPointer)
+                                      .build());
+    ASSERT_NO_FATAL_FAILURE(mWindow->consumeMotionDown());
+    mDispatcher->waitForIdle();
+    mFakePolicy->assertNotifyAnrWasNotCalled();
+
+    // Once a focused event arrives, we get an ANR for this application
+    // Send the key event but the event would not be processed as there is no focused window
+    // triggering ANR.
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    const std::chrono::duration timeout = mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
+    mFakePolicy->assertWarnNoFocusedWindowAnrWasNotCalled();
+}
+
+// We have a focused application, but no focused window, ANR warning flag is enabled
+TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWarningTriggered) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // taps on the window work as normal
+    const auto touchingPointer =
+            PointerBuilder(/*id=*/0, ToolType::FINGER).x(WINDOW_LOCATION.x).y(WINDOW_LOCATION.y);
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(touchingPointer)
+                                      .build());
+
+    ASSERT_NO_FATAL_FAILURE(mWindow->consumeMotionDown());
+    mDispatcher->waitForIdle();
+    mFakePolicy->assertNotifyAnrWasNotCalled();
+
+    // Once a focused event arrives, we get an ANR for this application
+    // Send the key event but the event would not be processed as there is no focused window
+    // triggering ANR.
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    const std::chrono::nanoseconds timeout =
+            mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
+    const std::chrono::milliseconds timeoutMillis =
+            std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
+    mFakePolicy->assertWarnNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
+}
+
+// We have a focused application, but no focused window
+// Make sure that we don't notify policy twice about the same ANR.
+TEST_F(InputDispatcherSingleWindowAnr, NoFocusedWindow_DoesNotSendDuplicateAnr_AnrWarningEnabled) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    const std::chrono::duration appTimeout = 400ms;
+    mApplication->setDispatchingTimeout(appTimeout);
+    mDispatcher->setFocusedApplication(ui::LogicalDisplayId::DEFAULT, mApplication);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // Once a focused event arrives, we get an ANR for this application
+    // We specify the injection timeout to be smaller than the application timeout, to ensure that
+    // injection times out (instead of failing).
+    const std::chrono::duration eventInjectionTimeout = 100ms;
+    ASSERT_LT(eventInjectionTimeout, appTimeout);
+    const InputEventInjectionResult result =
+            injectKey(*mDispatcher, AKEY_EVENT_ACTION_DOWN, /*repeatCount=*/0,
+                      ui::LogicalDisplayId::DEFAULT, InputEventInjectionSync::WAIT_FOR_RESULT,
+                      eventInjectionTimeout,
+                      /*allowKeyRepeat=*/false);
+    ASSERT_EQ(InputEventInjectionResult::TIMED_OUT, result)
+            << "result=" << ftl::enum_string(result);
+    // We already waited for 'eventInjectionTimeout`, because the countdown started when the event
+    // was first injected. So now we have (appTimeout - eventInjectionTimeout) left to wait.
+    std::chrono::duration remainingWaitTime = appTimeout - eventInjectionTimeout;
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(remainingWaitTime, mApplication);
+
+    std::this_thread::sleep_for(appTimeout);
+    // ANR should not be raised again. It is up to policy to do that if it desires.
+    mFakePolicy->assertNotifyAnrWasNotCalled();
+
+    // If we now get a focused window, the ANR should stop, but the policy handles that via
+    // 'notifyFocusChanged' callback. This is implemented in the policy so we can't test it here.
+    ASSERT_TRUE(mDispatcher->waitForIdle());
+}
+
+// We have a focused application, but no focused window
+TEST_F(InputDispatcherSingleWindowAnr, NoFocusedWindow_DropsFocusedEvents_AnrWarningEnabled) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    // Once a focused event arrives, we get an ANR for this application
+    ASSERT_NO_FATAL_FAILURE(assertInjectedKeyTimesOut(*mDispatcher));
+
+    const std::chrono::duration timeout = mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
+
+    // Future focused events get dropped right away
+    ASSERT_EQ(InputEventInjectionResult::FAILED, injectKeyDown(*mDispatcher));
+    ASSERT_TRUE(mDispatcher->waitForIdle());
+    mWindow->assertNoEvents();
+}
+
 /**
  * Make sure the stale key is dropped before causing an ANR. So even if there's no focused window,
  * there will not be an ANR.
@@ -12929,7 +13048,8 @@ TEST_F(InputDispatcherDragTests, DragAndDrop) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13038,7 +13158,8 @@ TEST_F(InputDispatcherDragTests, StylusDragAndDrop) {
     mDragWindow->consumeMotionMove(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
 
     // nothing to the window.
     mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_STYLUS)
@@ -13084,7 +13205,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropOnInvalidWindow) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, nullptr);
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, nullptr, /*location=*/{0, 0},
+                                                 /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13165,9 +13287,42 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenSplitTouch) {
               injectMotionEvent(*mDispatcher, secondFingerUpEvent, INJECT_EVENT_TIMEOUT,
                                 InputEventInjectionSync::WAIT_FOR_RESULT));
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 50});
     mWindow->assertNoEvents();
     mSecondWindow->consumeMotionMove();
+}
+
+TEST_F(InputDispatcherDragTests, DragAndDropCoordinatesWithDisplayTransform) {
+    // Set a display translation of (10, 20). This means that a point at (x, y) in logical
+    // space will be at (x + 10, y + 20) in global space.
+    ui::Transform displayTransform;
+    displayTransform.set(10, 20);
+    addDisplay(ui::LogicalDisplayId::DEFAULT, displayTransform);
+    updateWindowInfos();
+
+    startDrag();
+
+    // Move on window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .displayId(ui::LogicalDisplayId::DEFAULT)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(50).y(50))
+                                      .build());
+    mDragWindow->consumeMotionMove(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
+    mWindow->consumeDragEvent(false, 50, 50);
+
+    // drop to another window.
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .displayId(ui::LogicalDisplayId::DEFAULT)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
+                                      .build());
+    mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
+
+    // The drop window coordinates are local to the window (150 - 100, 50 - 0) = (50, 50).
+    // The display coordinates are transformed by the display transform:
+    // (150 + 10, 50 + 20) = (160, 70).
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{160, 70});
 }
 
 TEST_F(InputDispatcherDragTests, DragAndDropWhenMultiDisplays) {
@@ -13221,7 +13376,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenMultiDisplays) {
                                       .pointer(PointerBuilder(0, ToolType::FINGER).x(150).y(50))
                                       .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13262,7 +13418,8 @@ TEST_F(InputDispatcherDragTests, MouseDragAndDrop) {
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(150).y(50))
                     .build());
     mDragWindow->consumeMotionUp(ui::LogicalDisplayId::DEFAULT, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mSecondWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mSecondWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{150, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
 }
@@ -13308,7 +13465,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropFinishedWhenCancelCurrentTouch) {
 
     ASSERT_TRUE(mDispatcher->waitForIdle());
     // The D&D finished with nullptr
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, nullptr);
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, nullptr, /*location=*/{0, 0},
+                                                 /*rawLocation=*/{0, 0});
 
     // Remove drag window
     mDispatcher->onWindowInfosChanged({{*mWindow->getInfo(), *mSecondWindow->getInfo()}, {}, 0, 0});
@@ -13434,7 +13592,8 @@ TEST_F(InputDispatcherDragTests, DragAndDropWhenSplitTouchAndMultiDevice) {
     mDragWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_UP), WithDeviceId(deviceA),
                                           WithDisplayId(ui::LogicalDisplayId::DEFAULT),
                                           WithFlags(MotionFlag::NO_FOCUS_CHANGE)));
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{51, 51}, /*rawLocation=*/{51, 51});
     mSecondWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_MOVE), WithDeviceId(deviceA),
                                             WithDisplayId(ui::LogicalDisplayId::DEFAULT)));
 
@@ -15660,86 +15819,86 @@ protected:
 
         mDispatcher->setDisplayTopology(mTopology);
     }
-
-    void testMultiDisplayMouseGesture() {
-        // pointer-down
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
-                                          .displayId(DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                          .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(ACTION_DOWN), WithDisplayId(DISPLAY_ID),
-                                          WithRawCoords(60, 60)));
-
-        mDispatcher->notifyMotion(
-                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
-                        .displayId(DISPLAY_ID)
-                        .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                        .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
-                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
-
-        // pointer-move
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                          .displayId(DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
-                                          .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                          WithDisplayId(DISPLAY_ID), WithRawCoords(60, 60)));
-
-        // pointer-move with different display, by default windows are not topology aware and
-        // receive events as if they were in the same display.
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
-                                          .displayId(SECOND_DISPLAY_ID)
-                                          .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                                          .build());
-        // events should be delivered with the second displayId and in corresponding coordinate
-        // space.
-        // The second display is in ROT_270 orientation, so the input coordinates are transformed
-        // accordingly (70, 70) -> (70, 430)
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
-                                          WithDisplayId(SECOND_DISPLAY_ID),
-                                          WithRawCoords(70, 430)));
-
-        // pointer-up
-        mDispatcher->notifyMotion(
-                MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
-                        .displayId(SECOND_DISPLAY_ID)
-                        .buttonState(0)
-                        .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
-                        .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
-                        .build());
-        mWindow->consumeMotionEvent(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
-                                          WithDisplayId(SECOND_DISPLAY_ID),
-                                          WithRawCoords(70, 430)));
-
-        mDispatcher->notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
-                                          .displayId(SECOND_DISPLAY_ID)
-                                          .buttonState(0)
-                                          .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(430))
-                                          .build());
-        mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
-    }
 };
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGesture) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
-
     // Only the windows that are topology aware receive the cross display gesture.
     mWindow->setDisplayTopologyAware(true);
     updateWindowInfos();
 
-    testMultiDisplayMouseGesture();
-}
+    // pointer-down
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(ACTION_DOWN),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
 
-TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseGestureWithoutTopologyAwareFlag) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, false);
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_PRESS, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_PRESS),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
 
-    testMultiDisplayMouseGesture();
+    // pointer-move
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                    .displayId(DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(60).y(60))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+            WithDisplayId(DISPLAY_ID),
+            WithRawCoords(60, 60)));
+
+    // pointer-move with different display, by default windows are not topology aware and
+    // receive events as if they were in the same display.
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                    .build());
+    // events should be delivered with the second displayId and in corresponding coordinate
+    // space.
+    // The second display is in ROT_270 orientation, so the input coordinates are transformed
+    // accordingly (70, 70) -> (70, 430)
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+            WithDisplayId(SECOND_DISPLAY_ID),
+            WithRawCoords(70, 430)));
+
+    // pointer-up
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_BUTTON_RELEASE, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(0)
+                    .actionButton(AMOTION_EVENT_BUTTON_PRIMARY)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(70))
+                    .build());
+    mWindow->consumeMotionEvent(AllOf(
+            WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
+            WithDisplayId(SECOND_DISPLAY_ID),
+            WithRawCoords(70, 430)));
+
+    mDispatcher->notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_UP, AINPUT_SOURCE_MOUSE)
+                    .displayId(SECOND_DISPLAY_ID)
+                    .buttonState(0)
+                    .pointer(PointerBuilder(0, ToolType::MOUSE).x(70).y(430))
+                    .build());
+    mWindow->consumeMotionUp(SECOND_DISPLAY_ID);
 }
 
 TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrimaryDisplay) {
@@ -15798,7 +15957,8 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromPrim
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
                     .build());
     mDragWindow->consumeMotionUp(SECOND_DISPLAY_ID, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindowOnSecondDisplay->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindowOnSecondDisplay->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 450});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
     mWindowOnSecondDisplay->assertNoEvents();
@@ -15848,7 +16008,8 @@ TEST_F(InputDispatcherConnectedDisplayTest, MultiDisplayMouseDragAndDropFromNonP
                     .pointer(PointerBuilder(MOUSE_POINTER_ID, ToolType::MOUSE).x(50).y(50))
                     .build());
     mDragWindow->consumeMotionUp(DISPLAY_ID, MotionFlag::NO_FOCUS_CHANGE);
-    mFakePolicy->assertDropTargetEquals(*mDispatcher, mWindow->getToken());
+    mFakePolicy->assertNotifyDropWindowWasCalled(*mDispatcher, mWindow->getToken(),
+                                                 /*location=*/{50, 50}, /*rawLocation=*/{50, 50});
     mWindow->assertNoEvents();
     mSecondWindow->assertNoEvents();
     mWindowOnSecondDisplay->assertNoEvents();
@@ -15998,8 +16159,6 @@ protected:
 };
 
 TEST_P(InputDispatcherCrossDisplayGestureTestFixture, InputDispatcherCrossDisplayGestureTest) {
-    SCOPED_FLAG_OVERRIDE(use_topology_aware_flag, true);
-
     const auto& [_, sourceDisplayOrientation, destinationDisplayOrientation, sourceDisplayDensity,
                  destinationDisplayDensity, sourceDisplayCoords, destinationDisplayCoords] =
             GetParam();

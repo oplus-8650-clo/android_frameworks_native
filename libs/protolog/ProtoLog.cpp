@@ -33,8 +33,6 @@
 #include <utility>
 #include <vector>
 
-#include <utils/CallStack.h>
-
 #include <perfetto/public/pb_utils.h>
 #include <perfetto/public/protos/trace/interned_data/interned_data.pzc.h>
 #include <perfetto/public/protos/trace/trace_packet.pzc.h>
@@ -156,35 +154,6 @@ static inline uint64_t internProtoLogMessage(struct PerfettoDsTracerIterator* ct
     return msg_res.id;
 }
 
-static inline datasource::InternResult collectAndTraceStacktrace(
-        struct PerfettoDsTracerIterator* ctx, datasource::IncrementalState* incr_state) {
-    datasource::InternResult stacktrace_res{0, false};
-    android::CallStack stack("ProtoLog");
-    stack.update(/*ignoreDepth=*/2);
-    const auto& stack_str8 = stack.toString();
-
-    if (stack_str8.length() > 0) {
-        std::string_view stacktrace_sv(stack_str8.c_str(), stack_str8.length());
-        stacktrace_res = incr_state->internString(stacktrace_sv);
-        if (stacktrace_res.is_new) {
-            struct PerfettoDsRootTracePacket intern_packet;
-            PerfettoDsTracerPacketBegin(ctx, &intern_packet);
-            struct perfetto_protos_InternedData interned_data;
-            perfetto_protos_TracePacket_begin_interned_data(&intern_packet.msg, &interned_data);
-            struct perfetto_protos_InternedString internedString;
-            perfetto_protos_InternedData_begin_protolog_stacktrace(&interned_data, &internedString);
-            perfetto_protos_InternedString_set_iid(&internedString, stacktrace_res.id);
-            perfetto_protos_InternedString_set_str(&internedString, stacktrace_sv.data(),
-                                                   stacktrace_sv.length());
-            perfetto_protos_InternedData_end_protolog_stacktrace(&interned_data, &internedString);
-            perfetto_protos_TracePacket_end_interned_data(&intern_packet.msg, &interned_data);
-            PerfettoDsTracerPacketEnd(ctx, &intern_packet);
-        }
-    }
-
-    return stacktrace_res;
-}
-
 static inline void internStringArgs(
         struct PerfettoDsTracerIterator* ctx,
         const std::vector<std::pair<const std::string, datasource::InternResult>>& strings) {
@@ -227,7 +196,7 @@ void LogInternal(ProtoLogLevel level, const std::string_view group,
 
         datasource::InternResult stacktrace_res = {0, false};
         if (group_config.collect_stacktrace) {
-            stacktrace_res = collectAndTraceStacktrace(&ctx, incr_state);
+            // TODO(b/477870887): Unsupported for now. Context: b/473868195.
         }
 
         uint64_t msgId = message_id_getter(ctx, *incr_state, current_boottime_ns);
@@ -368,8 +337,8 @@ void Log(ProtoLogLevel level, const std::string_view group, const char* format,
             true);
 }
 
-void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash, int paramsMask,
-         int argCount, IArgumentProvider& args_provider) {
+void Log(ProtoLogLevel level, const std::string_view group, uint64_t messageHash,
+         uint64_t paramsMask, int argCount, IArgumentProvider& args_provider) {
     LogInternal(
             level, group,
             [&](struct PerfettoDsTracerIterator&, datasource::IncrementalState&, uint64_t) {

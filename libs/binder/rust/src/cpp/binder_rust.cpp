@@ -16,6 +16,7 @@
 
 #include <android/binder_api_level_utils.h>
 #include <android/binder_ibinder.h>
+#include <android/binder_stability.h>
 
 #include <string>
 
@@ -46,6 +47,39 @@ const char* Compat_AIBinder_Class_getFunctionName(const AIBinder_Class* clazz,
     (void)transactionCode;
 #endif // defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 36
     return {};
+}
+
+bool Compat_AIBinder_requiresVintfDeclaration(const AIBinder* binder) {
+#if defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    if (API_LEVEL_AT_LEAST(37)) {
+        return AIBinder_requiresVintfDeclaration(const_cast<AIBinder*>(binder));
+    }
+#else
+    (void)binder;
+#endif // defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    return false;
+}
+
+bool Compat_AIBinder_isVendorStable(const AIBinder* binder) {
+#if defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    if (API_LEVEL_AT_LEAST(37)) {
+        return AIBinder_isVendorStable(const_cast<AIBinder*>(binder));
+    }
+#else
+    (void)binder;
+#endif // defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    return false;
+}
+
+bool Compat_AIBinder_isSystemStable(const AIBinder* binder) {
+#if defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    if (API_LEVEL_AT_LEAST(37)) {
+        return AIBinder_isSystemStable(const_cast<AIBinder*>(binder));
+    }
+#else
+    (void)binder;
+#endif // defined(__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__) || __ANDROID_API__ >= 37
+    return false;
 }
 
 } // extern "C"

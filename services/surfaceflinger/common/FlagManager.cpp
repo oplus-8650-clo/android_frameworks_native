@@ -34,6 +34,7 @@
 #include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <com_android_server_display_feature_flags.h>
+#include <com_android_window_flags.h>
 
 namespace android {
 using namespace com::android::graphics::surfaceflinger;
@@ -111,9 +112,10 @@ void FlagManager::dump(std::string& result) const {
     DUMP_SYSPROP_FLAG(disable_sched_fifo_re);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer);
     DUMP_SYSPROP_FLAG(disable_sched_fifo_composer_callback);
+    DUMP_SYSPROP_FLAG(force_agtm_without_luts);
+    DUMP_SYSPROP_FLAG(invalid_hdr_type_for_force_sdr_optin);
     DUMP_SYSPROP_FLAG(productionize_readback_screenshot);
     DUMP_SYSPROP_FLAG(stable_edid_ids_for_external_displays_optin);
-    DUMP_SYSPROP_FLAG(force_agtm_without_luts);
 
     /// Legacy server flags ///
     DUMP_LEGACY_SERVER_FLAG(test_flag);
@@ -123,15 +125,18 @@ void FlagManager::dump(std::string& result) const {
     /// Trunk stable server (R/W) flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     DUMP_ACONFIG_FLAG(adpf_gpu_sf);
+    DUMP_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
-    DUMP_ACONFIG_FLAG(correct_virtual_display_power_state);
     DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
+    DUMP_ACONFIG_FLAG(force_sdr_invalid_hdr_type);
     DUMP_ACONFIG_FLAG(frontend_caching_v0);
+    DUMP_ACONFIG_FLAG(frametimeline_boottime_in_lambda);
     DUMP_ACONFIG_FLAG(get_display_known_vsync_sample_enabled);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
+    DUMP_ACONFIG_FLAG(graphite_renderengine_preview2_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_desktop_rollout);
     DUMP_ACONFIG_FLAG(jank_classification_v2);
     DUMP_ACONFIG_FLAG(luts_api);
@@ -151,14 +156,18 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces);
     DUMP_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved);
     DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
+    DUMP_ACONFIG_FLAG(connected_display_hdr_v3);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
     DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
-    DUMP_ACONFIG_FLAG(disable_synthetic_vsync_for_performance);
     DUMP_ACONFIG_FLAG(display_command_modeset);
+    DUMP_ACONFIG_FLAG(enable_user_preferred_hdr_mode);
     DUMP_ACONFIG_FLAG(fence_handling);
     DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection);
+    DUMP_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection_platform);
     DUMP_ACONFIG_FLAG(follower_display_backpressure);
+    DUMP_ACONFIG_FLAG(follower_display_backpressure_platform);
     DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition);
+    DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition_platform);
     DUMP_ACONFIG_FLAG(frame_rate_category_mrr);
     DUMP_ACONFIG_FLAG(graphite_renderengine);
     DUMP_ACONFIG_FLAG(hdcp_level_hal);
@@ -172,6 +181,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(renderable_buffer_usage);
     DUMP_ACONFIG_FLAG(restore_blur_step);
     DUMP_ACONFIG_FLAG(shader_disk_cache);
+    DUMP_ACONFIG_FLAG(small_blur_region_improvements);
     DUMP_ACONFIG_FLAG(skip_invisible_windows_in_input);
     DUMP_ACONFIG_FLAG(stable_edid_ids);
     DUMP_ACONFIG_FLAG(synced_resolution_switch);
@@ -240,9 +250,10 @@ FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_sf_sched, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_re, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(disable_sched_fifo_composer_callback, /* default */ false)
+FLAG_MANAGER_SYSPROP_FLAG(force_agtm_without_luts, /* default */ false)
+FLAG_MANAGER_SYSPROP_FLAG(invalid_hdr_type_for_force_sdr_optin, /* default */ false);
 FLAG_MANAGER_SYSPROP_FLAG(productionize_readback_screenshot, /* default */ false)
 FLAG_MANAGER_SYSPROP_FLAG(stable_edid_ids_for_external_displays_optin, /* default */ false)
-FLAG_MANAGER_SYSPROP_FLAG(force_agtm_without_luts, /* default */ false)
 
 /// Legacy server flags ///
 FLAG_MANAGER_LEGACY_SERVER_FLAG(test_flag, "", "")
@@ -256,17 +267,24 @@ FLAG_MANAGER_LEGACY_SERVER_FLAG(use_skia_tracing, PROPERTY_SKIA_ATRACE_ENABLED,
 FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
                           "debug.sf.cache_source_crop_only_moved")
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_hdr_v2");
+FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v3, "debug.sf.connected_display_hdr_v3");
 FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
-FLAG_MANAGER_ACONFIG_FLAG(disable_synthetic_vsync_for_performance, "");
 FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
 FLAG_MANAGER_ACONFIG_FLAG(fence_handling, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
                           "debug.sf.follower_arbitrary_refresh_rate_selection");
+FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection_platform,
+                          "debug.sf.follower_arbitrary_refresh_rate_selection_platform");
 FLAG_MANAGER_ACONFIG_FLAG(follower_display_backpressure, "debug.sf.follower_display_backpressure");
+FLAG_MANAGER_ACONFIG_FLAG(follower_display_backpressure_platform,
+                          "debug.sf.follower_display_backpressure_platform");
 FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition,
                           "debug.sf.force_slower_follower_gpu_composition");
+FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition_platform,
+                          "debug.sf.force_slower_follower_gpu_composition_platform");
 FLAG_MANAGER_ACONFIG_FLAG(frame_rate_category_mrr, "debug.sf.frame_rate_category_mrr")
+FLAG_MANAGER_ACONFIG_FLAG(frametimeline_boottime_in_lambda, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
 FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
@@ -280,6 +298,7 @@ FLAG_MANAGER_ACONFIG_FLAG(protected_if_client, "")
 FLAG_MANAGER_ACONFIG_FLAG(renderable_buffer_usage, "")
 FLAG_MANAGER_ACONFIG_FLAG(restore_blur_step, "debug.renderengine.restore_blur_step")
 FLAG_MANAGER_ACONFIG_FLAG(shader_disk_cache, "");
+FLAG_MANAGER_ACONFIG_FLAG(small_blur_region_improvements, "");
 FLAG_MANAGER_ACONFIG_FLAG(skip_invisible_windows_in_input, "");
 FLAG_MANAGER_ACONFIG_FLAG(stable_edid_ids, "debug.sf.stable_edid_ids")
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
@@ -293,16 +312,19 @@ FLAG_MANAGER_ACONFIG_FLAG(window_blur_kawase2_preallocate_buffers, "");
 /// IMPORTANT - please keep alphabetized to reduce merge conflicts
 FLAG_MANAGER_ACONFIG_FLAG(adpf_gpu_sf, "")
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces, "");
+FLAG_MANAGER_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate, "");
 FLAG_MANAGER_ACONFIG_FLAG(color_transform_translation, "");
 FLAG_MANAGER_ACONFIG_FLAG(configure_work_duration, "");
 FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
 FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_bugfix, "");
+FLAG_MANAGER_ACONFIG_FLAG(force_sdr_invalid_hdr_type, "");
 FLAG_MANAGER_ACONFIG_FLAG(frontend_caching_v0, "");
 FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
                           "debug.sf.get_display_known_vsync_sample_enabled");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
+FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview2_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(jank_classification_v2, "debug.sf.jank_classification_v2")
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
@@ -318,7 +340,20 @@ FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 
-FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(correct_virtual_display_power_state, "",
-                                   android::companion::virtualdevice::flags)
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);
+FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(enable_user_preferred_hdr_mode, "", com::android::window::flags);
+
+bool FlagManager::follower_arbitrary_refresh_rate_selection_combined() const {
+    return follower_arbitrary_refresh_rate_selection() ||
+            follower_arbitrary_refresh_rate_selection_platform();
+}
+
+bool FlagManager::follower_display_backpressure_combined() const {
+    return follower_display_backpressure() || follower_display_backpressure_platform();
+}
+
+bool FlagManager::force_slower_follower_gpu_composition_combined() const {
+    return force_slower_follower_gpu_composition() ||
+            force_slower_follower_gpu_composition_platform();
+}
 } // namespace android

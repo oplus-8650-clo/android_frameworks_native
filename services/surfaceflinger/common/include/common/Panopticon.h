@@ -19,6 +19,7 @@
 #include <log/log.h>
 #include <utils/Timers.h>
 #include <array>
+#include <atomic>
 #include "ftl/concat.h"
 #include "log/log_main.h"
 #include "ui/DisplayId.h"
@@ -52,7 +53,7 @@ namespace android::panopticon {
 
 // This is the workload type that we want to trace. Equivalent to a perfetto track.
 // Prefix by CG_ so that trace markers remain stable
-enum class Source : int32_t { CG_FrameSignal = 0, ftl_last = CG_FrameSignal };
+enum class Source : int32_t { CG_FrameSignal = 1, ftl_last = CG_FrameSignal };
 
 // Subcomponent of a workload that we want to trace. Equivalent to a perfetto slice.
 // Prefix by CG_ so that trace markers remain stable
@@ -81,6 +82,19 @@ struct Slice {
 
     void init(std::string_view track, SliceType slice, int32_t tracingCookie);
     void terminate(std::string_view track);
+    int64_t duration() {
+        auto end = endTime.load(std::memory_order_acquire);
+        auto start = startTime.load(std::memory_order_acquire);
+        if (end < 0 || start < 0) {
+            return -1;
+        }
+        return end - start;
+    }
+};
+
+struct Summary {
+    std::atomic_int32_t gpuRenderedLayers = -1;
+    std::atomic_int32_t dpuRenderedLayers = -1;
 };
 
 // RAII handle for referring to a slice. Ends the slice when destroyed
@@ -116,8 +130,8 @@ private:
 // everything is a prison.
 class Panopticon : public std::enable_shared_from_this<Panopticon> {
 public:
-    static std::shared_ptr<Panopticon> make(Source source, const char* suffix) {
-        auto panopticon = std::shared_ptr<Panopticon>(new Panopticon(source, suffix));
+    static std::shared_ptr<Panopticon> make(Source source, const char* suffix, int64_t vsyncId) {
+        auto panopticon = std::shared_ptr<Panopticon>(new Panopticon(source, suffix, vsyncId));
         return panopticon;
     }
 
@@ -132,6 +146,9 @@ public:
     // Simlar to SFTRACE_CALL OR SFTRACE_NAME
     SliceToken makeSlice(SliceType type) { return SliceToken(type, shared_from_this()); }
 
+    void reportGpuRenderedLayers(int32_t value) { mSummary.gpuRenderedLayers = value; }
+    void reportDpuRenderedLayers(int32_t value) { mSummary.dpuRenderedLayers = value; }
+
     SliceToken makeTopSlice() { return makeSlice(topSlice()); }
 
     std::string_view getSourceName() {
@@ -140,16 +157,20 @@ public:
         return *name;
     }
 
+    Summary& editSummary() { return mSummary; }
+
 private:
     Source mSource;
+    int64_t mVsyncId;
     std::string mTrack;
     std::string mKey;
     int32_t mBaseCookie;
     std::atomic_int32_t mTracingCookie;
 
     std::array<Slice, ftl::enum_size_v<SliceType>> mSlices;
+    Summary mSummary;
 
-    Panopticon(Source source, const char* prefix);
+    Panopticon(Source source, const char* prefix, int64_t vsyncId);
 
     Slice& sliceForType(SliceType type) {
         return mSlices[static_cast<size_t>(ftl::to_underlying(type))];
@@ -210,8 +231,8 @@ using Ids = ftl::SmallVector<std::string, 10>;
 // "registrate" because register is a reserved keyword :(
 // Registers a new Panopticon to this thread. When this PanopticonRegistration is destroyed, this
 // thread's Panopticon is also removed from thread-local storage, so that we don't leak.
-void make(std::string id, Source source);
-void make(Ids ids, Source source);
+void make(std::string id, Source source, int64_t vsyncId);
+void make(Ids ids, Source source, int64_t vsyncId);
 
 // "Borrows" a Panopticon for sharing to a new thread. Typical usage is to call
 // PanopticonRegistration::register immediately after hopping to the new thread. Do not retain this
@@ -224,6 +245,9 @@ PanopticonRegistrations share(Ids ids);
 
 // Creates a trace slice. Simlar to SFTRACE_CALL OR SFTRACE_NAME
 [[nodiscard]] SliceTokens slice(SliceType sliceType);
+
+void reportGpuRenderedLayers(int32_t value);
+void reportDpuRenderedLayers(int32_t value);
 
 // Effectively terminates this thread's Panopticon by removing from thread-local storage, even if a
 // PanopticonRegistration has not yet been destroyed. This is useful for a thread reporting that its

@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <optional>
@@ -217,6 +224,10 @@ public:
 
     virtual int32_t getLayerId() const = 0;
 // QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
+
+    // QTI_BEGIN
+    virtual vec2 getCornerRadius() const = 0;
+    // QTI_END
 };
 
 // TODO(b/121291683): Specialize std::hash<> for sp<T> so these and others can

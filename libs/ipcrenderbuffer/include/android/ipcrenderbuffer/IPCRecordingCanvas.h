@@ -16,6 +16,10 @@
 
 #pragma once
 
+// Skia headers have some bits that trigger -Wunused-parameter which is an error in some parts
+// of the Android build
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #include <SkCanvas.h>
 #include <SkCanvasVirtualEnforcer.h>
 #include <SkDrawable.h>
@@ -24,6 +28,8 @@
 #include <SkPath.h>
 #include <SkRect.h>
 #include <SkRuntimeEffect.h>
+#pragma clang diagnostic pop
+
 #include <gui/RenderCommandBufferProducer.h>
 #include <gui/SurfaceComposerClient.h>
 #include <gui/SurfaceControl.h>
@@ -46,6 +52,7 @@ class IPCRecordingCanvas : public SkCanvasVirtualEnforcer<SkNoDrawCanvas> {
 public:
     explicit IPCRecordingCanvas(IPCClientResourceCache& resourceCache);
 
+    bool canRecord();
     void startRecording();
     void endRecording();
 
@@ -101,6 +108,9 @@ public:
     void onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) override;
 
     //    void onDrawProxySurfaceControl(int id) override;
+
+    void beginRenderTarget(uint64_t bufferId);
+    void endRenderTarget();
 
     void storeSize(int width, int height);
 

@@ -557,6 +557,7 @@ public:
                                       const sp<SurfaceControl>& relativeTo, int32_t z);
         Transaction& setFlags(const sp<SurfaceControl>& sc,
                 uint32_t flags, uint32_t mask);
+        Transaction& setRoundedCornerOpt(const sp<SurfaceControl>& sc, bool enable);
         Transaction& setTransparentRegionHint(const sp<SurfaceControl>& sc,
                 const Region& transparentRegion);
         Transaction& setDimmingEnabled(const sp<SurfaceControl>& sc, bool dimmingEnabled);
@@ -628,6 +629,8 @@ public:
         Transaction& setExtendedRangeBrightness(const sp<SurfaceControl>& sc,
                                                 float currentBufferRatio, float desiredRatio);
         Transaction& setDesiredHdrHeadroom(const sp<SurfaceControl>& sc, float desiredRatio);
+        Transaction& setDesiredMaxHdrHeadroom(const sp<SurfaceControl>& sc,
+                                              float maxDesiredHdrSdrRatio);
         Transaction& setLuts(const sp<SurfaceControl>& sc, base::unique_fd&& lutFd,
                              const std::vector<int32_t>& offsets,
                              const std::vector<int32_t>& dimensions,

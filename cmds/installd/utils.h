@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <utime.h>
 
+#include <android-base/unique_fd.h>
 #include <cutils/multiuser.h>
 
 #include <installd_constants.h>
@@ -191,6 +192,32 @@ void drop_capabilities(uid_t uid);
 // `path` if present.
 bool remove_file_at_fd(int fd, /*out*/ std::string* path = nullptr);
 
+// Recursively chown the given fd and all its children. Does not follow symlinks.
+void chown_recursive(int fd, uid_t uid, gid_t gid, const std::string& absolute_path,
+                     std::vector<std::string>* failed_files);
+
+// Checks whether the passed in path is normalized
+bool is_path_normalized(std::string_view path);
+
+// Splits an app data path into a 'root' and it's package-specific component
+std::pair<std::string, std::string> split_app_data_path(const char* uuid, userid_t userId,
+                                                        const std::string& path);
+// Copies a file from src_fd to dst_fd
+bool copy_simple_file(int src_fd, int dst_fd, uid_t uid, gid_t gid, mode_t mode, size_t size,
+                      std::function<void(const char* msg)> errorHandler);
+
+// Safely opens a path by starting from root, then traversing it
+// component-by-component with O_NOFOLLOW.
+android::base::unique_fd open_path_recursive(const std::string& path, const std::string& root);
+
+// Safely opens the parent directory of a path by starting from root, then
+// traversing it with O_NOFOLLOW.
+android::base::unique_fd open_parent_recursive(const std::string& path, const std::string& root,
+                                               std::string* basename);
+
+// Recursively creates directories, starting from root
+android::base::unique_fd mkdirs_recursive(const std::string& path, const std::string& root,
+                                          uid_t uid, gid_t gid, mode_t mode);
 }  // namespace installd
 }  // namespace android
 

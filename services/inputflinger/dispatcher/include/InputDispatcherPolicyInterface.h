@@ -68,6 +68,14 @@ public:
      */
     virtual void notifyWindowResponsive(const sp<IBinder>& token, std::optional<gui::Pid> pid) = 0;
 
+    /*
+     * Warns the system that an application is close to "No Focused Window" ANR timeout.
+     */
+    virtual void warnNoFocusedWindowAnr(
+            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+            std::chrono::milliseconds elapsedDuration,
+            std::chrono::milliseconds timeoutDuration) = 0;
+
     /* Notifies the system that an input channel is unrecoverably broken. */
     virtual void notifyInputChannelBroken(const sp<IBinder>& token) = 0;
     virtual void notifyFocusChanged(const sp<IBinder>& oldToken, const sp<IBinder>& newToken) = 0;
@@ -165,8 +173,8 @@ public:
      */
     virtual void setPointerCapture(const PointerCaptureRequest&) = 0;
 
-    /* Notifies the policy that the drag window has moved over to another window */
-    virtual void notifyDropWindow(const sp<IBinder>& token, float x, float y) = 0;
+    /* Notifies the system that a window has been dropped on. */
+    virtual void notifyDropWindow(const sp<IBinder>& token, vec2 location, vec2 rawLocation) = 0;
 
     /* Notifies the policy that there was an input device interaction with apps. */
     virtual void notifyDeviceInteraction(DeviceId deviceId, nsecs_t timestamp,

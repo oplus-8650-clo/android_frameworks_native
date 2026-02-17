@@ -10,7 +10,8 @@ class BoxShadowUtils {
 public:
     explicit BoxShadowUtils(RuntimeEffectManager& manager);
     void drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
-                        const android::gui::BoxShadowSettings& settings, bool shouldDrawFpkRect);
+                        const android::gui::BoxShadowSettings& settings, bool supportsFpk,
+                        bool isInteriorOccluded);
 
 private:
     RuntimeEffectManager& mManager;

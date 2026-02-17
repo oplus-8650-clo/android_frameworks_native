@@ -55,9 +55,29 @@ flag {
 }
 
 flag {
-  name: "vulkan_1_4_instance_api"
+  name: "vk_khr_present_wait2"
   namespace: "core_graphics"
-  description: "Enable support for the Vulkan 1.4 instance API"
-  bug: "370568136"
-  is_fixed_read_only: true
+  description: "This flag has been replaced by vk_khr_present_wait2_gpu to allow a namespace change"
+  bug: "441472170"
+}
+
+flag {
+  name: "vk_khr_present_wait2_gpu"
+  namespace: "gpu"
+  description: "Enable support for the VK_KHR_present_wait2 vulkan extension"
+  bug: "441472170"
+}
+
+flag {
+  name: "ext_private_data_swapchain"
+  namespace: "gpu"
+  description: "Enable loader handling of EXT_private_data for swapchain objects"
+  bug: "475049631"
+}
+
+flag {
+  name: "khr_swapchain_maintenance1"
+  namespace: "gpu"
+  description: "Expose the KHR_swapchain_maintenance1 and KHR_surface_maintenance1 extensions"
+  bug: "475589943"
 }

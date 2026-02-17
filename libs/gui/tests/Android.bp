@@ -79,6 +79,7 @@ cc_test {
         "RenderCommandBuffer_test.cpp",
         "StreamSplitter_test.cpp",
         "Surface_test.cpp",
+        "Surface2HGraphicBufferProducer_test.cpp",
         "SurfaceTextureClient_test.cpp",
         "SurfaceTextureFBO_test.cpp",
         "SurfaceTextureGL_test.cpp",

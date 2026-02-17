@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 #include "common/Panopticon.h"
+#include <trace_categories.h>
+#include <atomic>
 #include <string_view>
 #include "common/trace.h"
+#include "perfetto/public/te_macros.h"
 
 namespace android::panopticon {
 
@@ -41,9 +44,28 @@ std::optional<SliceToken> slice(std::string id, SliceType sliceType) {
     return std::nullopt;
 }
 
+template <std::invocable<Summary&> F>
+void report(std::string id, F reporter) {
+    if (auto panopticon = sPanopticons.get(id.c_str()); panopticon) {
+        reporter(panopticon->get()->editSummary());
+    }
+}
+
+template <std::invocable<Summary&> F>
+void report(F reporter) {
+    if (sExclusiveIdStack.size() > 0) {
+        report(sExclusiveIdStack.back(), reporter);
+    } else {
+        for (const auto& [id, _] : sPanopticons) {
+            report(id, reporter);
+        }
+    }
+}
+
 } // namespace
 
-Panopticon::Panopticon(Source source, const char* suffix) : mSource(source) {
+Panopticon::Panopticon(Source source, const char* suffix, int64_t vsyncId)
+      : mSource(source), mVsyncId(vsyncId) {
     static std::atomic_int64_t sSeed = 0;
     mBaseCookie = static_cast<int16_t>(sSeed++) << 16;
     mTrack = std::string(
@@ -56,22 +78,118 @@ Panopticon::Panopticon(Source source, const char* suffix) : mSource(source) {
 
 Panopticon::~Panopticon() {
     SFTRACE_CALL();
+
     // TODO(alecmouri): Also package this up into a bow and upload to statsd
     for (auto& slice : mSlices) {
         slice.terminate(getTrackName());
     }
+
+    PERFETTO_TE(
+            tracing_perfetto::track_event_categories::rendering,
+            PERFETTO_TE_INSTANT("WorkloadSummary"),
+            PERFETTO_TE_PROTO_FIELDS(PERFETTO_TE_PROTO_FIELD_NESTED(
+                    /* perfetto_protos_TrackEvent_surfaceflinger_workload_field_number */ 2007,
+                    PERFETTO_TE_PROTO_FIELD_VARINT(1, static_cast<int32_t>(mSource)),
+                    PERFETTO_TE_PROTO_FIELD_BYTES(2, mKey.data(), mKey.size()),
+                    PERFETTO_TE_PROTO_FIELD_VARINT(3, mVsyncId),
+
+                    PERFETTO_TE_PROTO_FIELD_NESTED(
+                            /* perfetto_protos_AndroidSurfaceFlingerWorkload_summary_field_number
+                             */
+                            4,
+                            PERFETTO_TE_PROTO_FIELD_NESTED(
+                                    /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_timings_field_number
+                                     */
+                                    1,
+                                    PERFETTO_TE_PROTO_FIELD_NESTED(
+                                            /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_Timings_sf_cpu_field_number
+                                             */
+                                            1,
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    1,
+                                                    sliceForType(SliceType::CG_Sf_FrameSignal)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    2,
+                                                    sliceForType(SliceType::CG_Sf_Commit)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    3,
+                                                    sliceForType(SliceType::CG_Sf_Composite)
+                                                            .duration())),
+                                    PERFETTO_TE_PROTO_FIELD_NESTED(
+                                            /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_Timings_hwc_field_number
+                                             */
+                                            2,
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    1,
+                                                    sliceForType(SliceType::CG_Hwc_Present)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    2,
+                                                    sliceForType(SliceType::CG_Hwc_Validate)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    3,
+                                                    sliceForType(
+                                                            SliceType::CG_Hwc_PresentOrValidate)
+                                                            .duration())),
+                                    PERFETTO_TE_PROTO_FIELD_NESTED(
+                                            /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_Timings_re_field_number
+                                             */
+                                            3,
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    1,
+                                                    sliceForType(SliceType::CG_Re_drawLayers)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    2,
+                                                    sliceForType(SliceType::CG_Re_gpu).duration())),
+                                    PERFETTO_TE_PROTO_FIELD_NESTED(
+                                            /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_Timings_skia_field_number
+                                             */
+                                            4,
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    1,
+                                                    sliceForType(SliceType::CG_Skia_flush)
+                                                            .duration()),
+                                            PERFETTO_TE_PROTO_FIELD_VARINT(
+                                                    2,
+                                                    sliceForType(SliceType::CG_Skia_submit)
+                                                            .duration()))),
+                            PERFETTO_TE_PROTO_FIELD_NESTED(
+                                    /* perfetto_protos_AndroidSurfaceFlingerWorkload_Summary_stats_field_number
+                                     */
+                                    2,
+                                    PERFETTO_TE_PROTO_FIELD_VARINT(
+                                            1,
+                                            mSummary.gpuRenderedLayers.load(
+                                                    std::memory_order_acquire)),
+                                    PERFETTO_TE_PROTO_FIELD_VARINT(
+                                            2,
+                                            mSummary.dpuRenderedLayers.load(
+                                                    std::memory_order_acquire)))))),
+            PERFETTO_TE_PROTO_TRACK(
+                    PerfettoTeNamedTrackUuid(getTrackName().data(), 1,
+                                             PerfettoTeProcessTrackUuid()),
+                    PERFETTO_TE_PROTO_FIELD_CSTR(
+                            perfetto_protos_TrackDescriptor_atrace_name_field_number,
+                            getTrackName().data()),
+                    PERFETTO_TE_PROTO_FIELD_VARINT(
+                            perfetto_protos_TrackDescriptor_parent_uuid_field_number,
+                            PerfettoTeProcessTrackUuid())));
 }
 
 void Slice::init(std::string_view track, SliceType slice, int32_t tracingCookie) {
-    startTime = systemTime();
-    isTracing = true;
+    startTime.store(systemTime(), std::memory_order_release);
+    isTracing.store(true, std::memory_order_release);
     cookie = tracingCookie;
     SFTRACE_ASYNC_FOR_TRACK_BEGIN(track.data(), validateAndStringify(slice).data(), tracingCookie);
 }
 
 void Slice::terminate(std::string_view track) {
-    if (isTracing.exchange(false)) {
-        endTime = systemTime();
+    if (isTracing.exchange(false, std::memory_order_acq_rel)) {
+        endTime.store(systemTime(), std::memory_order_release);
         SFTRACE_ASYNC_FOR_TRACK_END(track.data(), cookie);
     }
 }
@@ -107,13 +225,13 @@ ExclusiveToken::~ExclusiveToken() {
     sExclusiveIdStack.pop_back();
 }
 
-void make(std::string id, Source source) {
+void make(std::string id, Source source, int64_t vsyncId) {
     if (auto panopticon = sPanopticons.get(id.c_str()); panopticon) {
         ALOGV("Clobbering metrics for: %s, %s", id.c_str(),
               panopticon->get()->getSourceName().data());
     }
 
-    auto panopticon = Panopticon::make(source, id.c_str());
+    auto panopticon = Panopticon::make(source, id.c_str(), vsyncId);
     sPanopticons.try_emplace(std::move(id), std::move(panopticon));
 }
 
@@ -175,9 +293,21 @@ SliceTokens slice(SliceType sliceType) {
     return tokens;
 }
 
-void make(Ids ids, Source source) {
+void reportGpuRenderedLayers(int32_t value) {
+    report([&](Summary& summary) {
+        summary.gpuRenderedLayers.store(value, std::memory_order_release);
+    });
+}
+
+void reportDpuRenderedLayers(int32_t value) {
+    report([&](Summary& summary) {
+        summary.dpuRenderedLayers.store(value, std::memory_order_release);
+    });
+}
+
+void make(Ids ids, Source source, int64_t vsyncId) {
     for (const auto& id : ids) {
-        make(id, source);
+        make(id, source, vsyncId);
     }
 }
 } // namespace android::panopticon

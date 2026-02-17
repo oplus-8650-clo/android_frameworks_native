@@ -24,12 +24,22 @@ rust_bindgen {
         "#![no_std]",
         "--blocklist-type",
         "AIBinder_Class",
+        "--blocklist-type",
+        "AIBinder",
         "--allowlist-function",
         "Compat_AIBinder_Class_setTransactionCodeToFunctionNameMap",
         "--allowlist-function",
         "Compat_AIBinder_Class_getFunctionName",
+        "--allowlist-function",
+        "Compat_AIBinder_requiresVintfDeclaration",
+        "--allowlist-function",
+        "Compat_AIBinder_isVendorStable",
+        "--allowlist-function",
+        "Compat_AIBinder_isSystemStable",
         "--raw-line",
         "use binder_ndk_sys::AIBinder_Class;",
+        "--raw-line",
+        "use binder_ndk_sys::AIBinder;",
         "--use-core",
         "--ctypes-prefix",
         "::core::ffi",
@@ -114,6 +124,7 @@ rust_library {
         "libdowncast_rs",
         "liblibc",
         "liblog_rust",
+        "libstatic_assertions",
         "libzerocopy",
         "libbinder_rs_ndk_compat",
     ],
@@ -148,7 +159,6 @@ rust_library {
     srcs: ["src/lib.rs"],
     rustlibs: [
         "libdowncast_rs_nostd",
-        "liblibc_nostd",
         "liblog_rust_nostd",
         "libspin_nostd",
     ],
@@ -166,7 +176,9 @@ rust_library {
     no_std_rlibs: [
         "libbinder_ndk_sys",
         "libbinder_rs_ndk_compat",
+        "libstatic_assertions",
         "libzerocopy",
+        "liblibc",
     ],
 }
 
@@ -185,6 +197,7 @@ rust_library {
         "libdowncast_rs",
         "liblibc",
         "libbinder_rs_ndk_compat",
+        "libstatic_assertions",
         "libzerocopy",
     ],
     vendor: true,
@@ -248,33 +261,8 @@ rust_library {
     visibility: [":__subpackages__"],
     no_std: {
         enabled: true,
-        rustlibs: [
-            "liblibc_nostd",
-        ],
         features: [],
     },
-}
-
-rust_defaults {
-    name: "libbinder_ndk_nostd_defaults",
-    // libbinder_ndk disables static builds on Android devices
-    // to ensure there's only one copy per device. The reality
-    // is that clients using libbinder_rs_nostd are likely not using
-    // soong as their build system. Keeping this as a shared lib
-    // allows us to test that no_std builds work correctly without
-    // changing the libbinder_ndk policy.
-    shared_libs: [
-        "libbinder_ndk",
-    ],
-    rustlibs: [
-        "liblibc_nostd",
-    ],
-    host_supported: false,
-    prefer_rlib: true,
-    dylib: {
-        enabled: false,
-    },
-    visibility: [":__subpackages__"],
 }
 
 rust_library {
@@ -402,6 +390,7 @@ rust_test {
         "libdowncast_rs",
         "liblibc",
         "liblog_rust",
+        "libstatic_assertions",
         "libzerocopy",
         "libbinder_rs_ndk_compat",
     ],
@@ -417,13 +406,14 @@ rust_test {
     ],
     rustlibs: [
         "libdowncast_rs_nostd",
-        "liblibc_nostd",
         "liblog_rust_nostd",
         "libspin_nostd",
     ],
     no_std_rlibs: [
         "libbinder_ndk_sys",
+        "libstatic_assertions",
         "libzerocopy",
+        "liblibc",
     ],
 }
 

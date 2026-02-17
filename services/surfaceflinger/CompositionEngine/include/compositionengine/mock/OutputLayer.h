@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 #pragma once
 
 #include <optional>
@@ -67,6 +74,10 @@ public:
     MOCK_METHOD(const PictureProfileHandle&, getPictureProfileHandle, (), (const));
     MOCK_METHOD(void, commitPictureProfileToCompositionState, ());
     MOCK_CONST_METHOD1(dump, void(std::string&));
+
+    // QTI_BEGIN
+    MOCK_METHOD(void, qtiSetConnectionType, (ui::DisplayConnectionType));
+    // QTI_END
 };
 
 } // namespace android::compositionengine::mock

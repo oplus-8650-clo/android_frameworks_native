@@ -15,6 +15,7 @@
 #include <cutils/ashmem.h>
 #include <cutils/log.h>
 #include <gui/RenderCommandBufferConsumer.h>
+#include <inttypes.h>
 #include <sys/mman.h>
 
 #include <private/gui/ParcelUtils.h>
@@ -25,9 +26,9 @@ namespace android {
 RenderCommandBufferConsumer::RenderCommandBufferConsumer() {}
 
 RenderCommandBufferConsumer::~RenderCommandBufferConsumer() {
-    munmap(mCommandBuffer, sizeof(LocklessTripleBuffer<RenderCommandBuffer>));
-    if (mFdCommandBuffer != -1) {
-        close(mFdCommandBuffer);
+    munmap(mRenderRegion, sizeof(IpcRenderRegion));
+    if (mAshmemFdRenderRegion != -1) {
+        close(mAshmemFdRenderRegion);
     }
     if (mContext != nullptr) {
         mContextFreeCallback(mContext);
@@ -35,26 +36,21 @@ RenderCommandBufferConsumer::~RenderCommandBufferConsumer() {
 }
 
 void RenderCommandBufferConsumer::adoptFdCommandBuffer(int fd) {
-    mFdCommandBuffer = fd;
-    void* region = mmap(nullptr, sizeof(LocklessTripleBuffer<RenderCommandBuffer>),
-                        PROT_READ | PROT_WRITE, MAP_SHARED, mFdCommandBuffer, 0);
-    mCommandBuffer = (LocklessTripleBuffer<RenderCommandBuffer>*)region;
+    mAshmemFdRenderRegion = fd;
+    mRenderRegion = (IpcRenderRegion*)mmap(nullptr, sizeof(IpcRenderRegion), PROT_READ | PROT_WRITE,
+                                           MAP_SHARED, mAshmemFdRenderRegion, 0);
 }
 
-RenderCommandBuffer* RenderCommandBufferConsumer::consumerAcquire() {
-    // LOG_ALWAYS_FATAL_IF(mCurrentBuffer != nullptr, "Unbalanced calls to
-    // consumerAcquire/consumerRelease");
-    if (mCommandBuffer == nullptr) {
-        return mCurrentBuffer; // For replay tool.
+void RenderCommandBufferConsumer::consumerAcquire(uint64_t frameNumber) {
+    while (!mRenderRegion->mCommandBuffers.empty()) {
+        uint64_t lo = mRenderRegion->mCommandBuffers.getLo();
+        uint64_t hi = mRenderRegion->mCommandBuffers.getHi();
+        // Skip until we get to the requested frameNumber OR the latest available frame.
+        if (lo + 1 >= frameNumber || lo + 1 == hi) {
+            return;
+        }
+        mRenderRegion->mCommandBuffers.popFront();
     }
-    mCurrentBuffer = mCommandBuffer->consume();
-    return mCurrentBuffer;
-}
-
-void RenderCommandBufferConsumer::consumerRelease() {
-    // LOG_ALWAYS_FATAL_IF(mCurrentBuffer == nullptr, "Unbalanced calls to
-    // consumerAcquire/consumerRelease"); mCommandBuffer->consumerRelease();
-    mCurrentBuffer = nullptr;
 }
 
 status_t RenderCommandBufferConsumer::readFromParcel(const Parcel& parcel,

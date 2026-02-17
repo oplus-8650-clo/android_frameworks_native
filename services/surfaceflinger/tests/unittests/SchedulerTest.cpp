@@ -454,6 +454,7 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentSelectsMaxRefreshRate) {
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);
 
     // Configure pacesetter display to 120Hz.
     const LayerFilter pacesetterLayerStack = {.layerStack = {.id = 0}};
@@ -502,6 +503,7 @@ TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequest) {
 
 TEST_F(SchedulerTest, chooseRefreshRateForContentFollowerModeChangeRequestPacesetterCantSwitch) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);
 
     // Configure pacesetter display to 120Hz.
     const DisplayModes kDisplay1ModesOneMode = makeModes(kDisplay1Mode120);
@@ -666,7 +668,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
     TestableScheduler::DisplayModeChoiceMap expectedChoices;
 
     const bool follower_arbitrary_refresh_rate =
-            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection();
+            FlagManager::getInstance().follower_arbitrary_refresh_rate_selection_combined();
     {
         const GlobalSignals globalSignals = {.idle = true};
         const GlobalSignals display2GlobalSignals = GlobalSignals{};
@@ -783,6 +785,8 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
 
 TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplaysArbitraryFollowersIdle) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);
+
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
@@ -866,6 +870,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplaysArbitraryFollowersIdle) 
 
 TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplaysArbitraryFollowersPowerMode) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
                                                                       kDisplay1Mode60->getId()));
@@ -969,6 +974,7 @@ TEST_F(SchedulerTest, resetForcedPacesetterDisplay) FTL_FAKE_GUARD(kMainThreadCo
 
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, false);
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure_platform, false);
 
     mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
                                 std::make_shared<RefreshRateSelector>(kDisplay1Modes,
@@ -1016,6 +1022,7 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplays) {
 
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysIgnoreBackpressureForLockstepFollower) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure_platform, true);
 
     auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
     ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((60_Hz).getPeriodNsecs()));
@@ -1091,6 +1098,7 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysIgnoreBackpressureForLockstep
 
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBackpressure) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure_platform, true);
 
     auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
     ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((120_Hz).getPeriodNsecs()));
@@ -1192,6 +1200,7 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnBack
 
 TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMissedPresentation) {
     SET_FLAG_FOR_TEST(flags::follower_display_backpressure, true);
+    SET_FLAG_FOR_TEST(flags::follower_display_backpressure_platform, true);
 
     auto mockVsyncTracker1 = std::make_shared<android::mock::VSyncTracker>();
     ON_CALL(*mockVsyncTracker1, currentPeriod).WillByDefault(Return((120_Hz).getPeriodNsecs()));
@@ -1351,6 +1360,48 @@ TEST_F(SchedulerTest, onFrameSignalMultipleDisplaysSkipFollowerCompositionOnMiss
         EXPECT_EQ(vsyncId, VsyncId(46));
         // pending presentation due to slower nature of the second display.
     }
+}
+
+TEST_F(SchedulerTest, isVsyncValid) {
+    // Setup a mock VSyncTracker to intercept calls.
+    auto mockVsyncTracker = std::make_shared<android::mock::VSyncTracker>();
+
+    // Register a display which will become the pacesetter, and inject the mock tracker.
+    mScheduler->registerDisplay(kDisplayId1, ui::DisplayConnectionType::Internal,
+                                std::make_shared<RefreshRateSelector>(kDisplay1Modes,
+                                                                      kDisplay1Mode60->getId()),
+                                mockVsyncTracker);
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    const uid_t uid = 1234;
+    const TimePoint expectedVsyncTime = TimePoint::fromNs(1'000'000'000);
+
+    // Case 1: No frame rate override for the given UID.
+    // isVsyncValid should return true without consulting the VSyncTracker.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(_, _)).Times(0);
+    EXPECT_TRUE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
+
+    // Case 2: A frame rate override is set for the UID.
+    // isVsyncValid should delegate the check to VSyncTracker::isVSyncInPhase.
+    const Fps frameRateOverride = 30_Hz;
+    mScheduler->setPreferredRefreshRateForUid({uid, frameRateOverride.getValue()});
+
+    // Mock the tracker to return false.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(expectedVsyncTime.ns(), frameRateOverride))
+            .WillOnce(Return(false));
+
+    // Verify isVsyncValid returns false.
+    EXPECT_FALSE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
+
+    // Mock the tracker to return true.
+    EXPECT_CALL(*mockVsyncTracker, isVSyncInPhase(expectedVsyncTime.ns(), frameRateOverride))
+            .WillOnce(Return(true));
+
+    // Verify isVsyncValid returns true.
+    EXPECT_TRUE(mScheduler->isVsyncValid(expectedVsyncTime, uid));
+    testing::Mock::VerifyAndClearExpectations(mockVsyncTracker.get());
 }
 
 TEST_F(SchedulerTest, nextFrameIntervalTest) {
@@ -1967,6 +2018,7 @@ FTL_FAKE_GUARD(kMainThreadContext) {
 
 TEST_F(SchedulerTest, selectorPtrForLayerStack) FTL_FAKE_GUARD(kMainThreadContext) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
+    SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);
 
     auto selector1 =
             std::make_shared<RefreshRateSelector>(kDisplay1Modes, kDisplay1Mode60->getId());

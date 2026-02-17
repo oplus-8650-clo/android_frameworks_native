@@ -43,9 +43,10 @@ public:
     bool disable_sched_fifo_re() const;
     bool disable_sched_fifo_composer() const;
     bool disable_sched_fifo_composer_callback() const;
+    bool force_agtm_without_luts() const;
+    bool invalid_hdr_type_for_force_sdr_optin() const;
     bool productionize_readback_screenshot() const;
     bool stable_edid_ids_for_external_displays_optin() const;
-    bool force_agtm_without_luts() const;
 
     /// Legacy server flags ///
     bool test_flag() const;
@@ -56,16 +57,19 @@ public:
     /// IMPORTANT - please keep alphabetized to reduce merge conflicts
     bool adpf_gpu_sf() const;
     bool bugfix_resize_virtual_display_surfaces() const;
+    bool bugfix_virtual_display_refresh_rate() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
-    bool correct_virtual_display_power_state() const;
     bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
     bool fence_handling() const;
+    bool force_sdr_invalid_hdr_type() const;
     bool frontend_caching_v0() const;
+    bool frametimeline_boottime_in_lambda() const;
     bool get_display_known_vsync_sample_enabled() const;
     bool graphite_renderengine_preview_rollout() const;
+    bool graphite_renderengine_preview2_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
     bool jank_classification_v2() const;
     bool md_degrade_hdr() const;
@@ -83,13 +87,11 @@ public:
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
     bool cache_when_source_crop_layer_only_moved() const;
     bool connected_display_hdr_v2() const;
+    bool connected_display_hdr_v3() const;
     bool correct_dpi_with_display_size() const;
     bool deprecate_frame_tracker() const;
-    bool disable_synthetic_vsync_for_performance() const;
     bool display_command_modeset() const;
-    bool follower_arbitrary_refresh_rate_selection() const;
-    bool follower_display_backpressure() const;
-    bool force_slower_follower_gpu_composition() const;
+    bool enable_user_preferred_hdr_mode() const;
     bool frame_rate_category_mrr() const;
     bool graphite_renderengine() const;
     bool hdcp_level_hal() const;
@@ -105,6 +107,7 @@ public:
     bool renderable_buffer_usage() const;
     bool restore_blur_step() const;
     bool shader_disk_cache() const;
+    bool small_blur_region_improvements() const;
     bool skip_invisible_windows_in_input() const;
     bool stable_edid_ids() const;
     bool synced_resolution_switch() const;
@@ -114,6 +117,10 @@ public:
     bool wb_virtualdisplay2() const;
     bool window_blur_kawase2_preallocate_buffers() const;
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
+
+    bool follower_arbitrary_refresh_rate_selection_combined() const;
+    bool follower_display_backpressure_combined() const;
+    bool force_slower_follower_gpu_composition_combined() const;
 
 protected:
     // overridden for unit tests
@@ -125,6 +132,13 @@ private:
 
     FlagManager() = default;
     FlagManager(const FlagManager&) = delete;
+
+    bool follower_arbitrary_refresh_rate_selection() const;
+    bool follower_arbitrary_refresh_rate_selection_platform() const;
+    bool follower_display_backpressure() const;
+    bool follower_display_backpressure_platform() const;
+    bool force_slower_follower_gpu_composition() const;
+    bool force_slower_follower_gpu_composition_platform() const;
 
     void dumpFlag(std::string& result, bool readonly, const char* name,
                   std::function<bool()> getter) const;

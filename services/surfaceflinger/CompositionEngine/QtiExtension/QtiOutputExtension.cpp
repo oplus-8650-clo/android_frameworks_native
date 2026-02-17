@@ -1,4 +1,5 @@
-/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 // #define LOG_NDEBUG 0
@@ -152,6 +153,22 @@ void QtiOutputExtension::qtiGetVisibleLayerInfo(
             sfext->qtiSetVisibleLayerInfo(*displayId, layer->getLayerFE().getDebugName(),
                     layer->getLayerFE().getLayerId(), layer->getState().displayFrame);
         }
+    }
+}
+
+void QtiOutputExtension::qtiSetCornerRadius(HWC2::Layer* layer, float x, float y) {
+    auto hwcextn = QtiExtensionContext::instance().getQtiHWComposerExtension();
+    if (hwcextn) {
+        hwcextn->qtiSetCornerRadius(layer, x, y);
+    }
+}
+
+void QtiOutputExtension::qtiSetPrivacyRegions(HWC2::Layer* layer, const std::vector<Rect>& rectList,
+                                              const std::vector<float>& radiusList,
+                                              const std::vector<uint32_t>& indexList) {
+    auto hwcextn = QtiExtensionContext::instance().getQtiHWComposerExtension();
+    if (hwcextn) {
+        hwcextn->qtiSetPrivacyRegions(layer, rectList, radiusList, indexList);
     }
 }
 

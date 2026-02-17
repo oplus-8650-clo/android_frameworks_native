@@ -15,9 +15,11 @@ cc_defaults {
         "surfaceflinger_defaults",
     ],
     shared_libs: [
+        "com.android.window.flags.window-aconfig_flags_c_lib",
         "libSurfaceFlingerProp",
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [
@@ -68,6 +70,7 @@ cc_defaults {
     shared_libs: [
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [
@@ -75,6 +78,7 @@ cc_defaults {
         "android.companion.virtualdevice.flags-aconfig-cc",
         "android.os.flags-aconfig-cc",
         "android.server.display.flags-aconfig-cc",
+        "com.android.window.flags.window-aconfig_flags_c_lib",
         "libguiflags_no_apex",
         "libsurfaceflinger_common",
         "libsurfaceflingerflags",
@@ -86,6 +90,7 @@ cc_defaults {
     shared_libs: [
         "libaconfig_storage_read_api_cc",
         "libtracing_perfetto",
+        "libperfetto_c",
         "server_configurable_flags",
     ],
     static_libs: [

@@ -269,8 +269,18 @@ BLASTBufferQueue::~BLASTBufferQueue() {
 // QTI_END: 2024-04-07: Display: gui: handle destruction of QtiBLASTBufferQueueExtension
     TransactionCompletedListener::getInstance()->removeQueueStallListener(this);
 
-    if (mTransactionReadyCallback) {
-        mTransactionReadyCallback(mSyncTransaction);
+    std::function<void(SurfaceComposerClient::Transaction*)> callback;
+    SurfaceComposerClient::Transaction* transaction;
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        callback = mTransactionReadyCallback;
+        transaction = mSyncTransaction;
+        mTransactionReadyCallback = nullptr;
+        mSyncTransaction = nullptr;
+    }
+
+    if (callback) {
+        callback(transaction);
     }
 
     if (mPendingTransactions.empty()) {
@@ -429,10 +439,14 @@ void BLASTBufferQueue::transactionCallback(nsecs_t /*latchTime*/, const sp<Fence
                 }
 
                 if (stat.cornerRadii.has_value()) {
-                    BQA_LOGV("updated cornerRadii=%s", stat.cornerRadii.value().toString().c_str());
-                    std::function<void(const gui::CornerRadii)> callbackCopy =
-                            getCornerRadiiCallback();
-                    if (callbackCopy) callbackCopy(stat.cornerRadii.value());
+                    const gui::CornerRadii& newRadii = stat.cornerRadii.value();
+                    if (mLastCornerRadii != newRadii) {
+                        mLastCornerRadii = newRadii;
+                        std::function<void(const gui::CornerRadii)> callbackCopy =
+                                getCornerRadiiCallback();
+                        if (callbackCopy) callbackCopy(newRadii);
+                        BQA_LOGV("updated cornerRadii=%s", newRadii.toString().c_str());
+                    }
                 }
                 // Update frametime stamps if the frame was latched and presented, indicated by a
                 // valid latch time.
@@ -1167,6 +1181,10 @@ private:
     friend class sp<AsyncProducerListener>;
 
 public:
+    bool needsAcquiredNotify() override { return mListener->needsAcquiredNotify(); }
+
+    bool needsDroppedNotify() override { return mListener->needsDroppedNotify(); }
+
     void onBufferReleased() override {
         AsyncWorker::getInstance().post([listener = mListener]() { listener->onBufferReleased(); });
     }
@@ -1180,6 +1198,20 @@ public:
         AsyncWorker::getInstance().post(
                 [listener = mListener, slot = slot]() { listener->onBufferDetached(slot); });
     }
+
+    void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) override {
+        AsyncWorker::getInstance().post(
+                [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
+                    listener->onBufferAcquired(bufferId, frameNumber);
+                });
+    };
+
+    void onBufferDropped(uint64_t bufferId, uint64_t frameNumber) override {
+        AsyncWorker::getInstance().post(
+                [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
+                    listener->onBufferDropped(bufferId, frameNumber);
+                });
+    };
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
     void onBufferAttached() override {
@@ -1367,7 +1399,6 @@ void BLASTBufferQueue::resizeFrameEventHistory(size_t newSize) {
     // point in time, so just ignore. This can go away once the class relationships and lifetimes of
     // objects are cleaned up with a major refactor of BufferQueue as a whole.
     if (mBufferItemConsumer != nullptr) {
-        std::unique_lock _lock{mMutex};
         mBufferItemConsumer->resizeFrameEventHistory(newSize);
     }
 }
@@ -1442,14 +1473,10 @@ void BLASTBufferQueue::updateBufferReleaseProducer() {
     // SELinux policy may prevent this process from sending the BufferReleaseChannel's file
     // descriptor to SurfaceFlinger, causing the entire transaction to be dropped. We send this
     // transaction independently of any other updates to ensure those updates aren't lost.
-    SurfaceComposerClient::Transaction t;
-    status_t status = t.setApplyToken(mApplyToken)
-                              .setBufferReleaseChannel(mSurfaceControl, mBufferReleaseProducer)
-                              .apply(false /* synchronous */, true /* oneWay */);
-    if (status != OK) {
-        ALOGW("[%s] %s - failed to set buffer release channel on %s", mName.c_str(),
-              statusToString(status).c_str(), mSurfaceControl->getName().c_str());
-    }
+    SurfaceComposerClient::Transaction()
+            .setApplyToken(mApplyToken)
+            .setBufferReleaseChannel(mSurfaceControl, mBufferReleaseProducer)
+            .apply(false /* synchronous */, true /* oneWay */);
 }
 
 void BLASTBufferQueue::drainBufferReleaseConsumer() {

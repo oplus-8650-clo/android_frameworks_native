@@ -31,6 +31,7 @@
 #include <ftl/small_map.h>
 #include <gui/BufferItem.h>
 #include <gui/BufferItemConsumer.h>
+#include <gui/CornerRadii.h>
 #include <gui/IGraphicBufferConsumer.h>
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/SurfaceComposerClient.h>
@@ -323,6 +324,7 @@ private:
             REQUIRES(mMutex);
 
     uint32_t mTransformHint GUARDED_BY(mMutex);
+    gui::CornerRadii mLastCornerRadii GUARDED_BY(mMutex);
 
     sp<IGraphicBufferConsumer> mConsumer;
     sp<IGraphicBufferProducer> mProducer;

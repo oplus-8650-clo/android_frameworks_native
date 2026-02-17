@@ -99,11 +99,9 @@ BufferQueueCore::BufferQueueCore()
         mConnectedProducerListener(),
         mBufferReleasedCbEnabled(false),
         mBufferAttachedCbEnabled(false),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
+        mBufferAcquiredCbEnabled(false),
+        mBufferDroppedCbEnabled(false),
         mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
-#else
-        mSlots(),
-#endif
         mQueue(),
         mFreeSlots(),
         mFreeBuffers(),
@@ -117,9 +115,7 @@ BufferQueueCore::BufferQueueCore()
         mDefaultWidth(1),
         mDefaultHeight(1),
         mDefaultBufferDataSpace(HAL_DATASPACE_UNKNOWN),
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         mAllowExtendedSlotCount(false),
-#endif
         mMaxBufferCount(BufferQueueDefs::NUM_BUFFER_SLOTS),
         mMaxAcquiredBufferCount(1),
         mMaxDequeuedBufferCount(1),
@@ -236,11 +232,7 @@ void BufferQueueCore::dumpState(const String8& prefix, String8* outResult) const
 }
 
 int BufferQueueCore::getTotalSlotCountLocked() const {
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     return mAllowExtendedSlotCount ? mMaxBufferCount : BufferQueueDefs::NUM_BUFFER_SLOTS;
-#else
-    return BufferQueueDefs::NUM_BUFFER_SLOTS;
-#endif
 }
 
 int BufferQueueCore::getMinUndequeuedBufferCountLocked() const {
@@ -275,7 +267,6 @@ int BufferQueueCore::getMaxBufferCountLocked() const {
     return maxBufferCount;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 status_t BufferQueueCore::extendSlotCountLocked(int size) {
     int previousSize = (int)mSlots.size();
     if (previousSize > size) {
@@ -293,7 +284,6 @@ status_t BufferQueueCore::extendSlotCountLocked(int size) {
     mMaxBufferCount = size;
     return NO_ERROR;
 }
-#endif
 
 void BufferQueueCore::clearBufferSlotLocked(int slot) {
     BQ_LOGV("clearBufferSlotLocked: slot %d", slot);

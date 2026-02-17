@@ -375,7 +375,7 @@ CreateInfoWrapper::CreateInfoWrapper(const VkInstanceCreateInfo& create_info,
                                      const VkAllocationCallbacks& allocator)
     : is_instance_(true),
       allocator_(allocator),
-      loader_api_version_(flags::vulkan_1_4_instance_api() ? VK_API_VERSION_1_4 : VK_API_VERSION_1_3),
+      loader_api_version_(VK_API_VERSION_1_4),
       icd_api_version_(icd_api_version),
       physical_dev_(VK_NULL_HANDLE),
       instance_info_(create_info),
@@ -387,7 +387,7 @@ CreateInfoWrapper::CreateInfoWrapper(VkPhysicalDevice physical_dev,
                                      const VkAllocationCallbacks& allocator)
     : is_instance_(false),
       allocator_(allocator),
-      loader_api_version_(flags::vulkan_1_4_instance_api() ? VK_API_VERSION_1_4 : VK_API_VERSION_1_3),
+      loader_api_version_(VK_API_VERSION_1_4),
       icd_api_version_(icd_api_version),
       physical_dev_(physical_dev),
       dev_info_(create_info),
@@ -664,6 +664,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_get_surface_capabilities2:
             case ProcHook::GOOGLE_surfaceless_query:
             case ProcHook::EXT_surface_maintenance1:
+            case ProcHook::KHR_surface_maintenance1:
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
@@ -686,13 +687,16 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::KHR_swapchain:
             case ProcHook::KHR_swapchain_mutable_format:
             case ProcHook::EXT_hdr_metadata:
+            case ProcHook::EXT_private_data:
             case ProcHook::EXT_swapchain_maintenance1:
+            case ProcHook::KHR_swapchain_maintenance1:
             case ProcHook::ANDROID_external_memory_android_hardware_buffer:
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::GOOGLE_display_timing:
             case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
+            case ProcHook::KHR_present_wait2:
             case ProcHook::KHR_external_fence_fd:
             case ProcHook::EXTENSION_CORE_1_0:
             case ProcHook::EXTENSION_CORE_1_1:
@@ -730,15 +734,18 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::EXT_present_timing:
             case ProcHook::KHR_present_id:
             case ProcHook::KHR_present_id2:
+            case ProcHook::KHR_present_wait2:
                 hook_extensions_.set(ext_bit);
                 // return now as these extensions do not require HAL support
                 return;
             case ProcHook::EXT_swapchain_maintenance1:
-                // map VK_KHR_swapchain_maintenance1 to KHR_external_fence_fd
+            case ProcHook::KHR_swapchain_maintenance1:
+                // map VK_{EXT,KHR}_swapchain_maintenance1 to KHR_external_fence_fd
                 name = VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
                 ext_bit = ProcHook::KHR_external_fence_fd;
                 break;
             case ProcHook::EXT_hdr_metadata:
+            case ProcHook::EXT_private_data:
             case ProcHook::KHR_bind_memory2:
                 hook_extensions_.set(ext_bit);
                 break;
@@ -761,6 +768,7 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
             case ProcHook::EXT_debug_report:
             case ProcHook::EXT_swapchain_colorspace:
             case ProcHook::EXT_surface_maintenance1:
+            case ProcHook::KHR_surface_maintenance1:
             case ProcHook::GOOGLE_surfaceless_query:
             case ProcHook::ANDROID_native_buffer:
             case ProcHook::EXTENSION_CORE_1_0:
@@ -815,8 +823,10 @@ void CreateInfoWrapper::FilterExtension(const char* name) {
         if (ext_bit != ProcHook::EXTENSION_UNKNOWN) {
             if (ext_bit == ProcHook::ANDROID_native_buffer)
                 hook_extensions_.set(ProcHook::KHR_swapchain);
-            if (ext_bit == ProcHook::KHR_external_fence_fd)
+            if (ext_bit == ProcHook::KHR_external_fence_fd) {
                 hook_extensions_.set(ProcHook::EXT_swapchain_maintenance1);
+                hook_extensions_.set(ProcHook::KHR_swapchain_maintenance1);
+            }
 
             hal_extensions_.set(ext_bit);
         }
@@ -962,6 +972,12 @@ VkResult EnumerateInstanceExtensionProperties(
     loader_extensions.push_back({
         VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
         VK_EXT_SURFACE_MAINTENANCE_1_SPEC_VERSION});
+
+    if (flags::khr_swapchain_maintenance1()) {
+        loader_extensions.push_back({
+                VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+                VK_KHR_SURFACE_MAINTENANCE_1_SPEC_VERSION});
+    }
 
     static const VkExtensionProperties loader_debug_report_extension = {
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME, VK_EXT_DEBUG_REPORT_SPEC_VERSION,
@@ -1171,6 +1187,11 @@ VkResult EnumerateDeviceExtensionProperties(
             {VK_KHR_PRESENT_ID_2_EXTENSION_NAME, VK_KHR_PRESENT_ID_2_SPEC_VERSION});
     }
 
+    if (flags::vk_khr_present_wait2_gpu()) {
+        loader_extensions.push_back({VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME,
+                                     VK_KHR_PRESENT_WAIT_2_SPEC_VERSION});
+    }
+
     // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
     // support is provided by the driver
     VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT
@@ -1218,6 +1239,12 @@ VkResult EnumerateDeviceExtensionProperties(
         loader_extensions.push_back({
                 VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
                 VK_EXT_SWAPCHAIN_MAINTENANCE_1_SPEC_VERSION});
+
+        if (flags::khr_swapchain_maintenance1()) {
+            loader_extensions.push_back({
+                    VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+                    VK_KHR_SWAPCHAIN_MAINTENANCE_1_SPEC_VERSION});
+        }
     }
 
     VkPhysicalDeviceProperties pDeviceProperties;
@@ -1391,6 +1418,33 @@ void DestroyInstance(VkInstance instance,
     FreeInstanceData(&data, *pAllocator);
 }
 
+static bool ValidateEnabledFeatures(VkDeviceCreateInfo const *pCreateInfo) {
+
+    // Walk the pNext chain looking for feature structs that may try to
+    // enable an unsupported feature in a loader-implemented extension.
+
+    for (auto pFeatures = reinterpret_cast<VkBaseInStructure const *>(pCreateInfo->pNext);
+            pFeatures;
+            pFeatures = reinterpret_cast<VkBaseInStructure const *>(pFeatures->pNext)) {
+
+        switch (pFeatures->sType) {
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT: {
+                if (flags::present_timing_ext()) {
+                    auto *p = reinterpret_cast<VkPhysicalDevicePresentTimingFeaturesEXT const *>(pFeatures);
+                    if (p->presentAtRelativeTime)
+                        return false;
+                }
+            } break;
+
+            default:
+                break;
+        }
+
+    }
+
+    return true;
+}
+
 VkResult CreateDevice(VkPhysicalDevice physicalDevice,
                       const VkDeviceCreateInfo* pCreateInfo,
                       const VkAllocationCallbacks* pAllocator,
@@ -1421,6 +1475,13 @@ VkResult CreateDevice(VkPhysicalDevice physicalDevice,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
     data->hook_extensions |= wrapper.GetHookExtensions();
+
+    // Reject device creation if the app attempts to enable unsupported features
+    // for extensions implemented by the loader.
+    if (!ValidateEnabledFeatures(pCreateInfo)) {
+        FreeDeviceData(data, data_allocator);
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
 
     // call into the driver
     VkDevice dev;
@@ -1467,6 +1528,22 @@ VkResult CreateDevice(VkPhysicalDevice physicalDevice,
         FreeDeviceData(data, data_allocator);
 
         return VK_ERROR_INCOMPATIBLE_DRIVER;
+    }
+
+    if (flags::ext_private_data_swapchain()) {
+        // If loader handling of private data slots is supported,
+        // find how many preallocated private data slots the application wants.
+        //
+        // If this struct is not found, the number of preallocated private data slots is zero,
+        // and so any private data slots later used will be "slow" (map-based) instead.
+        for (auto const *pPrivateData = reinterpret_cast<VkDevicePrivateDataCreateInfo const *>(pCreateInfo->pNext);
+                pPrivateData;
+                pPrivateData = reinterpret_cast<VkDevicePrivateDataCreateInfo const *>(pPrivateData->pNext)) {
+            if (pPrivateData->sType == VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO) {
+                std::lock_guard lock(data->private_data_mutex);
+                data->num_preallocated_private_data_slots = pPrivateData->privateDataSlotRequestCount;
+            }
+        }
     }
 
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
@@ -1736,7 +1813,19 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR: {
+                if (!flags::vk_khr_present_wait2_gpu()) {
+                    break;
+                }
+                auto features =
+                    reinterpret_cast<VkPhysicalDevicePresentWait2FeaturesKHR*>(
+                        pFeats);
+                features->presentWait2 = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT: {
+                // (same enum as VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR)
                 auto smf = reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT *>(
                         pFeats);
                 smf->swapchainMaintenance1 = true;
@@ -1760,6 +1849,14 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
                     timingsFeatures->presentTiming = true;
                     timingsFeatures->presentAtAbsoluteTime = true;
                     timingsFeatures->presentAtRelativeTime = false;
+                }
+            } break;
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT: {
+                if (flags::present_mode_fifo_latest_ready_ext2()) {
+                    auto * features = reinterpret_cast<
+                        VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT *>(pFeats);
+                    features->presentModeFifoLatestReady = VK_TRUE;
                 }
             } break;
 

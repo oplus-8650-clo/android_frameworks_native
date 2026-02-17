@@ -70,7 +70,13 @@ public:
     // Returns `nullptr` if the display is no longer registered (or never was).
     RefreshRateSelectorPtr selectorPtrFor(PhysicalDisplayId) const EXCLUDES(mDisplayLock);
 
-    enum class DesiredModeAction { None, InitiateDisplayModeSwitch, InitiateRenderRateSwitch };
+    enum class DesiredModeAction {
+        None,
+        InitiateDisplayModeSwitch,
+        MergeDisplayModeSwitch,
+        InitiateRenderRateSwitch
+    };
+
     enum class ModeChangeResult { Changed, Rejected, Aborted };
 
     DesiredModeAction setDesiredMode(PhysicalDisplayId, DisplayModeRequest&&)
@@ -88,6 +94,8 @@ public:
 
     // TODO: Remove once `modeset_state_machine` flag is cleaned up.
     void clearDesiredMode(PhysicalDisplayId) EXCLUDES(mDisplayLock);
+    // TODO: Remove once `synced_resolution_switch` flag is cleaned up.
+    void clearPendingMode(PhysicalDisplayId) REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     DisplayModeRequestOpt getPendingMode(PhysicalDisplayId) const REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock);
@@ -99,6 +107,10 @@ public:
     ModeChangeResult initiateModeChange(PhysicalDisplayId, DisplayModeRequest&&,
                                         const hal::VsyncPeriodChangeConstraints&,
                                         hal::VsyncPeriodChangeTimeline& outTimeline)
+            REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
+
+    ModeChangeResult initiateModeChange(
+            ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayModeRequest>&&)
             REQUIRES(kMainThreadContext) EXCLUDES(mDisplayLock);
 
     // TODO: Remove once `modeset_state_machine` flag is cleaned up.

@@ -183,6 +183,11 @@ std::unique_ptr<ContextRunner> CreateContextRunner(const AdbdAuthCallbacks& cb) 
                                               server_socket.value());
       break;
     }
+    case 3: {
+        context = std::make_unique<AdbdAuthContextV3>(&reinterpret_cast<const AdbdAuthCallbacksV3&>(cb),
+                                                      server_socket.value());
+        break;
+    }
     default: {
       fail("Unable to create AuthContext for version="s + std::to_string(cb.version));
     }
@@ -383,4 +388,25 @@ TEST(AdbAuthTest, UnregisterServiceBadService) {
     auto result = adbd_auth_unregister_service(runner->Context(),
                                                instance_name.c_str(), service_type.c_str());
     ASSERT_EQ(ADBD_AUTH_UNREGISTER_BAD_NAME, result);
+}
+
+TEST(AdbAuthTest, FrameworkConnectedCallback) {
+    AdbdAuthCallbacksV3 callbacks{};
+
+    static bool framework_detected = false;
+    callbacks.on_framework_connected = [] {
+        framework_detected = true;
+    };
+    callbacks.version = 3;
+    auto runner= CreateContextRunner(callbacks);
+
+    // Check that the framework connection has not been detected.
+    ASSERT_FALSE(framework_detected);
+
+    // Connect the framework
+    Framework framework{};
+    framework.SendAndWaitContext("XX", runner.get());
+
+    // Check that the framework connection has been detected.
+    ASSERT_TRUE(framework_detected);
 }

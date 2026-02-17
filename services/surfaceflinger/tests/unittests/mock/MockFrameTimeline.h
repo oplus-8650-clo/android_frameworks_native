@@ -31,7 +31,8 @@ public:
 
     MOCK_METHOD(void, onBootFinished, (), (override));
     MOCK_METHOD(void, addSurfaceFrame, (std::shared_ptr<scheduler::SurfaceFrame>), (override));
-    MOCK_METHOD(void, setSfWakeUp, (int64_t, nsecs_t, Fps, Fps, bool), (override));
+    MOCK_METHOD(void, setSfWakeUp,
+                (int64_t, nsecs_t, Fps, Fps, scheduler::FrameTimelineDisplayState), (override));
     MOCK_METHOD(void, setSfPresent,
                 (nsecs_t, const std::shared_ptr<FenceTime>&, const std::shared_ptr<FenceTime>&),
                 (override));

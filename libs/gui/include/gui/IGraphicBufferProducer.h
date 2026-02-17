@@ -126,7 +126,6 @@ public:
     //              * buffer specified by the slot is not dequeued
     virtual status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) = 0;
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     // extendSlotCount sets the maximum slot count (SLOT_COUNT) to the given
     //  size. This feature must be enabled by the consumer to function via
     // IGraphicBufferConsumer::allowUnlimitedSlots. This must be called before
@@ -148,7 +147,6 @@ public:
     //               (initialized to 64, then whatever the last call to this
     //               was)
     virtual status_t extendSlotCount(int size);
-#endif
 
     // setMaxDequeuedBufferCount sets the maximum number of buffers that can be
     // dequeued by the producer at one time. If this method succeeds, any new
@@ -448,6 +446,7 @@ public:
         uint64_t nextFrameNumber{0};
         FrameEventHistoryDelta frameTimestamps;
         bool bufferReplaced{false};
+        uint64_t bufferReplacedFrameId{0};
         int maxBufferCount{BufferQueueDefs::NUM_BUFFER_SLOTS};
         bool isSlotExpansionAllowed{false};
         status_t result{NO_ERROR};

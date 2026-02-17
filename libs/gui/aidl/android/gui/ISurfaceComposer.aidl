@@ -203,7 +203,6 @@ interface ISurfaceComposer {
      *      NAME_NOT_FOUND if the display is invalid, or
      *      BAD_VALUE      if the output parameter is invalid.
      */
-    // TODO(b/213909104) : Add unit tests to verify surface flinger boot time APIs
     boolean getBootDisplayModeSupport();
 
     /**

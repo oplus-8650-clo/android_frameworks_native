@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-#include "CapturedTouchpadEventConverter.h"
+#include "AbsoluteTouchpadEventConverter.h"
 
 #include <optional>
 #include <sstream>
+#include <vector>
 
 #include <android-base/stringprintf.h>
 #include <com_android_input_flags.h>
 #include <input/PrintTools.h>
 #include <linux/input-event-codes.h>
 #include <log/log_main.h>
+
+namespace input_flags = com::android::input::flags;
 
 namespace android {
 
@@ -54,7 +57,7 @@ void addRawMotionRange(InputDeviceInfo& deviceInfo, int32_t androidAxis,
 
 } // namespace
 
-CapturedTouchpadEventConverter::CapturedTouchpadEventConverter(
+AbsoluteTouchpadEventConverter::AbsoluteTouchpadEventConverter(
         InputReaderContext& readerContext, const InputDeviceContext& deviceContext,
         MultiTouchMotionAccumulator& motionAccumulator, DeviceId deviceId)
       : mDeviceId(deviceId),
@@ -93,7 +96,7 @@ CapturedTouchpadEventConverter::CapturedTouchpadEventConverter(
     }
 }
 
-std::string CapturedTouchpadEventConverter::dump() const {
+std::string AbsoluteTouchpadEventConverter::dump() const {
     std::stringstream out;
     out << "Orientation scale: " << mOrientationScale << "\n";
     out << "Pressure scale: " << mPressureScale << "\n";
@@ -116,7 +119,7 @@ std::string CapturedTouchpadEventConverter::dump() const {
     return out.str();
 }
 
-void CapturedTouchpadEventConverter::populateMotionRanges(InputDeviceInfo& info) const {
+void AbsoluteTouchpadEventConverter::populateMotionRanges(InputDeviceInfo& info) const {
     tryAddRawMotionRangeWithRelative(/*byref*/ info, AMOTION_EVENT_AXIS_X,
                                      AMOTION_EVENT_AXIS_RELATIVE_X, ABS_MT_POSITION_X);
     tryAddRawMotionRangeWithRelative(/*byref*/ info, AMOTION_EVENT_AXIS_Y,
@@ -141,7 +144,7 @@ void CapturedTouchpadEventConverter::populateMotionRanges(InputDeviceInfo& info)
     }
 }
 
-void CapturedTouchpadEventConverter::tryAddRawMotionRange(InputDeviceInfo& deviceInfo,
+void AbsoluteTouchpadEventConverter::tryAddRawMotionRange(InputDeviceInfo& deviceInfo,
                                                           int32_t androidAxis,
                                                           int32_t evdevAxis) const {
     std::optional<RawAbsoluteAxisInfo> info = mDeviceContext.getAbsoluteAxisInfo(evdevAxis);
@@ -150,7 +153,7 @@ void CapturedTouchpadEventConverter::tryAddRawMotionRange(InputDeviceInfo& devic
     }
 }
 
-void CapturedTouchpadEventConverter::tryAddRawMotionRangeWithRelative(InputDeviceInfo& deviceInfo,
+void AbsoluteTouchpadEventConverter::tryAddRawMotionRangeWithRelative(InputDeviceInfo& deviceInfo,
                                                                       int32_t androidAxis,
                                                                       int32_t androidRelativeAxis,
                                                                       int32_t evdevAxis) const {
@@ -166,14 +169,31 @@ void CapturedTouchpadEventConverter::tryAddRawMotionRangeWithRelative(InputDevic
     }
 }
 
-void CapturedTouchpadEventConverter::reset() {
+std::list<NotifyArgs> AbsoluteTouchpadEventConverter::reset(nsecs_t when) {
+    std::list<NotifyArgs> out;
+    if (input_flags::cancel_touches_on_absolute_capture_release() &&
+        !mPointerIdForSlotNumber.empty()) {
+        size_t pointerCount = mPointerIdsInUse.count();
+        std::vector<PointerCoords> coords;
+        std::vector<PointerProperties> properties;
+        coords.reserve(pointerCount);
+        properties.reserve(pointerCount);
+        for (const auto [slotNumber, pointerId] : mPointerIdForSlotNumber) {
+            coords.push_back(makePointerCoordsForSlot(slotNumber));
+            properties.push_back({.id = pointerId, .toolType = ToolType::FINGER});
+        }
+
+        out.push_back(makeMotionArgs(when, /*readTime=*/when, AMOTION_EVENT_ACTION_CANCEL, coords,
+                                     properties, /*actionButton=*/0, AMOTION_EVENT_FLAG_CANCELED));
+    }
     mCursorButtonAccumulator.reset(mDeviceContext);
     mDownTime = 0;
     mPointerIdsInUse.reset();
     mPointerIdForSlotNumber.clear();
+    return out;
 }
 
-std::list<NotifyArgs> CapturedTouchpadEventConverter::process(const RawEvent& rawEvent) {
+std::list<NotifyArgs> AbsoluteTouchpadEventConverter::process(const RawEvent& rawEvent) {
     std::list<NotifyArgs> out;
     if (rawEvent.type == EV_SYN && rawEvent.code == SYN_REPORT) {
         out = sync(rawEvent.when, rawEvent.readTime);
@@ -185,7 +205,7 @@ std::list<NotifyArgs> CapturedTouchpadEventConverter::process(const RawEvent& ra
     return out;
 }
 
-std::list<NotifyArgs> CapturedTouchpadEventConverter::sync(nsecs_t when, nsecs_t readTime) {
+std::list<NotifyArgs> AbsoluteTouchpadEventConverter::sync(nsecs_t when, nsecs_t readTime) {
     std::list<NotifyArgs> out;
     std::vector<PointerCoords> coords;
     std::vector<PointerProperties> properties;
@@ -304,7 +324,7 @@ std::list<NotifyArgs> CapturedTouchpadEventConverter::sync(nsecs_t when, nsecs_t
     return out;
 }
 
-NotifyMotionArgs CapturedTouchpadEventConverter::makeMotionArgs(
+NotifyMotionArgs AbsoluteTouchpadEventConverter::makeMotionArgs(
         nsecs_t when, nsecs_t readTime, int32_t action, const std::vector<PointerCoords>& coords,
         const std::vector<PointerProperties>& properties, int32_t actionButton, int32_t flags) {
     LOG_ALWAYS_FATAL_IF(coords.size() != properties.size(),
@@ -319,7 +339,7 @@ NotifyMotionArgs CapturedTouchpadEventConverter::makeMotionArgs(
                             AMOTION_EVENT_INVALID_CURSOR_POSITION, mDownTime, /*videoFrames=*/{});
 }
 
-PointerCoords CapturedTouchpadEventConverter::makePointerCoordsForSlot(size_t slotNumber) {
+PointerCoords AbsoluteTouchpadEventConverter::makePointerCoordsForSlot(size_t slotNumber) {
     const MultiTouchMotionAccumulator::Slot& slot = mMotionAccumulator.getSlot(slotNumber);
     PointerCoords coords;
     coords.clear();
@@ -352,14 +372,14 @@ PointerCoords CapturedTouchpadEventConverter::makePointerCoordsForSlot(size_t sl
     return coords;
 }
 
-int32_t CapturedTouchpadEventConverter::allocatePointerIdToSlot(size_t slotNumber) {
+int32_t AbsoluteTouchpadEventConverter::allocatePointerIdToSlot(size_t slotNumber) {
     const int32_t pointerId = firstUnmarkedBit(mPointerIdsInUse);
     mPointerIdsInUse.set(pointerId);
     mPointerIdForSlotNumber[slotNumber] = pointerId;
     return pointerId;
 }
 
-void CapturedTouchpadEventConverter::freePointerIdForSlot(size_t slotNumber) {
+void AbsoluteTouchpadEventConverter::freePointerIdForSlot(size_t slotNumber) {
     mPointerIdsInUse.reset(mPointerIdForSlotNumber.at(slotNumber));
     mPointerIdForSlotNumber.erase(slotNumber);
 }

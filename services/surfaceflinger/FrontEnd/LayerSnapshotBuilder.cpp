@@ -47,6 +47,18 @@ using namespace ftl::flag_operators;
 
 namespace {
 
+float getMaxHdrSdrRatio(float left, float right) {
+    if (left >= 1.f && right >= 1.f) {
+        return std::min(left, right);
+    } else if (left >= 1.f) {
+        return left;
+    } else if (right >= 1.f) {
+        return right;
+    }
+
+    return 0.f;
+}
+
 FloatRect getMaxDisplayBounds(const DisplayInfos& displays) {
     const ui::Size maxSize = [&displays] {
         if (displays.empty()) return ui::Size{5000, 5000};
@@ -356,6 +368,8 @@ LayerSnapshot LayerSnapshotBuilder::getRootSnapshot() {
     snapshot.trustedOverlay = gui::TrustedOverlay::UNSET;
     snapshot.gameMode = gui::GameMode::Unsupported;
     snapshot.frameRate = {};
+    snapshot.desiredHdrSdrRatio = 0.f;
+    snapshot.maxDesiredHdrSdrRatio = 0.f;
     snapshot.fixedTransformHint = ui::Transform::ROT_INVALID;
     snapshot.ignoreLocalTransform = false;
     return snapshot;
@@ -939,6 +953,8 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         snapshot.backgroundBlurScale = args.supportsBlur
                 ? requested.backgroundBlurScale
                 : 1.0f;
+        // args.supportsBlur can't be used here to remove blur region requests, because otherwise
+        // apps will break.
         snapshot.blurRegions = requested.blurRegions;
         for (auto& region : snapshot.blurRegions) {
             region.alpha = region.alpha * snapshot.color.a;
@@ -1000,8 +1016,12 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         }
     }
 
-    if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderCommandBufferChanged) {
-        snapshot.renderCommandBufferConsumer = requested.renderCommandBufferConsumer;
+    if (forceUpdate ||
+        (requested.what &
+         (layer_state_t::eRenderCommandBufferChanged |
+          layer_state_t::eRenderCommandBufferFrameIdChanged))) {
+        snapshot.renderCommandBuffer = requested.renderCommandBuffer;
+        snapshot.renderCommandBufferFrameId = requested.renderCommandBufferFrameId;
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eRenderResourceTokenChanged) {
@@ -1012,6 +1032,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         } else {
             snapshot.renderResourceCache = nullptr;
         }
+    }
+
+    if (forceUpdate ||
+        snapshot.clientChanges &
+                (layer_state_t::eDesiredHdrHeadroomChanged |
+                 layer_state_t::eDesiredMaxHdrHeadroomChanged)) {
+        snapshot.maxDesiredHdrSdrRatio = getMaxHdrSdrRatio(requested.maxDesiredHdrSdrRatio,
+                                                           parentSnapshot.maxDesiredHdrSdrRatio);
+        snapshot.desiredHdrSdrRatio =
+                getMaxHdrSdrRatio(snapshot.maxDesiredHdrSdrRatio, requested.desiredHdrSdrRatio);
     }
 
     bool hasSmpte2094_50 = false;
@@ -1027,7 +1057,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
             snapshot.stretchEffect.hasEffect() || snapshot.edgeExtensionEffect.hasEffect() ||
             snapshot.borderSettings.strokeWidth > 0 ||
             !snapshot.boxShadowSettings.boxShadows.empty() ||
-            snapshot.renderCommandBufferConsumer != nullptr || hasSmpte2094_50;
+            snapshot.renderCommandBuffer != nullptr || hasSmpte2094_50;
 
     snapshot.contentOpaque = snapshot.isContentOpaque();
     snapshot.isOpaque = snapshot.contentOpaque &&
@@ -1053,7 +1083,6 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
     }
 
     RoundedCornerState finalSettings = RoundedCornerState();
-
     // Populate parent settings to inherit
     RoundedCornerState parentSettings =
             calculateParentRoundedCornerSettings(parentSnapshot, snapshot);
@@ -1083,18 +1112,31 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
                                                parentSettings.effectiveRadii)) {
         finalSettings = parentSettings;
     }
-
     snapshot.roundedCorner = finalSettings;
 
-    snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
-    snapshot.roundedCorner.reportedRadii =
-            getClippedClientRadii(snapshot.roundedCorner.effectiveRadii,
-                                  snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+    snapshot.roundedCorner.disableClientDrawnRadii =
+            requested.flags & layer_state_t::eRoundedCornerOptDisabled ||
+            parentSettings.disableClientDrawnRadii;
 
-    if (shouldDisableCornerRounding(snapshot, requested)) {
-        snapshot.roundedCorner.sfDrawnRadii = gui::CornerRadii(0.f);
-    } else {
+    if (snapshot.clientChanges & layer_state_t::eClientDrawnCornerRadiusChanged) {
+        snapshot.roundedCorner.clientDrawnRadii = requested.clientDrawnCornerRadii;
+    }
+
+    if (snapshot.roundedCorner.disableClientDrawnRadii) {
+        // We are in a transition. Force Client to 0 and let SF handle it.
+        snapshot.roundedCorner.reportedRadii = gui::CornerRadii(0.f);
         snapshot.roundedCorner.sfDrawnRadii = snapshot.roundedCorner.effectiveRadii;
+    } else {
+        snapshot.roundedCorner.reportedRadii =
+                getClippedClientRadii(snapshot.roundedCorner.effectiveRadii,
+                                      snapshot.roundedCorner.cropRect, snapshot.sourceBounds());
+        if (shouldDisableCornerRounding(snapshot, requested)) {
+            // Optimization ENABLED: Client draws, SF is 0.
+            snapshot.roundedCorner.sfDrawnRadii = gui::CornerRadii(0.f);
+        } else {
+            // Optimization DISABLED: Client is 0, SF draws.
+            snapshot.roundedCorner.sfDrawnRadii = snapshot.roundedCorner.effectiveRadii;
+        }
     }
 }
 
@@ -1121,6 +1163,7 @@ RoundedCornerState LayerSnapshotBuilder::calculateParentRoundedCornerSettings(
     const auto& parentRoundedCorner = parentSnapshot.roundedCorner;
     if (parentRoundedCorner.hasEffectiveRadii()) {
         ui::Transform t = snapshot.localTransform.inverse();
+        parentSettings.disableClientDrawnRadii = parentRoundedCorner.disableClientDrawnRadii;
         parentSettings.cropRect = t.transform(parentRoundedCorner.cropRect);
         parentSettings.effectiveRadii = parentRoundedCorner.effectiveRadii;
         parentSettings.effectiveRadii.transform(t);
@@ -1238,13 +1281,15 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
                                    t.dsdx(), t.dsdy(), t.dtdx(), t.dtdy(), requestedT.dsdx(),
                                    requestedT.dsdy(), requestedT.dtdx(), requestedT.dtdy());
         std::string bufferDebug;
-        if (requested.externalTexture) {
+        if (requested.externalTexture || requested.renderCommandBufferConsumer) {
             auto unRotBuffer = requested.getUnrotatedBufferSize(primaryDisplayRotationFlags);
             auto& destFrame = requested.destinationFrame;
+            uint32_t bufferWidth, bufferHeight;
+            requested.getBufferDimensions(bufferWidth, bufferHeight);
             bufferDebug = base::StringPrintf(" buffer={%d,%d}  displayRot=%d"
                                              " destFrame={%d,%d,%d,%d} unRotBuffer={%d,%d}",
-                                             requested.externalTexture->getWidth(),
-                                             requested.externalTexture->getHeight(),
+                                             static_cast<int>(bufferWidth),
+                                             static_cast<int>(bufferHeight),
                                              primaryDisplayRotationFlags, destFrame.left,
                                              destFrame.top, destFrame.right, destFrame.bottom,
                                              unRotBuffer.getHeight(), unRotBuffer.getWidth());
@@ -1261,8 +1306,9 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
 
     FloatRect parentBounds = parentSnapshot.geomLayerBounds;
     parentBounds = snapshot.localTransform.inverse().transform(parentBounds);
-    snapshot.geomLayerBounds =
-            requested.externalTexture ? snapshot.bufferSize.toFloatRect() : parentBounds;
+    snapshot.geomLayerBounds = requested.externalTexture || requested.renderCommandBuffer
+            ? snapshot.bufferSize.toFloatRect()
+            : parentBounds;
     snapshot.geomLayerCrop = parentBounds;
     if (!requested.crop.isEmpty()) {
         snapshot.geomLayerCrop = snapshot.geomLayerCrop.intersect(requested.crop);

@@ -243,9 +243,6 @@ static const TracingCategory k_categories[] = {
     { "memory",  "Memory", 0, {
         { OPT,      "events/mm_event/mm_event_record/enable" },
         { OPT,      "events/synthetic/rss_stat_throttled/enable" },
-        { OPT,      "events/kmem/ion_heap_grow/enable" },
-        { OPT,      "events/kmem/ion_heap_shrink/enable" },
-        { OPT,      "events/ion/ion_stat/enable" },
         { OPT,      "events/gpu_mem/gpu_mem_total/enable" },
         { OPT,      "events/fastrpc/fastrpc_dma_stat/enable" },
     } },
@@ -673,7 +670,8 @@ static bool verifyKernelTraceFuncs(const char* funcs)
     // read from the kernel, except for wildcard inputs.
     bool ok = true;
     char* myFuncs = strdup(funcs);
-    char* func = strtok(myFuncs, ",");
+    char* saveptr;
+    char* func = strtok_r(myFuncs, ",", &saveptr);
     while (func) {
         if (!strchr(func, '*')) {
             String8 fancyFunc = String8::format("\n%s\n", func);
@@ -684,7 +682,7 @@ static bool verifyKernelTraceFuncs(const char* funcs)
                 ok = false;
             }
         }
-        func = strtok(nullptr, ",");
+        func = strtok_r(nullptr, ",", &saveptr);
     }
     free(myFuncs);
     return ok;
@@ -713,10 +711,11 @@ static bool setKernelTraceFuncs(const char* funcs)
         // Set the requested filter functions.
         ok &= truncateFile(k_ftraceFilterPath);
         char* myFuncs = strdup(funcs);
-        char* func = strtok(myFuncs, ",");
+        char* saveptr;
+        char* func = strtok_r(myFuncs, ",", &saveptr);
         while (func) {
             ok &= appendStr(k_ftraceFilterPath, func);
-            func = strtok(nullptr, ",");
+            func = strtok_r(nullptr, ",", &saveptr);
         }
         free(myFuncs);
 

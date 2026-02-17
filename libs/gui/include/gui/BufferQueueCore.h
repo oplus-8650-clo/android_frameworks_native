@@ -131,10 +131,8 @@ private:
     int getMaxBufferCountLocked(bool asyncMode,
             bool dequeueBufferCannotBlock, int maxBufferCount) const;
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     // This resizes mSlots to the given size, but only if it's increasing.
     status_t extendSlotCountLocked(int size);
-#endif
     // clearBufferSlotLocked frees the GraphicBuffer and sync resources for the
     // given slot.
     void clearBufferSlotLocked(int slot);
@@ -216,6 +214,14 @@ private:
     // callback is registered by the listener. When set to false,
     // mConnectedProducerListener will not trigger onBufferAttached() callback.
     bool mBufferAttachedCbEnabled;
+    //  mBufferAcquiredCbEnabled is used indicate whether onBufferAcquired()
+    //  callback is registered by the listener. When set to false,
+    //  mConnectedProducerListener will not trigger onBufferAcquired() callback.
+    bool mBufferAcquiredCbEnabled;
+    //  mBufferDroppedCbEnabled is used indicate whether onBufferDropped()
+    //  callback is registered by the listener. When set to false,
+    //  mConnectedProducerListener will not trigger onBufferDropped() callback.
+    bool mBufferDroppedCbEnabled;
 
     // mSlots is a collection of buffer slots that must be mirrored on the producer
     // side. This allows buffer ownership to be transferred between the producer
@@ -279,11 +285,9 @@ private:
     // is specified.
     android_dataspace mDefaultBufferDataSpace;
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     // mAllowExtendedSlotCount is set by the consumer to permit the producer to
     // request an unlimited number of slots.
     bool mAllowExtendedSlotCount;
-#endif
 
     // mMaxBufferCount is the limit on the number of buffers that will be
     // allocated at one time.

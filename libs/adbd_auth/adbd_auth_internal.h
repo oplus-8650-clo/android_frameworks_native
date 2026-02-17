@@ -184,6 +184,10 @@ struct AdbdAuthContext {
   std::vector<FrameworkPktHandler> framework_handlers_;
 
   std::atomic<size_t> received_packets_ = 0;
+
+  virtual void on_framework_connected() {
+    LOG(INFO) << "adbd_auth: context v1 connected noop";
+  }
 };
 
 class AdbdAuthContextV2 : public AdbdAuthContext {
@@ -194,6 +198,24 @@ class AdbdAuthContextV2 : public AdbdAuthContext {
   void StartAdbWifi(std::string_view buf) EXCLUDES(mutex_);
   void StopAdbWifi(std::string_view buf) EXCLUDES(mutex_);
 
- protected:
+protected:
+  virtual void on_framework_connected() {
+    LOG(INFO) << "adbd_auth: context v2 connected noop";
+  }
   AdbdAuthCallbacksV2 callbacks_v2_;
+};
+
+class AdbdAuthContextV3 : public AdbdAuthContextV2 {
+public:
+  explicit AdbdAuthContextV3(const AdbdAuthCallbacksV3* callbacks, std::optional<int> server_fd = {});
+  virtual ~AdbdAuthContextV3() = default;
+
+protected:
+  void on_framework_connected() override {
+    if (callbacks_v3_.on_framework_connected != nullptr) {
+      LOG(INFO) << "adbd_auth: framework connected callback()";
+      callbacks_v3_.on_framework_connected();
+    }
+  }
+  AdbdAuthCallbacksV3 callbacks_v3_;
 };

@@ -30,28 +30,16 @@ public:
     virtual ~RenderCommandBufferProducer();
 
     int getFd();
-    RenderCommandBuffer* acquire() {
-        LOG_ALWAYS_FATAL_IF(mCurrentBuffer != nullptr, "Already acquired");
-        mCurrentBuffer = mCommandBuffer->producerAcquire();
-        mCurrentBuffer->reset();
-        return mCurrentBuffer;
-    }
-    void release() {
-        LOG_ALWAYS_FATAL_IF(mCurrentBuffer == nullptr, "Already released");
 
-        mCurrentBuffer = nullptr;
-        mCommandBuffer->producerRelease();
-    }
-
-    void startRecording();
-    void finishRecording();
+    bool canRecord() { return !mRenderRegion->mCommandBuffers.full(); }
+    RenderCommandBuffer* startRecording();
+    void finishRecordingAndPostFrame();
 
     status_t writeToParcel(Parcel* parcel) const;
+    uint64_t getFrameNumber() { return mRenderRegion->mCommandBuffers.getHi(); }
 
 private:
-    int mAshmemFdRenderCommands;
-    void* mSharedRegionRenderCommands;
-    LocklessTripleBuffer<RenderCommandBuffer>* mCommandBuffer;
-    RenderCommandBuffer* mCurrentBuffer = nullptr;
+    int mAshmemFdRenderRegion;
+    IpcRenderRegion* mRenderRegion;
 };
 } // namespace android

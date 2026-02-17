@@ -150,7 +150,6 @@ status_t BufferQueueProducer::requestBuffer(int slot, sp<GraphicBuffer>* buf) {
     return NO_ERROR;
 }
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 status_t BufferQueueProducer::extendSlotCount(int size) {
     ATRACE_CALL();
 
@@ -191,7 +190,6 @@ status_t BufferQueueProducer::extendSlotCount(int size) {
 
     return NO_ERROR;
 }
-#endif
 
 status_t BufferQueueProducer::setMaxDequeuedBufferCount(
         int maxDequeuedBuffers) {
@@ -1193,6 +1191,7 @@ status_t BufferQueueProducer::queueBuffer(int slot,
                         mCore->mActiveBuffers.erase(last.mSlot);
                         mCore->mFreeBuffers.push_back(last.mSlot);
                         output->bufferReplaced = true;
+                        output->bufferReplacedFrameId = mSlots[last.mSlot].mFrameNumber;
                     }
                 }
 
@@ -1500,9 +1499,7 @@ status_t BufferQueueProducer::connect(const sp<IProducerListener>& listener,
             output->nextFrameNumber = mCore->mFrameCounter + 1;
             output->bufferReplaced = false;
             output->maxBufferCount = mCore->mMaxBufferCount;
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
             output->isSlotExpansionAllowed = mCore->mAllowExtendedSlotCount;
-#endif
 
             if (listener != nullptr) {
                 // Set up a death notification so that we can disconnect
@@ -1520,6 +1517,8 @@ status_t BufferQueueProducer::connect(const sp<IProducerListener>& listener,
 #endif
                 mCore->mConnectedProducerListener = listener;
                 mCore->mBufferReleasedCbEnabled = listener->needsReleaseNotify();
+                mCore->mBufferAcquiredCbEnabled = listener->needsAcquiredNotify();
+                mCore->mBufferDroppedCbEnabled = listener->needsDroppedNotify();
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
                 mCore->mBufferAttachedCbEnabled = listener->needsAttachNotify();
 #endif
@@ -1895,6 +1894,9 @@ status_t BufferQueueProducer::setPresentMode(int32_t mode) {
     std::lock_guard<std::mutex> lock(mCore->mMutex);
     switch (mode) {
         case ANATIVEWINDOW_PRESENT_DEFAULT:
+            mCore->mLegacyBufferDrop = true;
+            mCore->mPresentMode = mode;
+            return NO_ERROR;
         case ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY:
             mCore->mLegacyBufferDrop = false;
             mCore->mPresentMode = mode;

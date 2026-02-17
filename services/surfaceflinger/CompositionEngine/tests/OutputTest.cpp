@@ -3321,6 +3321,9 @@ TEST_F(OutputPostFramebufferTest, releaseFencesAreSetInLayerFE) {
     SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::
                               force_slower_follower_gpu_composition,
                       false);
+    SET_FLAG_FOR_TEST(com::android::graphics::surfaceflinger::flags::
+                              force_slower_follower_gpu_composition_platform,
+                      false);
 
     // Simulate getting release fences from each layer, and ensure they are passed to the
     // front-end layer interface for each layer correctly.
@@ -3382,6 +3385,8 @@ TEST_F(OutputPostFramebufferTest, releaseFencesAreSetInLayerFE) {
 
 TEST_F(OutputPostFramebufferTest, setReleaseFencesIncludeClientTargetAcquireFence) {
     SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition, false);
+    SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition_platform, false);
+
     mOutput.mState.isEnabled = true;
     mOutput.mState.usesClientComposition = true;
 
@@ -3426,6 +3431,8 @@ TEST_F(OutputPostFramebufferTest, setReleaseFencesIncludeClientTargetAcquireFenc
 
 TEST_F(OutputPostFramebufferTest, setReleaseFencesIncludeLastClientTargetAcquireFence) {
     SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition, true);
+    SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition_platform, true);
+
     mOutput.mState.isEnabled = true;
     mOutput.mState.usesClientComposition = true;
 
@@ -3487,6 +3494,8 @@ TEST_F(OutputPostFramebufferTest, setReleaseFencesIncludeLastClientTargetAcquire
 
 TEST_F(OutputPostFramebufferTest, setReleaseFencesNoLayerOrLastAcquiredFence) {
     SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition, true);
+    SET_FLAG_FOR_TEST(flags::force_slower_follower_gpu_composition_platform, true);
+
     mOutput.mState.isEnabled = true;
     mOutput.mState.usesClientComposition = true;
 

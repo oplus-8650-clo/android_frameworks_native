@@ -45,7 +45,7 @@ public:
     bool takeOwnership();
     void teardown();
 
-    VulkanBackendContext createSkiaVulkanBackendContext();
+    VulkanBackendContext createSkiaVulkanBackendContext(bool threadSafeVMA);
     VkSemaphore createExportableSemaphore();
     VkSemaphore importSemaphoreFromSyncFd(int syncFd);
     int exportSemaphoreSyncFd(VkSemaphore semaphore);

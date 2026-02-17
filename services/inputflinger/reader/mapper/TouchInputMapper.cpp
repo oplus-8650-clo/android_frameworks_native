@@ -286,10 +286,11 @@ std::list<NotifyArgs> TouchInputMapper::reconfigure(nsecs_t when,
 
     mConfig = config;
 
-    // Full configuration should happen the first time configure is called and
-    // when the device type is changed. Changing a device type can affect
-    // various other parameters so should result in a reconfiguration.
-    if (!changes.any() || changes.test(InputReaderConfiguration::Change::DEVICE_TYPE)) {
+    // Full configuration should happen the first time configure is called or when the overrides
+    // for the .idc properties of the device have changed. Changing a device configuration can
+    // affect various other parameters so should result in a total reconfiguration.
+    if (!changes.any() ||
+        changes.test(InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES)) {
         // Configure basic parameters.
         mParameters = computeParameters(getDeviceContext());
 
@@ -317,7 +318,7 @@ std::list<NotifyArgs> TouchInputMapper::reconfigure(nsecs_t when,
                     InputReaderConfiguration::Change::POINTER_CAPTURE |
                     InputReaderConfiguration::Change::POINTER_GESTURE_ENABLEMENT |
                     InputReaderConfiguration::Change::EXTERNAL_STYLUS_PRESENCE |
-                    InputReaderConfiguration::Change::DEVICE_TYPE)) {
+                    InputReaderConfiguration::Change::DEVICE_CONFIGURATION_OVERRIDES)) {
         // Configure device sources, display dimensions, orientation and
         // scaling factors.
         configureInputDevice(when, &resetNeeded);

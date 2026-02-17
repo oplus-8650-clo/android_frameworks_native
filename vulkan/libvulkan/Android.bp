@@ -125,6 +125,7 @@ cc_library_shared {
         "driver.cpp",
         "driver_gen.cpp",
         "layers_extensions.cpp",
+        "private_data.cpp",
         "stubhal.cpp",
         "swapchain.cpp",
     ],

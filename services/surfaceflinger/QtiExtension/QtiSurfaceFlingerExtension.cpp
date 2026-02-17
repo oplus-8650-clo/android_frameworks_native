@@ -1261,6 +1261,12 @@ void QtiSurfaceFlingerExtension::qtiCreateSmomoInstance(const DisplayDeviceState
         return;
     }
 
+    if (!mQtiComposerExtnIntf) {
+        ALOGE("Failed to create smomo instance, invalid ComposerExtnIntf");
+        return;
+    }
+
+
     const auto displayOpt = mQtiFlinger->mPhysicalDisplays.get(state.getPhysical().id);
     const auto& displayObject = displayOpt->get();
     const auto& snapshot = displayObject.snapshot();

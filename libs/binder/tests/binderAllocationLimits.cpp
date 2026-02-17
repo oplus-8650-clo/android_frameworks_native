@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <../BuildFlags.h>
 #include <../observer/BinderStatsPusher.h>
 #include <../observer/BinderStatsUtils.h>
 #include <android-base/logging.h>
@@ -30,6 +31,7 @@
 #include <utils/CallStack.h>
 
 #include <malloc.h>
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <numeric>
@@ -433,11 +435,12 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     String16 myAidlMethod1(u"myAidlMethod1");
     for (int i = 0; i < 150; ++i) { // More than kMinSpamCount (125)
         data.push_back(createStatsData(1001, 1, "IFoo", myAidlMethod1,
-                                       currentTimeNanos - 8000'000'000, 0));
+                                       currentTimeNanos - 8000'000'000,
+                                       currentTimeNanos - 8000'000'000 + 20));
         data.push_back(createStatsData(1002, 1, "IFoo", myAidlMethod1,
-                                       currentTimeNanos - 8000'000'000, 0));
+                                       currentTimeNanos - 8000'000'000,
+                                       currentTimeNanos - 8000'000'000 + 23));
     }
-
     android::BinderStatsPusher pusher;
     auto service = pusher.getBinderStatsServiceLocked(currentTimeNanos / 1000'000'000);
     EXPECT_NE(service, nullptr);
@@ -448,12 +451,24 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
             mallocs++;
             totalBytes += bytes;
         });
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+        pusher.sortAndAggregateStatsLocked(currentTimeNanos / 1000'000'000, data);
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
         for (auto& datum : data) {
             addFn(std::move(datum));
         }
         pusher.aggregateStatsLocked(currentTimeNanos / 1000'000'000);
+#endif
     };
     runAggregateWithOnMalloc();
+    data.clear();
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    EXPECT_EQ(mallocs, 9u);
+    EXPECT_EQ(totalBytes, 1090u);
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
+    EXPECT_EQ(mallocs, 22u);
+    EXPECT_EQ(totalBytes, 2854u);
+#endif
     currentTimeNanos = 18'100'000'000;
 
     for (int i = 0; i < 150; ++i) {     // More than kMinSpamCount (125)
@@ -461,18 +476,26 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
             String16 myAidlMethod(u"myAidlMethod");
             myAidlMethod.append(String16(std::to_string(j).c_str()));
             data.push_back(createStatsData(1003, j, "IFoo2", myAidlMethod,
-                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
+                                           currentTimeNanos - 8000'000'000 + 1,
+                                           currentTimeNanos - 8000'000'000 + i * 43));
             data.push_back(createStatsData(1004, j, "IFoo2", myAidlMethod,
-                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
+                                           currentTimeNanos - 8000'000'000 + 1,
+                                           currentTimeNanos - 8000'000'000 + i * 531));
             data.push_back(createStatsData(1005, j, "IFoo2", myAidlMethod,
-                                           currentTimeNanos - 8000'000'000 + i * 1000, 0));
+                                           currentTimeNanos - 8000'000'000 + 1,
+                                           currentTimeNanos - 8000'000'000 + i * 1089));
         }
     }
     mallocs = 0;
     totalBytes = 0;
     runAggregateWithOnMalloc();
-    EXPECT_EQ(mallocs, 971u);
-    EXPECT_EQ(totalBytes, 148548u);
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+    EXPECT_EQ(mallocs, 63u);
+    EXPECT_EQ(totalBytes, 125488u);
+#else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
+    EXPECT_EQ(mallocs, 1024u);
+    EXPECT_EQ(totalBytes, 281642u);
+#endif
 }
 
 int main(int argc, char** argv) {

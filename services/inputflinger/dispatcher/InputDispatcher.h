@@ -775,6 +775,9 @@ private:
         /** The configured ANR timeout threshold in milliseconds after which ANR is raised. */
         std::chrono::milliseconds timeoutDuration;
 
+        /** Whether ANR warning is triggered or not. */
+        bool anrWarningTriggered = false;
+
         explicit NoFocusedWindowAnrState(nsecs_t eventTime, nsecs_t timeoutEndTime,
                                          std::shared_ptr<InputApplicationHandle> applicationHandle,
                                          int32_t eventId, std::chrono::milliseconds timeoutDuration)
@@ -814,6 +817,8 @@ private:
      */
     ui::LogicalDisplayId mAwaitedApplicationDisplayId GUARDED_BY(mLock);
     void processNoFocusedWindowAnrLocked() REQUIRES(mLock);
+
+    nsecs_t processNoFocusedWindowAnrWarningLocked() REQUIRES(mLock);
 
     /**
      * Tell policy about a window or a monitor that just became unresponsive. Starts ANR.
@@ -965,7 +970,8 @@ private:
             REQUIRES(mLock);
     void sendFocusChangedCommandLocked(const sp<IBinder>& oldToken, const sp<IBinder>& newToken)
             REQUIRES(mLock);
-    void sendDropWindowCommandLocked(const sp<IBinder>& token, float x, float y) REQUIRES(mLock);
+    void sendDropWindowCommandLocked(const sp<IBinder>& token, vec2 location, vec2 rawLocation)
+            REQUIRES(mLock);
     void onAnrLocked(const std::shared_ptr<Connection>& connection) REQUIRES(mLock);
     void onAnrLocked(std::shared_ptr<InputApplicationHandle> application) REQUIRES(mLock);
     void updateLastAnrStateLocked(const sp<android::gui::WindowInfoHandle>& window,
@@ -974,6 +980,11 @@ private:
                                   const std::string& reason) REQUIRES(mLock);
     void updateLastAnrStateLocked(const std::string& windowLabel, const std::string& reason)
             REQUIRES(mLock);
+    void warnNoFocusedWindowAnrLocked(
+            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
+            std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration)
+            REQUIRES(mLock);
+
     // Input verifiers for each display.
     // In the case of mouse/touchpad cursor events, the verifier on the primary display
     // in the topology group will be used.

@@ -329,9 +329,8 @@ public:
 
         scheduler::FrameTargets targets;
         scheduler::FrameTargeters targeters;
-
-        for (const auto& [id, display] :
-             FTL_FAKE_GUARD(mFlinger->mStateLock, mFlinger->mPhysicalDisplays)) {
+        const auto& displays = FTL_FAKE_GUARD(mFlinger->mStateLock, mFlinger->mPhysicalDisplays);
+        for (const auto& [id, display] : displays) {
             targets.try_emplace(id, &frameTargeter.target());
             targeters.try_emplace(id, &frameTargeter);
         }
@@ -411,6 +410,7 @@ public:
 
     void commitTransactionsLocked(uint32_t transactionFlags, bool modeset = false) {
         Mutex::Autolock lock(mFlinger->mStateLock);
+        std::lock_guard modeLock(mFlinger->mModeTransitionMutex);
         ftl::FakeGuard guard(kMainThreadContext);
         mFlinger->processDisplayChangesLocked();
         mFlinger->commitTransactionsLocked(transactionFlags);

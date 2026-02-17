@@ -41,6 +41,10 @@ _INTERCEPTED_EXTENSIONS = [
     'VK_KHR_present_id',
     'VK_KHR_present_id2',
     'VK_EXT_present_timing',
+    'VK_KHR_present_wait2',
+    'VK_EXT_private_data',
+    'VK_KHR_swapchain_maintenance1',
+    'VK_KHR_surface_maintenance1',
 ]
 
 # Extensions known to vulkan::driver level.
@@ -122,6 +126,18 @@ _NEEDED_COMMANDS = [
 
     # VK_KHR_swapchain_maintenance1 requirement
     'vkImportFenceFdKHR',
+
+    # For EXT_private_data
+    'vkCreatePrivateDataSlotEXT',
+    'vkDestroyPrivateDataSlotEXT',
+    'vkGetPrivateDataEXT',
+    'vkSetPrivateDataEXT',
+
+    # For promoted EXT_private_data in 1.3
+    'vkCreatePrivateDataSlot',
+    'vkDestroyPrivateDataSlot',
+    'vkGetPrivateData',
+    'vkSetPrivateData',
 ]
 
 # Functions intercepted at vulkan::driver level.
@@ -180,6 +196,18 @@ _INTERCEPTED_COMMANDS = [
 
     # For promoted VK_KHR_external_fence_capabilities
     'vkGetPhysicalDeviceExternalFenceProperties',
+
+    # For EXT_private_data
+    'vkCreatePrivateDataSlotEXT',
+    'vkDestroyPrivateDataSlotEXT',
+    'vkGetPrivateDataEXT',
+    'vkSetPrivateDataEXT',
+
+    # For promoted EXT_private_data in 1.3
+    'vkCreatePrivateDataSlot',
+    'vkDestroyPrivateDataSlot',
+    'vkGetPrivateData',
+    'vkSetPrivateData',
 ]
 
 

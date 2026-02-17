@@ -115,6 +115,7 @@ using android::defaultServiceManager;
 using android::Dumpsys;
 using android::INVALID_OPERATION;
 using android::IServiceManager;
+using android::NAME_NOT_FOUND;
 using android::OK;
 using android::PhysicalDisplayId;
 using android::sp;
@@ -875,7 +876,8 @@ void Dumpstate::PrintHeader() const {
 
     printf("Kernel: ");
     DumpFileToFd(STDOUT_FILENO, "", "/proc/version");
-    printf("Command line: %s\n", strtok(cmdline_buf, "\n"));
+    char* saveptr;
+    printf("Command line: %s\n", strtok_r(cmdline_buf, "\n", &saveptr));
     printf("Bootconfig: ");
     DumpFileToFd(STDOUT_FILENO, "", "/proc/bootconfig");
     printf("Uptime: ");
@@ -1375,6 +1377,9 @@ static Dumpstate::RunStatus RunDumpsysTextByPriority(const std::string& title, i
                 dumpsys.writeDumpFooter(STDOUT_FILENO, service, elapsed_seconds);
                 bool dump_complete = (status == OK);
                 dumpsys.stopDumpThread(dump_complete);
+            } else if (status == NAME_NOT_FOUND) {
+                MYLOGD("Failed to start dump thread for service: %s, status: %d",
+                       String8(service).c_str(), status);
             } else {
                 MYLOGE("Failed to start dump thread for service: %s, status: %d",
                        String8(service).c_str(), status);

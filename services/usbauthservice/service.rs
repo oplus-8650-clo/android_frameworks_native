@@ -14,16 +14,86 @@
 
 //! This module implements the IUsbAuthManager AIDL interface.
 
-use crate::manager::UsbDeviceAuthManager;
+use crate::manager::{AuthEventsCallback, UsbDeviceAuthManager};
+use android_hardware_usb_auth::aidl::android::hardware::usb::IUsbAuthEventsListener::IUsbAuthEventsListener;
 use android_hardware_usb_auth::aidl::android::hardware::usb::IUsbAuthManager::{
     BnUsbAuthManager, IUsbAuthManager,
 };
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::UsbAuthDeviceInfo;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationStatus::UsbAuthorizationStatus;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
-use binder::{Interface, SpIBinder, Status};
-use log::debug;
+use binder::{DeathRecipient, IBinder, Interface, SpIBinder, Status};
+use log::{debug, error};
+use std::any::Any;
 use std::sync::{Arc, Mutex};
+
+// Internal container for auth events
+struct AuthEventsCallbackContainer {
+    inner: binder::Strong<dyn IUsbAuthEventsListener>,
+    death_recipient: Option<DeathRecipient>,
+}
+
+impl AuthEventsCallbackContainer {
+    pub fn new(inner: binder::Strong<dyn IUsbAuthEventsListener>) -> Self {
+        Self { inner, death_recipient: None }
+    }
+
+    pub fn attach_death_recipient(
+        &mut self,
+        device_manager: Arc<Mutex<UsbDeviceAuthManager>>,
+    ) -> binder::Result<()> {
+        let inner_clone = self.inner.clone();
+        let mut death_recipient = DeathRecipient::new(move || {
+            let container = Box::new(Self::new(inner_clone.clone()));
+            device_manager.clone().lock().unwrap().unregister_callback(container);
+        });
+
+        let mut ibinder = self.inner.as_binder();
+        ibinder.link_to_death(&mut death_recipient)?;
+        self.death_recipient = Some(death_recipient);
+
+        Ok(())
+    }
+}
+
+impl AuthEventsCallback for AuthEventsCallbackContainer {
+    fn send_ask(&mut self, device: &UsbAuthDeviceInfo) {
+        if let Err(e) = self.inner.onDeviceAskForAuthorization(device) {
+            error!("Failed to send onDeviceAskForAuthorization: {}", e);
+        }
+    }
+
+    fn send_allow_persisted(&mut self, device: &UsbAuthDeviceInfo) {
+        if let Err(e) = self.inner.onDeviceCheckPersistedAuthorization(device) {
+            error!("Failed to send onDeviceCheckPersistedAuthorization: {}", e);
+        }
+    }
+
+    fn send_status_change(
+        &mut self,
+        device: &UsbAuthDeviceInfo,
+        status: &UsbAuthorizationStatus,
+        system_state: &UsbAuthorizationSystemState,
+    ) {
+        if let Err(e) =
+            self.inner.onDeviceAuthorizationStatusChanged(device, *status, *system_state)
+        {
+            error!("Failed to send onDeviceAuthorizationStatusChanged: {}", e);
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn equals(&self, other: &dyn AuthEventsCallback) -> bool {
+        if let Some(container) = other.as_any().downcast_ref::<AuthEventsCallbackContainer>() {
+            return self.inner == container.inner;
+        }
+
+        false
+    }
+}
 
 /// Implementation of the `IUsbAuthManager` binder service.
 pub struct UsbAuthServiceImpl {
@@ -69,6 +139,13 @@ impl IUsbAuthManager for UsbAuthServiceImpl {
         Ok(devices)
     }
 
+    fn getDevicesAwaitingPersistedAuthorization(&self) -> binder::Result<Vec<UsbAuthDeviceInfo>> {
+        debug!("getDevicesAwaitingPersistedAuthorization called");
+        let manager = self.device_manager.lock().unwrap();
+        let devices = manager.allow_persisted_devices().into_iter().map(|d| d.info).collect();
+        Ok(devices)
+    }
+
     fn getAuthorizationStatus(
         &self,
         device: &UsbAuthDeviceInfo,
@@ -89,6 +166,26 @@ impl IUsbAuthManager for UsbAuthServiceImpl {
         manager.update_authorization_status(&device.syspath, authorized).map_err(|e| {
             Status::new_exception_str(binder::ExceptionCode::ILLEGAL_ARGUMENT, Some(&e.to_string()))
         })
+    }
+
+    fn registerForUsbAuthorizationEvents(
+        &self,
+        listener: &binder::Strong<dyn IUsbAuthEventsListener>,
+    ) -> binder::Result<bool> {
+        let mut container = Box::new(AuthEventsCallbackContainer::new(listener.clone()));
+        container.attach_death_recipient(self.device_manager.clone())?;
+        let mut manager = self.device_manager.lock().unwrap();
+        Ok(manager.register_callback(container))
+    }
+
+    fn unregisterForUsbAuthorizationEvents(
+        &self,
+        listener: &binder::Strong<dyn IUsbAuthEventsListener>,
+    ) -> binder::Result<()> {
+        let container = Box::new(AuthEventsCallbackContainer::new(listener.clone()));
+        let mut manager = self.device_manager.lock().unwrap();
+        manager.unregister_callback(container);
+        Ok(())
     }
 }
 
@@ -164,7 +261,7 @@ mod tests {
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
         (service, device_manager)
@@ -190,7 +287,7 @@ mod tests {
         fs::write(&policy_file, "ask when LoggedIn").unwrap();
 
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap(),
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
 
@@ -198,6 +295,7 @@ mod tests {
         let device_info = create_test_device(&device_syspath);
         let device_with_state = UsbDeviceInfoWithState {
             info: device_info.clone(),
+            interfaces: vec![],
             authorized: false,
             is_deferred: false,
         };

@@ -383,6 +383,10 @@ def parse_vulkan_registry():
         for req in extension.iter('require'):
           if req.get('feature') is not None:
             apiversion = req.get('feature')
+          elif req.get('depends') is not None:
+            deps = req.get('depends')
+            if deps.startswith('VK_VERSION') and deps.isidentifier():
+              apiversion = deps
           for commands in req:
             if commands.tag == 'command':
               cmd_name = commands.get('name')

@@ -15,7 +15,30 @@
  */
 
 /**
- * @addtogroup NativeService Native Service
+ * @addtogroup NativeService
+ *
+ * ANativeService APIs allow you to implement Services declared as
+ * {@code android:nativeService=true} using only native code.
+ *
+ * Because most NDK APIs rely on the Android Runtime (ART), the APIs available to native services
+ * (which may not have the ART loaded inside their processes) are limited to a specific subset.
+ * The current set of supported APIs is:
+ *
+ * - AFont_*
+ * - AFontMatcher_*
+ * - AIBinder_*
+ *   - except AIBinder_fromJavaBinder and AIBinder_toJavaBinder
+ * - ALooper_*
+ * - ANativeService_*
+ * - AParcel_*
+ *   - except AParcel_fromJavaParcel
+ * - APersistableBundle_*
+ * - ASharedMemory_*
+ *   - except ASharedMemory_dupFromJava
+ * - AStatus_*
+ * - ASystemFontIterator_*
+ * - ATrace_*
+ *
  * @{
  */
 
@@ -34,10 +57,10 @@
 __BEGIN_DECLS
 
 /**
- * {@link ANativeService} represents a native service instance.
- * A unique instance of this struct is prepared by the framework for each service and it lives
- * during the service's lifetime. The same instance is passed to all callback functions of the
- * service.
+ * An opaque struct representing a native service instance.
+ *
+ * The framework creates a unique instance of this struct for each service. A handle to this same
+ * instance is passed to every callback function of the service.
  *
  * Introduced in API 37.
  */
@@ -57,7 +80,7 @@ typedef void ANativeService_createFunc(ANativeService* _Nonnull service);
 
 /**
  * The default name of the entry point function. You can specify a different function name through
- * `android.app.func_name` meta-data in your manifest.
+ * `android.app.PROPERTY_NATIVE_SERVICE_FUNCTION_NAME` property in your manifest.
  *
  * Introduced in API 37.
  */
@@ -90,10 +113,9 @@ typedef enum ANativeServiceTrimMemoryLevel : int32_t {
 /**
  * The function type signature definition of the "onBind" callback function called when someone is
  * binding to the service, with the given action and data on the intent. This may return NULL if
- * clients cannot bind to the service, or a pointer to a valid AIBinder. If an AIBinder is returned
- * you *must* first call AIBinder_incStrong() on the binder returning it with a single strong
- * reference. If you do not you will see crashes about referencing a pure virtual function, as the
- * instance will be destructed when returning from your onBind() implementation.
+ * clients cannot bind to the service, or a pointer to a valid AIBinder. If an AIBinder is returned,
+ * its ownership is transferred to the system, which is responsible for decrementing the reference
+ * count of the instance.
  *
  * This callback function will run on the main thread of the process.
  *
@@ -106,7 +128,8 @@ typedef enum ANativeServiceTrimMemoryLevel : int32_t {
  * or null if not specified.
  * \param data The data specified in the intent passed to `Context.bindService`. This is an encoded
  * URI based on RFC 2396 using UTF-8 or null if not specified.
- * \return an AIBinder pointer through which clients can call on to the service.
+ * \return an AIBinder pointer through which clients can call on to the service. Ownership is
+ * transferred to the system.
  */
 typedef AIBinder* _Nullable (*ANativeService_onBindCallback)(ANativeService* _Nonnull service,
                                                              uint64_t bindToken,

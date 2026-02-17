@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <CapturedTouchpadEventConverter.h>
+#include <AbsoluteTouchpadEventConverter.h>
 
 #include <list>
 #include <memory>
@@ -23,6 +23,7 @@
 #include <com_android_input_flags.h>
 #include <gtest/gtest.h>
 #include <input/Input.h>
+#include <input/ScopedFlagOverride.h>
 #include <linux/input-event-codes.h>
 #include <linux/input.h>
 #include <utils/StrongPointer.h>
@@ -41,9 +42,9 @@ using testing::Each;
 using testing::ElementsAre;
 using testing::VariantWith;
 
-class CapturedTouchpadEventConverterTest : public testing::Test {
+class AbsoluteTouchpadEventConverterTest : public testing::Test {
 public:
-    CapturedTouchpadEventConverterTest()
+    AbsoluteTouchpadEventConverterTest()
           : mFakeEventHub(std::make_unique<FakeEventHub>()),
             mFakePolicy(sp<FakeInputReaderPolicy>::make()),
             mReader(mFakeEventHub, mFakePolicy, mFakeListener),
@@ -81,13 +82,13 @@ protected:
         mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOUCH_MINOR, 0, 1000, 0, 0, 0);
     }
 
-    CapturedTouchpadEventConverter createConverter() {
+    AbsoluteTouchpadEventConverter createConverter() {
         addBasicAxesToEventHub();
-        return CapturedTouchpadEventConverter(*mReader.getContext(), mDeviceContext, mAccumulator,
+        return AbsoluteTouchpadEventConverter(*mReader.getContext(), mDeviceContext, mAccumulator,
                                               DEVICE_ID);
     }
 
-    void processAxis(CapturedTouchpadEventConverter& conv, int32_t type, int32_t code,
+    void processAxis(AbsoluteTouchpadEventConverter& conv, int32_t type, int32_t code,
                      int32_t value) {
         RawEvent event;
         event.when = ARBITRARY_TIME;
@@ -100,7 +101,7 @@ protected:
         EXPECT_TRUE(out.empty());
     }
 
-    std::list<NotifyArgs> processSync(CapturedTouchpadEventConverter& conv) {
+    std::list<NotifyArgs> processSync(AbsoluteTouchpadEventConverter& conv) {
         RawEvent event;
         event.when = ARBITRARY_TIME;
         event.readTime = READ_TIME;
@@ -111,7 +112,7 @@ protected:
         return conv.process(event);
     }
 
-    NotifyMotionArgs processSyncAndExpectSingleMotionArg(CapturedTouchpadEventConverter& conv) {
+    NotifyMotionArgs processSyncAndExpectSingleMotionArg(AbsoluteTouchpadEventConverter& conv) {
         std::list<NotifyArgs> args = processSync(conv);
         EXPECT_EQ(1u, args.size());
         return std::get<NotifyMotionArgs>(args.front());
@@ -126,7 +127,7 @@ protected:
     MultiTouchMotionAccumulator mAccumulator;
 };
 
-TEST_F(CapturedTouchpadEventConverterTest, MotionRanges_allAxesPresent_populatedCorrectly) {
+TEST_F(AbsoluteTouchpadEventConverterTest, MotionRanges_allAxesPresent_populatedCorrectly) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, -500, 2000, 0, 0, 40);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOUCH_MAJOR, 0, 1100, 0, 0, 35);
@@ -135,7 +136,7 @@ TEST_F(CapturedTouchpadEventConverterTest, MotionRanges_allAxesPresent_populated
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MINOR, 0, 800, 0, 0, 20);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_ORIENTATION, -3, 4, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_PRESSURE, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     InputDeviceInfo info;
@@ -223,10 +224,10 @@ TEST_F(CapturedTouchpadEventConverterTest, MotionRanges_allAxesPresent_populated
     EXPECT_NEAR(0, size->resolution, EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, MotionRanges_bareMinimumAxesPresent_populatedCorrectly) {
+TEST_F(AbsoluteTouchpadEventConverterTest, MotionRanges_bareMinimumAxesPresent_populatedCorrectly) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     InputDeviceInfo info;
@@ -241,8 +242,8 @@ TEST_F(CapturedTouchpadEventConverterTest, MotionRanges_bareMinimumAxesPresent_p
     EXPECT_EQ(4u, info.getMotionRanges().size());
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, OneFinger_motionReportedCorrectly) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, OneFinger_motionReportedCorrectly) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -281,11 +282,11 @@ TEST_F(CapturedTouchpadEventConverterTest, OneFinger_motionReportedCorrectly) {
                               WithToolType(ToolType::FINGER)))));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, OneFinger_touchDimensionsPassedThrough) {
+TEST_F(AbsoluteTouchpadEventConverterTest, OneFinger_touchDimensionsPassedThrough) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MAJOR, 0, 1000, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MINOR, 0, 1000, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -303,10 +304,10 @@ TEST_F(CapturedTouchpadEventConverterTest, OneFinger_touchDimensionsPassedThroug
                       WithTouchDimensions(250, 120), WithToolDimensions(400, 200)));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, OneFinger_orientationCalculatedCorrectly) {
+TEST_F(AbsoluteTouchpadEventConverterTest, OneFinger_orientationCalculatedCorrectly) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_ORIENTATION, -3, 4, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -335,11 +336,11 @@ TEST_F(CapturedTouchpadEventConverterTest, OneFinger_orientationCalculatedCorrec
                 EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, OneFinger_pressureScaledCorrectly) {
+TEST_F(AbsoluteTouchpadEventConverterTest, OneFinger_pressureScaledCorrectly) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_PRESSURE, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -351,7 +352,7 @@ TEST_F(CapturedTouchpadEventConverterTest, OneFinger_pressureScaledCorrectly) {
     EXPECT_THAT(processSyncAndExpectSingleMotionArg(conv), WithPressure(0.5));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest,
+TEST_F(AbsoluteTouchpadEventConverterTest,
        OneFinger_withAllSizeAxes_sizeCalculatedFromTouchMajorMinorAverage) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
@@ -359,7 +360,7 @@ TEST_F(CapturedTouchpadEventConverterTest,
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOUCH_MINOR, 0, 256, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MAJOR, 0, 256, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MINOR, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -377,13 +378,13 @@ TEST_F(CapturedTouchpadEventConverterTest,
                 EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest,
+TEST_F(AbsoluteTouchpadEventConverterTest,
        OneFinger_withMajorDimensionsOnly_sizeCalculatedFromTouchMajor) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOUCH_MAJOR, 0, 256, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MAJOR, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -399,13 +400,13 @@ TEST_F(CapturedTouchpadEventConverterTest,
                 EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest,
+TEST_F(AbsoluteTouchpadEventConverterTest,
        OneFinger_withToolDimensionsOnly_sizeCalculatedFromToolMajorMinorAverage) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MAJOR, 0, 256, 0, 0, 0);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MINOR, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -421,12 +422,12 @@ TEST_F(CapturedTouchpadEventConverterTest,
                 EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest,
+TEST_F(AbsoluteTouchpadEventConverterTest,
        OneFinger_withToolMajorOnly_sizeCalculatedFromTouchMajor) {
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_X, 0, 4000, 0, 0, 45);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_POSITION_Y, 0, 2500, 0, 0, 40);
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_WIDTH_MAJOR, 0, 256, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -441,10 +442,10 @@ TEST_F(CapturedTouchpadEventConverterTest,
                 EPSILON);
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, OnePalm_neverReported) {
+TEST_F(AbsoluteTouchpadEventConverterTest, OnePalm_neverReported) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -468,10 +469,10 @@ TEST_F(CapturedTouchpadEventConverterTest, OnePalm_neverReported) {
     EXPECT_EQ(0u, processSync(conv).size());
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, FingerTurningIntoPalm_cancelled) {
+TEST_F(AbsoluteTouchpadEventConverterTest, FingerTurningIntoPalm_cancelled) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -508,10 +509,10 @@ TEST_F(CapturedTouchpadEventConverterTest, FingerTurningIntoPalm_cancelled) {
     EXPECT_EQ(0u, processSync(conv).size());
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, PalmTurningIntoFinger_reported) {
+TEST_F(AbsoluteTouchpadEventConverterTest, PalmTurningIntoFinger_reported) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -538,10 +539,10 @@ TEST_F(CapturedTouchpadEventConverterTest, PalmTurningIntoFinger_reported) {
                       WithCoords(52, 100), WithRelativeMotion(1, 0)));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, FingerArrivingAfterPalm_onlyFingerReported) {
+TEST_F(AbsoluteTouchpadEventConverterTest, FingerArrivingAfterPalm_onlyFingerReported) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -578,10 +579,10 @@ TEST_F(CapturedTouchpadEventConverterTest, FingerArrivingAfterPalm_onlyFingerRep
                       WithCoords(98, 148), WithRelativeMotion(-2, -2)));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, FingerAndFingerTurningIntoPalm_partiallyCancelled) {
+TEST_F(AbsoluteTouchpadEventConverterTest, FingerAndFingerTurningIntoPalm_partiallyCancelled) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -628,10 +629,10 @@ TEST_F(CapturedTouchpadEventConverterTest, FingerAndFingerTurningIntoPalm_partia
     EXPECT_THAT(args, Each(VariantWith<NotifyMotionArgs>(WithPointerCount(2u))));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, FingerAndPalmTurningIntoFinger_reported) {
+TEST_F(AbsoluteTouchpadEventConverterTest, FingerAndPalmTurningIntoFinger_reported) {
     addBasicAxesToEventHub();
     mFakeEventHub->addAbsoluteAxis(EVENTHUB_ID, ABS_MT_TOOL_TYPE, 0, MT_TOOL_PALM, 0, 0, 0);
-    CapturedTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
+    AbsoluteTouchpadEventConverter conv(*mReader.getContext(), mDeviceContext, mAccumulator,
                                         DEVICE_ID);
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -669,8 +670,8 @@ TEST_F(CapturedTouchpadEventConverterTest, FingerAndPalmTurningIntoFinger_report
                                           WithPointerCount(2u)))));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, TwoFingers_motionReportedCorrectly) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, TwoFingers_motionReportedCorrectly) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -756,8 +757,8 @@ TEST_F(CapturedTouchpadEventConverterTest, TwoFingers_motionReportedCorrectly) {
                                                          WithToolType(ToolType::FINGER)))));
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, RelativeMotionAxesClearedForNewFingerInSlot) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, RelativeMotionAxesClearedForNewFingerInSlot) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
     // Put down one finger.
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -816,8 +817,8 @@ TEST_F(CapturedTouchpadEventConverterTest, RelativeMotionAxesClearedForNewFinger
 }
 
 // Pointer IDs max out at 31, and so must be reused once a touch is lifted to avoid running out.
-TEST_F(CapturedTouchpadEventConverterTest, PointerIdsReusedAfterLift) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, PointerIdsReusedAfterLift) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     // Put down two fingers, which should get IDs 0 and 1.
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
@@ -854,7 +855,7 @@ TEST_F(CapturedTouchpadEventConverterTest, PointerIdsReusedAfterLift) {
 
     std::list<NotifyArgs> args = processSync(conv);
     // Slot 1 being present will result in a MOVE event, even though it hasn't actually moved (see
-    // comments in CapturedTouchpadEventConverter::sync).
+    // comments in AbsoluteTouchpadEventConverter::sync).
     EXPECT_THAT(args,
                 ElementsAre(VariantWith<NotifyMotionArgs>(
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
@@ -881,9 +882,9 @@ TEST_F(CapturedTouchpadEventConverterTest, PointerIdsReusedAfterLift) {
 // Motion events without any pointers are invalid, so when a button press is reported in the same
 // frame as a touch down, the button press must be reported second. Similarly with a button release
 // and a touch lift.
-TEST_F(CapturedTouchpadEventConverterTest,
+TEST_F(AbsoluteTouchpadEventConverterTest,
        ButtonPressedAndReleasedInSameFrameAsTouch_ReportedWithPointers) {
-    CapturedTouchpadEventConverter conv = createConverter();
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -922,8 +923,8 @@ TEST_F(CapturedTouchpadEventConverterTest,
 
 // Some touchpads sometimes report a button press before they report the finger touching the pad. In
 // that case we need to wait until the touch comes to report the button press.
-TEST_F(CapturedTouchpadEventConverterTest, ButtonPressedBeforeTouch_ReportedOnceTouchOccurs) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, ButtonPressedBeforeTouch_ReportedOnceTouchOccurs) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_KEY, BTN_LEFT, 1);
     ASSERT_EQ(0u, processSync(conv).size());
@@ -947,8 +948,8 @@ TEST_F(CapturedTouchpadEventConverterTest, ButtonPressedBeforeTouch_ReportedOnce
 
 // When all fingers are lifted from a touchpad, we should release any buttons that are down, since
 // we won't be able to report them being lifted later if no pointers are present.
-TEST_F(CapturedTouchpadEventConverterTest, ButtonReleasedAfterTouchLifts_ReportedWithLift) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, ButtonReleasedAfterTouchLifts_ReportedWithLift) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -983,8 +984,8 @@ TEST_F(CapturedTouchpadEventConverterTest, ButtonReleasedAfterTouchLifts_Reporte
     ASSERT_EQ(0u, processSync(conv).size());
 }
 
-TEST_F(CapturedTouchpadEventConverterTest, MultipleButtonsPressedDuringTouch_ReportedCorrectly) {
-    CapturedTouchpadEventConverter conv = createConverter();
+TEST_F(AbsoluteTouchpadEventConverterTest, MultipleButtonsPressedDuringTouch_ReportedCorrectly) {
+    AbsoluteTouchpadEventConverter conv = createConverter();
 
     processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
     processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
@@ -1032,6 +1033,35 @@ TEST_F(CapturedTouchpadEventConverterTest, MultipleButtonsPressedDuringTouch_Rep
                                     AllOf(WithMotionAction(AMOTION_EVENT_ACTION_BUTTON_RELEASE),
                                           WithActionButton(AMOTION_EVENT_BUTTON_SECONDARY),
                                           WithButtonState(0)))));
+}
+
+TEST_F(AbsoluteTouchpadEventConverterTest, ResetCancelsFingers) {
+    SCOPED_FLAG_OVERRIDE(cancel_touches_on_absolute_capture_release, true);
+    AbsoluteTouchpadEventConverter conv = createConverter();
+
+    processAxis(conv, EV_ABS, ABS_MT_SLOT, 0);
+    processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 1);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_X, 500);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_Y, 500);
+    processAxis(conv, EV_ABS, ABS_MT_SLOT, 1);
+    processAxis(conv, EV_ABS, ABS_MT_TRACKING_ID, 2);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_X, 800);
+    processAxis(conv, EV_ABS, ABS_MT_POSITION_Y, 500);
+    processAxis(conv, EV_KEY, BTN_TOUCH, 1);
+    processAxis(conv, EV_KEY, BTN_TOOL_DOUBLETAP, 1);
+    EXPECT_THAT(processSync(conv),
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                                    WithMotionAction(AMOTION_EVENT_ACTION_DOWN)),
+                            VariantWith<NotifyMotionArgs>(WithMotionAction(
+                                    AMOTION_EVENT_ACTION_POINTER_DOWN |
+                                    1 << AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT))));
+
+    EXPECT_THAT(conv.reset(ARBITRARY_TIME),
+                ElementsAre(VariantWith<NotifyMotionArgs>(
+                        AllOf(WithMotionAction(AMOTION_EVENT_ACTION_CANCEL), WithPointerCount(2),
+                              WithPointerCoords(0, 500, 500), WithPointerCoords(1, 800, 500),
+                              WithPointerToolType(0, ToolType::FINGER),
+                              WithPointerToolType(1, ToolType::FINGER)))));
 }
 
 } // namespace android

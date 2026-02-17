@@ -35,6 +35,7 @@
 
 #include <common/FlagManager.h>
 #include <common/Panopticon.h>
+#include <common/ThreadStateCrashLogger.h>
 #include "compat/GraphitePipelineManager.h"
 
 namespace android::renderengine::skia {
@@ -118,13 +119,14 @@ std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
             graphitePersistentPipelineStorage(&driverVersion, sizeof(driverVersion),
                                               vulkanInterface.isProtected());
 
-    return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(),
-                                               persistentStorage,
-                                               SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
-                                                      mRuntimeEffectManager.mKnownEffects.size()),
-                                               vulkanInterface.isProtected()
-                                                       ? &mProtectedPipelineCallbackHandler
-                                                       : &mPipelineCallbackHandler);
+    return SkiaGpuContext::MakeVulkan_Graphite(
+        vulkanInterface.createSkiaVulkanBackendContext(/*threadSafeVMA=*/true),
+        persistentStorage,
+        SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
+                mRuntimeEffectManager.mKnownEffects.size()),
+        vulkanInterface.isProtected()
+                ? &mProtectedPipelineCallbackHandler
+                : &mPipelineCallbackHandler);
 }
 
 void GraphiteVkRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {
@@ -181,11 +183,14 @@ base::unique_fd GraphiteVkRenderEngine::flushAndSubmit(SkiaGpuContext* context, 
     }
 
     const bool inserted = context->graphiteContext()->insertRecording(insertInfo);
-    LOG_ALWAYS_FATAL_IF(!inserted,
-                        "graphite::Context::insertRecording(...) failed, check for Skia errors");
+    LOG_THREAD_STATE_AND_CRASH_IF(!inserted,
+                                  "graphite::Context::insertRecording(...) failed, check for Skia "
+                                  "errors");
     auto slice = panopticon::slice(panopticon::SliceType::CG_Skia_submit);
     const bool submitted = context->graphiteContext()->submit(graphite::SyncToCpu::kNo);
-    LOG_ALWAYS_FATAL_IF(!submitted, "graphite::Context::submit(...) failed, check for Skia errors");
+    LOG_THREAD_STATE_AND_CRASH_IF(!submitted,
+                                  "graphite::Context::submit(...) failed, check for Skia errors");
+
     // Skia's "backend" semaphores can be deleted immediately after inserting the recording; only
     // the underlying VK semaphores need to be kept until GPU work is complete.
     mStagedWaitSemaphores.clear();

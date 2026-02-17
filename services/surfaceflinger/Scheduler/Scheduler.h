@@ -245,8 +245,12 @@ public:
         std::scoped_lock lock{mVsyncConfigLock};
         return mVsyncConfiguration.get();
     }
-    // Sets the render rate for the scheduler to run at.
-    void setRenderRate(PhysicalDisplayId, Fps, bool applyImmediately);
+    // Combines resyncToHardwareVsync, setRenderRate, and updatePhaseConfiguration.
+    enum class ResyncToModeOpts { None, PeakRenderRate };
+    void resyncToMode(const FrameRateMode&, ResyncToModeOpts = ResyncToModeOpts::None);
+
+    // TODO: b/434757601 - Merge with DMC::setActiveMode.
+    void setRenderRate(PhysicalDisplayId, Fps renderRate, bool applyImmediately);
 
     void enableHardwareVsync(PhysicalDisplayId) REQUIRES(kMainThreadContext);
     void disableHardwareVsync(PhysicalDisplayId, bool disallow) REQUIRES(kMainThreadContext);
@@ -269,11 +273,11 @@ public:
         mLastResyncTimeOnTx = 0;
     }
 
-    // Passes a vsync sample to VsyncController. Returns true if
-    // VsyncController detected that the vsync period changed and false
-    // otherwise.
+    // Passes a vsync sample to VsyncController. Returns true if VsyncController detected that the
+    // vsync period changed and false otherwise.
     bool addResyncSample(PhysicalDisplayId, nsecs_t timestamp,
-                         std::optional<nsecs_t> hwcVsyncPeriod);
+                         std::optional<nsecs_t> hwcVsyncPeriod,
+                         VSyncTracker::VsyncTimeSource source);
     void addPresentFence(PhysicalDisplayId, std::shared_ptr<FenceTime>)
             REQUIRES(kMainThreadContext);
 
@@ -665,6 +669,18 @@ private:
         return pacesetterDisplayLocked()
                 .transform([](const Display& display) { return display.selectorPtr; })
                 .or_else([] { return std::optional<RefreshRateSelectorPtr>(nullptr); })
+                .value();
+    }
+
+    RefreshRateSelectorPtr selectorPtrLocked(PhysicalDisplayId displayId) const
+            REQUIRES(mDisplayLock) {
+        ftl::FakeGuard guard(kMainThreadContext);
+        return mDisplays.get(displayId)
+                .transform([](const Display& display) { return display.selectorPtr; })
+                .or_else([this] {
+                    ftl::FakeGuard guard(mDisplayLock);
+                    return std::make_optional(pacesetterSelectorPtrLocked());
+                })
                 .value();
     }
 

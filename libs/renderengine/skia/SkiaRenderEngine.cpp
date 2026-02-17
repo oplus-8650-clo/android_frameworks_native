@@ -53,14 +53,15 @@
 #include <android/ipcrenderbuffer/RenderBufferHelpers.h>
 #include <common/FlagManager.h>
 #include <common/Panopticon.h>
+#include <common/ThreadStateCrashLogger.h>
 #include <common/trace.h>
 #include <gui/FenceMonitor.h>
 #include <include/gpu/ganesh/GrBackendSemaphore.h>
 #include <include/gpu/ganesh/GrContextOptions.h>
 #include <include/gpu/ganesh/GrTypes.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
+#include <include/private/SkHdrMetadata.h>
 #include <pthread.h>
-#include <src/codec/SkHdrAgtmPriv.h>
 #include <src/core/SkTraceEventCommon.h>
 #include <sync/sync.h>
 #include <ui/BlurRegion.h>
@@ -380,11 +381,13 @@ void SkiaRenderEngine::finishRenderingAndAbandonContexts() {
 void SkiaRenderEngine::useProtectedContext(bool useProtectedContext) {
     if (useProtectedContext == mInProtectedContext ||
         (useProtectedContext && !supportsProtectedContent())) {
-        return;
+        return; // No context switch is required
     }
 
-    // release any scratch resources before switching into a new mode
-    if (getActiveContext()) {
+    // If the active context's cache management policy is to get rid of purgeable resources upon
+    // switching contexts, then handle doing so here.
+    if (getActiveContext() &&
+        activeContextCachePolicy() == CacheManagementPolicy::kUponContextSwitch) {
         getActiveContext()->purgeUnlockedScratchResources();
     }
 
@@ -403,6 +406,10 @@ void SkiaRenderEngine::useProtectedContext(bool useProtectedContext) {
 
 SkiaGpuContext* SkiaRenderEngine::getActiveContext() {
     return mInProtectedContext ? mProtectedContext.get() : mContext.get();
+}
+
+SkiaRenderEngine::CacheManagementPolicy SkiaRenderEngine::activeContextCachePolicy() const {
+    return mInProtectedContext ? mProtectedCachePolicy : mUnprotectedCachePolicy;
 }
 
 static float toDegrees(uint32_t transform) {
@@ -589,6 +596,24 @@ void SkiaRenderEngine::cleanupPostRender() {
     SFTRACE_CALL();
     std::lock_guard<std::mutex> lock(mRenderingMutex);
     mTextureCleanupMgr.cleanup();
+
+    // Check each context's cache management policy, cleaning up any cached resources that have not
+    // been used after a certain amount of time. The duration is chosen based upon how long we
+    // generally expect resources to remain useful for.
+    if (mUnprotectedCachePolicy == CacheManagementPolicy::kClearStaleResourcesPostRender) {
+        // TODO(b/471222157): Currently, no RenderEngine implementations will encounter this.
+        // Eventually, update RenderEngine to use kClearStaleResourcesPostRender for its unprotected
+        // cache and determine the expected/optimal time duration to use.
+        static constexpr std::chrono::milliseconds kUnusedDuration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(30));
+        mContext->purgeResourcesNotUsedIn(kUnusedDuration);
+    }
+    if (mProtectedContext &&
+        mProtectedCachePolicy == CacheManagementPolicy::kClearStaleResourcesPostRender) {
+        static constexpr std::chrono::milliseconds kProtectedUnusedDuration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(30));
+        mProtectedContext->purgeResourcesNotUsedIn(kProtectedUnusedDuration);
+    }
 }
 
 sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
@@ -621,6 +646,11 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           parameters.layer.sourceDataspace
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+                                          , toSkColorSpace(parameters.outputDataSpace)
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           , parameters.layer.lutSourceIsHwc
                                          );
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
@@ -631,11 +661,13 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
             if (err == OK && smpte2094_50) {
                 auto smpte2094_50Data =
                         SkData::MakeWithoutCopy(smpte2094_50->data(), smpte2094_50->size());
-                auto agtm = skhdr::Agtm::Make(smpte2094_50Data.get());
-                if (agtm) {
+                skhdr::AdaptiveGlobalToneMap agtm;
+                if (agtm.parse(smpte2094_50Data.get())) {
                     SFTRACE_NAME("AGTM");
-                    shader = shader->makeWithColorFilter(
-                            agtm->makeColorFilter(std::log2(parameters.display.targetHdrSdrRatio)));
+                    skhdr::Metadata metadata = skhdr::Metadata::MakeEmpty();
+                    metadata.setAdaptiveGlobalToneMap(agtm);
+                    shader = shader->makeWithColorFilter(metadata.makeToneMapColorFilter(
+                            std::log2(parameters.display.targetHdrSdrRatio)));
                 }
             }
         }
@@ -777,7 +809,7 @@ static SkRRect getBlurRRect(const BlurRegion& region) {
 // Arbitrary default margin which should be close enough to zero.
 constexpr float kDefaultMargin = 0.0001f;
 static bool equalsWithinMargin(float expected, float value, float margin = kDefaultMargin) {
-    LOG_ALWAYS_FATAL_IF(margin < 0.f, "Margin is negative!");
+    LOG_THREAD_STATE_AND_CRASH_IF(margin < 0.f, "Margin is negative!");
     return std::abs(expected - value) < margin;
 }
 
@@ -812,7 +844,7 @@ private:
     AutoBackendTexture::CleanupManager& mMgr;
 };
 
-void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {
+void SkiaRenderEngine::waitFence(SkiaGpuContext* context, base::borrowed_fd fenceFd) {\
     // If the fence is already signaled, we can skip waiting on it.
     if (fenceFd.get() >= 0) {
         if (sync_wait(fenceFd.get(), 0) >= 0) {
@@ -826,7 +858,8 @@ void SkiaRenderEngine::drawLayersInternal(
         const std::shared_ptr<std::promise<FenceResult>>&& resultPromise,
         const DisplaySettings& display, const std::vector<LayerSettings>& layers,
         const std::shared_ptr<ExternalTexture>& buffer, base::unique_fd&& bufferFence) {
-    SFTRACE_FORMAT("%s for %s", __func__, display.namePlusId.c_str());
+    SFTRACE_FORMAT("%s%s for %s", __func__, mInProtectedContext ? " (PROTECTED)" : "",
+                   display.namePlusId.empty() ? "<unknown>" : display.namePlusId.c_str());
 
     auto slice = panopticon::slice(panopticon::SliceType::CG_Re_drawLayers);
 
@@ -843,6 +876,20 @@ void SkiaRenderEngine::drawLayersInternal(
     auto context = getActiveContext();
     LOG_ALWAYS_FATAL_IF(context->isAbandonedOrDeviceLost(),
                         "Context is abandoned/device lost at start of %s", __func__);
+
+    // Only dump settings on crashes that occur after the more specific validations above, which
+    // aren't affected by the settings logged here.
+    ThreadStateCrashLogger settingsLogger(
+            [inProtectedContext = this->mInProtectedContext, &buffer, &display, &layers] {
+                ALOGD(" --- drawLayersInternal debugging context --- ");
+                ALOGD("Context: %s", inProtectedContext ? "protected" : "unprotected");
+                ALOGD("Output buffer: %s", toString(*buffer).c_str());
+                logSettings(display);
+                ALOGD("%zu layers:", layers.size());
+                for (auto layer : layers) {
+                    logSettings(layer);
+                }
+            });
 
     // any AutoBackendTexture deletions will now be deferred until cleanupPostRender is called
     DeferTextureCleanup dtc(mTextureCleanupMgr);
@@ -949,8 +996,8 @@ void SkiaRenderEngine::drawLayersInternal(
 
         sk_sp<SkImage> blurInput;
         if (blurCompositionLayer == &layer) {
-            LOG_ALWAYS_FATAL_IF(activeSurface == dstSurface);
-            LOG_ALWAYS_FATAL_IF(canvas == dstCanvas);
+            LOG_THREAD_STATE_AND_CRASH_IF(activeSurface == dstSurface);
+            LOG_THREAD_STATE_AND_CRASH_IF(canvas == dstCanvas);
 
             blurInput = activeSurface->makeTemporaryImage();
 
@@ -974,10 +1021,10 @@ void SkiaRenderEngine::drawLayersInternal(
             surfaceAutoSaveRestore.replace(canvas);
             initCanvas(canvas, display);
 
-            LOG_ALWAYS_FATAL_IF(activeSurface->getCanvas()->getSaveCount() !=
-                                dstSurface->getCanvas()->getSaveCount());
-            LOG_ALWAYS_FATAL_IF(activeSurface->getCanvas()->getTotalMatrix() !=
-                                dstSurface->getCanvas()->getTotalMatrix());
+            LOG_THREAD_STATE_AND_CRASH_IF(activeSurface->getCanvas()->getSaveCount() !=
+                                          dstSurface->getCanvas()->getSaveCount());
+            LOG_THREAD_STATE_AND_CRASH_IF(activeSurface->getCanvas()->getTotalMatrix() !=
+                                          dstSurface->getCanvas()->getTotalMatrix());
 
             // assign dstSurface to activeSurface
             activeSurface = dstSurface;
@@ -1100,7 +1147,8 @@ void SkiaRenderEngine::drawLayersInternal(
 
             if (layer.shadow.length > 0) {
                 // This would require a new parameter/flag to SkShadowUtils::DrawShadow
-                LOG_ALWAYS_FATAL_IF(layer.disableBlending, "Cannot disableBlending with a shadow");
+                LOG_THREAD_STATE_AND_CRASH_IF(layer.disableBlending,
+                                              "Cannot disableBlending with a shadow");
 
                 SkRRect shadowBounds, shadowClip;
                 if (layer.geometry.boundaries == layer.shadow.boundaries) {
@@ -1137,8 +1185,8 @@ void SkiaRenderEngine::drawLayersInternal(
                                                                        : originalBounds;
 
             if (!layer.boxShadowSettings.boxShadows.empty()) {
-                LOG_ALWAYS_FATAL_IF(layer.disableBlending,
-                                    "Cannot disableBlending with a box shadow");
+                LOG_THREAD_STATE_AND_CRASH_IF(layer.disableBlending,
+                                              "Cannot disableBlending with a box shadow");
 
                 float cornerRadius =
                         roundf(preferredOriginalBounds.radii(SkRRect::kUpperLeft_Corner).fX);
@@ -1146,16 +1194,16 @@ void SkiaRenderEngine::drawLayersInternal(
                         (!layer.source.buffer.buffer || layer.source.buffer.isOpaque) &&
                         layer.alpha == 1.0f;
                 mBoxShadowUtils.drawBoxShadows(canvas, preferredOriginalBounds.rect(), cornerRadius,
-                                               layer.boxShadowSettings,
-                                               opaqueContent && supportsForwardPixelKill());
+                                               layer.boxShadowSettings, supportsForwardPixelKill(),
+                                               opaqueContent);
             }
 
             // Similar to shadows, do the rendering before the clip is applied because even when the
             // layer is occluded it should have an outline.
             if (layer.borderSettings.strokeWidth > 0) {
                 SFTRACE_NAME("LayerBorder");
-                LOG_ALWAYS_FATAL_IF(layer.disableBlending,
-                                    "Cannot disableBlending with an outline");
+                LOG_THREAD_STATE_AND_CRASH_IF(layer.disableBlending,
+                                              "Cannot disableBlending with an outline");
                 SkRRect outlineRect = preferredOriginalBounds;
                 outlineRect.outset(layer.borderSettings.strokeWidth,
                                    layer.borderSettings.strokeWidth);
@@ -1337,7 +1385,8 @@ void SkiaRenderEngine::drawLayersInternal(
             paint.setAlphaf(layer.alpha);
 
             if (imageTextureRef->colorType() == kAlpha_8_SkColorType) {
-                LOG_ALWAYS_FATAL_IF(layer.disableBlending, "Cannot disableBlending with A8");
+                LOG_THREAD_STATE_AND_CRASH_IF(layer.disableBlending,
+                                              "Cannot disableBlending with A8");
 
                 // SysUI creates the alpha layer as a coverage layer, which is
                 // appropriate for the DPU. Use a color matrix to convert it to
@@ -1423,14 +1472,21 @@ void SkiaRenderEngine::drawLayersInternal(
             canvas->clipRRect(roundRectClip, enableAntiAlias);
         }
 
-        if (layer.renderCommandBufferConsumer) {
+        if (layer.renderCommandBuffer) {
+            SFTRACE_NAME("RenderCommandBuffer");
             if (layer.renderResourceCache) {
                 for (auto& [id, bitmap] : layer.renderResourceCache->bitmaps) {
-                    auto imageTextureRef = getOrCreateBackendTexture(bitmap.buffer, false);
+                    bool isRenderTarget =
+                            bitmap.buffer->getUsage() & GraphicBuffer::USAGE_HW_RENDER;
+                    auto imageTextureRef = getOrCreateBackendTexture(bitmap.buffer, isRenderTarget);
 
                     if (!bitmap.image) {
                         bitmap.image =
                                 imageTextureRef->makeImage(layerDataspace, kUnpremul_SkAlphaType);
+                    }
+
+                    if (isRenderTarget && !bitmap.surface) {
+                        bitmap.surface = imageTextureRef->getOrCreateSurface(layerDataspace);
                     }
                 }
             }
@@ -1440,8 +1496,7 @@ void SkiaRenderEngine::drawLayersInternal(
                 canvas->clipRRect(bounds);
             }
             renderCommandBufferToCanvas(layer.renderResourceCache.get(),
-                                        layer.renderCommandBufferConsumer.get(), canvas,
-                                        [&](int) {});
+                                        layer.renderCommandBuffer.get(), canvas, [&](int) {});
         } else if (!bounds.isRect()) {
             paint.setAntiAlias(true);
             canvas->drawRRect(bounds, paint);
@@ -1461,7 +1516,7 @@ void SkiaRenderEngine::drawLayersInternal(
     surfaceAutoSaveRestore.restore();
     mCapture->endCapture();
 
-    LOG_ALWAYS_FATAL_IF(activeSurface != dstSurface);
+    LOG_THREAD_STATE_AND_CRASH_IF(activeSurface != dstSurface);
 
     auto drawFence = sp<Fence>::make(flushAndSubmit(context, dstSurface));
     trace(drawFence);
@@ -1489,6 +1544,19 @@ void SkiaRenderEngine::tonemapAndDrawGainmapInternal(
         float hdrSdrRatio, ui::Dataspace dataspace, const std::shared_ptr<ExternalTexture>& sdr,
         const std::shared_ptr<ExternalTexture>& gainmap) {
     std::lock_guard<std::mutex> lock(mRenderingMutex);
+
+    ThreadStateCrashLogger parametersLogger([inProtectedContext = this->mInProtectedContext, &hdr,
+                                             hdrSdrRatio, dataspace, &sdr, &gainmap] {
+        ALOGD(" --- tonemapAndDrawGainmapInternal debugging context --- ");
+        ALOGD("Context: %s", inProtectedContext ? "protected" : "unprotected");
+        ALOGD("Input HDR buffer: %s", toString(*hdr).c_str());
+        ALOGD("hdrSdrRatio: %f", hdrSdrRatio);
+        ALOGD("dataspace: %s (%s)", toString(dataspace).c_str(),
+              dataspaceDetails(static_cast<android_dataspace>(dataspace)).c_str());
+        ALOGD("Output SDR buffer: %s", toString(*sdr).c_str());
+        ALOGD("Output gainmap buffer: %s", toString(*gainmap).c_str());
+    });
+
     auto context = getActiveContext();
     auto gainmapTextureRef = getOrCreateBackendTexture(gainmap->getBuffer(), true);
 

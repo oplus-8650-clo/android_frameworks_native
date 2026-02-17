@@ -243,10 +243,16 @@ bool AidlComposer::namesAnAidlComposerService(std::string_view serviceName) {
     return true;
 }
 
-AidlComposer::AidlComposer(const std::string& serviceName) {
+AidlComposer::AidlComposer(const std::string& serviceName)
+    : AidlComposer(AidlIComposer::fromBinder(ndk::SpAIBinder(
+            AServiceManager_waitForService(ensureFullyQualifiedName(serviceName).c_str()))))
+  {
+}
+
+AidlComposer::AidlComposer(std::shared_ptr<AidlIComposer> composer)
+      : mAidlComposer(std::move(composer)) {
+
     // This only waits if the service is actually declared
-    mAidlComposer = AidlIComposer::fromBinder(ndk::SpAIBinder(
-            AServiceManager_waitForService(ensureFullyQualifiedName(serviceName).c_str())));
     if (!mAidlComposer) {
         LOG_ALWAYS_FATAL("Failed to get AIDL composer service");
         return;
@@ -279,22 +285,20 @@ AidlComposer::AidlComposer(const std::string& serviceName) {
             }
         }
     }
-    mLifecycleBatchCommandSupported = getLayerLifecycleBatchCommand();
-
     status = mAidlComposer->getCapabilities(&mCapabilities);
     if (!status.isOk()) {
         ALOGE("getCapabilities failed %s", status.getDescription().c_str());
     }
 
+    mLifecycleBatchCommandSupported = getLayerLifecycleBatchCommand();
+
     ALOGI("Loaded AIDL composer3 HAL service");
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #ifdef QTI_COMPOSER3_EXTENSIONS
     ndk::SpAIBinder qtiComposer3ClientBinder;
-    AIBinder_getExtension(ndk::SpAIBinder(
 // QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
-                                  AServiceManager_waitForService(ensureFullyQualifiedName(serviceName).c_str()))
+    AIBinder_getExtension(mAidlComposer->asBinder().get(),
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
-                                  .get(),
                           qtiComposer3ClientBinder.getR());
     if (qtiComposer3ClientBinder.get() != nullptr) {
         qtiComposer3Client = IQtiComposer3Client::fromBinder(qtiComposer3ClientBinder);
@@ -480,6 +484,16 @@ Error AidlComposer::createLayer(Display display, Layer* outLayer) {
 Error AidlComposer::destroyLayer(Display display, Layer layer) {
     Error error = Error::NONE;
     if (!mLifecycleBatchCommandSupported) {
+        // TODO(b/473591033): There is a known bug here where a race condition with
+        // setCursorPosition and destroyLayer can occur. In the event where lifecycle batch command
+        // is unsupported, calling setCursorPosition on a valid layer followed by destroyLayer on
+        // that layer before executeCommands is called will result in a BAD_LAYER error when
+        // executeCommands is finally called. This is because setCursorPosition will queue a
+        // command with the associated layer ID in mWriter. But destroyLayer will immediately call
+        // mAidlComposerClient->destroyLayer to immediately destroy the layer. When executeCommands
+        // is called to execute the queued up commands in mWriter, the cursor update command will
+        // contain a destroyed layer ID and yield a BAD_LAYER error. This can cause a screen
+        // flicker.
         const auto status = mAidlComposerClient->destroyLayer(translate<int64_t>(display),
                                                               translate<int64_t>(layer));
         if (!status.isOk()) {
@@ -1251,7 +1265,7 @@ Error AidlComposer::execute(Display display) {
     Error error = Error::NONE;
     for (const auto& cmdErr : commandErrors) {
         const auto index = static_cast<size_t>(cmdErr.commandIndex);
-        if (index < 0 || index >= commands.size()) {
+        if (cmdErr.commandIndex < 0 || index >= commands.size()) {
             ALOGE("invalid command index %zu", index);
             return Error::BAD_PARAMETER;
         }
@@ -1465,6 +1479,46 @@ Error AidlComposer::setDisplayMode(Display display, Config modeId, bool seamless
         error = execute(display);
     } else {
         error = Error::BAD_DISPLAY;
+    }
+    mMutex.unlock_shared();
+    return error;
+}
+
+Error AidlComposer::setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                                    bool seamless) {
+    Error error = Error::NONE;
+    std::vector<DisplayCommand> commands;
+    mMutex.lock_shared();
+    for (const auto& [display, modeId] : requests) {
+        DisplayCommand command;
+        command.display = translate<int64_t>(display);
+        command.activeConfig = {.configId = translate<int32_t>(modeId),
+                                .seamlessRequired = seamless};
+        commands.push_back(std::move(command));
+    }
+    std::vector<CommandError> commandErrors;
+
+    std::vector<CommandResultPayload> results;
+    auto status = mAidlComposerClient->executeCommands(commands, &results);
+    if (status.isOk()) {
+        for (auto& result : results) {
+            commandErrors.push_back(std::move(result.get<CommandResultPayload::Tag::error>()));
+        }
+    } else {
+        ALOGE("executeCommands failed %s", status.getDescription().c_str());
+        error = static_cast<Error>(status.getServiceSpecificError());
+    }
+
+    if (error == Error::NONE && !commandErrors.empty()) {
+        // return the first error
+        const auto& cmdErr = commandErrors.front();
+        const auto index = static_cast<size_t>(cmdErr.commandIndex);
+        if (cmdErr.commandIndex < 0 || index >= commands.size()) {
+            ALOGE("invalid command index %zu", index);
+            error = Error::BAD_PARAMETER;
+        } else {
+            error = translate<Error>(cmdErr.errorCode);
+        }
     }
     mMutex.unlock_shared();
     return error;

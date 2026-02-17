@@ -49,9 +49,11 @@ public:
     void onDisplayModeChanged(ftl::NonNull<DisplayModePtr>, bool force) final;
 
     bool addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t> hwcVsyncPeriod,
-                             bool* periodFlushed) final;
+                             bool* periodFlushed, VSyncTracker::VsyncTimeSource source) final;
 
     void setDisplayPowerMode(hal::PowerMode powerMode) final;
+
+    bool isModeChangeInProgress() const final { return mModeChangeInProgress; }
 
     void resetModel() final;
 
@@ -79,6 +81,8 @@ private:
     bool mMoreSamplesNeeded GUARDED_BY(mMutex) = false;
     bool mPeriodConfirmationInProgress GUARDED_BY(mMutex) = false;
     DisplayModePtr mModePtrTransitioningTo GUARDED_BY(mMutex);
+    std::atomic<bool> mModeChangeInProgress = false;
+    std::optional<DisplayModeId> mDisplayModeId GUARDED_BY(mMutex);
 
     class LastHwVsync {
     public:

@@ -46,9 +46,9 @@ cc_test {
     ],
     srcs: [
         ":inputdispatcher_common_test_sources",
+        "AbsoluteTouchpadEventConverter_test.cpp",
         "AndroidInputEventProtoConverter_test.cpp",
         "AnrTracker_test.cpp",
-        "CapturedTouchpadEventConverter_test.cpp",
         "CursorInputMapper_test.cpp",
         "DisplayTopologyGraph_test.cpp",
         "EventHub_test.cpp",
@@ -70,6 +70,7 @@ cc_test {
         "InputTraceSession.cpp",
         "InputTracingTest.cpp",
         "InstrumentedInputReader.cpp",
+        "InteractionReporter_test.cpp",
         "JoystickInputMapper_test.cpp",
         "KeyboardInputMapper_test.cpp",
         "LatencyTracker_test.cpp",

@@ -56,103 +56,75 @@ void TransactionCallbackInvoker::addEmptyTransaction(const ListenerCallbacks& li
     transactionStatsDeque.emplace_back(callbackIds);
 }
 
-status_t TransactionCallbackInvoker::addOnCommitCallbackHandles(
-        const std::deque<sp<CallbackHandle>>& handles,
-        std::deque<sp<CallbackHandle>>& outRemainingHandles) {
-    if (handles.empty()) {
-        return NO_ERROR;
-    }
-    for (const auto& handle : handles) {
-        if (!containsOnCommitCallbacks(handle->callbackIds)) {
-            outRemainingHandles.push_back(handle);
-            continue;
+void TransactionCallbackInvoker::addOnCommitCallbackHandles(std::vector<CallbackHandle>& handles) {
+    auto it = std::remove_if(handles.begin(), handles.end(), [this](CallbackHandle& handle) {
+        if (containsOnCommitCallbacks(handle.callbackIds)) {
+            addCallbackHandle(std::move(handle));
+            return true;
         }
-        status_t err = addCallbackHandle(handle);
-        if (err != NO_ERROR) {
-            return err;
-        }
-    }
-
-    return NO_ERROR;
+        return false;
+    });
+    handles.erase(it, handles.end());
 }
 
-status_t TransactionCallbackInvoker::addCallbackHandles(
-        const std::deque<sp<CallbackHandle>>& handles) {
-    if (handles.empty()) {
-        return NO_ERROR;
+void TransactionCallbackInvoker::addCallbackHandles(std::vector<CallbackHandle>&& handles) {
+    for (auto& handle : handles) {
+        addCallbackHandle(std::move(handle));
     }
-    for (const auto& handle : handles) {
-        status_t err = addCallbackHandle(handle);
-        if (err != NO_ERROR) {
-            return err;
-        }
-    }
-
-    return NO_ERROR;
 }
 
-status_t TransactionCallbackInvoker::findOrCreateTransactionStats(
-        const sp<IBinder>& listener, const std::vector<CallbackId>& callbackIds,
-        TransactionStats** outTransactionStats) {
+TransactionStats* TransactionCallbackInvoker::findOrCreateTransactionStats(
+        const sp<IBinder>& listener, const std::vector<CallbackId>& callbackIds) {
     auto& transactionStatsDeque = mCompletedTransactions[listener];
 
     // Search back to front because the most recent transactions are at the back of the deque
     auto itr = transactionStatsDeque.rbegin();
     for (; itr != transactionStatsDeque.rend(); itr++) {
         if (compareCallbackIds(itr->callbackIds, callbackIds) == 0) {
-            *outTransactionStats = &(*itr);
-            return NO_ERROR;
+            return &(*itr);
         }
     }
-    *outTransactionStats = &transactionStatsDeque.emplace_back(callbackIds);
-    return NO_ERROR;
+    return &transactionStatsDeque.emplace_back(callbackIds);
 }
 
-status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>& handle) {
-    // If we can't find the transaction stats something has gone wrong. The client should call
-    // startRegistration before trying to add a callback handle.
-    TransactionStats* transactionStats;
-    status_t err =
-            findOrCreateTransactionStats(handle->listener, handle->callbackIds, &transactionStats);
-    if (err != NO_ERROR) {
-        return err;
-    }
+void TransactionCallbackInvoker::addCallbackHandle(CallbackHandle&& handle) {
+    TransactionStats* transactionStats =
+            findOrCreateTransactionStats(handle.listener, handle.callbackIds);
 
-    transactionStats->latchTime = handle->latchTime;
+    transactionStats->latchTime = handle.latchTime;
     // If the layer has already been destroyed, don't add the SurfaceControl to the callback.
     // The client side keeps a sp<> to the SurfaceControl so if the SurfaceControl has been
     // destroyed the client side is dead and there won't be anyone to send the callback to.
-    sp<IBinder> surfaceControl = handle->surfaceControl.promote();
-    if (surfaceControl) {
-        sp<Fence> previousReleaseFence = handle->fenceMerger.waitAndGetFence(handle->name.c_str());
-
-        FrameEventHistoryStats eventStats(handle->frameNumber, handle->previousFrameNumber,
-                                          handle->gpuCompositionDoneFence->getSnapshot().fence,
-                                          handle->compositorTiming, handle->refreshStartTime,
-                                          handle->dequeueReadyTime);
-        transactionStats->surfaceStats.emplace_back(surfaceControl, handle->acquireTimeOrFence,
-                                                    previousReleaseFence,
-                                                    handle->transformHint,
-                                                    handle->currentMaxAcquiredBufferCount,
-                                                    handle->cornerRadii, eventStats,
-                                                    handle->previousReleaseCallbackId);
-        if (handle->bufferReleaseChannel &&
-            handle->previousReleaseCallbackId != ReleaseCallbackId::INVALID_ID) {
-            if (FlagManager::getInstance().monitor_buffer_fences()) {
-                if (auto previousBuffer = handle->previousBuffer.lock()) {
-                    previousBuffer->getBuffer()
-                            ->getDependencyMonitor()
-                            .addEgress(FenceTime::makeValid(previousReleaseFence),
-                                       "Txn release");
-                }
-            }
-            mBufferReleases.emplace_back(handle->name, handle->bufferReleaseChannel,
-                                         handle->previousReleaseCallbackId,
-                                         previousReleaseFence,
-                                         handle->currentMaxAcquiredBufferCount);
-        }
+    sp<IBinder> surfaceControl = handle.surfaceControl.promote();
+    if (!surfaceControl) {
+        return;
     }
-    return NO_ERROR;
+
+    sp<Fence> previousReleaseFence = handle.fenceMerger.waitAndGetFence(handle.name.c_str());
+
+    FrameEventHistoryStats eventStats(handle.frameNumber, handle.previousFrameNumber,
+                                      handle.gpuCompositionDoneFence->getSnapshot().fence,
+                                      handle.compositorTiming, handle.refreshStartTime,
+                                      handle.dequeueReadyTime);
+    transactionStats->surfaceStats.emplace_back(surfaceControl, handle.acquireTimeOrFence,
+                                                previousReleaseFence, handle.transformHint,
+                                                handle.currentMaxAcquiredBufferCount,
+                                                handle.cornerRadii, eventStats,
+                                                handle.previousReleaseCallbackId);
+    if (handle.bufferReleaseChannel &&
+        handle.previousReleaseCallbackId != ReleaseCallbackId::INVALID_ID) {
+        if (FlagManager::getInstance().monitor_buffer_fences()) {
+            if (auto previousBuffer = handle.previousBuffer.lock()) {
+                previousBuffer->getBuffer()
+                        ->getDependencyMonitor()
+                        .addEgress(FenceTime::makeValid(previousReleaseFence), "Txn release");
+            }
+        }
+        mBufferReleases.emplace_back(std::move(handle.name), std::move(handle.bufferReleaseChannel),
+                                     handle.previousReleaseCallbackId,
+                                     std::move(previousReleaseFence),
+                                     handle.currentMaxAcquiredBufferCount);
+    }
 }
 
 void TransactionCallbackInvoker::addPresentFence(sp<Fence> presentFence) {
@@ -218,7 +190,7 @@ void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
         mPresentFence.clear();
     }
 
-    BackgroundExecutor::getInstance().sendCallbacks(
+    BackgroundExecutor::getInstanceForTransaction().sendCallbacks(
             {[listenerStatsToSend = std::move(listenerStatsToSend)]() {
                 SFTRACE_NAME("TransactionCallbackInvoker::sendCallbacks");
                 for (auto& stats : listenerStatsToSend) {

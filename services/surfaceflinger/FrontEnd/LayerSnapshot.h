@@ -28,6 +28,8 @@
 #include "android-base/stringprintf.h"
 #include "compositionengine/LayerFE.h"
 
+struct RenderCommandBuffer;
+
 namespace android::surfaceflinger::frontend {
 
 struct RoundedCornerState {
@@ -45,6 +47,8 @@ struct RoundedCornerState {
     gui::CornerRadii reportedRadii;
     // The radius used as the source for children to inherit from.
     gui::CornerRadii effectiveRadii;
+
+    bool disableClientDrawnRadii = false;
 
     bool hasClientDrawnRadius() const { return !clientDrawnRadii.isEmpty(); }
     bool hasRequestedRadius() const { return !requestedRadii.isEmpty(); }
@@ -114,6 +118,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     std::optional<ui::Transform::RotationFlags> transformHint;
     bool handleSkipScreenshotFlag = false;
     int32_t frameRateSelectionPriority = -1;
+    float maxDesiredHdrSdrRatio = 0.f;
     LayerHierarchy::TraversalPath mirrorRootPath;
     uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     uint32_t touchCropId;
@@ -150,7 +155,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     // True when the surfaceDamage is recognized as a small area update.
     bool isSmallDirty = false;
 
-    std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
+    std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
     sp<IBinder> renderResourceToken;
     // Populated when renderResourceToken changes.
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;

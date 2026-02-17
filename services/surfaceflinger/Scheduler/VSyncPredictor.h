@@ -21,7 +21,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include <android-base/stringprintf.h>
 #include <android-base/thread_annotations.h>
+#include <ftl/enum.h>
 #include <scheduler/FrameTime.h>
 #include <scheduler/TimeKeeper.h>
 #include <ui/DisplayId.h>
@@ -45,11 +47,12 @@ public:
                    size_t minimumSamplesForPrediction, uint32_t outlierTolerancePercent);
     ~VSyncPredictor();
 
-    bool addVsyncTimestamp(nsecs_t timestamp) final EXCLUDES(mMutex);
+    bool addVsyncTimestamp(nsecs_t timestamp,
+                           VsyncTimeSource source = VsyncTimeSource::Unknown) final
+            EXCLUDES(mMutex);
     nsecs_t nextAnticipatedVSyncTimeFrom(nsecs_t timePoint,
                                          std::optional<nsecs_t> lastVsyncOpt = {}) final
             EXCLUDES(mMutex);
-    nsecs_t getModelAccuracyInNs(nsecs_t knownVsync) const final EXCLUDES(mMutex);
     nsecs_t currentPeriod() const final EXCLUDES(mMutex);
     Period minFramePeriod() const final EXCLUDES(mMutex);
     void resetModel() final EXCLUDES(mMutex);
@@ -62,6 +65,26 @@ public:
     struct Model {
         nsecs_t slope;
         nsecs_t intercept;
+    };
+
+    struct ModelAccuracy {
+        nsecs_t modelErrorNs;
+        nsecs_t actualVsync;
+        nsecs_t predictedVsync;
+        nsecs_t idealPeriod;
+        double vsyncPeriodsElapsed;
+        VsyncTimeSource source;
+
+        std::string to_string() const {
+            return base::StringPrintf("error= %.2f, actual= %.2f, predicted= %.2f, "
+                                      "VsyncTimeSource= %s, VsyncPeriod= %.2f, "
+                                      "VsyncPeriodsElapsed= %.2f",
+                                      static_cast<float>(modelErrorNs) / 1e6f,
+                                      static_cast<float>(actualVsync) / 1e6f,
+                                      static_cast<float>(predictedVsync) / 1e6f,
+                                      ftl::enum_string(source).c_str(),
+                                      static_cast<float>(idealPeriod) / 1e6f, vsyncPeriodsElapsed);
+        }
     };
 
     VSyncPredictor::Model getVSyncPredictionModel() const EXCLUDES(mMutex);
@@ -87,6 +110,8 @@ public:
     void dump(std::string& result) const final EXCLUDES(mMutex);
 
 private:
+    friend struct VSyncPredictorTest;
+
     struct VsyncSequence {
         nsecs_t vsyncTime;
         int64_t seq;
@@ -144,6 +169,8 @@ private:
     size_t next(size_t i) const REQUIRES(mMutex);
     bool validate(nsecs_t timestamp) const REQUIRES(mMutex);
     Model getVSyncPredictionModelLocked() const REQUIRES(mMutex);
+    ModelAccuracy getModelAccuracyLocked(nsecs_t knownVsync, VsyncTimeSource) const
+            REQUIRES(mMutex);
     nsecs_t snapToVsync(nsecs_t timePoint) const REQUIRES(mMutex);
     Period minFramePeriodLocked() const REQUIRES(mMutex);
     Duration ensureMinFrameDurationIsKept(TimePoint, TimePoint) REQUIRES(mMutex);

@@ -16,10 +16,13 @@
 
 #include "VulkanInterface.h"
 
+#include <include/android/vk/AndroidVulkanMemoryAllocator.h>
 #include <include/gpu/GpuTypes.h>
 #include <include/gpu/vk/VulkanBackendContext.h>
+#include <include/gpu/vk/VulkanMemoryAllocator.h>
 
 #include <android-base/stringprintf.h>
+#include <common/ThreadStateCrashLogger.h>
 #include <log/log_main.h>
 #include <utils/Timers.h>
 
@@ -33,7 +36,8 @@ namespace skia {
 
 using base::StringAppendF;
 
-VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
+VulkanBackendContext
+VulkanInterface::createSkiaVulkanBackendContext(bool threadSafeVMA) {
     VulkanBackendContext backendContext;
     backendContext.fInstance = mInstance;
     backendContext.fPhysicalDevice = mPhysicalDevice;
@@ -47,6 +51,8 @@ VulkanBackendContext VulkanInterface::createSkiaVulkanBackendContext() {
     backendContext.fProtectedContext = mIsProtected ? Protected::kYes : Protected::kNo;
     backendContext.fDeviceLostContext = this; // VulkanInterface is long-lived
     backendContext.fDeviceLostProc = onVkDeviceFault;
+    SkiaVMA::Options opts{.fThreadSafe = threadSafeVMA};
+    backendContext.fMemoryAllocator = SkiaVMA::Make(backendContext, opts);
     return backendContext;
 };
 
@@ -178,7 +184,7 @@ void VulkanInterface::onVkDeviceFault(void* callbackContext, const std::string& 
     }
 
     crashMsg << "): " << description;
-    LOG_ALWAYS_FATAL("%s", crashMsg.str().c_str());
+    LOG_THREAD_STATE_AND_CRASH("%s", crashMsg.str().c_str());
 };
 
 static skgpu::VulkanGetProc sGetProc = [](const char* proc_name,

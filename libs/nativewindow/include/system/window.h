@@ -263,6 +263,10 @@ enum {
     NATIVE_WINDOW_SET_PRODUCER_THROTTLING_ENABLED = 51,
     NATIVE_WINDOW_GET_PRODUCER_THROTTLING_ENABLED = 52,
     NATIVE_WINDOW_SET_PRESENT_MODE                = 53,
+    NATIVE_WINDOW_GET_LAST_REPLACED_FRAME_ID      = 54,
+    NATIVE_WINDOW_API_SET_ON_ACQUIRED_CALLBACK    = 55,
+    NATIVE_WINDOW_API_SET_ON_DROPPED_CALLBACK     = 56,
+    NATIVE_WINDOW_API_CONNECT_WITH_LISTENER       = 57,
     // clang-format on
 };
 
@@ -891,6 +895,19 @@ static inline int native_window_api_connect(
 }
 
 /*
+ * Indentical to native_window_api_connect(..., int api) but also connects a
+ * listener which can be used by setting native_window_set_on_acquired_callback
+ * and native_window_set_on_dropped_callback
+ */
+static inline int native_window_api_connect_with_listener(struct ANativeWindow* window, int api,
+                                                          bool needsReleaseNotify,
+                                                          bool needsAcquiredNotify,
+                                                          bool needsDroppedNotify) {
+    return window->perform(window, NATIVE_WINDOW_API_CONNECT_WITH_LISTENER, api, needsReleaseNotify,
+                           needsAcquiredNotify, needsDroppedNotify);
+}
+
+/*
  * native_window_api_disconnect(..., int api)
  * disconnect the API from this window.
  * An error is returned if for instance the window wasn't connected in the
@@ -978,6 +995,11 @@ static inline int native_window_get_refresh_cycle_duration(
 {
     return window->perform(window, NATIVE_WINDOW_GET_REFRESH_CYCLE_DURATION,
             outRefreshDuration);
+}
+
+static inline int native_window_get_last_replaced_frame_id(struct ANativeWindow* window,
+                                                           uint64_t* frameId) {
+    return window->perform(window, NATIVE_WINDOW_GET_LAST_REPLACED_FRAME_ID, frameId);
 }
 
 static inline int native_window_get_next_frame_id(
@@ -1175,6 +1197,31 @@ static inline int native_window_set_frame_rate(struct ANativeWindow* window, flo
                                         int8_t compatibility, int8_t changeFrameRateStrategy) {
     return window->perform(window, NATIVE_WINDOW_SET_FRAME_RATE, (double)frameRate,
                            (int)compatibility, (int)changeFrameRateStrategy);
+}
+
+typedef void (*ANativeWindow_OnAcquiredCallback)(uint64_t bufferId, uint64_t frameId, void* data);
+
+typedef void (*ANativeWindow_OnDroppedCallback)(uint64_t bufferId, uint64_t frameId, void* data);
+
+/*
+ * Sets a callback fro when a buffer is acquired in BufferQueueConsumer::acquireBuffer.
+ * For this to work a native_window_api_connect_with_listener must be called beforehand.
+ */
+static inline int native_window_set_on_acquired_callback(struct ANativeWindow* window,
+                                                         ANativeWindow_OnAcquiredCallback callback,
+                                                         void* data) {
+    return window->perform(window, NATIVE_WINDOW_API_SET_ON_ACQUIRED_CALLBACK, callback, data);
+}
+
+/*
+ * Sets a callback for when a buffer is dropped in
+ * BufferQueueConsumer::acquireBuffer or in BufferQueueProducer
+ * For this to work a native_window_api_connect_with_listener must be called beforehand.
+ */
+static inline int native_window_set_on_dropped_callback(struct ANativeWindow* window,
+                                                        ANativeWindow_OnDroppedCallback callback,
+                                                        void* data) {
+    return window->perform(window, NATIVE_WINDOW_API_SET_ON_DROPPED_CALLBACK, callback, data);
 }
 
 /*

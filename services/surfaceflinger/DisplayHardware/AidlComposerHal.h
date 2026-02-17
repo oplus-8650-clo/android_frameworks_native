@@ -67,6 +67,8 @@ public:
     static bool namesAnAidlComposerService(std::string_view serviceName);
 
     explicit AidlComposer(const std::string& serviceName);
+    explicit AidlComposer(
+        std::shared_ptr<aidl::android::hardware::graphics::composer3::IComposer> composer);
     ~AidlComposer() override;
 
     bool isSupported(OptionalFeature) const override;
@@ -238,6 +240,8 @@ public:
                                       std::optional<DisplayDecorationSupport>* support) override;
     Error setIdleTimerEnabled(Display displayId, std::chrono::milliseconds timeout) override;
 
+    friend class AidlComposerHalTest;
+
     Error getPhysicalDisplayOrientation(Display displayId,
                                         AidlTransform* outDisplayOrientation) override;
     void onHotplugConnect(Display) override;
@@ -263,6 +267,8 @@ public:
     Error getDisplayKnownVsyncSample(Display display,
                                      composer3::VsyncSample* outVsyncSample) override;
     Error setDisplayMode(Display display, Config modeId, bool seamless) override;
+    Error setDisplayModes(const std::vector<std::pair<Display, Config>>& requests,
+                          bool seamless) override;
 
 private:
 // QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client

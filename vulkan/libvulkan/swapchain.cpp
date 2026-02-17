@@ -35,6 +35,9 @@
 #include <utils/Trace.h>
 
 #include <algorithm>
+#include <condition_variable>
+#include <map>
+#include <mutex>
 #include <unordered_set>
 #include <vector>
 
@@ -49,6 +52,50 @@ namespace vulkan {
 namespace driver {
 
 namespace {
+
+class VulkanLoaderSurfaceListener {
+   public:
+    void associatePresentId(uint64_t frameId, uint64_t presentId) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mFrameIdToPresentId[frameId] = presentId;
+        mQueuedPresentIds.insert(presentId);
+    }
+
+    void onFramePresented(uint64_t frameId) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        auto it = mFrameIdToPresentId.find(frameId);
+        if (it != mFrameIdToPresentId.end()) {
+            mQueuedPresentIds.erase(it->second);
+            mFrameIdToPresentId.erase(it);
+            mCondition.notify_all();
+        }
+    }
+
+    VkResult waitForPresentId(uint64_t presentId, uint64_t timeout) {
+        // Because we don't want to keep an unbounded history of presentIds we
+        // only keep track of in-flight frames. Any other presentIds not being
+        // tracked in mQueuedPresentIds are consider to be already presented.
+        // As a result a random present id will return VK_SUCCESS
+        std::unique_lock<std::mutex> lock(mMutex);
+        if (mQueuedPresentIds.count(presentId) == 0) {
+            return VK_SUCCESS;
+        }
+
+        auto result =
+            mCondition.wait_for(lock, std::chrono::nanoseconds(timeout), [&] {
+                auto count = mQueuedPresentIds.count(presentId);
+                return count == 0;
+            });
+
+        return result ? VK_SUCCESS : VK_TIMEOUT;
+    }
+
+   private:
+    std::mutex mMutex;
+    std::condition_variable mCondition;
+    std::unordered_set<uint64_t> mQueuedPresentIds;
+    std::map<uint64_t, uint64_t> mFrameIdToPresentId;
+};
 
 enum class LibvulkanTimeDomain {
     kStageLocal = 1,  // VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT
@@ -264,6 +311,7 @@ struct Surface {
     android::sp<ANativeWindow> window;
     VkSwapchainKHR swapchain_handle;
     uint64_t consumer_usage;
+    VulkanLoaderSurfaceListener listener;
 
     // Indicate whether this surface has been used by a swapchain, no matter the
     // swapchain is still current or has been destroyed.
@@ -278,9 +326,34 @@ Surface* SurfaceFromHandle(VkSurfaceKHR handle) {
     return reinterpret_cast<Surface*>(handle);
 }
 
+// Tracking for live surfaces, used by nativeWindowOnAcquiredCallback below.
+// Note that callbacks can be delivered as late as _during static deinitialization_
+// so this structure needs to live forever.
+struct {
+    std::unordered_set<Surface *> mSurfaces;
+    std::mutex mMutex;
+} live_surfaces [[clang::no_destroy]];
+
 bool IsSharedPresentMode(VkPresentModeKHR mode) {
     return mode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
         mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR;
+}
+
+static void nativeWindowOnAcquiredCallback(uint64_t /*bufferId*/,
+                                           uint64_t frameId,
+                                           void* data) {
+    Surface* surface = static_cast<Surface*>(data);
+
+    // It is possible for callbacks to be delivered after the destruction
+    // of the associated surface. Ensure that the surface still lives
+    // before using it.
+    std::lock_guard lock(live_surfaces.mMutex);
+    if (!live_surfaces.mSurfaces.count(surface)) {
+        ALOGW("Dropping present callback for surface %p as the surface has been destroyed.", data);
+        return;
+    }
+
+    surface->listener.onFramePresented(frameId);
 }
 
 struct Swapchain {
@@ -288,7 +361,9 @@ struct Swapchain {
               uint32_t num_images_,
               VkPresentModeKHR present_mode,
               int pre_transform_,
-              int64_t refresh_duration_)
+              int64_t refresh_duration_,
+              uint32_t num_private_data_slots,
+              bool present_wait_enabled)
         : surface(surface_),
           num_images(num_images_),
           mailbox_mode(present_mode == VK_PRESENT_MODE_MAILBOX_KHR),
@@ -296,7 +371,9 @@ struct Swapchain {
           frame_timestamps_enabled(false),
           refresh_duration(refresh_duration_),
           acquire_next_image_timeout(-1),
-          shared(IsSharedPresentMode(present_mode)) {
+          shared(IsSharedPresentMode(present_mode)),
+          private_data(num_private_data_slots),
+          present_wait_enabled(present_wait_enabled) {
     }
 
     VkResult get_refresh_duration(uint64_t& outRefreshDuration)
@@ -323,6 +400,8 @@ struct Swapchain {
     int64_t refresh_duration;
     nsecs_t acquire_next_image_timeout;
     bool shared;
+    std::vector<uint64_t> private_data;
+    bool present_wait_enabled;
 
     struct Image {
         Image()
@@ -712,14 +791,26 @@ VkResult CreateAndroidSurfaceKHR(
         return VK_ERROR_SURFACE_LOST_KHR;
     }
 
-    err =
-        native_window_api_connect(surface->window.get(), NATIVE_WINDOW_API_EGL);
+    if (flags::vk_khr_present_wait2_gpu()) {
+        err = native_window_api_connect_with_listener(
+            surface->window.get(), NATIVE_WINDOW_API_EGL, false, true, true);
+    } else {
+        err = native_window_api_connect(surface->window.get(),
+                                        NATIVE_WINDOW_API_EGL);
+    }
     if (err != android::OK) {
-        ALOGE("native_window_api_connect() failed: %s (%d)", strerror(-err),
-              err);
+        ALOGE("native_window_api_connect_with_listener() failed: %s (%d)",
+              strerror(-err), err);
         surface->~Surface();
         allocator->pfnFree(allocator->pUserData, surface);
         return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+    }
+
+    // Note: we don't attach the listener callbacks here; we only want to
+    // do this if a swapchain is created with VK_SWAPCHAIN_CREATE_PRESENT_WAIT_2_BIT_KHR.
+    if (flags::vk_khr_present_wait2_gpu()) {
+        std::lock_guard lock(live_surfaces.mMutex);
+        live_surfaces.mSurfaces.insert(surface);
     }
 
     *out_surface = HandleFromSurface(surface);
@@ -735,6 +826,15 @@ void DestroySurfaceKHR(VkInstance instance,
     Surface* surface = SurfaceFromHandle(surface_handle);
     if (!surface)
         return;
+
+    if (flags::vk_khr_present_wait2_gpu()) {
+        // Remove the surface from the set of live surfaces.
+        // After this point, no async present callbacks will be
+        // delivered to this surface so we can safely clean it up.
+        std::lock_guard lock(live_surfaces.mMutex);
+        live_surfaces.mSurfaces.erase(surface);
+    }
+
     native_window_api_disconnect(surface->window.get(), NATIVE_WINDOW_API_EGL);
     ALOGV_IF(surface->swapchain_handle != VK_NULL_HANDLE,
              "destroyed VkSurfaceKHR 0x%" PRIx64
@@ -1170,6 +1270,17 @@ VkResult GetPhysicalDeviceSurfaceCapabilities2KHR(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_WAIT_2_KHR: {
+                if (!flags::vk_khr_present_wait2_gpu())
+                    break;
+
+                VkSurfaceCapabilitiesPresentWait2KHR* present_wait2 =
+                    reinterpret_cast<VkSurfaceCapabilitiesPresentWait2KHR*>(
+                        pNext);
+                present_wait2->presentWait2Supported = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT: {
                 VkSurfacePresentModeCompatibilityEXT* mode_caps =
                     reinterpret_cast<VkSurfacePresentModeCompatibilityEXT*>(pNext);
@@ -1352,16 +1463,20 @@ VkResult GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice pdev,
         if (!surfaceless_enabled) {
             return VK_ERROR_SURFACE_LOST_KHR;
         }
+
         // Support for VK_GOOGLE_surfaceless_query.  The primary purpose of this
         // extension for this function is for
         // VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR and
-        // VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR.  We technically cannot
-        // know if VK_PRESENT_MODE_SHARED_MAILBOX_KHR is supported without a
-        // surface, and that cannot be relied upon.  Therefore, don't return it.
+        // VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR.
+        //
+        // VK_PRESENT_MODE_FIFO_KHR is always supported for any surface.
+        //
+        // The GOOGLE_surfaceless_query spec requires that these three
+        // be the only present modes reported for a surfaceless query.
+        //
+        // Other present modes must be queried using a surface handle.
+
         present_modes.push_back(VK_PRESENT_MODE_FIFO_KHR);
-        if (flags::present_mode_fifo_latest_ready_ext2()) {
-            present_modes.push_back(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT);
-        }
     } else {
         ANativeWindow* window = SurfaceFromHandle(surface)->window.get();
 
@@ -1509,6 +1624,16 @@ static void DestroySwapchainInternal(VkDevice device,
 
     if (!allocator) {
         allocator = &GetData(device).allocator;
+    }
+
+    {
+        // remove from any private data slots
+        auto& device_data = GetData(device);
+        std::lock_guard lock(device_data.private_data_mutex);
+
+        for (auto slot : device_data.private_data_slots) {
+            slot->erase(reinterpret_cast<uint64_t>(swapchain_handle));
+        }
     }
 
     swapchain->~Swapchain();
@@ -1847,10 +1972,34 @@ VkResult CreateSwapchainKHR(VkDevice device,
         ALOGW_IF(err != android::OK,
                  "native_window_api_disconnect failed: %s (%d)", strerror(-err),
                  err);
-        err = native_window_api_connect(window, NATIVE_WINDOW_API_EGL);
+        if (flags::vk_khr_present_wait2_gpu()) {
+            err = native_window_api_connect_with_listener(
+                window, NATIVE_WINDOW_API_EGL, false, true, true);
+        } else {
+            err = native_window_api_connect(window, NATIVE_WINDOW_API_EGL);
+        }
         ALOGW_IF(err != android::OK,
-                 "native_window_api_connect failed: %s (%d)", strerror(-err),
-                 err);
+                 "native_window_api_connect_with_listener failed: %s (%d)",
+                 strerror(-err), err);
+    }
+
+    bool present_wait_enabled =
+        (create_info->flags & VK_SWAPCHAIN_CREATE_PRESENT_WAIT_2_BIT_KHR);
+
+    if (flags::vk_khr_present_wait2_gpu() && present_wait_enabled) {
+        // If the caller wants present wait support, connect the callbacks.
+        // We do this regardless of whether we skipped the disconnect/reconnect
+        // cycle above, since CreateAndroidSurfaceKHR does not set them up.
+        err = native_window_set_on_acquired_callback(
+                window, &nativeWindowOnAcquiredCallback, &surface);
+        ALOGW_IF(err != android::OK,
+                "native_window_set_on_acquired_callback failed: %s (%d)",
+                strerror(-err), err);
+        err = native_window_set_on_dropped_callback(
+                window, &nativeWindowOnAcquiredCallback, &surface);
+        ALOGW_IF(err != android::OK,
+                "native_window_set_on_dropped_callback failed: %s (%d)",
+                strerror(-err), err);
     }
 
     err =
@@ -2135,7 +2284,9 @@ VkResult CreateSwapchainKHR(VkDevice device,
     Swapchain* swapchain = new (mem)
         Swapchain(surface, num_images, create_info->presentMode,
                   TranslateVulkanToNativeTransform(create_info->preTransform),
-                  refresh_duration);
+                  refresh_duration,
+                  GetData(device).num_preallocated_private_data_slots,
+                  present_wait_enabled);
     VkSwapchainImageCreateInfoANDROID swapchain_image_create = {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wold-style-cast"
@@ -2540,6 +2691,7 @@ static void SetSwapchainSurfaceDamage(ANativeWindow *window, const VkPresentRegi
 static VkResult SetSwapchainFrameTimestamp(
     Swapchain& swapchain,
     uint64_t presentId,
+    uint64_t nativeFrameId,
     uint64_t desiredPresentTime,
     VkPresentStageFlagsEXT presentStageQueries,
     bool returnErrorIfFull) {
@@ -2553,15 +2705,6 @@ static VkResult SetSwapchainFrameTimestamp(
         ALOGV("Calling native_window_enable_frame_timestamps(true)");
         native_window_enable_frame_timestamps(window, true);
         swapchain.frame_timestamps_enabled = true;
-    }
-
-    // Record the nativeFrameId so it can be later correlated to
-    // this present.
-    uint64_t nativeFrameId = 0;
-    int err = native_window_get_next_frame_id(
-            window, &nativeFrameId);
-    if (err != android::OK) {
-        ALOGE("Failed to get next native frame ID.");
     }
 
     // Add a new timing record with the user's presentID and
@@ -2661,14 +2804,20 @@ static VkResult PresentOneSwapchain(VkQueue queue,
             if (pRegion) {
                 SetSwapchainSurfaceDamage(window, pRegion);
             }
+            uint64_t nativeFrameId = 0;
+            int err = native_window_get_next_frame_id(window, &nativeFrameId);
+            if (err != android::OK) {
+                ALOGE("Failed to get next native frame ID.");
+            }
             if (pGenericTime) {
                 // If generic timestamps are used we don't use the GoogleTimings
                 // extension
                 if (pGenericTime->presentStageQueries) {
-                    if (VK_SUCCESS !=
-                        SetSwapchainFrameTimestamp(
-                            swapchain, presentId, pGenericTime->targetTime,
-                            pGenericTime->presentStageQueries, true)) {
+                    if (VK_SUCCESS != SetSwapchainFrameTimestamp(
+                                          swapchain, presentId, nativeFrameId,
+                                          pGenericTime->targetTime,
+                                          pGenericTime->presentStageQueries,
+                                          true)) {
                         // We're presenting faster than results are coming in.
                         // We can either wait to drain the results queue, grow
                         // the results queue, or present again without asking
@@ -2677,9 +2826,21 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                     }
                 }
             } else if (pGoogleTime) {
-                SetSwapchainFrameTimestamp(swapchain, pGoogleTime->presentID,
-                                           pGoogleTime->desiredPresentTime, 0,
-                                           false);
+                SetSwapchainFrameTimestamp(
+                    swapchain, pGoogleTime->presentID, nativeFrameId,
+                    pGoogleTime->desiredPresentTime, 0, false);
+            }
+            if (flags::vk_khr_present_wait2_gpu() && swapchain.present_wait_enabled) {
+                if (presentId != 0) {
+                    swapchain.surface.listener.associatePresentId(nativeFrameId,
+                            presentId);
+                }
+
+                uint64_t frameId;
+                native_window_get_last_replaced_frame_id(window, &frameId);
+                if (frameId != 0) {
+                    swapchain.surface.listener.onFramePresented(frameId);
+                }
             }
             if (pPresentMode) {
                 if (!SetSwapchainPresentMode(window, *pPresentMode))
@@ -2751,6 +2912,28 @@ static VkResult PresentOneSwapchain(VkQueue queue,
     }
 
     return swapchain_result;
+}
+
+VKAPI_ATTR
+VkResult WaitForPresent2KHR(VkDevice,
+                            VkSwapchainKHR swapchain_handle,
+                            const VkPresentWait2InfoKHR* pPresentWait2Info) {
+    ATRACE_CALL();
+
+    Swapchain* swapchain = SwapchainFromHandle(swapchain_handle);
+    if (!swapchain) {
+        // Swapchain handle is not valid (e.g., already destroyed)
+        return VK_ERROR_OUT_OF_DATE_KHR;
+    }
+
+    Surface& surface = swapchain->surface;
+    if (surface.swapchain_handle != swapchain_handle) {
+        // This is an old, orphaned swapchain
+        return VK_ERROR_OUT_OF_DATE_KHR;
+    }
+
+    return surface.listener.waitForPresentId(pPresentWait2Info->presentId,
+                                             pPresentWait2Info->timeout);
 }
 
 VKAPI_ATTR
@@ -3313,6 +3496,23 @@ VkResult ReleaseSwapchainImagesEXT(VkDevice /*device*/,
     }
 
     return VK_SUCCESS;
+}
+
+VKAPI_ATTR
+VkResult ReleaseSwapchainImagesKHR(VkDevice device,
+                                   const VkReleaseSwapchainImagesInfoKHR* pReleaseInfo) {
+    ATRACE_CALL();
+
+    // Just forward to the EXT version, it's the same.
+    return ReleaseSwapchainImagesEXT(device, pReleaseInfo);
+}
+
+uint64_t GetSwapchainPreallocatedDataSlot(VkSwapchainKHR swapchain, int index) {
+    return SwapchainFromHandle(swapchain)->private_data[index];
+}
+
+void SetSwapchainPreallocatedDataSlot(VkSwapchainKHR swapchain, int index, uint64_t value) {
+    SwapchainFromHandle(swapchain)->private_data[index] = value;
 }
 
 }  // namespace driver

@@ -109,7 +109,7 @@ void LayerHistory::registerLayer(Layer* layer, bool contentDetectionEnabled,
 
     // The layer can be placed on either map, it is assumed that partitionLayers() will be called
     // to correct them.
-    mInactiveLayerInfos.insert({layer->getSequence(), std::make_pair(layer, std::move(info))});
+    mInactiveLayerInfos.try_emplace(layer->getSequence(), layer, std::move(info));
 }
 
 void LayerHistory::setDisplaySize(ui::Size displaySize) {
@@ -135,13 +135,12 @@ void LayerHistory::record(int32_t id, const LayerProps& layerProps, nsecs_t pres
         return;
     }
 
-    const auto& info = layerPair->second;
+    auto& info = layerPair->second;
     info->setLastPresentTime(presentTime, now, updateType, mModeChangePending, layerProps);
 
     // Activate layer if inactive.
     if (found == LayerStatus::LayerInInactiveMap) {
-        mActiveLayerInfos.insert(
-                {id, std::make_pair(layerPair->first, std::move(layerPair->second))});
+        mActiveLayerInfos.try_emplace(id, layerPair->first, std::move(info));
         mInactiveLayerInfos.erase(id);
     }
 }
@@ -172,13 +171,12 @@ void LayerHistory::setLayerProperties(int32_t id, const LayerProps& properties) 
         return;
     }
 
-    const auto& info = layerPair->second;
+    auto& info = layerPair->second;
     info->setProperties(properties);
 
     // Activate layer if inactive and visible.
     if (found == LayerStatus::LayerInInactiveMap && info->isVisible()) {
-        mActiveLayerInfos.insert(
-                {id, std::make_pair(layerPair->first, std::move(layerPair->second))});
+        mActiveLayerInfos.try_emplace(id, layerPair->first, std::move(info));
         mInactiveLayerInfos.erase(id);
     }
 }
@@ -251,15 +249,13 @@ void LayerHistory::partitionLayers(nsecs_t now) {
     SFTRACE_CALL();
     const nsecs_t threshold = getActiveLayerThreshold(now);
 
-    // iterate over inactive map
-    LayerInfos::iterator it = mInactiveLayerInfos.begin();
-    while (it != mInactiveLayerInfos.end()) {
-        auto& [layerUnsafe, info] = it->second;
+    // Iterate over inactive map, moving active layers to the active map.
+    for (auto it = mInactiveLayerInfos.begin(); it != mInactiveLayerInfos.end();) {
+        auto& info = it->second.second;
         if (info->isLayerActive(threshold)) {
-            // move this to the active map
-
-            mActiveLayerInfos.insert({it->first, std::move(it->second)});
-            it = mInactiveLayerInfos.erase(it);
+            mActiveLayerInfos.try_emplace(it->first, it->second.first, std::move(info));
+            // No need to advance the iterator as that now points to the next element.
+            mInactiveLayerInfos.erase(it);
         } else {
             if (CC_UNLIKELY(mTraceEnabled)) {
                 trace(*info, LayerVoteType::NoVote, 0);
@@ -273,10 +269,9 @@ void LayerHistory::partitionLayers(nsecs_t now) {
     mQtiGameFrameRateOverridePresent = false;
 
 // QTI_END: 2025-02-12: Display: sf: avoid smomo override when game frame rate override is present
-    // iterate over active map
-    it = mActiveLayerInfos.begin();
-    while (it != mActiveLayerInfos.end()) {
-        auto& [layerUnsafe, info] = it->second;
+    // Iterate over active map, moving inactive layers to the inactive map.
+    for (auto it = mActiveLayerInfos.begin(); it != mActiveLayerInfos.end();) {
+        auto& info = it->second.second;
         if (info->isLayerActive(threshold)) {
             // Set layer vote if set
             const auto frameRate = info->getSetFrameRateVote();
@@ -405,9 +400,9 @@ void LayerHistory::partitionLayers(nsecs_t now) {
                 trace(*info, LayerVoteType::NoVote, 0);
             }
             info->onLayerInactive(now);
-            // move this to the inactive map
-            mInactiveLayerInfos.insert({it->first, std::move(it->second)});
-            it = mActiveLayerInfos.erase(it);
+            mInactiveLayerInfos.try_emplace(it->first, it->second.first, std::move(info));
+            // No need to advance the iterator as that now points to the next element.
+            mActiveLayerInfos.erase(it);
         }
     }
 }

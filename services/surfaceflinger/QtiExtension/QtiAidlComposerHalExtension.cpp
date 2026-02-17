@@ -1,4 +1,5 @@
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #define LOG_NDEBUG 0
@@ -113,6 +114,47 @@ Error QtiAidlComposerHalExtension::qtiTryDrawMethod(Display display,
     mQtiAidlComposer->mMutex.unlock_shared();
 #endif
     return ret;
+}
+
+Error QtiAidlComposerHalExtension::qtiSetCornerRadius(Display disp, V2_1_Layer layer, float x,
+                                                      float y) {
+    Error error = Error::NONE;
+#ifdef QTI_COMPOSER3_EXTENSIONS
+    mQtiAidlComposer->mMutex.lock_shared();
+    if (mQtiAidlComposer->getWriter(disp)) {
+        mQtiAidlComposer->getWriter(disp)->get().qtiSetCornerRadius(static_cast<int64_t>(disp),
+                                                                    static_cast<int64_t>(layer), x,
+                                                                    y);
+    } else {
+        error = Error::BAD_DISPLAY;
+        ALOGI("%s: Attempted to set corner radius on disconnected display %" PRId64, __func__,
+              disp);
+    }
+    mQtiAidlComposer->mMutex.unlock_shared();
+#endif
+    return error;
+}
+
+Error QtiAidlComposerHalExtension::qtiSetPrivacyRegions(Display disp, V2_1_Layer layer,
+                                                        const std::vector<Rect>& rectList,
+                                                        const std::vector<float>& radiusList,
+                                                        const std::vector<uint32_t>& indexList) {
+    Error error = Error::NONE;
+#ifdef QTI_COMPOSER3_EXTENSIONS
+    mQtiAidlComposer->mMutex.lock_shared();
+    if (mQtiAidlComposer->getWriter(disp)) {
+        mQtiAidlComposer->getWriter(disp)->get().qtiSetPrivacyRegions(static_cast<int64_t>(disp),
+                                                                      static_cast<int64_t>(layer),
+                                                                      rectList, radiusList,
+                                                                      indexList);
+    } else {
+        error = Error::BAD_DISPLAY;
+        ALOGI("%s: Attempted to set privacy regions on disconnected display %" PRId64, __func__,
+              disp);
+    }
+    mQtiAidlComposer->mMutex.unlock_shared();
+#endif
+    return error;
 }
 
 } // namespace android::surfaceflingerextension

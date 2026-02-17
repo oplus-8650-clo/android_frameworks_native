@@ -24,6 +24,7 @@ use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationStatus::UsbAuthorizationStatus;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
 use log::debug;
+use std::any::Any;
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -55,11 +56,38 @@ const USB_DEVICES_PATH: &str = "bus/usb/devices/";
 /// Relative path to the static USB authorization policy file.
 const USB_AUTH_POLICY_CONF_RELATIVE_PATH: &str = "usb_auth/policy.conf";
 
+/// Relative path to the interactive USB authorization policy file.
+/// This requires a client to respond to policy directives.
+const USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH: &str = "usb_auth/interactive_policy.conf";
+
 /// Relative path to the internal devices configuration file.
 const USB_AUTH_INTERNAL_DEVICES_CONF_RELATIVE_PATH: &str = "usb_auth/internal_devices.conf";
 
 // Placeholder for the list of internal devices.
 struct InternalDevices;
+
+/// Callback for auth events if any are ready to be sent.
+pub trait AuthEventsCallback: Any + Send {
+    /// Send an event requesting user interaction asking to authorize this device.
+    fn send_ask(&mut self, device: &UsbAuthDeviceInfo);
+
+    /// Send an event requesting client to check prior authorization history for this device.
+    fn send_allow_persisted(&mut self, device: &UsbAuthDeviceInfo);
+
+    /// Send an event notifying the client of a device authorization decision.
+    fn send_status_change(
+        &mut self,
+        device: &UsbAuthDeviceInfo,
+        status: &UsbAuthorizationStatus,
+        system_state: &UsbAuthorizationSystemState,
+    );
+
+    /// Cast self as Any trait -- necessary for downcasting.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Compare this callback against another callback object.
+    fn equals(&self, other: &dyn AuthEventsCallback) -> bool;
+}
 
 /// Manages the lists of USB devices based on their authorization state.
 pub struct UsbDeviceAuthManager {
@@ -75,10 +103,14 @@ pub struct UsbDeviceAuthManager {
     deferred_devices: Vec<UsbDeviceInfoWithState>,
     /// Devices that require user interaction for authorization.
     ask_devices: Vec<UsbDeviceInfoWithState>,
+    /// Devices that requires looking up previous user interaction for authorization.
+    allow_persisted_devices: Vec<UsbDeviceInfoWithState>,
     /// The current system authorization state.
     system_state: UsbAuthorizationSystemState,
     /// The static policy rules used for device authorization.
     policy: Policy,
+    /// Registered callbacks for auth events.
+    callbacks: Vec<Box<dyn AuthEventsCallback>>,
 }
 
 impl UsbDeviceAuthManager {
@@ -95,6 +127,11 @@ impl UsbDeviceAuthManager {
     /// Returns a clone of the list of devices requiring user interaction.
     pub fn ask_devices(&self) -> Vec<UsbDeviceInfoWithState> {
         self.ask_devices.clone()
+    }
+
+    /// Returns a clone of the list of devices requiring lookup of previous user response.
+    pub fn allow_persisted_devices(&self) -> Vec<UsbDeviceInfoWithState> {
+        self.allow_persisted_devices.clone()
     }
 
     /// Returns a reference to the current system state for USB authorization.
@@ -121,8 +158,8 @@ impl UsbDeviceAuthManager {
     }
 
     /// Creates a new `UsbDeviceAuthManager` and performs initial setup.
-    pub fn new() -> Result<Self, Error> {
-        Self::with_paths("/sys", "/etc")
+    pub fn new(use_interactive_policy: bool) -> Result<Self, Error> {
+        Self::with_paths("/sys", "/etc", use_interactive_policy)
     }
 
     /// Creates a new `UsbDeviceAuthManager` with specified root directories and performs initial setup.
@@ -130,20 +167,31 @@ impl UsbDeviceAuthManager {
     pub fn with_paths<P: AsRef<Path>, Q: AsRef<Path>>(
         root_sys_dir_path: P,
         root_etc_dir_path: Q,
+        use_interactive_policy: bool,
     ) -> Result<Self, Error> {
         let mut manager = Self {
             processed_devices: Vec::new(),
             deferred_devices: Vec::new(),
             ask_devices: Vec::new(),
+            allow_persisted_devices: Vec::new(),
             system_state: UsbAuthorizationSystemState::BOOTED,
             root_sys_dir: root_sys_dir_path.as_ref().to_path_buf(),
             root_etc_dir: root_etc_dir_path.as_ref().to_path_buf(),
             policy: create_default_policy(),
+            callbacks: Vec::new(),
         };
         debug!("Setting initial USB authorization state to deny all devices.");
         manager.set_default_to_deny_for_new_devices()?;
-        debug!("Loading static policy");
-        manager.load_static_policy()?;
+        if use_interactive_policy {
+            debug!("Attempting to use interactive policy");
+            if manager.load_interactive_policy().is_err() {
+                debug!("Interactive policy failed. Falling back to static policy.");
+                manager.load_static_policy()?;
+            }
+        } else {
+            debug!("Loading static policy");
+            manager.load_static_policy()?;
+        }
         debug!("Loading internal devices list");
         manager.load_internal_devices()?;
         debug!("System state set to Booted");
@@ -161,6 +209,15 @@ impl UsbDeviceAuthManager {
         } else {
             debug!("Internal devices file not found. Assuming no internal devices.");
         }
+        Ok(())
+    }
+    /// Loads the interactive USB policy from a file or falls back to the static policy.
+    fn load_interactive_policy(&mut self) -> Result<(), Error> {
+        debug!("Loading interactive USB policy");
+        let policy_file_path =
+            self.root_etc_dir.join(USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH);
+        self.policy = Parser::parse_rules_from_file(&policy_file_path)?.policy().clone();
+
         Ok(())
     }
     /// Loads the static USB policy from a file or creates a default one if the file does not exist.
@@ -242,6 +299,13 @@ impl UsbDeviceAuthManager {
         }
     }
 
+    fn reevaluate_allow_persisted_devices(&mut self) {
+        let allow_persisted = std::mem::take(&mut self.allow_persisted_devices);
+        for device in allow_persisted {
+            self.process_usb_device(device);
+        }
+    }
+
     /// Re-evaluates authorized devices when the system state changes.
     fn reevaluate_authorized_devices(&mut self) {
         let processed = std::mem::take(&mut self.processed_devices);
@@ -263,6 +327,7 @@ impl UsbDeviceAuthManager {
         }
         self.reevaluate_deferred_devices();
         self.reevaluate_ask_devices();
+        self.reevaluate_allow_persisted_devices();
     }
 
     /// Processes a newly added USB device, determines its authorization state, and adds it to the
@@ -273,32 +338,113 @@ impl UsbDeviceAuthManager {
         device_with_state.authorized = action == Action::Allow;
         device_with_state.is_deferred = action == Action::Defer;
         match action {
-            Action::Defer => self.deferred_devices.push(device_with_state),
-            Action::Ask => self.ask_devices.push(device_with_state),
-            _ => self.processed_devices.push(device_with_state),
+            Action::Defer => {
+                self.deferred_devices.push(device_with_state.clone());
+
+                // We also send callbacks when deferring and we notify the client
+                // of the underlying authorization state.
+                for cb in &mut self.callbacks {
+                    let status = if device_with_state.authorized {
+                        UsbAuthorizationStatus::AUTHORIZED
+                    } else {
+                        UsbAuthorizationStatus::DENIED_AND_DEFERRED
+                    };
+
+                    cb.send_status_change(&device_with_state.info, &status, &self.system_state);
+                }
+            }
+            Action::Ask => {
+                self.ask_devices.push(device_with_state.clone());
+                for cb in &mut self.callbacks {
+                    cb.send_ask(&device_with_state.info);
+                }
+            }
+            Action::AllowPersisted => {
+                self.allow_persisted_devices.push(device_with_state.clone());
+                for cb in &mut self.callbacks {
+                    cb.send_allow_persisted(&device_with_state.info);
+                }
+            }
+            _ => {
+                self.processed_devices.push(device_with_state.clone());
+                for cb in &mut self.callbacks {
+                    let status = if device_with_state.authorized {
+                        UsbAuthorizationStatus::AUTHORIZED
+                    } else {
+                        UsbAuthorizationStatus::DENIED
+                    };
+
+                    cb.send_status_change(&device_with_state.info, &status, &self.system_state);
+                }
+            }
         }
     }
 
-    /// Updates the authorization status of a device that is awaiting user authorization.
+    fn set_authorized_and_send_status_change(
+        &mut self,
+        mut device_with_state: UsbDeviceInfoWithState,
+        status: UsbAuthorizationStatus,
+    ) -> Result<(), Error> {
+        let authorized: bool = status == UsbAuthorizationStatus::AUTHORIZED;
+        authorization::authorize_device_via_sysfs(&device_with_state.info.syspath, authorized)?;
+        device_with_state.authorized = authorized;
+
+        for cb in &mut self.callbacks {
+            cb.send_status_change(&device_with_state.info, &status, &self.system_state);
+        }
+
+        match status {
+            UsbAuthorizationStatus::DENIED_AND_DEFERRED => {
+                self.deferred_devices.push(device_with_state)
+            }
+            _ => self.processed_devices.push(device_with_state),
+        }
+        Ok(())
+    }
+
+    /// Updates the authorization status of a device that is awaiting user authorization or
+    /// one that is already processed.
     ///
-    /// If the device is found in the `ask_devices` list, it is moved to the `processed_devices`
-    /// list with its authorization status updated.
+    /// If the device is found in `ask_devices` or `processed_devices`, the authorization is set
+    /// and the device is moved into the `processed_devices` list. We allow already processed
+    /// devices to update status for more complex UI scenarios (i.e. revoke authorization if user
+    /// does not finish logging in with new keyboard) and for testing.
+    ///
+    /// If the device is found in `allow_persisted_devices` list, it is moved to the
+    /// `deferred_devices` list with its authorization status updated.
     ///
     /// # Returns
     ///
     /// * `Ok(())` if the device was found and updated.
-    /// * `Err(Error::DeviceNotFound)` if the device was not found in the `ask_devices` list.
+    /// * `Err(Error::DeviceNotFound)` if the device was not found in any list.
     pub fn update_authorization_status(
         &mut self,
         device_syspath: &str,
         authorized: bool,
     ) -> Result<(), Error> {
+        let mut status = if authorized {
+            UsbAuthorizationStatus::AUTHORIZED
+        } else {
+            UsbAuthorizationStatus::DENIED
+        };
         if let Some(pos) = self.ask_devices.iter().position(|d| d.info.syspath == device_syspath) {
-            let mut device_with_state = self.ask_devices.remove(pos);
-            device_with_state.authorized = authorized;
-            authorization::authorize_device_via_sysfs(&device_with_state.info.syspath, authorized)?;
-            self.processed_devices.push(device_with_state);
-            Ok(())
+            let device_with_state = self.ask_devices.remove(pos);
+            self.set_authorized_and_send_status_change(device_with_state, status)
+        } else if let Some(pos) =
+            self.allow_persisted_devices.iter().position(|d| d.info.syspath == device_syspath)
+        {
+            let device_with_state = self.allow_persisted_devices.remove(pos);
+            // Defer devices that were denied by `allow-persist`. They may be enabled by a
+            // later rule.
+            if !authorized {
+                status = UsbAuthorizationStatus::DENIED_AND_DEFERRED;
+            }
+            self.set_authorized_and_send_status_change(device_with_state, status)
+        } else if let Some(pos) =
+            self.processed_devices.iter().position(|d| d.info.syspath == device_syspath)
+        {
+            let device_with_state = self.processed_devices.remove(pos);
+            self.set_authorized_and_send_status_change(device_with_state, status)
         } else {
             Err(Error::DeviceNotFound(device_syspath.to_string()))
         }
@@ -336,14 +482,51 @@ impl UsbDeviceAuthManager {
     /// * `device` - The `Device` object representing the USB device to be removed.
     pub fn remove_usb_device(&mut self, device: &Device) -> Result<(), Error> {
         if let Some(device_syspath) = device.syspath().to_str() {
-            self.processed_devices.retain(|d| d.info.syspath != device_syspath);
             self.deferred_devices.retain(|d| d.info.syspath != device_syspath);
             self.ask_devices.retain(|d| d.info.syspath != device_syspath);
+            self.allow_persisted_devices.retain(|d| d.info.syspath != device_syspath);
+
+            // When removing an already processed device, also send an authorization denied
+            // callback. This helps to avoid a race on the client side where authorization status
+            // from this callback may come out-of-order with device removal.
+            if let Some(pos) =
+                self.processed_devices.iter().position(|d| d.info.syspath == device_syspath)
+            {
+                let device_with_state = self.processed_devices.remove(pos);
+                if device_with_state.authorized {
+                    let status = UsbAuthorizationStatus::DENIED;
+                    for cb in &mut self.callbacks {
+                        cb.send_status_change(&device_with_state.info, &status, &self.system_state);
+                    }
+                }
+            }
             Ok(())
         } else {
             debug!("Failed to get syspath for device: {:?}", device.name());
             Err(Error::DeviceNotFound(device.syspath().display().to_string()))
         }
+    }
+
+    /// Registers callbacks for authorization events.
+    ///
+    /// # Arguments
+    /// * `callback` - Boxed object that implements the necessary callback functions.
+    ///
+    /// # Returns
+    /// * True if the callback was unique and registered.
+    /// * False if the callback was already registered previously.
+    pub fn register_callback(&mut self, callback: Box<dyn AuthEventsCallback>) -> bool {
+        let unique = !self.callbacks.iter().any(|v| v.equals(callback.as_ref()));
+        if unique {
+            self.callbacks.push(callback);
+        }
+
+        unique
+    }
+
+    /// Unregisters a callback if it was previously registered.
+    pub fn unregister_callback(&mut self, callback: Box<dyn AuthEventsCallback>) {
+        self.callbacks.retain(|v| !v.equals(callback.as_ref()))
     }
 }
 
@@ -450,7 +633,8 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         let authorized_default_path = mock_sys.path().join(USBCORE_AUTHORIZED_DEFAULT_PATH);
         assert_eq!(fs::read_to_string(authorized_default_path).unwrap(), "0");
@@ -474,7 +658,8 @@ mod tests {
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager = UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+        let manager =
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         assert_eq!(manager.policy.all_rules.len(), 1);
         assert_eq!(manager.policy.all_rules[0].action, Action::Allow);
@@ -486,15 +671,17 @@ mod tests {
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
         let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
 
         manager.processed_devices.push(UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "authorized".to_string(), ..Default::default() },
+            interfaces: vec![],
             authorized: true,
             is_deferred: false,
         });
         manager.processed_devices.push(UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "unauthorized".to_string(), ..Default::default() },
+            interfaces: vec![],
             authorized: false,
             is_deferred: false,
         });
@@ -516,11 +703,12 @@ mod tests {
         fs::write(&policy_file, "defer when Booted").unwrap();
 
         let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path()).unwrap();
+            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
         assert_eq!(manager.policy.all_rules.len(), 1);
 
         let device = UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "test_device".to_string(), ..Default::default() },
+            interfaces: vec![],
             authorized: false,
             is_deferred: false,
         };

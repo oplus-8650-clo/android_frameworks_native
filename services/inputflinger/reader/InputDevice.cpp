@@ -20,7 +20,9 @@
 
 #include <string>
 
+#include <android-base/logging.h>
 #include <android/sysprop/InputProperties.sysprop.h>
+#include <com_android_input_flags.h>
 #include <ftl/flags.h>
 #include <input/Input.h>
 
@@ -39,6 +41,8 @@
 #include "VibratorInputMapper.h"
 
 namespace android {
+
+namespace input_flags = com::android::input::flags;
 
 InputDevice::InputDevice(InputReaderContext* context, DeviceId id, int32_t generation,
                          const InputDeviceIdentifier& identifier)
@@ -246,6 +250,7 @@ std::list<NotifyArgs> InputDevice::configure(nsecs_t when,
                                              ConfigurationChanges changes) {
     return configureInternal(when, readerConfig, changes);
 }
+
 std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                                                      const InputReaderConfiguration& readerConfig,
                                                      ConfigurationChanges changes,
@@ -279,11 +284,10 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
     using Change = InputReaderConfiguration::Change;
 
     if (!changes.any() || !isIgnored()) {
-        // Full configuration should happen the first time configure is called
-        // and when the device type is changed. Changing a device type can
-        // affect various other parameters so should result in a
-        // reconfiguration.
-        if (!changes.any() || changes.test(Change::DEVICE_TYPE)) {
+        // Full configuration should happen the first time configure is called or when the overrides
+        // for the .idc properties of the device have changed. Changing a device configuration can
+        // affect various other parameters so should result in a total reconfiguration.
+        if (!changes.any() || changes.test(Change::DEVICE_CONFIGURATION_OVERRIDES)) {
             mConfiguration.clear();
             for_each_subdevice([this](InputDeviceContext& context) {
                 std::optional<PropertyMap> configuration =
@@ -293,23 +297,50 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                 }
             });
 
-            mAssociatedDeviceType =
-                    getValueByKey(readerConfig.deviceTypeAssociations, mIdentifier.location);
             mIsWaking = mConfiguration.getBool("device.wake").value_or(false);
-            mShouldSmoothScroll = mConfiguration.getBool("device.viewBehavior_smoothScroll");
-            auto primaryDirectionalMotionAxisLabel =
-                mConfiguration.getString("device.viewBehavior_primaryDirectionalMotionAxis");
 
-            if (primaryDirectionalMotionAxisLabel.has_value()) {
-                const std::string& label = primaryDirectionalMotionAxisLabel.value();
+            std::optional<InputDeviceConfigurationOverride> inputDeviceConfigurationOverride =
+                    getValueByKey(readerConfig.deviceConfigurationOverrides, mIdentifier.location);
+
+            mAssociatedDeviceType = inputDeviceConfigurationOverride.has_value()
+                    ? inputDeviceConfigurationOverride->deviceType
+                    : std::nullopt;
+
+            std::optional<InputDeviceViewBehavior> viewBehaviorOverride =
+                    inputDeviceConfigurationOverride->viewBehavior;
+
+            std::optional<bool> shouldSmoothScrollFromPropertyMap =
+                    mConfiguration.getBool("device.viewBehavior_smoothScroll");
+            if (shouldSmoothScrollFromPropertyMap.has_value()) {
+                mShouldSmoothScroll = shouldSmoothScrollFromPropertyMap;
+                if (viewBehaviorOverride.has_value() &&
+                    viewBehaviorOverride->shouldSmoothScroll.has_value()) {
+                    LOG(WARNING) << "device.viewBehavior_smoothScroll is specified by both .idc "
+                                    "file and configuration override, the configuration override "
+                                    "will be ignored";
+                }
+            } else if (viewBehaviorOverride.has_value()) {
+                mShouldSmoothScroll = viewBehaviorOverride->shouldSmoothScroll;
+            }
+
+            std::optional<std::string> primaryDirectionalMotionAxisLabelFromPropertyMap =
+                    mConfiguration.getString("device.viewBehavior_primaryDirectionalMotionAxis");
+            if (primaryDirectionalMotionAxisLabelFromPropertyMap.has_value()) {
+                const std::string& label = primaryDirectionalMotionAxisLabelFromPropertyMap.value();
                 mPrimaryDirectionalMotionAxis = MotionEvent::getAxisFromLabel(label.c_str());
                 if (!mPrimaryDirectionalMotionAxis.has_value()) {
                     LOG_ALWAYS_FATAL("InputDevice %s: Invalid value '%s' for "
                                      "'device.viewBehavior_primaryDirectionalMotionAxis'",
                                      getName().c_str(), label.c_str());
                 }
-            } else {
-                mPrimaryDirectionalMotionAxis = std::nullopt;
+                if (viewBehaviorOverride.has_value() &&
+                    viewBehaviorOverride->primaryDirectionalMotionAxis.has_value()) {
+                    LOG(WARNING) << "device.viewBehavior_primaryDirectionalMotionAxis is specified "
+                                    "by both .idc file and configuration override, the "
+                                    "configuration override will be ignored";
+                }
+            } else if (viewBehaviorOverride.has_value()) {
+                mPrimaryDirectionalMotionAxis = viewBehaviorOverride->primaryDirectionalMotionAxis;
             }
         }
 
@@ -632,9 +663,21 @@ std::vector<std::unique_ptr<InputMapper>> InputDevice::createMappers(
     if (classes.test(InputDeviceClass::TOUCHPAD) && classes.test(InputDeviceClass::TOUCH_MT)) {
         mappers.push_back(createInputMapper<TouchpadInputMapper>(contextPtr, readerConfig));
     } else if (classes.test(InputDeviceClass::TOUCH_MT)) {
-        mappers.push_back(createInputMapper<MultiTouchInputMapper>(contextPtr, readerConfig));
+        if (classes.test(InputDeviceClass::CURSOR) &&
+            input_flags::enable_inbound_event_verification()) {
+            LOG(INFO) << "Skipping MultiTouchInputMapper for device " << contextPtr.getName()
+                      << " because InputDeviceClass::CURSOR is set";
+        } else {
+            mappers.push_back(createInputMapper<MultiTouchInputMapper>(contextPtr, readerConfig));
+        }
     } else if (classes.test(InputDeviceClass::TOUCH)) {
-        mappers.push_back(createInputMapper<SingleTouchInputMapper>(contextPtr, readerConfig));
+        if (classes.test(InputDeviceClass::CURSOR) &&
+            input_flags::enable_inbound_event_verification()) {
+            LOG(INFO) << "Skipping SingleTouchInputMapper for device " << contextPtr.getName()
+                      << " because InputDeviceClass::CURSOR is set";
+        } else {
+            mappers.push_back(createInputMapper<SingleTouchInputMapper>(contextPtr, readerConfig));
+        }
     }
 
     // Joystick-like devices.

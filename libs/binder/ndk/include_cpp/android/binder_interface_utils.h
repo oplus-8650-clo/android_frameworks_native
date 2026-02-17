@@ -40,6 +40,7 @@
 
 #include <memory>
 #include <mutex>
+#include <type_traits>
 
 namespace ndk {
 

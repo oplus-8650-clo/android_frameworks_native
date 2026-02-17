@@ -26,6 +26,7 @@
 
 #include <android/gui/ISystemContentPriorityConstants.h>
 #include <common/FlagManager.h>
+#include <ftl/static_vector.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/JankInfo.h>
 #include <gui/LayerMetadata.h>
@@ -213,6 +214,7 @@ public:
     // Used by both SF and FrameTimeline.
     std::optional<int32_t> getJankType() const;
     std::optional<JankSeverityType> getJankSeverityType() const;
+    std::optional<float> getJankSeverityScore() const;
 
     // Functions called by SF
     int64_t getToken() const { return mToken; };
@@ -294,13 +296,15 @@ public:
         Status status;
         TimelineItem predictions;
         TimelineItem actuals;
+        nsecs_t vsyncResyncedJitter;
 
-        static PreviousFrameData unknown() { return PreviousFrameData{Status::Unknown, {}, {}}; }
+        static PreviousFrameData unknown() { return PreviousFrameData{Status::Unknown, {}, {}, 0}; }
         static PreviousFrameData outOfOrder() {
-            return PreviousFrameData{Status::OutOfOrder, {}, {}};
+            return PreviousFrameData{Status::OutOfOrder, {}, {}, 0};
         }
-        static PreviousFrameData create(TimelineItem predictions, TimelineItem actuals) {
-            return PreviousFrameData{Status::Valid, predictions, actuals};
+        static PreviousFrameData create(TimelineItem predictions, TimelineItem actuals,
+                                        nsecs_t vsyncResyncedJitter) {
+            return PreviousFrameData{Status::Valid, predictions, actuals, vsyncResyncedJitter};
         }
     };
     PreviousFrameData previousFrameDataLocked() const REQUIRES(mMutex);
@@ -385,6 +389,11 @@ private:
     nsecs_t mActualPresentDelta GUARDED_BY(mMutex) = 0;
 };
 
+struct FrameTimelineDisplayState {
+    bool poweredOn = true;
+    bool modeChangeInProgress = false;
+};
+
 /*
  * Maintains a history of SurfaceFrames grouped together by the vsync time in which they were
  * presented
@@ -412,7 +421,7 @@ public:
     // The first function called by SF for the current DisplayFrame. Fetches SF predictions based on
     // the token and sets the actualSfWakeTime for the current DisplayFrame.
     virtual void setSfWakeUp(int64_t token, nsecs_t wakeupTime, Fps refreshRate, Fps renderRate,
-                             bool displayOn = true) = 0;
+                             FrameTimelineDisplayState displayState = {}) = 0;
 
     // Sets the sfPresentTime and finalizes the current DisplayFrame. Tracks the
     // given present fence until it's signaled, and updates the present timestamps of all presented
@@ -467,10 +476,10 @@ private:
 
     void flushTokens(nsecs_t flushTime) REQUIRES(mMutex);
 
-    std::map<int64_t, TimelineItem> mPredictions GUARDED_BY(mMutex);
+    static constexpr size_t kMaxTokens = 500;
+    ftl::StaticVector<std::pair<int64_t, TimelineItem>, kMaxTokens> mPredictions GUARDED_BY(mMutex);
     int64_t mCurrentToken GUARDED_BY(mMutex);
     mutable std::mutex mMutex;
-    static constexpr size_t kMaxTokens = 500;
 };
 
 class FrameTimeline : public android::scheduler::FrameTimeline {
@@ -514,7 +523,7 @@ public:
         // Sets the token, vsyncPeriod, predictions and SF start time.
         void onSfWakeUp(int64_t token, Fps refreshRate, Fps renderRate,
                         std::optional<TimelineItem> predictions, nsecs_t wakeUpTime,
-                        bool displayOn);
+                        FrameTimelineDisplayState displayState);
         // Sets the appropriate metadata and classifies the jank.
         void onPresent(nsecs_t signalTime, nsecs_t previousPredictedPresentTime,
                        nsecs_t previousActualPresentTime);
@@ -602,7 +611,7 @@ public:
         // Alternative jank classification, Experimental for now.
         nsecs_t mPresentDelay = 0;
         float mJankDebugMetadata = 0.0f;
-        bool mDisplayOn = true;
+        FrameTimelineDisplayState mDisplayState = {};
         nsecs_t mExpectedPresentDelta = 0;
         nsecs_t mActualPresentDelta = 0;
     };
@@ -619,7 +628,7 @@ public:
             int32_t systemContentPriority) override;
     void addSurfaceFrame(std::shared_ptr<scheduler::SurfaceFrame> surfaceFrame) override;
     void setSfWakeUp(int64_t token, nsecs_t wakeupTime, Fps refreshRate, Fps renderRate,
-                     bool displayOn = true) override;
+                     FrameTimelineDisplayState displayState = {}) override;
     void setSfPresent(nsecs_t sfPresentTime, const std::shared_ptr<FenceTime>& presentFence,
                       const std::shared_ptr<FenceTime>& gpuFence = FenceTime::NO_FENCE) override;
     void onCommitNotComposited() override;

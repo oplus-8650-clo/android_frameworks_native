@@ -8,13 +8,6 @@
 
 namespace android {
 
-FenceMerger::FenceMerger() = default;
-FenceMerger::~FenceMerger() = default;
-
-FenceMerger::FenceMerger(sp<Fence> fence) : mFence(std::move(fence)) {}
-
-FenceMerger::FenceMerger(FenceMerger&& other) noexcept = default;
-
 sp<Fence> FenceMerger::waitAndGetFence(const char* name) {
     SFTRACE_FORMAT("FenceMerger::waitAndGetFence for %s", name);
     if (mFenceFutureList.empty()) {

@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// QTI_BEGIN
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+// QTI_END
+
 // #define LOG_NDEBUG 0
 
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
@@ -194,9 +201,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     layerSettings.lutSourceIsHwc = mSnapshot->luts == nullptr;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
-    layerSettings.renderCommandBufferConsumer = mSnapshot->renderCommandBufferConsumer;
-    layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
+    layerSettings.renderCommandBuffer = mSnapshot->renderCommandBuffer;
     layerSettings.renderResourceCache = mSnapshot->renderResourceCache;
+    layerSettings.renderCommandBufferFrameId = mSnapshot->renderCommandBufferFrameId;
 
     if (hasEffect() && !hasBufferOrSidebandStream()) {
         prepareEffectsClientComposition(layerSettings, targetSettings);
@@ -497,4 +504,18 @@ int32_t LayerFE::getLayerId() const {
     return static_cast<int32_t>(mSnapshot->sequence);
 }
 // QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
+
+// QTI_BEGIN
+vec2 LayerFE::getCornerRadius() const {
+    float minX = std::min(std::min(mSnapshot->roundedCorner.sfDrawnRadii.topLeft.x,
+                                   mSnapshot->roundedCorner.sfDrawnRadii.topRight.x),
+                          std::min(mSnapshot->roundedCorner.sfDrawnRadii.bottomLeft.x,
+                                   mSnapshot->roundedCorner.sfDrawnRadii.bottomRight.x));
+    float minY = std::min(std::min(mSnapshot->roundedCorner.sfDrawnRadii.topLeft.y,
+                                   mSnapshot->roundedCorner.sfDrawnRadii.topRight.y),
+                          std::min(mSnapshot->roundedCorner.sfDrawnRadii.bottomLeft.y,
+                                   mSnapshot->roundedCorner.sfDrawnRadii.bottomRight.y));
+    return vec2{minX, minY};
+}
+// QTI_END
 } // namespace android

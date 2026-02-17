@@ -24,6 +24,10 @@ package {
 cc_library_shared {
     name: "libgraphicsenv",
 
+    defaults: [
+        "aconfig_lib_cc_static_link.defaults",
+    ],
+
     srcs: [
         "FeatureOverrides.cpp",
         "GpuStatsInfo.cpp",
@@ -34,6 +38,10 @@ cc_library_shared {
     cflags: [
         "-Wall",
         "-Werror",
+    ],
+
+    static_libs: [
+        "libegl_flags",
     ],
 
     shared_libs: [

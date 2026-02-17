@@ -133,6 +133,7 @@ public:
     bool plannerEnabled() const { return mPlanner != nullptr; }
     bool plannerTexturePoolEnabled() const override;
     virtual bool anyLayersRequireClientComposition() const;
+    virtual size_t numLayersRequiringClientComposition() const;
     virtual void updateProtectedContentState();
     virtual bool dequeueRenderBuffer(base::unique_fd*,
                                      std::shared_ptr<renderengine::ExternalTexture>*);

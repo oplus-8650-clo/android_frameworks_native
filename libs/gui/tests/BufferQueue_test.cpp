@@ -1711,7 +1711,6 @@ TEST_F(BufferQueueTest, AttachBuffer_WithAdditionalOptions_DoesNotReallocate) {
 }
 #endif
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 struct MockUnlimitedSlotConsumer : public MockConsumer {
     virtual void onSlotCountChanged(int size) override { mSize = size; }
 
@@ -1764,9 +1763,7 @@ protected:
     void setUpConsumer() {
         EXPECT_EQ(OK, mConsumer->consumerConnect(mConsumerListener, false));
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         EXPECT_EQ(OK, mConsumer->allowUnlimitedSlots(true));
-#endif
         EXPECT_EQ(OK, mConsumer->setConsumerUsageBits(GraphicBuffer::USAGE_SW_READ_OFTEN));
         EXPECT_EQ(OK, mConsumer->setDefaultBufferSize(10, 10));
         EXPECT_EQ(OK, mConsumer->setDefaultBufferFormat(PIXEL_FORMAT_RGBA_8888));
@@ -1780,9 +1777,7 @@ protected:
         EXPECT_EQ(OK,
                   mProducer->connect(mProducerListener, NATIVE_WINDOW_API_CPU,
                                      /*producerControlledByApp*/ true, &output));
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
         ASSERT_TRUE(output.isSlotExpansionAllowed);
-#endif
         ASSERT_EQ(OK, mProducer->setMaxDequeuedBufferCount(kDequeableBufferCount));
         ASSERT_EQ(OK, mProducer->allowAllocation(true));
     }
@@ -1849,9 +1844,7 @@ TEST_F(BufferQueueUnlimitedTest, CanAcquireAndReleaseAll) {
 
         BufferItem buffer;
         EXPECT_EQ(OK, mConsumer->acquireBuffer(&buffer, 0));
-        EXPECT_EQ(OK,
-                  mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, EGL_NO_DISPLAY,
-                                           EGL_NO_SYNC, buffer.mFence));
+        EXPECT_EQ(OK, mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, buffer.mFence));
     }
 }
 
@@ -1890,9 +1883,7 @@ TEST_F(BufferQueueUnlimitedTest, GetReleasedBuffersExtended) {
 
         BufferItem buffer;
         EXPECT_EQ(OK, mConsumer->acquireBuffer(&buffer, 0));
-        EXPECT_EQ(OK,
-                  mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, EGL_NO_DISPLAY,
-                                           EGL_NO_SYNC_KHR, buffer.mFence));
+        EXPECT_EQ(OK, mConsumer->releaseBuffer(buffer.mSlot, buffer.mFrameNumber, buffer.mFence));
     }
 
     EXPECT_EQ(OK, mConsumer->getReleasedBuffersExtended(&releasedSlots));
@@ -1927,5 +1918,4 @@ TEST_F(BufferQueueUnlimitedTest, GetReleasedBuffersExtended) {
                 << "Slots that are still held in the queue are not released.";
     }
 }
-#endif //  COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
 } // namespace android

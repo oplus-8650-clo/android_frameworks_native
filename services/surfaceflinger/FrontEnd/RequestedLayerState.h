@@ -25,6 +25,8 @@
 #include "LayerCreationArgs.h"
 #include "QueuedTransactionState.h"
 
+struct RenderCommandBuffer;
+
 namespace android::surfaceflinger::frontend {
 using namespace ftl::flag_operators;
 
@@ -74,6 +76,7 @@ struct RequestedLayerState : layer_state_t {
     // Currently we only care about the primary display
     ui::Transform getTransform(uint32_t displayRotationFlags) const;
     ui::Size getUnrotatedBufferSize(uint32_t displayRotationFlags) const;
+    void getBufferDimensions(uint32_t& outWidth, uint32_t& outHeight) const;
     bool canBeDestroyed() const;
     bool isRoot() const;
     bool isHiddenByPolicy() const;
@@ -145,6 +148,7 @@ struct RequestedLayerState : layer_state_t {
     ftl::Flags<RequestedLayerState::Changes> changes;
     bool bgColorLayer = false;
     nsecs_t lastUpdateTime = 0;
+    std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
 };
 
 } // namespace android::surfaceflinger::frontend

@@ -43,6 +43,16 @@ flag {
 }
 
 flag {
+  name: "cancel_touches_on_absolute_capture_release"
+  namespace: "input"
+  description: "Send a cancellation event if there are touches on a touchpad when leaving absolute pointer capture mode"
+  bug: "481649058"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
   name: "enable_multi_device_input"
   namespace: "input"
   description: "Set to true to enable multi-device input: touch and stylus can be active at the same time, but in different windows"
@@ -190,16 +200,6 @@ flag {
 }
 
 flag {
-  name: "use_topology_aware_flag"
-  namespace: "input"
-  description: "Require apps to use topology-aware flag to receive cross-display gestures"
-  bug: "401220484"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "low_level_tracing"
   namespace: "input"
   description: "Log low-level events from evdev and the Gestures library in traces"
@@ -208,6 +208,7 @@ flag {
 
 flag {
   name: "enable_attention_service_apis"
+  is_exported: true
   namespace: "input"
   description: "Enable AttentionService APIs"
   bug: "438159795"
@@ -231,4 +232,11 @@ flag {
   metadata {
     purpose: PURPOSE_BUGFIX
   }
+}
+
+flag {
+    name: "enable_anr_warning_callback_input_dispatcher"
+    namespace: "system_performance"
+    description: "Enables a callback that warns an application when it is at risk of an ANR for input dispatcher."
+    bug: "481062299"
 }

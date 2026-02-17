@@ -47,9 +47,7 @@ const SkString kEffectSource_LutEffect(R"(
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     uniform int lutSourceIsHwc;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     uniform int interpolation;
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     uniform vec3 luminanceCoefficients; // for CIE_Y
     // for hlg/pq transfer function, we need normalize it to [0.0, 1.0]
     // we use `normalizeScalar` to do so
@@ -118,14 +116,28 @@ const SkString kEffectSource_LutEffect(R"(
                 // get indices
                 // this follows 3d flatten policy described in API/AIDL interface
                 // i.e., `FLAT[z + DEPTH * (y + HEIGHT * x)] = ORIGINAL[x][y][z]`
-                float i000 = z0 + (y0 * float(size)) + (x0 * float(size) * float(size));
+// QTI_BEGIN: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
+             /* float i000 = z0 + (y0 * float(size)) + (x0 * float(size) * float(size));
+// QTI_END: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
                 float i001 = z1 + (y0 * float(size)) + (x0 * float(size) * float(size));
                 float i010 = z0 + (y1 * float(size)) + (x0 * float(size) * float(size));
                 float i011 = z1 + (y1 * float(size)) + (x0 * float(size) * float(size));
                 float i100 = z0 + (y0 * float(size)) + (x1 * float(size) * float(size));
                 float i101 = z1 + (y0 * float(size)) + (x1 * float(size) * float(size));
                 float i110 = z0 + (y1 * float(size)) + (x1 * float(size) * float(size));
-                float i111 = z1 + (y1 * float(size)) + (x1 * float(size) * float(size));
+// QTI_BEGIN: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
+                float i111 = z1 + (y1 * float(size)) + (x1 * float(size) * float(size)); */
+
+                // luts are sent in the order of RGB and index must be calculated as such
+                float i000 = x0 + (y0 * float(size)) + (z0 * float(size) * float(size));
+                float i001 = x0 + (y0 * float(size)) + (z1 * float(size) * float(size));
+                float i010 = x0 + (y1 * float(size)) + (z0 * float(size) * float(size));
+                float i011 = x0 + (y1 * float(size)) + (z1 * float(size) * float(size));
+                float i100 = x1 + (y0 * float(size)) + (z0 * float(size) * float(size));
+                float i101 = x1 + (y0 * float(size)) + (z1 * float(size) * float(size));
+                float i110 = x1 + (y1 * float(size)) + (z0 * float(size) * float(size));
+                float i111 = x1 + (y1 * float(size)) + (z1 * float(size) * float(size));
+// QTI_END: 2026-01-17: Display: renderengine: Modify RGB order in interpolation logic
 
                 // TODO(b/377984618): support Tetrahedral interpolation
                 // perform trilinear interpolation
@@ -313,9 +325,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     const int ulutSourceIsHwc = lutSourceIsHwc ? 1 : 0;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     const int uInterpolation = static_cast<int>(INTERPOLATION_METHOD);
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     const float uNormalizeScalar = static_cast<float>(normalizeScalar);
 
     if (static_cast<LutProperties::SamplingKey>(samplingKey) == LutProperties::SamplingKey::CIE_Y) {
@@ -332,11 +342,15 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     mBuilder->uniform("lutSourceIsHwc") = ulutSourceIsHwc;
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     mBuilder->uniform("interpolation") = uInterpolation;
-// QTI_END: 2025-12-29: Display: renderengine: Modify luts interpolation logic
     mBuilder->uniform("normalizeScalar") = uNormalizeScalar;
 
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+    if (lutSourceIsHwc == 1) {
+        return mBuilder->makeShader();
+    }
+
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
     // de-gamma the image without changing the primaries
     return mBuilder->makeShader()->makeWithWorkingColorSpace(
             toSkColorSpace(srcDataspace)->makeLinearGamma());
@@ -346,7 +360,11 @@ sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      std::shared_ptr<gui::DisplayLuts> displayLuts,
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                      ui::Dataspace srcDataspace
-                                     , bool lutSourceIsHwc
+// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+                                     , sk_sp<SkColorSpace> outColorSpace, bool lutSourceIsHwc
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                     ) {
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     if (mBuilder == nullptr) {
@@ -393,6 +411,12 @@ sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,
                                      );
 // QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         }
+// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
+
+        if (lutSourceIsHwc == 1) {
+            input = input->makeWithWorkingColorSpace(outColorSpace);
+        }
+// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
     }
     return input;
 }

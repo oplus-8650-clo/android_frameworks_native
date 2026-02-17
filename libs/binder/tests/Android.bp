@@ -37,6 +37,10 @@ cc_defaults {
     ] + select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER"), {
         true: ["-DLIBBINDER_BINDER_OBSERVER"],
         default: [],
+    }) + select(release_flag("RELEASE_LIBBINDER_BINDER_OBSERVER_V2"), {
+        true: ["-DLIBBINDER_BINDER_OBSERVER_V2"],
+        false: [],
+        default: [],
     }),
 }
 
@@ -72,11 +76,6 @@ cc_test {
     ],
     static_libs: [
         "libfakeservicemanager",
-    ],
-    defaults: [
-        "libbinder_client_cache_flag",
-        "libbinder_addservice_cache_flag",
-        "libbinder_remove_cache_static_list_flag",
     ],
     test_suites: ["general-tests"],
     require_root: true,
@@ -948,8 +947,10 @@ cc_test {
     shared_libs: [
         "libbinder",
         "libutils",
+        "packagemanager_aidl-cpp",
     ],
     static_libs: [
+        "apex_aidl_interface-cpp",
         "libprocpartition",
     ],
 

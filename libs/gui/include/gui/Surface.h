@@ -39,6 +39,7 @@
 #include <utils/RefBase.h>
 #include <utils/String8.h>
 
+#include <optional>
 #include <shared_mutex>
 #include <unordered_set>
 
@@ -106,11 +107,59 @@ public:
     virtual void onBufferDetached(int /*slot*/) override {}
 };
 
+struct SurfaceQueueBufferInput {
+    sp<Fence> fence;
+
+    android_dataspace dataSpace = HAL_DATASPACE_UNKNOWN;
+    HdrMetadata hdrMetadata;
+
+    Rect crop;
+    int scalingMode = 0;
+    uint32_t transform = 0;
+    uint32_t stickyTransform = 0;
+    Region surfaceDamage;
+
+    int64_t timestamp = 0;
+    int isAutoTimestamp = 0;
+    bool getFrameTimestamps = false;
+
+    std::optional<PictureProfileHandle> pictureProfileHandle;
+};
+
 // Contains additional data from the queueBuffer operation.
 struct SurfaceQueueBufferOutput {
     // True if this queueBuffer caused a buffer to be replaced in the queue
-    // (and therefore not will not be acquired)
+    // (and therefore not will not be acquired).
+    //
+    // This happens when the producer queues a buffer but the consumer has
+    // configured the BufferQueue to drop older buffers (e.g. in async mode),
+    // and the queue was full or the last buffer was droppable.
     bool bufferReplaced = false;
+
+    // The default width and height of the buffers in the queue, as set by
+    // setDefaultBufferSize(). This may be different from the dimensions of the
+    // buffer just queued if the producer is scaling or if the default size was
+    // changed recently.
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    // The transform hint (NATIVE_WINDOW_TRANSFORM_*) that the consumer would like
+    // the producer to apply to the buffer content. This usually corresponds to
+    // the display rotation.
+    uint32_t transformHint = 0;
+
+    // The number of buffers currently in the queue waiting to be acquired by the
+    // consumer. This includes the buffer just queued.
+    uint32_t numPendingBuffers = 0;
+
+    // The frame number that will be assigned to the next buffer queued.
+    // This is useful for the producer to know what frame number it just used
+    // (nextFrameNumber - 1).
+    uint64_t nextFrameNumber = 0;
+
+    // If requested by the input, this will contain any recent changes to the
+    // frame event history (timestamps for previous frames).
+    FrameEventHistoryDelta frameTimestamps;
 };
 
 /*
@@ -228,11 +277,22 @@ public:
      * See IGBP::setGenerationNumber for more information. */
     status_t setGenerationNumber(uint32_t generationNumber);
 
+    /*
+     * Set whether the Surface should automatically update the generation number
+     * on any buffers attached to it after this call.
+     *
+     * Default is true.
+     */
+    void setAutoGenerationUpdate(bool autoGeneration);
+
     // See IGraphicBufferProducer::getConsumerName
     String8 getConsumerName() const;
 
     // See IGraphicBufferProducer::getNextFrameNumber
     uint64_t getNextFrameNumber() const;
+
+    // get the frame id of the last frame replaced by bufferQueueProducer::queueBuffer
+    std::optional<uint64_t> getLastReplacedFrameId() const;
 
     /* Set the scaling mode to be used with a Surface.
      * See NATIVE_WINDOW_SET_SCALING_MODE and its parameters
@@ -357,12 +417,15 @@ private:
             ANativeWindowBuffer* buffer);
 
     int dispatchConnect(va_list args);
+    int dispatchConnectWithListener(va_list args);
     int dispatchDisconnect(va_list args);
     int dispatchSetBufferCount(va_list args);
     int dispatchSetBuffersGeometry(va_list args);
     int dispatchSetBuffersDimensions(va_list args);
     int dispatchSetBuffersUserDimensions(va_list args);
     int dispatchSetBuffersFormat(va_list args);
+    int dispatchSetOnDroppedCallback(va_list args);
+    int dispatchSetOnAcquiredCallback(va_list args);
     int dispatchSetScalingMode(va_list args);
     int dispatchSetBuffersTransform(va_list args);
     int dispatchSetBuffersStickyTransform(va_list args);
@@ -382,6 +445,7 @@ private:
     int dispatchSetPresentMode(va_list args);
     int dispatchSetAutoRefresh(va_list args);
     int dispatchGetDisplayRefreshCycleDuration(va_list args);
+    int dispatchGetLastReplacedFrameId(va_list args);
     int dispatchGetNextFrameId(va_list args);
     int dispatchEnableFrameTimestamps(va_list args);
     int dispatchGetCompositorTiming(va_list args);
@@ -409,7 +473,6 @@ private:
 
 protected:
     virtual int dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd);
-    virtual int cancelBuffer(sp<GraphicBuffer>&& buffer, int fenceFd);
     virtual int perform(int operation, va_list args);
     virtual int setSwapInterval(int interval);
 
@@ -444,9 +507,11 @@ public:
     // attachBuffer call. This allows clients with their own buffer caches to free up buffers no
     // longer in use by this surface.
     virtual int connect(int api, const sp<SurfaceListener>& listener,
-                        bool reportBufferRemoval = false);
+                        bool reportBufferRemoval = false, bool needsAcquiredNotify = false,
+                        bool needsDroppedNotify = false);
     virtual int detachNextBuffer(sp<GraphicBuffer>* outBuffer, sp<Fence>* outFence);
     virtual int attachBuffer(ANativeWindowBuffer*);
+    virtual int attachBuffer(const sp<GraphicBuffer>& buffer);
 
     virtual void destroy();
 
@@ -471,6 +536,12 @@ public:
     // attachBuffer operation.
     status_t queueBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fd = Fence::NO_FENCE,
                          SurfaceQueueBufferOutput* output = nullptr);
+
+    status_t queueBuffer(const sp<GraphicBuffer>& buffer, const SurfaceQueueBufferInput& input,
+                         SurfaceQueueBufferOutput* output = nullptr);
+
+    // Cancels the buffer, returning it to the BufferQueue without actually queuing it.
+    virtual status_t cancelBuffer(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence);
 
     // Detaches this buffer, dissociating it from this Surface. This buffer must have been returned
     // by queueBuffer or associated with this Surface via an attachBuffer operation.
@@ -502,33 +573,56 @@ protected:
 
     class ProducerListenerProxy : public BnProducerListener {
     public:
-        ProducerListenerProxy(const wp<Surface>& parent, const sp<SurfaceListener>& listener)
-              : mParent(parent), mSurfaceListener(listener) {}
+        ProducerListenerProxy(const wp<Surface>& parent, const sp<SurfaceListener>& listener,
+                              bool needsAcquiredNotify = false, bool needsDroppedNotify = false)
+              : mParent(parent),
+                mSurfaceListener(listener),
+                mNeedsAcquiredNotify(needsAcquiredNotify),
+                mNeedsDroppedNotify(needsDroppedNotify) {}
+
         virtual ~ProducerListenerProxy() {}
 
-        virtual void onBufferReleased() {
-            mSurfaceListener->onBufferReleased();
-        }
+        virtual void onBufferReleased() override { mSurfaceListener->onBufferReleased(); }
 
-        virtual bool needsReleaseNotify() {
+        virtual bool needsReleaseNotify() override {
             return mSurfaceListener->needsReleaseNotify();
         }
 
-        virtual void onBufferDetached(int slot) { mSurfaceListener->onBufferDetached(slot); }
+        virtual void onBufferDetached(int slot) override {
+            mSurfaceListener->onBufferDetached(slot);
+        }
 
-        virtual void onBuffersDiscarded(const std::vector<int32_t>& slots);
+        virtual void onBuffersDiscarded(const std::vector<int32_t>& slots) override;
+
+        virtual void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) override;
+
+        virtual void onBufferDropped(uint64_t bufferId, uint64_t frameNumber) override;
+
+        virtual bool needsAcquiredNotify() override { return mNeedsAcquiredNotify; }
+
+        virtual bool needsDroppedNotify() override { return mNeedsDroppedNotify; }
+
+        void setOnDroppedCallback(ANativeWindow_OnDroppedCallback onDroppedCallback, void* data);
+
+        void setOnAcquiredCallback(ANativeWindow_OnAcquiredCallback onAcquiredCallback, void* data);
+
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
-        virtual void onBufferAttached() {
-            mSurfaceListener->onBufferAttached();
-        }
+        virtual void onBufferAttached() override { mSurfaceListener->onBufferAttached(); }
 
-        virtual bool needsAttachNotify() {
-            return mSurfaceListener->needsAttachNotify();
-        }
+        virtual bool needsAttachNotify() override { return mSurfaceListener->needsAttachNotify(); }
 #endif
     private:
         wp<Surface> mParent;
         sp<SurfaceListener> mSurfaceListener;
+
+        bool mNeedsAcquiredNotify;
+        bool mNeedsDroppedNotify;
+
+        std::mutex mMutex;
+        ANativeWindow_OnAcquiredCallback mOnAcquiredCallback GUARDED_BY(mMutex) = nullptr;
+        void* mOnAcquiredCallbackData GUARDED_BY(mMutex) = nullptr;
+        ANativeWindow_OnDroppedCallback mOnDroppedCallback GUARDED_BY(mMutex) = nullptr;
+        void* mOnDroppedCallbackData GUARDED_BY(mMutex) = nullptr;
     };
 
     class ProducerDeathListenerProxy : public IBinder::DeathRecipient {
@@ -556,6 +650,10 @@ protected:
     void getQueueBufferInputLocked(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
                                    nsecs_t timestamp,
                                    IGraphicBufferProducer::QueueBufferInput* out);
+
+    status_t queueBufferImpl(const sp<GraphicBuffer>& buffer, const sp<Fence>& fence,
+                             const SurfaceQueueBufferInput* maybeInput,
+                             SurfaceQueueBufferOutput* output) EXCLUDES(mMutex);
 
     // For easing in adoption of gralloc4 metadata by vendor components, as well as for supporting
     // the public ANativeWindow api, allow setting relevant metadata when queueing a buffer through
@@ -598,11 +696,7 @@ protected:
     // slot that has not yet been used. The buffer allocated to a slot will also
     // be replaced if the requested buffer usage or geometry differs from that
     // of the buffer allocated to a slot.
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     std::vector<BufferSlot> mSlots;
-#else
-    BufferSlot mSlots[NUM_BUFFER_SLOTS];
-#endif
 
     struct BufferHash {
         std::size_t operator()(const sp<GraphicBuffer>& buffer) const {
@@ -745,6 +839,10 @@ protected:
     // IGraphicBufferProducer::setGenerationNumber for more information.
     uint32_t mGenerationNumber;
 
+    // If true, the generation number is automatically updated on any buffers
+    // attached to this surface.
+    bool mAutoGenerationUpdate = true;
+
     // Caches the values that have been passed to the producer.
     bool mSharedBufferMode;
     bool mAutoRefresh;
@@ -788,11 +886,9 @@ protected:
     std::vector<sp<GraphicBuffer>> mRemovedBuffers;
     int mMaxBufferCount;
 
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_UNLIMITED_SLOTS)
     bool mIsSlotExpansionAllowed;
-#endif
 
-    sp<IProducerListener> mListenerProxy;
+    sp<ProducerListenerProxy> mListenerProxy;
 
     // Get and flush the buffers of given slots, if the buffer in the slot
     // is currently dequeued then it won't be flushed and won't be returned
@@ -816,6 +912,9 @@ protected:
     mutable std::mutex mDebugMutex;
     String8 mDebugName GUARDED_BY(mDebugMutex) = String8("not-connected");
     uint64_t mId GUARDED_BY(mDebugMutex) = 0;
+
+    // The frame id of the last frame replaced by bufferQueueProducer::queueBuffer
+    std::optional<uint64_t> mLastReplacedFrameId;
 };
 
 } // namespace android
