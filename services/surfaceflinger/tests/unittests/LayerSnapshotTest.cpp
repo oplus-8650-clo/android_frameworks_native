@@ -1683,6 +1683,76 @@ TEST_F(LayerSnapshotTest, SetClientDrawnClippedRadii) {
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.clientDrawnRadii, CLIPPED_RADIUS);
 }
 
+TEST_F(LayerSnapshotTest, shouldDisableCornerRounding_EmptyClientDrawnRadii) {
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+    static const gui::CornerRadii ACTUAL_RADIUS = gui::CornerRadii(RADIUS);
+
+    setRoundedCorners(1, RADIUS);
+    setCrop(1, Rect{1000, 1000});
+    setClientDrawnCornerRadius(1, RADIUS, FloatRect{0, 0, 1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.sfDrawnRadii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, ACTUAL_RADIUS);
+
+    // ClientDrawnRadii is empty -> SF draws corners
+    setClientDrawnCornerRadius(1, 0.f, FloatRect{0, 0, 1000, 1000});
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.sfDrawnRadii, ACTUAL_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, ZERO_RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, shouldDisableCornerRounding_BoundsMismatch) {
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+    static const gui::CornerRadii ACTUAL_RADIUS = gui::CornerRadii(RADIUS);
+
+    setRoundedCorners(1, RADIUS);
+    setCrop(1, Rect{1000, 1000});
+    setClientDrawnCornerRadius(1, RADIUS, FloatRect{0, 0, 1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.sfDrawnRadii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, ACTUAL_RADIUS);
+
+    // Bounds don't match -> SF draws corners
+    setClientDrawnCornerRadius(1, RADIUS, FloatRect{0, 0, 999, 999});
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.sfDrawnRadii, ACTUAL_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, ACTUAL_RADIUS);
+}
+
+TEST_F(LayerSnapshotTest, clientDrawnCornerRadiiOnlyUpdatesOnFlag) {
+    static constexpr float RADIUS_A = 123.f;
+    static constexpr float RADIUS_B = 456.f;
+    static const gui::CornerRadii CORNER_A = gui::CornerRadii(RADIUS_A);
+    static const gui::CornerRadii CORNER_B = gui::CornerRadii(RADIUS_B);
+
+    // Set the client drawn corner radius to A
+    setRoundedCorners(1, RADIUS_A);
+    setCrop(1, Rect{1000, 1000});
+    setClientDrawnCornerRadius(1, RADIUS_A, FloatRect{0, 0, 1000, 1000});
+
+    // Should be A
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, CORNER_A);
+
+    // Trigger an update that does NOT include eClientDrawnCornerRadiusChanged
+    setAlpha(1, 0.5f);
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    // Should still be A
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, CORNER_A);
+
+    // Now trigger an update includes eClientDrawnCornerRadiusChanged
+    setClientDrawnCornerRadius(1, RADIUS_B, FloatRect{0, 0, 1000, 1000});
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    // Should now be B
+    EXPECT_EQ(getSnapshot({.id = 1})->roundedCorner.clientDrawnRadii, CORNER_B);
+}
+
 TEST_F(LayerSnapshotTest, reportedRadiiWithCornerRegionOverlap) {
     static const gui::CornerRadii RADIUS = gui::CornerRadii(111.f, 222.f, 333.f, 444.f);
 

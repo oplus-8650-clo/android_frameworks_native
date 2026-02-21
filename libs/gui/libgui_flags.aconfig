@@ -133,3 +133,13 @@ flag {
   description: "Enable out of process rendering"
   bug: "448153717"
 } # out_of_process_rendering
+
+flag {
+  name: "allocate_buffer_priority_inheritance"
+  namespace: "core_graphics"
+  description: "Inherit caller priority when BBQ allocates buffers"
+  bug: "479828540"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+} # allocate_buffer_priority_inheritance

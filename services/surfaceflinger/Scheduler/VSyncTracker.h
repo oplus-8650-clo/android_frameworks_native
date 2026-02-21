@@ -70,12 +70,18 @@ public:
      */
     virtual bool addVsyncTimestamp(nsecs_t timestamp) = 0;
 
+    struct HwVsyncStability {
+        std::optional<nsecs_t> error;
+        std::optional<nsecs_t> stddev;
+    };
+
     struct ModelAccuracy {
         nsecs_t modelErrorNs;
         nsecs_t actualVsync;
         nsecs_t predictedVsync;
         nsecs_t idealPeriod;
         double vsyncPeriodsElapsed;
+        HwVsyncStability hwVsyncStability;
     };
 
     /*

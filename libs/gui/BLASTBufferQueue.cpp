@@ -32,6 +32,8 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 //#define LOG_NDEBUG 0
 
+#include <atomic>
+
 #include <com_android_graphics_libgui_flags.h>
 #include <cutils/atomic.h>
 #include <ftl/fake_guard.h>
@@ -57,6 +59,8 @@
 #include <android-base/thread_annotations.h>
 
 #include <com_android_graphics_libgui_flags.h>
+
+#include "AsyncWorker.h"
 
 using namespace com::android::graphics::libgui;
 using namespace std::chrono_literals;
@@ -997,27 +1001,89 @@ private:
     std::mutex mMutex;
     sp<BLASTBufferQueue> mBbq GUARDED_BY(mMutex);
     bool mDestroyed GUARDED_BY(mMutex) = false;
+    AsyncWorker mAllocWorker;
+    std::atomic<pid_t> mAllocWorkerTid{-1};
 
 public:
     BBQSurface(const sp<IGraphicBufferProducer>& igbp, bool controlledByApp,
                const sp<IBinder>& scHandle, const sp<BLASTBufferQueue>& bbq)
-          : Surface(igbp, controlledByApp, scHandle), mBbq(bbq) {}
+          : Surface(igbp, controlledByApp, scHandle), mBbq(bbq) {
+        if (com_android_graphics_libgui_flags_allocate_buffer_priority_inheritance()) {
+            mAllocWorker.post([this] {
+                androidSetThreadName("allocateBuffers");
+                mAllocWorkerTid.store(gettid(), std::memory_order_relaxed);
+            });
+        }
+    }
 
     void allocateBuffers() override {
         ATRACE_CALL();
         uint32_t reqWidth = mReqWidth ? mReqWidth : mUserWidth;
         uint32_t reqHeight = mReqHeight ? mReqHeight : mUserHeight;
+        if (com_android_graphics_libgui_flags_allocate_buffer_priority_inheritance()) {
+            allocateBuffersCallerPriority(reqWidth, reqHeight);
+        } else {
+            allocateBuffersStaticPriority(reqWidth, reqHeight);
+        }
+    }
+
+    void allocateBuffersStaticPriority(uint32_t reqWidth, uint32_t reqHeight) {
         auto gbp = getIGraphicBufferProducer();
         std::thread allocateThread([reqWidth, reqHeight, gbp = getIGraphicBufferProducer(),
                                     reqFormat = mReqFormat, reqUsage = mReqUsage]() {
             androidSetThreadName("allocateBuffers");
             pid_t tid = gettid();
             androidSetThreadPriority(tid, ANDROID_PRIORITY_DISPLAY);
+            gbp->allocateBuffers(reqWidth, reqHeight, reqFormat, reqUsage);
+        });
+        allocateThread.detach();
+    }
 
+    void allocateBuffersCallerPriority(uint32_t reqWidth, uint32_t reqHeight) {
+        std::optional<int> callerPriority;
+        pid_t workerTid = mAllocWorkerTid.load(std::memory_order_relaxed);
+        int callerScheduler = sched_getscheduler(0);
+        switch (callerScheduler) {
+            // For fair policies, we can set worker thread's priority
+            // to the caller thread's priority.
+            case SCHED_OTHER: // i.e. SCHED_NORMAL
+            case SCHED_BATCH:
+            case SCHED_EXT:
+                callerPriority = androidGetThreadPriority(gettid());
+                break;
+            // For realtime policies, this process doesn't necessarily have
+            // the capability to switch the worker thread to a realtime
+            // policy. As such, just use the highest generic priority.
+            case SCHED_FIFO:
+            case SCHED_RR:
+            case SCHED_DEADLINE:
+                callerPriority = -10; // Process.THREAD_PRIORITY_TOP_APP_BOOST
+                break;
+            // Priority doesn't matter for SCHED_IDLE.
+            case SCHED_IDLE:
+                break;
+            default:
+                ALOGW("Unknown scheduling class %d", callerScheduler);
+        }
+
+        // If the allocation thread is already running, set its priority here so that the
+        // scheduler has the right priority when we wake it up. On the rare chance we're
+        // here before the allocation thread has started, the best we can do is have the
+        // allocation thread update its own priority.
+        if (callerPriority.has_value() && workerTid != -1) {
+            androidSetThreadPriority(workerTid, *callerPriority);
+        }
+
+        auto gbp = getIGraphicBufferProducer();
+        mAllocWorker.post([reqWidth, reqHeight, gbp = getIGraphicBufferProducer(),
+                           reqFormat = mReqFormat, reqUsage = mReqUsage, workerTid,
+                           callerPriority]() {
+            if (callerPriority.has_value() && workerTid == -1) {
+                androidSetThreadPriority(gettid(), *callerPriority);
+            }
             gbp->allocateBuffers(reqWidth, reqHeight,
                                  reqFormat, reqUsage);
         });
-        allocateThread.detach();
     }
 
     status_t setFrameTimelineInfo(uint64_t frameNumber,
@@ -1122,56 +1188,10 @@ SurfaceComposerClient::Transaction* BLASTBufferQueue::gatherPendingTransactions(
     return t;
 }
 
-// Maintains a single worker thread per process that services a list of runnables.
-class AsyncWorker : public Singleton<AsyncWorker> {
-private:
-    std::thread mThread;
-    bool mDone = false;
-    std::deque<std::function<void()>> mRunnables;
-    std::mutex mMutex;
-    std::condition_variable mCv;
-    void run() {
-        std::unique_lock<std::mutex> lock(mMutex);
-        while (!mDone) {
-            while (!mRunnables.empty()) {
-                std::deque<std::function<void()>> runnables = std::move(mRunnables);
-                mRunnables.clear();
-                lock.unlock();
-                // Run outside the lock since the runnable might trigger another
-                // post to the async worker.
-                execute(runnables);
-                lock.lock();
-            }
-            mCv.wait(lock);
-        }
-    }
-
-    void execute(std::deque<std::function<void()>>& runnables) {
-        while (!runnables.empty()) {
-            std::function<void()> runnable = runnables.front();
-            runnables.pop_front();
-            runnable();
-        }
-    }
-
-public:
-    AsyncWorker() : Singleton<AsyncWorker>() { mThread = std::thread(&AsyncWorker::run, this); }
-
-    ~AsyncWorker() {
-        mDone = true;
-        mCv.notify_all();
-        if (mThread.joinable()) {
-            mThread.join();
-        }
-    }
-
-    void post(std::function<void()> runnable) {
-        std::unique_lock<std::mutex> lock(mMutex);
-        mRunnables.emplace_back(std::move(runnable));
-        mCv.notify_one();
-    }
-};
-ANDROID_SINGLETON_STATIC_INSTANCE(AsyncWorker);
+// Per-process AsyncWorker that emulates a single 'binder thread'.
+class AsyncProducerListenerWorker : public AsyncWorker,
+                                    public Singleton<AsyncProducerListenerWorker> {};
+ANDROID_SINGLETON_STATIC_INSTANCE(AsyncProducerListenerWorker);
 
 // Asynchronously calls ProducerListener functions so we can emulate one way binder calls.
 class AsyncProducerListener : public BnProducerListener {
@@ -1186,28 +1206,29 @@ public:
     bool needsDroppedNotify() override { return mListener->needsDroppedNotify(); }
 
     void onBufferReleased() override {
-        AsyncWorker::getInstance().post([listener = mListener]() { listener->onBufferReleased(); });
+        AsyncProducerListenerWorker::getInstance().post(
+                [listener = mListener]() { listener->onBufferReleased(); });
     }
 
     void onBuffersDiscarded(const std::vector<int32_t>& slots) override {
-        AsyncWorker::getInstance().post(
+        AsyncProducerListenerWorker::getInstance().post(
                 [listener = mListener, slots = slots]() { listener->onBuffersDiscarded(slots); });
     }
 
     void onBufferDetached(int slot) override {
-        AsyncWorker::getInstance().post(
+        AsyncProducerListenerWorker::getInstance().post(
                 [listener = mListener, slot = slot]() { listener->onBufferDetached(slot); });
     }
 
     void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) override {
-        AsyncWorker::getInstance().post(
+        AsyncProducerListenerWorker::getInstance().post(
                 [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
                     listener->onBufferAcquired(bufferId, frameNumber);
                 });
     };
 
     void onBufferDropped(uint64_t bufferId, uint64_t frameNumber) override {
-        AsyncWorker::getInstance().post(
+        AsyncProducerListenerWorker::getInstance().post(
                 [listener = mListener, bufferId = bufferId, frameNumber = frameNumber]() {
                     listener->onBufferDropped(bufferId, frameNumber);
                 });
@@ -1215,7 +1236,8 @@ public:
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
     void onBufferAttached() override {
-        AsyncWorker::getInstance().post([listener = mListener]() { listener->onBufferAttached(); });
+        AsyncProducerListenerWorker::getInstance().post(
+                [listener = mListener]() { listener->onBufferAttached(); });
     }
 #endif
 };

@@ -89,9 +89,6 @@ interface IInputConstants
      */
     const int INPUT_EVENT_FLAG_TAINTED = 0x80000000;
 
-    /* The default pointer acceleration value. */
-    const int DEFAULT_POINTER_ACCELERATION = 3;
-
     /* The default mouse wheel acceleration value. */
     const int DEFAULT_MOUSE_WHEEL_ACCELERATION = 4;
 

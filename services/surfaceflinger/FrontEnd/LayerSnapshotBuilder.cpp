@@ -1143,9 +1143,10 @@ void LayerSnapshotBuilder::updateRoundedCorner(LayerSnapshot& snapshot,
 
 bool LayerSnapshotBuilder::shouldDisableCornerRounding(LayerSnapshot& snapshot,
                                                        const RequestedLayerState& requested) {
-    bool radiiMatch = requested.clientDrawnCornerRadii == snapshot.roundedCorner.reportedRadii;
+    bool radiiMatch =
+            snapshot.roundedCorner.clientDrawnRadii == snapshot.roundedCorner.reportedRadii;
     bool boundsMatch = snapshot.geomLayerBounds == requested.clientDrawnCornerRadiusCrop;
-    return !requested.clientDrawnCornerRadii.isEmpty() && radiiMatch && boundsMatch;
+    return !snapshot.roundedCorner.clientDrawnRadii.isEmpty() && radiiMatch && boundsMatch;
 }
 
 RoundedCornerState LayerSnapshotBuilder::calculateLayerRoundedCornerSettings(

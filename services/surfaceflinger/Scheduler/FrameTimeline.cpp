@@ -167,6 +167,11 @@ std::string jankTypeBitmaskToString(int32_t jankType) {
         jankType &= ~JankType::DisplayModeChangeInProgress;
     }
 
+    if (jankType & JankType::DisplayPowerModeChangeInProgress) {
+        janks.emplace_back("PowerModeChange in progress");
+        jankType &= ~JankType::DisplayPowerModeChangeInProgress;
+    }
+
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
     return std::accumulate(janks.begin(), janks.end(), std::string(),
@@ -312,6 +317,11 @@ int32_t jankTypeBitmaskToProto(int32_t jankType) {
         jankType &= ~JankType::DisplayModeChangeInProgress;
     }
 
+    if (jankType & JankType::DisplayPowerModeChangeInProgress) {
+        protoJank |= FrameTimelineEvent::JANK_DISPLAY_POWER_MODE_CHANGE_IN_PROGRESS;
+        jankType &= ~JankType::DisplayPowerModeChangeInProgress;
+    }
+
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
     return protoJank;
@@ -392,7 +402,8 @@ std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
             JankType::PredictionError | JankType::SurfaceFlingerScheduling | JankType::Unknown |
             JankType::Dropped | JankType::AppResyncedJitter;
     const int32_t nonJankBitmask = JankType::BufferStuffing | JankType::SurfaceFlingerStuffing |
-            JankType::NonAnimating | JankType::DisplayNotOn | JankType::DisplayModeChangeInProgress;
+            JankType::NonAnimating | JankType::DisplayNotOn |
+            JankType::DisplayModeChangeInProgress | JankType::DisplayPowerModeChangeInProgress;
     static_assert((kJankTypeAll & ~(jankBitmask | nonJankBitmask)) == 0);
 
     if ((jankType & jankBitmask) == 0) { // Not Janky
@@ -969,6 +980,11 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
 
     if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
         mJankType.experimental() = JankType::DisplayNotOn;
+        return;
+    }
+
+    if (displayFrameJankTypeExperimental & JankType::DisplayPowerModeChangeInProgress) {
+        mJankType.experimental() = JankType::DisplayPowerModeChangeInProgress;
         return;
     }
 
@@ -1732,6 +1748,10 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
 
     if (mJankType.experimental() != JankType::None && mDisplayState.modeChangeInProgress) {
         mJankType.experimental() |= JankType::DisplayModeChangeInProgress;
+    }
+
+    if (mJankType.experimental() != JankType::None && mDisplayState.powerModeChangeInProgress) {
+        mJankType.experimental() = JankType::DisplayPowerModeChangeInProgress;
     }
 }
 

@@ -17,6 +17,7 @@
 #pragma once
 
 #include <binder/Binder.h>
+#include <binder/Functional.h>
 
 namespace android {
 
@@ -28,7 +29,12 @@ class LIBBINDER_EXPORTED JavaBBinderBase : public BBinder {
 public:
     JavaBBinderBase();
 
-    static const void* getSubclassID();
+    // Only use this method to check if the binder belongs to type JavaBBinderExt
+    static const void* getExtSubclassID();
+
+    virtual void getFunctionName(
+            uint32_t code,
+            const android::binder::impl::SmallFunction<void(const char*)>& callback) const = 0;
 
 protected:
     virtual ~JavaBBinderBase();

@@ -2587,6 +2587,50 @@ TEST_F(FrameTimelineTest, jankClassification_presentOnTimeDoesNotClassify_Experi
     EXPECT_EQ(jankData[0].jankTypeLegacy, JankType::None);
 }
 
+TEST_F(FrameTimelineTest, jankClassification_displayPowerChangeInProgress) {
+    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
+    SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, true);
+    // Layer specific increment
+    EXPECT_CALL(*mTimeStats, incrementJankyFrames(_));
+    auto presentFence1 = fenceFactory.createFenceTimeForTest(Fence::NO_FENCE);
+    int64_t surfaceFrameToken = mTokenManager->generateTokenForPredictions({10, 20, 30});
+    int64_t sfToken1 = mTokenManager->generateTokenForPredictions({22, 30, 30});
+    FrameTimelineInfo ftInfo;
+    ftInfo.vsyncId = surfaceFrameToken;
+    ftInfo.inputEventId = sInputEventId;
+    auto surfaceFrame =
+            mFrameTimeline->createSurfaceFrameForToken(ftInfo, sPidOne, sUidOne, sLayerIdOne,
+                                                       sLayerNameOne, sLayerNameOne,
+                                                       /*isBuffer*/ true, sGameMode,
+                                                       sContentPriority);
+
+    // Set powerModeChangeInProgress = true
+    FrameTimelineDisplayState displayState = {.poweredOn = true,
+                                              .modeChangeInProgress = false,
+                                              .powerModeChangeInProgress = true};
+    mFrameTimeline->setSfWakeUp(sfToken1, 22, RR_11, RR_11, displayState);
+    surfaceFrame->setPresentState(SurfaceFrame::PresentState::Presented);
+    mFrameTimeline->addSurfaceFrame(surfaceFrame);
+    mFrameTimeline->setSfPresent(35, presentFence1); // Late finish (35 > 30)
+    auto displayFrame = getDisplayFrame(0);
+    auto& presentedSurfaceFrame = getSurfaceFrame(0, 0);
+    presentFence1->signalForTest(45); // Late present (45 > 30 + 2)
+
+    addEmptyDisplayFrame();
+    displayFrame = getDisplayFrame(0);
+
+    // Fences have flushed, so the present timestamps should be updated
+    EXPECT_EQ(displayFrame->getActuals().presentTime, 45);
+    EXPECT_EQ(presentedSurfaceFrame.getActuals().presentTime, 45);
+    EXPECT_EQ(displayFrame->getFramePresentMetadata(), FramePresentMetadata::LatePresent);
+    EXPECT_EQ(displayFrame->getFrameReadyMetadata(), FrameReadyMetadata::LateFinish);
+
+    // Verify DisplayPowerModeChangeInProgress is tagged
+    EXPECT_EQ(displayFrame->getJankType(), JankType::DisplayPowerModeChangeInProgress);
+    EXPECT_EQ(presentedSurfaceFrame.getJankType().value(),
+              JankType::DisplayPowerModeChangeInProgress);
+}
+
 TEST_F(FrameTimelineTest, jankClassification_displayFrameOnTimeFinishEarlyPresent_Legacy) {
     SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, false);
     Fps vsyncRate = RR_11;
