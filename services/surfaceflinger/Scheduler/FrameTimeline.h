@@ -392,6 +392,7 @@ private:
 struct FrameTimelineDisplayState {
     bool poweredOn = true;
     bool modeChangeInProgress = false;
+    bool powerModeChangeInProgress = false;
 };
 
 /*

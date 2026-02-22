@@ -103,7 +103,6 @@
 #include "FrontEnd/LayerSnapshot.h"
 #include "FrontEnd/LayerSnapshotBuilder.h"
 #include "FrontEnd/TransactionHandler.h"
-#include "LayerVector.h"
 #include "MutexUtils.h"
 #include "PowerAdvisor/PowerAdvisor.h"
 #include "QueuedTransactionState.h"
@@ -429,10 +428,9 @@ private:
 
     class State {
     public:
-        explicit State(LayerVector::StateSet set) : stateSet(set) {}
+        State() = default;
+
         State& operator=(const State& other) {
-            // We explicitly don't copy stateSet so that, e.g., mDrawingState
-            // always uses the Drawing StateSet.
             displays = other.displays;
             colorMatrixChanged = other.colorMatrixChanged;
             if (colorMatrixChanged) {
@@ -442,8 +440,6 @@ private:
 
             return *this;
         }
-
-        const LayerVector::StateSet stateSet = LayerVector::StateSet::Invalid;
 
         ui::DisplayMap<wp<IBinder>, DisplayDeviceState> displays;
 
@@ -1418,8 +1414,13 @@ private:
 
     ui::Rotation getPhysicalDisplayOrientation(PhysicalDisplayId, bool isPrimary) const
             REQUIRES(mStateLock);
-    void traverseLegacyLayers(const LayerVector::Visitor& visitor) const
-            REQUIRES(kMainThreadContext);
+
+    template <typename F>
+    void traverseLegacyLayers(F visitor) const REQUIRES(kMainThreadContext) {
+        for (auto& layer : mLegacyLayers) {
+            visitor(layer.second.get());
+        }
+    }
 
     void initBootProperties();
     void initTransactionTraceWriter();
@@ -1442,7 +1443,7 @@ private:
     // - write access from the main thread must lock mStateLock, since another
     // thread may be reading these variables.
     mutable Mutex mStateLock;
-    State mCurrentState{LayerVector::StateSet::Current};
+    State mCurrentState;
     std::atomic<int32_t> mTransactionFlags = 0;
     std::atomic<uint32_t> mUniqueTransactionId = 1;
 
@@ -1469,7 +1470,7 @@ private:
 
     // Can only accessed from the main thread, these members
     // don't need synchronization
-    State mDrawingState{LayerVector::StateSet::Drawing};
+    State mDrawingState;
     bool mVisibleRegionsDirty = false;
 
     bool mHdrLayerInfoChanged = false;
@@ -1691,6 +1692,8 @@ private:
     }
 
     std::atomic_bool mPowerHintSessionEnabled;
+    std::atomic_int mPowerModeInProgressCount{0};
+    std::atomic_bool mPowerModeChangeInProgress{false};
     // Whether a display should be turned on when initialized
     bool mSkipPowerOnForQuiescent;
 

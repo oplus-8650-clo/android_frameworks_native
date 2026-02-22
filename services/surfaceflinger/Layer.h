@@ -61,7 +61,6 @@
 #include "DisplayHardware/HWComposer.h"
 #include "FrameTracker.h"
 #include "LayerFE.h"
-#include "LayerVector.h"
 #include "Scheduler/FrameTimeline.h"
 #include "Scheduler/LayerInfo.h"
 #include "SurfaceFlinger.h"

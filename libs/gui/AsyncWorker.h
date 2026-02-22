@@ -13,18 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define LOG_TAG "libbinder.Binder"
 
-#include <binder/internal/JavaBBinderBase.h>
+#pragma once
 
-namespace android::internal {
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include <mutex>
+#include <thread>
 
-JavaBBinderBase::JavaBBinderBase() = default;
-JavaBBinderBase::~JavaBBinderBase() = default;
+// A single worker thread that services a list of runnables.
+class AsyncWorker {
+public:
+    AsyncWorker();
+    ~AsyncWorker();
 
-const void* JavaBBinderBase::getExtSubclassID() {
-    static const char* const kSubclassID = "JavaBBinderExt";
-    return kSubclassID;
-}
+    void post(std::function<void()> runnable);
 
-} // namespace android::internal
+private:
+    std::thread mThread;
+    bool mDone = false;
+    std::deque<std::function<void()>> mRunnables;
+    std::mutex mMutex;
+    std::condition_variable mCv;
+
+    void run();
+    void execute(std::deque<std::function<void()>>& runnables);
+};

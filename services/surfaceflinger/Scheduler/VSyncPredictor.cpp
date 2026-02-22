@@ -148,8 +148,6 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
 
     std::lock_guard lock(mMutex);
 
-    calculateVsyncStability(timestamp);
-
     if (!validate(timestamp)) {
         // VSR could elect to ignore the incongruent timestamp or resetModel(). If ts is ignored,
         // don't insert this ts into mTimestamps ringbuffer. If we are still
@@ -435,7 +433,10 @@ VSyncTracker::ModelAccuracy VSyncPredictor::getModelAccuracyLocked(nsecs_t known
             ? static_cast<double>(knownVsync - *lastVsync) / static_cast<double>(idealPeriod())
             : 0.0;
 
-    return {modelErrorNs, knownVsync, predictedVsync, idealPeriod(), vsyncPeriodsElapsed};
+    const auto stability = calculateVsyncStability(knownVsync);
+
+    return {modelErrorNs,  knownVsync,          predictedVsync,
+            idealPeriod(), vsyncPeriodsElapsed, stability};
 }
 
 /*
@@ -692,7 +693,9 @@ bool VSyncPredictor::needsMoreSamples() const {
     return mTimestamps.size() < getMinSamplesRequiredForPrediction();
 }
 
-void VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) {
+VSyncTracker::HwVsyncStability VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) const {
+    HwVsyncStability stability;
+
     // Find the most recent valid timestamp as a reference point for the interval.
     nsecs_t lastTimestamp = 0;
     if (!mTimestamps.empty()) {
@@ -706,7 +709,7 @@ void VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) {
         // the stability calculation will be meaningless. Clear the history in this case.
         if (!isVsyncWithinThreshold(timestamp, lastTimestamp)) {
             mVsyncErrors.clear();
-            return;
+            return stability;
         }
 
         const nsecs_t delta = timestamp - lastTimestamp;
@@ -718,7 +721,7 @@ void VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) {
             if (n > 0) {
                 // Calculate the variance between the observed timestamp and the theoretical ideal.
                 const nsecs_t error = delta - (n * ideal);
-                traceInt64("VSP-HwErrorNs", error);
+                stability.error = error;
 
                 // Only use consecutive samples (n == 1) for the stability metric.
                 // This isolates immediate jitter from cumulative drift over skipped frames (n > 1).
@@ -738,12 +741,13 @@ void VSyncPredictor::calculateVsyncStability(nsecs_t timestamp) {
                             sumSqDiff += std::pow(static_cast<double>(mVsyncErrors[i]) - mean, 2);
                         }
                         const double stddev = std::sqrt(sumSqDiff / mVsyncErrors.size());
-                        traceInt64("VSP-StabStdNs", static_cast<int64_t>(stddev));
+                        stability.stddev = static_cast<nsecs_t>(stddev);
                     }
                 }
             }
         }
     }
+    return stability;
 }
 
 void VSyncPredictor::resetModel() {
