@@ -307,7 +307,9 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     : std::nullopt;
 
             std::optional<InputDeviceViewBehavior> viewBehaviorOverride =
-                    inputDeviceConfigurationOverride->viewBehavior;
+                    inputDeviceConfigurationOverride.has_value()
+                    ? inputDeviceConfigurationOverride->viewBehavior
+                    : std::nullopt;
 
             std::optional<bool> shouldSmoothScrollFromPropertyMap =
                     mConfiguration.getBool("device.viewBehavior_smoothScroll");

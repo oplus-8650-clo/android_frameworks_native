@@ -2016,6 +2016,35 @@ FTL_FAKE_GUARD(kMainThreadContext) {
     EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
 }
 
+TEST_F(SelectPacesetterDisplayTest, InternalDisplayGreaterVsyncButExternalDisplayGreaterPeakFps)
+FTL_FAKE_GUARD(kMainThreadContext) {
+    // ARR capable internal display with 120FPS with 240Hz refresh rate.
+    const auto vrrModeId = DisplayModeId(0);
+    const auto internalRefreshRate = Fps::fromValue(240);
+    auto internalPeakFps = Fps::fromValue(120);
+    const ftl::NonNull<DisplayModePtr> vrrMode = ftl::as_non_null(
+            createVrrDisplayMode(DisplayModeId(0), internalRefreshRate,
+                                 hal::VrrConfig{.minFrameIntervalNs = static_cast<int32_t>(
+                                                        internalPeakFps.getPeriodNsecs())}));
+    std::shared_ptr<RefreshRateSelector> vrrSelectorPtr =
+            std::make_shared<RefreshRateSelector>(makeModes(vrrMode), vrrMode->getId(),
+                                                  RefreshRateSelector::Config{
+                                                          .enableFrameRateOverride = true});
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+
+    // 144Hz/60Hz external display.
+    const ftl::NonNull<DisplayModePtr> display2Mode144 =
+            ftl::as_non_null(createDisplayMode(kDisplayId2, DisplayModeId(0), 144_Hz));
+    const DisplayModes extDisplayModes = makeModes(display2Mode144);
+    auto selector2 =
+            std::make_shared<RefreshRateSelector>(extDisplayModes, display2Mode144->getId());
+    mScheduler->registerDisplay(kDisplayId2, ui::DisplayConnectionType::External, selector2);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
+    // 144Hz should win out against 120Hz.
+    EXPECT_EQ(mScheduler->pacesetterDisplayId(), kDisplayId2);
+}
+
 TEST_F(SchedulerTest, selectorPtrForLayerStack) FTL_FAKE_GUARD(kMainThreadContext) {
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection, true);
     SET_FLAG_FOR_TEST(flags::follower_arbitrary_refresh_rate_selection_platform, true);

@@ -61,6 +61,18 @@ class QtiSurfaceExtensionGPP;
 }
 class GraphicBuffer;
 
+#ifndef NO_BINDER
+namespace hardware {
+namespace graphics {
+namespace bufferqueue {
+namespace V2_0 {
+struct IGraphicBufferProducer;
+} // namespace V2_0
+} // namespace bufferqueue
+} // namespace graphics
+} // namespace hardware
+#endif
+
 namespace gui {
 class FrameTimelineInfo;
 class ISurfaceComposer;
@@ -207,6 +219,14 @@ public:
      * Get the underlying Surface from the given ANativeWindow.
      */
     static sp<Surface> from(ANativeWindow* anw);
+
+    /*
+     * creates a Surface from a HIDL IGraphicBufferProducer token (v2.0).
+     */
+#ifndef NO_BINDER
+    static sp<Surface> fromHidl(
+            const sp<hardware::graphics::bufferqueue::V2_0::IGraphicBufferProducer>& token);
+#endif
 
     /*
      * Null-safe check of whether two surfaces represent the same underlying object. Roughly

@@ -87,6 +87,7 @@ enum {
     SET_PRODUCER_THROTTLING_ENABLED,
     GET_PRODUCER_THROTTLING_ENABLED,
     SET_PRESENT_MODE,
+    GET_CONFIG_FOR_SURFACE,
 };
 
 class BpGraphicBufferProducer : public BpInterface<IGraphicBufferProducer>
@@ -98,6 +99,21 @@ public:
     }
 
     ~BpGraphicBufferProducer() override;
+
+    virtual status_t getConfigForSurface(SurfaceConfig* outConfig) override {
+        Parcel data, reply;
+        data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_CONFIG_FOR_SURFACE, data, &reply);
+        if (result != NO_ERROR) {
+            return result;
+        }
+
+        result = reply.readInt32();
+        if (result != NO_ERROR) {
+            return result;
+        }
+        return reply.read(*outConfig);
+    }
 
     virtual status_t requestBuffer(int bufferIdx, sp<GraphicBuffer>* buf) {
         Parcel data, reply;
@@ -1040,6 +1056,12 @@ IMPLEMENT_HYBRID_META_INTERFACE(GraphicBufferProducer,
 
 // ----------------------------------------------------------------------
 
+status_t IGraphicBufferProducer::getConfigForSurface(SurfaceConfig* outConfig) {
+    // No-op for IGBP other than BufferQueue.
+    (void)outConfig;
+    return INVALID_OPERATION;
+}
+
 status_t IGraphicBufferProducer::extendSlotCount(int size) {
     // No-op for IGBP other than BufferQueue.
     (void)size;
@@ -1686,6 +1708,16 @@ status_t BnGraphicBufferProducer::onTransact(
             int32_t mode = data.readInt32();
             status_t result = setPresentMode(mode);
             reply->writeInt32(result);
+            return NO_ERROR;
+        }
+        case GET_CONFIG_FOR_SURFACE: {
+            CHECK_INTERFACE(IGraphicBufferProducer, data, reply);
+            SurfaceConfig config;
+            status_t result = getConfigForSurface(&config);
+            reply->writeInt32(result);
+            if (result == NO_ERROR) {
+                reply->write(config);
+            }
             return NO_ERROR;
         }
     }

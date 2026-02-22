@@ -80,8 +80,8 @@ ConsumerBase::ConsumerBase(bool controlledByApp, bool consumerIsSurfaceFlinger)
         mPrevFinalReleaseFence(Fence::NO_FENCE) {
     sp<IGraphicBufferProducer> producer;
     BufferQueue::createBufferQueue(&producer, &mConsumer, consumerIsSurfaceFlinger);
-    mSurface = sp<Surface>::make(producer, controlledByApp);
     initialize(controlledByApp);
+    mSurface = sp<Surface>::make(producer, controlledByApp);
 }
 
 ConsumerBase::ConsumerBase(const sp<IGraphicBufferProducer>& producer,
@@ -89,9 +89,9 @@ ConsumerBase::ConsumerBase(const sp<IGraphicBufferProducer>& producer,
       : mSlots(BufferQueueDefs::NUM_BUFFER_SLOTS),
         mAbandoned(false),
         mConsumer(consumer),
-        mSurface(sp<Surface>::make(producer, controlledByApp)),
         mPrevFinalReleaseFence(Fence::NO_FENCE) {
     initialize(controlledByApp);
+    mSurface = sp<Surface>::make(producer, controlledByApp);
 }
 
 void ConsumerBase::initialize(bool controlledByApp) {

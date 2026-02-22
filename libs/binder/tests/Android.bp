@@ -104,6 +104,7 @@ cc_test {
     ],
     header_libs: [
         "jni_headers",
+        "libbinder_internal_headers",
     ],
     test_suites: ["general-tests"],
     host_supported: false,
@@ -137,6 +138,7 @@ cc_test {
     ],
     header_libs: [
         "jni_headers",
+        "libbinder_internal_headers",
     ],
     test_suites: ["general-tests"],
     host_supported: false,
@@ -978,6 +980,7 @@ cc_test {
     ],
     header_libs: [
         "jni_headers",
+        "libbinder_internal_headers",
     ],
     test_suites: ["device-tests"],
     require_root: true,

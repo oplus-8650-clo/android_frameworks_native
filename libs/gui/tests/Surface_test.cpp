@@ -2839,6 +2839,32 @@ TEST_F(SurfaceTest, UnlimitedSlots_SetMaxDequeuedBufferCount_EdgeCase) {
     }
 }
 
+TEST_F(SurfaceTest, UnlimitedSlots_SecondSurface_UnderstandsExtraSlots) {
+    auto [consumer, surface] = BufferItemConsumer::create(TEST_PRODUCER_USAGE_BITS);
+    ASSERT_NE(nullptr, surface.get());
+
+    // We can set the max dequeued count before connecting.
+    ASSERT_EQ(NO_ERROR, surface->setMaxDequeuedBufferCount(32));
+
+    // 100 is more than the default 64
+    ASSERT_EQ(NO_ERROR, surface->setMaxDequeuedBufferCount(100));
+
+    sp<Surface> surface2 = sp<Surface>::make(surface->getIGraphicBufferProducer());
+    ASSERT_EQ(NO_ERROR, surface2->connect(NATIVE_WINDOW_API_CPU, sp<StubSurfaceListener>::make()));
+
+    sp<GraphicBuffer> buffers[100];
+    for (int i = 0; i < 100; i++) {
+        sp<Fence> fence;
+        ASSERT_EQ(NO_ERROR, surface2->dequeueBuffer(&buffers[i], &fence));
+    }
+
+    for (int i = 0; i < 100; i++) {
+        ASSERT_EQ(NO_ERROR, surface2->cancelBuffer(buffers[i], Fence::NO_FENCE));
+    }
+
+    ASSERT_EQ(NO_ERROR, surface2->disconnect(NATIVE_WINDOW_API_CPU));
+}
+
 TEST_F(SurfaceTest, isBufferOwned) {
     const int TEST_USAGE_FLAGS = GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_HW_RENDER;
     auto [bufferItemConsumer, surface] = BufferItemConsumer::create(TEST_USAGE_FLAGS);

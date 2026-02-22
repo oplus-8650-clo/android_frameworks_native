@@ -168,7 +168,7 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
     const bool hadSideStream = sidebandStream != nullptr;
     const layer_state_t& clientState = resolvedComposerState.state;
     const bool hadSomethingToDraw = hasSomethingToDraw();
-    uint64_t clientChanges = what | layer_state_t::diff(clientState);
+    auto clientChanges = what | layer_state_t::diff(clientState);
     layer_state_t::merge(clientState);
     what = clientChanges;
 
@@ -700,28 +700,28 @@ bool RequestedLayerState::backpressureEnabled() const {
 }
 
 bool RequestedLayerState::isSimpleBufferUpdate(const layer_state_t& s) const {
-    static constexpr uint64_t requiredFlags = layer_state_t::eBufferChanged;
+    static constexpr auto requiredFlags = layer_state_t::eBufferChanged;
     if ((s.what & requiredFlags) != requiredFlags) {
         SFTRACE_FORMAT_INSTANT("%s: false [missing required flags 0x%" PRIx64 "]", __func__,
                                (s.what | requiredFlags) & ~s.what);
         return false;
     }
 
-    const uint64_t deniedFlags = layer_state_t::eProducerDisconnect | layer_state_t::eLayerChanged |
-            layer_state_t::eRelativeLayerChanged | layer_state_t::eTransparentRegionChanged |
-            layer_state_t::eBlurRegionsChanged | layer_state_t::eLayerStackChanged |
-            layer_state_t::eReparent;
+    static constexpr auto deniedFlags = layer_state_t::eProducerDisconnect |
+            layer_state_t::eLayerChanged | layer_state_t::eRelativeLayerChanged |
+            layer_state_t::eTransparentRegionChanged | layer_state_t::eBlurRegionsChanged |
+            layer_state_t::eLayerStackChanged | layer_state_t::eReparent;
     if (s.what & deniedFlags) {
         SFTRACE_FORMAT_INSTANT("%s: false [has denied flags 0x%" PRIx64 "]", __func__,
                                s.what & deniedFlags);
         return false;
     }
 
-    const uint64_t changedFlags = diff(s);
-    const uint64_t deniedChanges = layer_state_t::ePositionChanged | layer_state_t::eAlphaChanged |
-            layer_state_t::eColorTransformChanged | layer_state_t::eBackgroundColorChanged |
-            layer_state_t::eMatrixChanged | layer_state_t::eCornerRadiusChanged |
-            layer_state_t::eClientDrawnCornerRadiusChanged |
+    const auto changedFlags = diff(s);
+    static constexpr auto deniedChanges = layer_state_t::ePositionChanged |
+            layer_state_t::eAlphaChanged | layer_state_t::eColorTransformChanged |
+            layer_state_t::eBackgroundColorChanged | layer_state_t::eMatrixChanged |
+            layer_state_t::eCornerRadiusChanged | layer_state_t::eClientDrawnCornerRadiusChanged |
             layer_state_t::eBackgroundBlurRadiusChanged |
             layer_state_t::eBackgroundBlurScaleChanged | layer_state_t::eBufferTransformChanged |
             layer_state_t::eTransformToDisplayInverseChanged | layer_state_t::eCropChanged |
@@ -754,7 +754,7 @@ bool RequestedLayerState::hasSomethingToDraw() const {
 }
 
 void RequestedLayerState::clearChanges() {
-    what = 0;
+    what.reset();
     changes.clear();
 }
 

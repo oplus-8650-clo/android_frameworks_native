@@ -163,4 +163,136 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
     }
 }
 
+void BoxShadowUtils::drawBorder(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
+                                const SkColor4f& color, float borderWidth) {
+    SFTRACE_CALL();
+    if (borderWidth <= 0) return;
+
+    float r = cornerRadius;
+    if (r > rect.width() * 0.5f) r = rect.width() * 0.5f;
+    if (r > rect.height() * 0.5f) r = rect.height() * 0.5f;
+
+    // Prepare color and transparent color for fringe
+    SkColor c = color.toSkColor();
+    SkColor c0 = SkColorSetA(c, 0);
+
+    float x0 = rect.fLeft;
+    float y0 = rect.fTop;
+    float x1 = rect.fRight;
+    float y1 = rect.fBottom;
+
+    // Corner centers
+    SkPoint cc[4] = {
+            {x1 - r, y0 + r}, // top-right
+            {x1 - r, y1 - r}, // bottom-right
+            {x0 + r, y1 - r}, // bottom-left
+            {x0 + r, y0 + r}, // top-left
+    };
+
+    float sa[4] = {-SK_ScalarPI * 0.5f, 0, SK_ScalarPI * 0.5f, SK_ScalarPI};
+    const int kNumSegs = std::clamp((int)ceilf(r * 0.5f), 1, 16);
+
+    // Number of points in the perimeter path (4 corners * (segments + 1))
+    int nPerim = 4 * (kNumSegs + 1);
+
+    // We need 4 vertices per perimeter point for the stroke:
+    // 0: Outer fringe edge (alpha 0)
+    // 1: Outer stroke edge (alpha full)
+    // 2: Inner stroke edge (alpha full)
+    // 3: Inner fringe edge (alpha 0)
+    int vertexCount = nPerim * 4;
+
+    // 6 indices per quad segment (2 triangles * 3 vertices).
+    // There are 3 strips (outer fringe, stroke body, inner fringe).
+    // So 3 strips * 2 triangles * 3 indices = 18 indices per segment step.
+    int indexCount = nPerim * 18;
+
+    // Max segments is 16.
+    // Max nPerim = 4 * (16 + 1) = 68.
+    // Max vertexCount = 68 * 4 = 272.
+    // Max indexCount = 68 * 18 = 1224.
+    SkPoint pos[272];
+    SkColor colors[272];
+    uint16_t indices[1224];
+
+    int vIndex = 0;
+
+    float outset = 0.5f;              // half-pixel for AA fringe center
+    float inset = borderWidth - 0.5f; // inner edge of opaque stroke
+
+    for (int cIdx = 0; cIdx < 4; cIdx++) {
+        for (int s = 0; s <= kNumSegs; s++) {
+            float a = sa[cIdx] + (SK_ScalarPI * 0.5f) * (float)s / (float)kNumSegs;
+            float nx = cosf(a);
+            float ny = sinf(a);
+
+            // Point on the rect boundary
+            float px = cc[cIdx].fX + nx * r;
+            float py = cc[cIdx].fY + ny * r;
+
+            // 0: Outer fringe edge (transparent) -
+            pos[vIndex] = {px + nx * outset, py + ny * outset};
+            colors[vIndex] = c0;
+            vIndex++;
+
+            // 1: Outer stroke edge (opaque)
+            pos[vIndex] = {px - nx * 0.5f, py - ny * 0.5f};
+            colors[vIndex] = c;
+            vIndex++;
+
+            // 2: Inner stroke edge (opaque)
+            pos[vIndex] = {px - nx * inset, py - ny * inset};
+            colors[vIndex] = c;
+            vIndex++;
+
+            // 3: Inner fringe edge (transparent)
+            pos[vIndex] = {px - nx * (borderWidth + 0.5f), py - ny * (borderWidth + 0.5f)};
+            colors[vIndex] = c0;
+            vIndex++;
+        }
+    }
+
+    int idx = 0;
+    for (int i = 0; i < nPerim; i++) {
+        int next = (i + 1) % nPerim;
+
+        int base = i * 4;
+        int nextBase = next * 4;
+
+        // Strip 1: Outer fringe (0 -> 1)
+        indices[idx++] = base + 0;
+        indices[idx++] = nextBase + 0;
+        indices[idx++] = base + 1;
+        indices[idx++] = nextBase + 0;
+        indices[idx++] = nextBase + 1;
+        indices[idx++] = base + 1;
+
+        // Strip 2: Stroke body (1 -> 2)
+        indices[idx++] = base + 1;
+        indices[idx++] = nextBase + 1;
+        indices[idx++] = base + 2;
+        indices[idx++] = nextBase + 1;
+        indices[idx++] = nextBase + 2;
+        indices[idx++] = base + 2;
+
+        // Strip 3: Inner fringe (2 -> 3)
+        indices[idx++] = base + 2;
+        indices[idx++] = nextBase + 2;
+        indices[idx++] = base + 3;
+        indices[idx++] = nextBase + 2;
+        indices[idx++] = nextBase + 3;
+        indices[idx++] = base + 3;
+    }
+
+    sk_sp<SkVertices> vertices =
+            SkVertices::MakeCopy(SkVertices::kTriangles_VertexMode, vertexCount, pos, nullptr,
+                                 colors, indexCount, indices);
+
+    SkPaint paint;
+    paint.setColor(SK_ColorWHITE);
+    paint.setBlendMode(SkBlendMode::kSrcOver);
+    paint.setAntiAlias(false);
+    canvas->drawVertices(vertices, SkBlendMode::kModulate, paint);
+}
+
 } // namespace android::renderengine::skia

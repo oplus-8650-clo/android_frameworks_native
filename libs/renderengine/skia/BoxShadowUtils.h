@@ -12,6 +12,8 @@ public:
     void drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
                         const android::gui::BoxShadowSettings& settings, bool supportsFpk,
                         bool isInteriorOccluded);
+    void drawBorder(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
+                    const SkColor4f& color, float borderWidth);
 
 private:
     RuntimeEffectManager& mManager;

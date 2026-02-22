@@ -2664,8 +2664,7 @@ void SurfaceFlinger::updateLayerHistory(nsecs_t now) {
         const bool hasChanges =
                 snapshot->changes.any(Changes::FrameRate | Changes::Buffer | Changes::Animation |
                                       Changes::Geometry | Changes::Visibility) ||
-                (snapshot->clientChanges & layer_state_t::eDefaultFrameRateCompatibilityChanged) !=
-                        0;
+                (snapshot->clientChanges & layer_state_t::eDefaultFrameRateCompatibilityChanged);
 
         if (!updateSmallDirty && !hasChanges) {
             continue;
@@ -6163,7 +6162,7 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
         }
     }
 
-    const uint64_t what = s.what;
+    const auto what = s.what;
     uint32_t flags = 0;
     sp<Layer> layer = nullptr;
     if (s.surface) {
@@ -6262,7 +6261,7 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
                                                              systemContentPriority);
     }
 
-    if ((what & layer_state_t::eBufferChanged) == 0) {
+    if (!(what & layer_state_t::eBufferChanged)) {
         layer->setDesiredPresentTime(desiredPresentTime, isAutoTimestamp);
     }
 

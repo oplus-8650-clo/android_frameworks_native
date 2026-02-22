@@ -23,7 +23,7 @@
 #include <include/gpu/graphite/Surface.h>
 #include <include/gpu/graphite/TextureInfo.h>
 
-#include "skia/ColorSpaces.h"
+#include <renderengine/ColorSpaces.h>
 
 #include <android/hardware_buffer.h>
 #include <common/trace.h>

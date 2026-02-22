@@ -44,6 +44,7 @@
 #include <android/gui/TrustedOverlay.h>
 
 #include <ftl/flags.h>
+#include <gui/BitSet.h>
 #include <gui/BufferReleaseChannel.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/LayerMetadata.h>
@@ -174,6 +175,8 @@ public:
  * Used to communicate layer information between SurfaceFlinger and its clients.
  */
 struct layer_state_t {
+    using LayerChangedSet = BitSet<64>;
+
     enum Permission {
         ACCESS_SURFACE_FLINGER = 0x1,
         ROTATE_SURFACE_FLINGER = 0x2,
@@ -209,72 +212,71 @@ struct layer_state_t {
         eRoundedCornerOptDisabled = 0x4000,
     };
 
-    enum : uint64_t {
-        ePositionChanged = 0x00000001,
-        eLayerChanged = 0x00000002,
-        eTrustedPresentationInfoChanged = 0x00000004,
-        eAlphaChanged = 0x00000008,
-        eMatrixChanged = 0x00000010,
-        eTransparentRegionChanged = 0x00000020,
-        eFlagsChanged = 0x00000040,
-        eLayerStackChanged = 0x00000080,
-        eFlushJankData = 0x00000100,
-        eCachingHintChanged = 0x00000200,
-        eDimmingEnabledChanged = 0x00000400,
-        eShadowRadiusChanged = 0x00000800,
-        eLutsChanged = 0x00001000,
-        eBufferCropChanged = 0x00002000,
-        eRelativeLayerChanged = 0x00004000,
-        eReparent = 0x00008000,
-        eColorChanged = 0x00010000,
-        eFrameRateCategoryChanged = 0x00020000,
-        eBufferTransformChanged = 0x00040000,
-        eTransformToDisplayInverseChanged = 0x00080000,
-        eCropChanged = 0x00100000,
-        eBufferChanged = 0x00200000,
-        eDefaultFrameRateCompatibilityChanged = 0x00400000,
-        eDataspaceChanged = 0x00800000,
-        eHdrMetadataChanged = 0x01000000,
-        eSurfaceDamageRegionChanged = 0x02000000,
-        eApiChanged = 0x04000000,
-        eSidebandStreamChanged = 0x08000000,
-        eColorTransformChanged = 0x10000000,
-        eHasListenerCallbacksChanged = 0x20000000,
-        eInputInfoChanged = 0x40000000,
-        eCornerRadiusChanged = 0x80000000,
-        eDestinationFrameChanged = 0x1'00000000,
-        eFrameRateSelectionStrategyChanged = 0x2'00000000,
-        eBackgroundColorChanged = 0x4'00000000,
-        eMetadataChanged = 0x8'00000000,
-        eColorSpaceAgnosticChanged = 0x10'00000000,
-        eFrameRateSelectionPriority = 0x20'00000000,
-        eFrameRateChanged = 0x40'00000000,
-        eBackgroundBlurRadiusChanged = 0x80'00000000,
-        eProducerDisconnect = 0x100'00000000,
-        eFixedTransformHintChanged = 0x200'00000000,
-        eDesiredHdrHeadroomChanged = 0x400'00000000,
-        eBlurRegionsChanged = 0x800'00000000,
-        eAutoRefreshChanged = 0x1000'00000000,
-        eStretchChanged = 0x2000'00000000,
-        eTrustedOverlayChanged = 0x4000'00000000,
-        eDropInputModeChanged = 0x8000'00000000,
-        eExtendedRangeBrightnessChanged = 0x10000'00000000,
-        eEdgeExtensionChanged = 0x20000'00000000,
-        eBufferReleaseChannelChanged = 0x40000'00000000,
-        ePictureProfileHandleChanged = 0x80000'00000000,
-        eAppContentPriorityChanged = 0x100000'00000000,
-        eClientDrawnCornerRadiusChanged = 0x200000'00000000,
-        eBorderSettingsChanged = 0x400000'00000000,
-        eBoxShadowSettingsChanged = 0x800000'00000000,
-        eStopLayerChanged = 0x1000000'00000000,
-        eBackgroundBlurScaleChanged = 0x2000000'00000000,
-        eSystemContentPriorityChanged = 0x4000000'00000000,
-        eRenderCommandBufferChanged = 0x8000000'00000000,
-        eRenderCommandBufferFrameIdChanged = 0x10000000'00000000,
-        eRenderResourceTokenChanged = 0x20000000'00000000,
-        eDesiredMaxHdrHeadroomChanged = 0x40000000'00000000,
-        eCompositionFilterFlagChanged = 0x80000000'00000000,
-    };
+    static constexpr auto ePositionChanged = LayerChangedSet{0};
+    static constexpr auto eLayerChanged = LayerChangedSet{1};
+    static constexpr auto eTrustedPresentationInfoChanged = LayerChangedSet{2};
+    static constexpr auto eAlphaChanged = LayerChangedSet{3};
+    static constexpr auto eMatrixChanged = LayerChangedSet{4};
+    static constexpr auto eTransparentRegionChanged = LayerChangedSet{5};
+    static constexpr auto eFlagsChanged = LayerChangedSet{6};
+    static constexpr auto eLayerStackChanged = LayerChangedSet{7};
+    static constexpr auto eFlushJankData = LayerChangedSet{8};
+    static constexpr auto eCachingHintChanged = LayerChangedSet{9};
+    static constexpr auto eDimmingEnabledChanged = LayerChangedSet{10};
+    static constexpr auto eShadowRadiusChanged = LayerChangedSet{11};
+    static constexpr auto eLutsChanged = LayerChangedSet{12};
+    static constexpr auto eBufferCropChanged = LayerChangedSet{13};
+    static constexpr auto eRelativeLayerChanged = LayerChangedSet{14};
+    static constexpr auto eReparent = LayerChangedSet{15};
+    static constexpr auto eColorChanged = LayerChangedSet{16};
+    static constexpr auto eFrameRateCategoryChanged = LayerChangedSet{17};
+    static constexpr auto eBufferTransformChanged = LayerChangedSet{18};
+    static constexpr auto eTransformToDisplayInverseChanged = LayerChangedSet{19};
+    static constexpr auto eCropChanged = LayerChangedSet{20};
+    static constexpr auto eBufferChanged = LayerChangedSet{21};
+    static constexpr auto eDefaultFrameRateCompatibilityChanged = LayerChangedSet{22};
+    static constexpr auto eDataspaceChanged = LayerChangedSet{23};
+    static constexpr auto eHdrMetadataChanged = LayerChangedSet{24};
+    static constexpr auto eSurfaceDamageRegionChanged = LayerChangedSet{25};
+    static constexpr auto eApiChanged = LayerChangedSet{26};
+    static constexpr auto eSidebandStreamChanged = LayerChangedSet{27};
+    static constexpr auto eColorTransformChanged = LayerChangedSet{28};
+    static constexpr auto eHasListenerCallbacksChanged = LayerChangedSet{29};
+    static constexpr auto eInputInfoChanged = LayerChangedSet{30};
+    static constexpr auto eCornerRadiusChanged = LayerChangedSet{31};
+    static constexpr auto eDestinationFrameChanged = LayerChangedSet{32};
+    static constexpr auto eFrameRateSelectionStrategyChanged = LayerChangedSet{33};
+    static constexpr auto eBackgroundColorChanged = LayerChangedSet{34};
+    static constexpr auto eMetadataChanged = LayerChangedSet{35};
+    static constexpr auto eColorSpaceAgnosticChanged = LayerChangedSet{36};
+    static constexpr auto eFrameRateSelectionPriority = LayerChangedSet{37};
+    static constexpr auto eFrameRateChanged = LayerChangedSet{38};
+    static constexpr auto eBackgroundBlurRadiusChanged = LayerChangedSet{39};
+    static constexpr auto eProducerDisconnect = LayerChangedSet{40};
+    static constexpr auto eFixedTransformHintChanged = LayerChangedSet{41};
+    static constexpr auto eDesiredHdrHeadroomChanged = LayerChangedSet{42};
+    static constexpr auto eBlurRegionsChanged = LayerChangedSet{43};
+    static constexpr auto eAutoRefreshChanged = LayerChangedSet{44};
+    static constexpr auto eStretchChanged = LayerChangedSet{45};
+    static constexpr auto eTrustedOverlayChanged = LayerChangedSet{46};
+    static constexpr auto eDropInputModeChanged = LayerChangedSet{47};
+    static constexpr auto eExtendedRangeBrightnessChanged = LayerChangedSet{48};
+    static constexpr auto eEdgeExtensionChanged = LayerChangedSet{49};
+    static constexpr auto eBufferReleaseChannelChanged = LayerChangedSet{50};
+    static constexpr auto ePictureProfileHandleChanged = LayerChangedSet{51};
+    static constexpr auto eAppContentPriorityChanged = LayerChangedSet{52};
+    static constexpr auto eClientDrawnCornerRadiusChanged = LayerChangedSet{53};
+    static constexpr auto eBorderSettingsChanged = LayerChangedSet{54};
+    static constexpr auto eBoxShadowSettingsChanged = LayerChangedSet{55};
+    static constexpr auto eStopLayerChanged = LayerChangedSet{56};
+    static constexpr auto eBackgroundBlurScaleChanged = LayerChangedSet{57};
+    static constexpr auto eSystemContentPriorityChanged = LayerChangedSet{58};
+    static constexpr auto eRenderCommandBufferChanged = LayerChangedSet{59};
+    static constexpr auto eRenderCommandBufferFrameIdChanged = LayerChangedSet{60};
+    static constexpr auto eRenderResourceTokenChanged = LayerChangedSet{61};
+    static constexpr auto eDesiredMaxHdrHeadroomChanged = LayerChangedSet{62};
+    static constexpr auto eCompositionFilterFlagChanged = LayerChangedSet{63};
+    // When adding a change flag, update LayerChangedSet to reflect new size requirement
 
     layer_state_t();
 
@@ -283,16 +285,16 @@ struct layer_state_t {
     status_t read(const Parcel& input);
     // Compares two layer_state_t structs and returns a set of change flags describing all the
     // states that are different.
-    uint64_t diff(const layer_state_t& other) const;
+    LayerChangedSet diff(const layer_state_t& other) const;
     bool hasBufferChanges() const;
 
     // Layer hierarchy updates.
-    static constexpr uint64_t HIERARCHY_CHANGES = layer_state_t::eLayerChanged |
+    static constexpr auto HIERARCHY_CHANGES = layer_state_t::eLayerChanged |
             layer_state_t::eRelativeLayerChanged | layer_state_t::eReparent |
             layer_state_t::eLayerStackChanged;
 
     // Geometry updates.
-    static constexpr uint64_t GEOMETRY_CHANGES = layer_state_t::eBufferCropChanged |
+    static constexpr auto GEOMETRY_CHANGES = layer_state_t::eBufferCropChanged |
             layer_state_t::eBufferTransformChanged | layer_state_t::eCornerRadiusChanged |
             layer_state_t::eClientDrawnCornerRadiusChanged | layer_state_t::eCropChanged |
             layer_state_t::eDestinationFrameChanged | layer_state_t::eMatrixChanged |
@@ -300,7 +302,7 @@ struct layer_state_t {
             layer_state_t::eTransparentRegionChanged | layer_state_t::eEdgeExtensionChanged;
 
     // Buffer and related updates.
-    static constexpr uint64_t BUFFER_CHANGES = layer_state_t::eApiChanged |
+    static constexpr auto BUFFER_CHANGES = layer_state_t::eApiChanged |
             layer_state_t::eBufferChanged | layer_state_t::eBufferCropChanged |
             layer_state_t::eBufferTransformChanged | layer_state_t::eDataspaceChanged |
             layer_state_t::eRenderCommandBufferFrameIdChanged |
@@ -312,7 +314,7 @@ struct layer_state_t {
             layer_state_t::eDesiredHdrHeadroomChanged | layer_state_t::eLutsChanged;
 
     // Content updates.
-    static constexpr uint64_t CONTENT_CHANGES = layer_state_t::BUFFER_CHANGES |
+    static constexpr auto CONTENT_CHANGES = layer_state_t::BUFFER_CHANGES |
             layer_state_t::eAlphaChanged | layer_state_t::eAutoRefreshChanged |
             layer_state_t::eBackgroundBlurRadiusChanged |
             layer_state_t::eBackgroundBlurScaleChanged | layer_state_t::eBackgroundColorChanged |
@@ -328,11 +330,11 @@ struct layer_state_t {
             layer_state_t::eDesiredMaxHdrHeadroomChanged;
 
     // Changes which invalidates the layer's visible region in CE.
-    static constexpr uint64_t CONTENT_DIRTY = layer_state_t::CONTENT_CHANGES |
+    static constexpr auto CONTENT_DIRTY = layer_state_t::CONTENT_CHANGES |
             layer_state_t::GEOMETRY_CHANGES | layer_state_t::HIERARCHY_CHANGES;
 
     // Changes affecting child states.
-    static constexpr uint64_t AFFECTS_CHILDREN = layer_state_t::GEOMETRY_CHANGES |
+    static constexpr auto AFFECTS_CHILDREN = layer_state_t::GEOMETRY_CHANGES |
             layer_state_t::HIERARCHY_CHANGES | layer_state_t::eAlphaChanged |
             layer_state_t::eBackgroundBlurRadiusChanged |
             layer_state_t::eBackgroundBlurScaleChanged | layer_state_t::eBlurRegionsChanged |
@@ -346,23 +348,23 @@ struct layer_state_t {
             layer_state_t::eCompositionFilterFlagChanged;
 
     // Changes affecting data sent to input.
-    static constexpr uint64_t INPUT_CHANGES = layer_state_t::eAlphaChanged |
+    static constexpr auto INPUT_CHANGES = layer_state_t::eAlphaChanged |
             layer_state_t::eInputInfoChanged | layer_state_t::eDropInputModeChanged |
             layer_state_t::eTrustedOverlayChanged | layer_state_t::eLayerStackChanged;
 
     // Changes that affect the visible region on a display.
-    static constexpr uint64_t VISIBLE_REGION_CHANGES = layer_state_t::GEOMETRY_CHANGES |
+    static constexpr auto VISIBLE_REGION_CHANGES = layer_state_t::GEOMETRY_CHANGES |
             layer_state_t::HIERARCHY_CHANGES | layer_state_t::eAlphaChanged;
 
     // Changes that force GPU composition.
-    static constexpr uint64_t COMPOSITION_EFFECTS = layer_state_t::eBackgroundBlurRadiusChanged |
+    static constexpr auto COMPOSITION_EFFECTS = layer_state_t::eBackgroundBlurRadiusChanged |
             layer_state_t::eBackgroundBlurScaleChanged | layer_state_t::eBlurRegionsChanged |
             layer_state_t::eCornerRadiusChanged | layer_state_t::eShadowRadiusChanged |
             layer_state_t::eStretchChanged | layer_state_t::eBorderSettingsChanged |
             layer_state_t::eBoxShadowSettingsChanged;
 
     // Changes that affect the frame rate
-    static constexpr uint64_t FRAME_RATE_CHANGES = layer_state_t::eFrameRateCategoryChanged |
+    static constexpr auto FRAME_RATE_CHANGES = layer_state_t::eFrameRateCategoryChanged |
             layer_state_t::eFrameRateSelectionStrategyChanged |
             layer_state_t::eFrameRateSelectionPriority | layer_state_t::eFrameRateChanged;
 
@@ -408,7 +410,7 @@ struct layer_state_t {
     };
     sp<IBinder> surface;
     int32_t layerId;
-    uint64_t what;
+    LayerChangedSet what;
     float x;
     float y;
     int32_t z;

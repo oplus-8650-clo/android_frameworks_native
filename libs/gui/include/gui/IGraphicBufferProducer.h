@@ -110,6 +110,29 @@ public:
         USE_BUFFER_HUB = 0x62687562, // 'bhub'
     };
 
+    struct SurfaceConfig : public Flattenable<SurfaceConfig> {
+        SurfaceConfig() = default;
+
+        // Moveable.
+        SurfaceConfig(SurfaceConfig&& src) = default;
+        SurfaceConfig& operator=(SurfaceConfig&& src) = default;
+        // Not copyable.
+        SurfaceConfig(const SurfaceConfig& src) = delete;
+        SurfaceConfig& operator=(const SurfaceConfig& src) = delete;
+
+        // Flattenable protocol
+        static constexpr size_t minFlattenedSize();
+        size_t getFlattenedSize() const;
+        size_t getFdCount() const;
+        status_t flatten(void*& buffer, size_t& size, int*& fds, size_t& count) const;
+        status_t unflatten(void const*& buffer, size_t& size, int const*& fds, size_t& count);
+
+        size_t slotCount = BufferQueueDefs::NUM_BUFFER_SLOTS;
+        bool isSlotExpansionAllowed = false;
+    };
+
+    virtual status_t getConfigForSurface(SurfaceConfig* outConfig);
+
     // requestBuffer requests a new buffer for the given index. The server (i.e.
     // the IGraphicBufferProducer implementation) assigns the newly created
     // buffer to the given slot index, and the client is expected to mirror the

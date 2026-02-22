@@ -130,7 +130,7 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     pid = state.ownerPid;
     permissions = state.ownerPermissions;
     changes = RequestedLayerState::Changes::Created;
-    clientChanges = 0;
+    clientChanges.reset();
     mirrorRootPath =
             LayerHierarchy::isMirror(path.variant) ? path : LayerHierarchy::TraversalPath::ROOT;
     stopLayerId = state.stopLayerId;
@@ -517,7 +517,7 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
                 requested.externalTexture->getUsage() & GRALLOC_USAGE_PROTECTED;
         geomUsesSourceCrop = hasBufferOrSidebandStream();
 
-        if (buffer) {
+        if (buffer && FlagManager::getInstance().force_agtm_without_luts()) {
             auto& mapper = GraphicBufferMapper::get();
             std::optional<std::vector<uint8_t>> smpte2094_50;
             status_t err = OK;
@@ -527,6 +527,10 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
             }
 
             hasSmpte2094_50 = err == OK && smpte2094_50;
+
+            if (hasSmpte2094_50) {
+                SFTRACE_NAME("Found smpte2094-50 on a layer!");
+            }
         }
     }
 

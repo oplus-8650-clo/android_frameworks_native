@@ -43,6 +43,7 @@
 #include <gui/AidlUtil.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/LayerState.h>
+#include <gui/bufferqueue/2.0/H2BGraphicBufferProducer.h>
 #include <private/gui/ComposerService.h>
 #include <private/gui/ComposerServiceAIDL.h>
 #endif
@@ -190,7 +191,17 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     mProducerControlledByApp = controlledByApp;
     mSwapIntervalZero = false;
     mMaxBufferCount = NUM_BUFFER_SLOTS;
+    mIsSlotExpansionAllowed = false;
     mSurfaceControlHandle = surfaceControlHandle;
+
+    IGraphicBufferProducer::SurfaceConfig config;
+    if (auto status = mGraphicBufferProducer->getConfigForSurface(&config); status == OK) {
+        mIsSlotExpansionAllowed = config.isSlotExpansionAllowed;
+        if (config.slotCount > mSlots.size()) {
+            mSlots.resize(config.slotCount);
+        }
+    }
+
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 
     char value[PROPERTY_VALUE_MAX];
@@ -216,6 +227,7 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
 // QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     }
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
+
 }
 
 Surface::~Surface() {
@@ -242,6 +254,22 @@ Surface::~Surface() {
 sp<Surface> Surface::from(ANativeWindow* anw) {
     return sp<Surface>::fromExisting(static_cast<Surface*>(anw));
 }
+
+#ifndef NO_BINDER
+sp<Surface> Surface::fromHidl(
+        const sp<hardware::graphics::bufferqueue::V2_0::IGraphicBufferProducer>& token) {
+    if (token == nullptr) {
+        return nullptr;
+    }
+    using H2BGraphicBufferProducer =
+            hardware::graphics::bufferqueue::V2_0::utils::H2BGraphicBufferProducer;
+    sp<IGraphicBufferProducer> bufferProducer = sp<H2BGraphicBufferProducer>::make(token);
+    if (bufferProducer == nullptr) {
+        return nullptr;
+    }
+    return sp<Surface>::make(bufferProducer);
+}
+#endif
 
 bool Surface::areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b) {
     if (a == b) {
@@ -2688,6 +2716,9 @@ int Surface::setMaxDequeuedBufferCount(int maxDequeuedBuffers) {
     Mutex::Autolock lock(mMutex);
 
     if (maxDequeuedBuffers > BufferQueueDefs::NUM_BUFFER_SLOTS && !mIsSlotExpansionAllowed) {
+        SURF_LOGE("setMaxDequeuedBufferCount: maxDequeuedBuffers (%d) > NUM_BUFFER_SLOTS (%d) and "
+                  "slot expansion is not allowed",
+                  maxDequeuedBuffers, BufferQueueDefs::NUM_BUFFER_SLOTS);
         return BAD_VALUE;
     }
 

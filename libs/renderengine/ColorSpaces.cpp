@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-#include "ColorSpaces.h"
+#include <renderengine/ColorSpaces.h>
 
 namespace android {
 namespace renderengine {
-namespace skia {
-
 // please keep in sync with hwui/utils/Color.cpp
 // TODO: Scale by the dimming ratio here instead of in a generic 3x3 transform
 // Otherwise there may be luminance shift for e.g., HLG.
@@ -83,6 +81,5 @@ sk_sp<SkColorSpace> toSkColorSpace(ui::Dataspace dataspace) {
     }
 }
 
-} // namespace skia
 } // namespace renderengine
 } // namespace android
