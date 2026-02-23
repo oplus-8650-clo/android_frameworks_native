@@ -48,6 +48,14 @@ public:
         ucred creds{};
         socklen_t len = sizeof(creds);
         if (getsockopt(fd.get(), SOL_SOCKET, SO_PEERCRED, &creds, &len) < 0) {
+            /* Sepolicy denial will return EACCES in case of missing getopt
+             * permission. Knowing client UID is not essential so treat
+             * this as a warning for backward compatibility
+             */
+            if (errno == EACCES) {
+                ALOGW("Permission denied while retrieving peer UID, ignoring it");
+                return OK;
+            }
             return -errno;
         }
         *outUid = creds.uid;
