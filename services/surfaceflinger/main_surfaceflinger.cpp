@@ -22,12 +22,14 @@
 
 #include <sched.h>
 
+#include <android/frameworks/displayservice/1.0/IDisplayService.h>
 #include <android/hardware/graphics/allocator/2.0/IAllocator.h>
 #include <android/hardware/graphics/allocator/3.0/IAllocator.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
 #include <common/FlagManager.h>
+#include <displayservice/DisplayService.h>
 #include <errno.h>
 #include <hidl/LegacySupport.h>
 #include <processgroup/sched_policy.h>
@@ -56,6 +58,19 @@ static status_t startGraphicsAllocatorService() {
     }
 
     return OK;
+}
+
+static void startDisplayService() {
+    using android::frameworks::displayservice::V1_0::implementation::DisplayService;
+    using android::frameworks::displayservice::V1_0::IDisplayService;
+
+    sp<IDisplayService> displayservice = sp<DisplayService>::make();
+    status_t err = displayservice->registerAsService();
+
+    // b/141930622
+    if (err != OK) {
+        ALOGE("Did not register (deprecated) IDisplayService service.");
+    }
 }
 
 int main() {
@@ -135,6 +150,8 @@ int main() {
     }
     sm->addService(String16("SurfaceFlingerAIDL"), composerAIDL, false,
                    IServiceManager::DUMP_FLAG_PRIORITY_CRITICAL | IServiceManager::DUMP_FLAG_PROTO);
+
+    startDisplayService(); // dependency on SF getting registered above
 
     SurfaceFlinger::setSchedFifo(true, __func__);
     flinger->run();

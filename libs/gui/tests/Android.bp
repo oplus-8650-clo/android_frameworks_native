@@ -53,9 +53,11 @@ cc_test {
         "-Wthread-safety",
         // Allow access to buffer queue core private members
         "-DENABLE_BQC_TESTING",
+        "-fexceptions",
     ],
 
     srcs: [
+        "BitSet_test.cpp",
         "BLASTBufferQueue_test.cpp",
         "BufferItemConsumer_test.cpp",
         "BufferQueue_test.cpp",

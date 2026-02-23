@@ -1681,6 +1681,8 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
 
                 if (layerFEState->luts) {
                     luts = layerFEState->luts;
+                } else if (layerState.generatedLuts) {
+                    luts = layerState.generatedLuts;
                 } else {
                     bool hasSmpte2094_50 = false;
 

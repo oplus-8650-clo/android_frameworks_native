@@ -19,6 +19,40 @@
 
 namespace android {
 
+constexpr size_t IGraphicBufferProducer::SurfaceConfig::minFlattenedSize() {
+    return sizeof(slotCount) + sizeof(isSlotExpansionAllowed);
+}
+
+size_t IGraphicBufferProducer::SurfaceConfig::getFlattenedSize() const {
+    return minFlattenedSize();
+}
+
+size_t IGraphicBufferProducer::SurfaceConfig::getFdCount() const {
+    return 0;
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::flatten(void*& buffer, size_t& size, int*& /*fds*/,
+                                                        size_t& /*count*/) const {
+    if (size < getFlattenedSize()) {
+        return NO_MEMORY;
+    }
+
+    FlattenableUtils::write(buffer, size, slotCount);
+    FlattenableUtils::write(buffer, size, isSlotExpansionAllowed);
+    return NO_ERROR;
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::unflatten(void const*& buffer, size_t& size,
+                                                          int const*& /*fds*/, size_t& /*count*/) {
+    if (size < minFlattenedSize()) {
+        return NO_MEMORY;
+    }
+
+    FlattenableUtils::read(buffer, size, slotCount);
+    FlattenableUtils::read(buffer, size, isSlotExpansionAllowed);
+    return NO_ERROR;
+}
+
 constexpr size_t IGraphicBufferProducer::QueueBufferInput::minFlattenedSize() {
     return sizeof(timestamp) + sizeof(isAutoTimestamp) + sizeof(dataSpace) + sizeof(crop) +
             sizeof(scalingMode) + sizeof(transform) + sizeof(stickyTransform) +

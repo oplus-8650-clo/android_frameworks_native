@@ -41,7 +41,7 @@ public:
     IPCRenderBufferOp* getOps() { return mHead.get(); }
 
     // op must be allocated by this RenderCommandBuffer
-    void pushOp(const IPCRenderBufferOp* op);
+    void pushOp(IPCRenderBufferOp* op);
 
     void reset();
 

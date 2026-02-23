@@ -30,7 +30,7 @@
 #include <ui/DebugUtils.h>
 #include <mutex>
 
-#include "skia/ColorSpaces.h"
+#include <renderengine/ColorSpaces.h>
 
 namespace android {
 namespace renderengine {
@@ -240,10 +240,10 @@ sk_sp<SkShader> RuntimeEffectManager::createLinearEffectShader(
         // the output gamut and apply the custom OETF. Using the final output space disables Skia's
         // color management post OETF.
         sk_sp<SkColorSpace> inputSpace =
-                toSkColorSpace(linearEffect.inputDataspace)->makeLinearGamma();
+                renderengine::toSkColorSpace(linearEffect.inputDataspace)->makeLinearGamma();
         sk_sp<SkColorSpace> outputSpace = nullptr;
         if ((linearEffect.fakeOutputDataspace & HAL_DATASPACE_TRANSFER_MASK)) {
-            outputSpace = toSkColorSpace(linearEffect.fakeOutputDataspace);
+            outputSpace = renderengine::toSkColorSpace(linearEffect.fakeOutputDataspace);
         }
         shader = shader->makeWithWorkingColorSpace(inputSpace, outputSpace);
     }

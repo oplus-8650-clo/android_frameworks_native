@@ -19,6 +19,7 @@
 #include <mutex>
 
 #include <binder/IServiceManager.h>
+#include <binder/internal/JavaBBinderBase.h>
 #include <utils/SystemClock.h>
 #include "../BuildFlags.h"
 #include "BinderStatsUtils.h"
@@ -58,14 +59,27 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
     // V2, we only need the start time if we are tracking latency for a transaction.
     bool trackStartTime =
             kBinderObserverV2Enabled ? trackingInfo.trackLatency : trackingInfo.isTracked();
+
+    String16 aidlMethodName;
+    if (trackingInfo.isTracked()) {
+        if (binder->checkSubclass(android::internal::JavaBBinderBase::getExtSubclassID())) {
+            static_cast<internal::JavaBBinderBase*>(binder)
+                    ->getFunctionName(code, [&aidlMethodName](const char* name) {
+                        if (name) {
+                            aidlMethodName = String16(name);
+                        }
+                    });
+        } else {
+            aidlMethodName = String16(binder->getFunctionName(code).c_str());
+        }
+    }
+
     return {
             .startTimeNanos = trackStartTime ? uptimeNanos() : 0,
             .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? getCpuTimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
             // TODO(b/299356196): Reduce std::string and String16 allocations.
-            .aidlMethodName = trackingInfo.isTracked()
-                    ? String16(binder->getFunctionName(code).c_str())
-                    : String16(),
+            .aidlMethodName = aidlMethodName,
             .code = code,
             .callingUid = callingUid,
             .trackingInfo = trackingInfo,

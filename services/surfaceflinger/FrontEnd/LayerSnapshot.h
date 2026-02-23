@@ -71,7 +71,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     bool isHiddenByPolicyFromParent = false;
     bool isHiddenByPolicyFromRelativeParent = false;
     ftl::Flags<RequestedLayerState::Changes> changes;
-    uint64_t clientChanges = 0;
+    layer_state_t::LayerChangedSet clientChanges;
     // Some consumers of this snapshot (input, layer traces) rely on each snapshot to be unique.
     // For mirrored layers, snapshots will have the same sequence so this unique id provides
     // an alternative identifier when needed.

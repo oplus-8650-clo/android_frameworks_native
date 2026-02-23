@@ -26,7 +26,7 @@
 #include <include/gpu/ganesh/vk/GrVkBackendSurface.h>
 #include <include/gpu/ganesh/vk/GrVkTypes.h>
 
-#include "skia/ColorSpaces.h"
+#include <renderengine/ColorSpaces.h>
 #include "skia/compat/SkiaBackendTexture.h"
 
 #include <android/hardware_buffer.h>

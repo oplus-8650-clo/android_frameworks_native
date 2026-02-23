@@ -71,7 +71,6 @@ bool isSameSurfaceControl(const sp<SurfaceControl>& lhs, const sp<SurfaceControl
 layer_state_t::layer_state_t()
       : surface(nullptr),
         layerId(-1),
-        what(0),
         x(0),
         y(0),
         z(0),
@@ -120,7 +119,7 @@ status_t layer_state_t::write(Parcel& output) const
 {
     SAFE_PARCEL(output.writeStrongBinder, surface);
     SAFE_PARCEL(output.writeInt32, layerId);
-    SAFE_PARCEL(output.writeUint64, what);
+    SAFE_PARCEL(output.write, what.data(), what.dataSize());
     SAFE_PARCEL(output.writeFloat, x);
     SAFE_PARCEL(output.writeFloat, y);
     SAFE_PARCEL(output.writeInt32, z);
@@ -270,7 +269,7 @@ status_t layer_state_t::read(const Parcel& input)
 {
     SAFE_PARCEL(input.readNullableStrongBinder, &surface);
     SAFE_PARCEL(input.readInt32, &layerId);
-    SAFE_PARCEL(input.readUint64, &what);
+    SAFE_PARCEL(input.read, what.data(), what.dataSize());
     SAFE_PARCEL(input.readFloat, &x);
     SAFE_PARCEL(input.readFloat, &y);
     SAFE_PARCEL(input.readInt32, &z);
@@ -917,13 +916,13 @@ void layer_state_t::merge(const layer_state_t& other) {
     }
     if ((other.what & what) != other.what) {
         ALOGE("Unmerged SurfaceComposer Transaction properties. LayerState::merge needs updating? "
-              "other.what=0x%" PRIX64 " what=0x%" PRIX64 " unmerged flags=0x%" PRIX64,
-              other.what, what, (other.what & what) ^ other.what);
+              "unmerged flags=%s",
+              ((other.what & what) ^ other.what).to_string().c_str());
     }
 }
 
-uint64_t layer_state_t::diff(const layer_state_t& other) const {
-    uint64_t diff = 0;
+layer_state_t::LayerChangedSet layer_state_t::diff(const layer_state_t& other) const {
+    LayerChangedSet diff;
     CHECK_DIFF2(diff, ePositionChanged, other, x, y);
     if (other.what & eLayerChanged) {
         diff |= eLayerChanged;

@@ -242,9 +242,9 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
     // Only assigning the actual refresh rate if the first display is powered on ensures that any
     // other powered-on display will take over the new pacesetter designation regardless of its
     // refresh rate.
-    Fps newPacesetterVsyncRate = Fps::fromValue(0);
+    Fps newPacesetterRefreshRate = Fps::fromValue(0);
     if (firstDisplay.powerMode == hal::PowerMode::ON) {
-        newPacesetterVsyncRate = firstDisplay.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+        newPacesetterRefreshRate = firstDisplay.selectorPtr->getActiveMode().modePtr->getPeakFps();
     }
 
     // Attempt to set the fastest powered-on display as the pacesetter.
@@ -253,20 +253,20 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
             continue;
         }
 
-        const Fps displayVsyncRate = display.selectorPtr->getActiveMode().modePtr->getVsyncRate();
-        if (isStrictlyLess(newPacesetterVsyncRate, displayVsyncRate)) {
+        const Fps displayRefreshRate = display.selectorPtr->getActiveMode().modePtr->getPeakFps();
+        if (isStrictlyLess(newPacesetterRefreshRate, displayRefreshRate)) {
             newPacesetterId = id;
             newPacesetterConnectionType = display.connectionType;
-            newPacesetterVsyncRate = displayVsyncRate;
+            newPacesetterRefreshRate = displayRefreshRate;
         }
     }
 
     // The slack in the difference between refresh rate difference to consider them roughly equal
     // for pacesetter selection purposes. E.g. 59.98 and 60.02Hz Should be considered roughly equal.
-    const auto isVsyncRateApproxEqual = [&](const Display& display, Fps otherFps) -> bool {
+    const auto isRefreshRateApproxEqual = [&](const Display& display, Fps otherFps) -> bool {
         constexpr float kRefreshRateEpsilon = 0.1f;
-        const Fps displayVsyncRate = display.selectorPtr->getActiveMode().modePtr->getVsyncRate();
-        return std::abs(displayVsyncRate.getValue() - otherFps.getValue()) < kRefreshRateEpsilon;
+        const Fps displayRefreshRate = display.selectorPtr->getActiveMode().modePtr->getPeakFps();
+        return std::abs(displayRefreshRate.getValue() - otherFps.getValue()) < kRefreshRateEpsilon;
     };
 
     // If the current pacesetter display is powered on and its refresh rate is not too far off from
@@ -274,11 +274,11 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
     if (const auto pacesetterOpt = pacesetterDisplayLocked()) {
         const auto& pacesetter = pacesetterOpt->get();
         if (pacesetter.powerMode == hal::PowerMode::ON) {
-            if (isVsyncRateApproxEqual(pacesetter, newPacesetterVsyncRate)) {
+            if (isRefreshRateApproxEqual(pacesetter, newPacesetterRefreshRate)) {
                 newPacesetterId = pacesetter.displayId;
                 newPacesetterConnectionType = pacesetter.connectionType;
-                newPacesetterVsyncRate =
-                        pacesetter.selectorPtr->getActiveMode().modePtr->getVsyncRate();
+                newPacesetterRefreshRate =
+                        pacesetter.selectorPtr->getActiveMode().modePtr->getPeakFps();
             }
         }
     }
@@ -292,7 +292,7 @@ PhysicalDisplayId Scheduler::selectPacesetterDisplayLocked(
                 continue;
             }
 
-            if (isVsyncRateApproxEqual(display, newPacesetterVsyncRate)) {
+            if (isRefreshRateApproxEqual(display, newPacesetterRefreshRate)) {
                 return id;
             }
         }
