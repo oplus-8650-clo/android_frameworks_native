@@ -78,8 +78,9 @@ std::string toString(VSyncRequest request) {
 }
 
 std::string toString(const EventThreadConnection& connection) {
-    return StringPrintf("Connection{%p, %s}", &connection,
-                        toString(connection.vsyncRequest).c_str());
+    return StringPrintf("Connection{%p, %s, owned by (pid=%d, uid=%u)}", &connection,
+                        toString(connection.vsyncRequest).c_str(), connection.mOwnerPid,
+                        connection.mOwnerUid);
 }
 
 std::string toString(const DisplayEventReceiver::Event& event) {
@@ -225,8 +226,10 @@ DisplayEventReceiver::Event makeModeRejection(PhysicalDisplayId displayId, Displ
 } // namespace
 
 EventThreadConnection::EventThreadConnection(EventThread* eventThread, uid_t callingUid,
+                                             pid_t callingPid,
                                              EventRegistrationFlags eventRegistration)
       : mOwnerUid(callingUid),
+        mOwnerPid(callingPid),
         mEventRegistration(eventRegistration),
         mEventThread(eventThread),
         mChannel(gui::BitTube(
@@ -362,9 +365,10 @@ void EventThread::setDuration(std::chrono::nanoseconds workDuration,
 
 sp<EventThreadConnection> EventThread::createEventConnection(
         EventRegistrationFlags eventRegistration) const {
-    auto connection = sp<EventThreadConnection>::make(const_cast<EventThread*>(this),
-                                                      IPCThreadState::self()->getCallingUid(),
-                                                      eventRegistration);
+    const auto& ipc = IPCThreadState::self();
+    auto connection =
+            sp<EventThreadConnection>::make(const_cast<EventThread*>(this), ipc->getCallingUid(),
+                                            ipc->getCallingPid(), eventRegistration);
     if (!FlagManager::getInstance().disable_sched_fifo_sf_sched()) {
         const int policy = SCHED_FIFO;
         connection->setMinSchedulerPolicy(policy, sched_get_priority_min(policy));
@@ -376,8 +380,8 @@ status_t EventThread::registerDisplayEventConnection(const sp<EventThreadConnect
     std::lock_guard<std::mutex> lock(mMutex);
 
     // this should never happen
-    auto it = std::find(mDisplayEventConnections.cbegin(),
-            mDisplayEventConnections.cend(), connection);
+    auto it = std::find(mDisplayEventConnections.cbegin(), mDisplayEventConnections.cend(),
+                        connection);
     if (it != mDisplayEventConnections.cend()) {
         ALOGW("DisplayEventConnection %p already exists", connection.get());
         mCondition.notify_all();
@@ -390,8 +394,8 @@ status_t EventThread::registerDisplayEventConnection(const sp<EventThreadConnect
 }
 
 void EventThread::removeDisplayEventConnectionLocked(const wp<EventThreadConnection>& connection) {
-    auto it = std::find(mDisplayEventConnections.cbegin(),
-            mDisplayEventConnections.cend(), connection);
+    auto it = std::find(mDisplayEventConnections.cbegin(), mDisplayEventConnections.cend(),
+                        connection);
     if (it != mDisplayEventConnections.cend()) {
         mDisplayEventConnections.erase(it);
     }

@@ -335,12 +335,10 @@ InputConsumer::ConsumeResult InputConsumer::consume(InputEventFactoryInterface* 
                         for (size_t i = 0; i < count; i++) {
                             const InputMessage& msg = batch.samples[i];
                             status_t status = sendFinishedSignal(msg.header.seq, false);
-                            if (input_flags::fix_input_anr_by_send_message_exception()) {
-                                if (status != OK) {
-                                    // Failed to finish the input message, so adding to
-                                    // unfinishedInputMessages vector to be retried by the caller.
-                                    unfinishedInputMessages.push_back(msg);
-                                }
+                            if (status != OK) {
+                                // Failed to finish the input message, so adding to
+                                // unfinishedInputMessages vector to be retried by the caller.
+                                unfinishedInputMessages.push_back(msg);
                             }
                         }
                         batch.samples.erase(batch.samples.begin(), batch.samples.begin() + count);

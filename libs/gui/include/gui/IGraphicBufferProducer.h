@@ -110,7 +110,7 @@ public:
         USE_BUFFER_HUB = 0x62687562, // 'bhub'
     };
 
-    struct SurfaceConfig : public Flattenable<SurfaceConfig> {
+    struct SurfaceConfig : public Parcelable {
         SurfaceConfig() = default;
 
         // Moveable.
@@ -120,15 +120,12 @@ public:
         SurfaceConfig(const SurfaceConfig& src) = delete;
         SurfaceConfig& operator=(const SurfaceConfig& src) = delete;
 
-        // Flattenable protocol
-        static constexpr size_t minFlattenedSize();
-        size_t getFlattenedSize() const;
-        size_t getFdCount() const;
-        status_t flatten(void*& buffer, size_t& size, int*& fds, size_t& count) const;
-        status_t unflatten(void const*& buffer, size_t& size, int const*& fds, size_t& count);
-
+        String8 consumerName;
         size_t slotCount = BufferQueueDefs::NUM_BUFFER_SLOTS;
         bool isSlotExpansionAllowed = false;
+
+        virtual status_t writeToParcel(android::Parcel* parcel) const override;
+        virtual status_t readFromParcel(const android::Parcel* parcel) override;
     };
 
     virtual status_t getConfigForSurface(SurfaceConfig* outConfig);

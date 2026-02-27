@@ -71,7 +71,7 @@ public:
                 sp<BufferItemConsumer> itemConsumer = sp<BufferItemConsumer>::make(
                         // Sample usage bits from screenrecord
                         GRALLOC_USAGE_HW_VIDEO_ENCODER | GRALLOC_USAGE_SW_READ_OFTEN);
-                sp<BufferListener> listener = sp<BufferListener>::make(this);
+                sp<BufferListener> listener = sp<BufferListener>::make();
                 itemConsumer->setFrameAvailableListener(listener);
                 itemConsumer->setName(String8("Virtual disp consumer (TransactionTest)"));
                 itemConsumer->setDefaultBufferSize(mBufferSize.width, mBufferSize.height);
@@ -95,11 +95,13 @@ public:
                 t.apply();
                 SurfaceComposerClient::Transaction().apply(true);
 
-                std::unique_lock lock(mMutex);
-                mAvailable = false;
+                std::unique_lock lock(listener->mMutex);
+                listener->mAvailable = false;
                 // Wait for frame buffer ready.
-                mCondition.wait_for(lock, std::chrono::seconds(2),
-                                    [this]() NO_THREAD_SAFETY_ANALYSIS { return mAvailable; });
+                listener->mCondition.wait_for(lock, std::chrono::seconds(2),
+                                              [listener]() NO_THREAD_SAFETY_ANALYSIS {
+                                                  return listener->mAvailable;
+                                              });
 
                 BufferItem item;
                 itemConsumer->acquireBuffer(&item, 0, true);
@@ -139,22 +141,20 @@ protected:
     ui::Size mBufferSize;
     PhysicalDisplayId mDisplayId;
     ui::Rotation mRotation = ui::Rotation::Rotation0;
-    std::mutex mMutex;
-    std::condition_variable mCondition;
-    bool mAvailable = false;
-
-    void onFrameAvailable() {
-        std::unique_lock lock(mMutex);
-        mAvailable = true;
-        mCondition.notify_all();
-    }
 
     class BufferListener : public ConsumerBase::FrameAvailableListener {
     public:
-        BufferListener(LayerRenderPathTestHarness* owner) : mOwner(owner) {}
-        LayerRenderPathTestHarness* mOwner;
+        BufferListener() = default;
 
-        void onFrameAvailable(const BufferItem& /*item*/) { mOwner->onFrameAvailable(); }
+        std::mutex mMutex;
+        std::condition_variable mCondition;
+        bool mAvailable = false;
+
+        void onFrameAvailable(const BufferItem& /*item*/) override {
+            std::unique_lock lock(mMutex);
+            mAvailable = true;
+            mCondition.notify_all();
+        }
     };
 };
 
@@ -240,6 +240,7 @@ public:
         if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
             return;
         }
+        canvas->storeSize(bufferWidth, bufferHeight);
         canvas->startRecording();
         canvas->drawColor(SkColorSetARGB(color.a, color.r, color.g, color.b), SkBlendMode::kSrc);
         canvas->endRecording();
@@ -259,6 +260,7 @@ public:
         if (!com_android_graphics_libgui_flags_out_of_process_rendering()) {
             return;
         }
+        canvas->storeSize(bufferWidth, bufferHeight);
         canvas->startRecording();
 
         ASSERT_TRUE(bufferWidth % 2 == 0 && bufferHeight % 2 == 0);

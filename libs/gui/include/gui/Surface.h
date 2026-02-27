@@ -515,6 +515,8 @@ public:
             IGraphicBufferProducer::DisconnectMode mode =
                     IGraphicBufferProducer::DisconnectMode::Api);
 
+    virtual void setProducerControlledByApp(bool controlledByApp);
+
     virtual int setMaxDequeuedBufferCount(int maxDequeuedBuffers);
     virtual int setAsyncMode(bool async);
     virtual int setSharedBufferMode(bool sharedBufferMode);

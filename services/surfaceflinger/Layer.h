@@ -465,8 +465,6 @@ protected:
     // statistical history needs to only be tracked by count of frames.
     // TODO: Deprecate the '--latency-clear' and get rid of this.
     std::atomic<uint32_t> mFrameStatsHistorySize;
-    // Timestamp history for UIAutomation. Thread safe.
-    FrameTracker mDeprecatedFrameTracker;
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t mQtiLayerClass{0};

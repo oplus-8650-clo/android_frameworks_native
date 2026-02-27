@@ -112,7 +112,7 @@ public:
         if (result != NO_ERROR) {
             return result;
         }
-        return reply.read(*outConfig);
+        return reply.readParcelable(outConfig);
     }
 
     virtual status_t requestBuffer(int bufferIdx, sp<GraphicBuffer>* buf) {
@@ -876,6 +876,10 @@ class HpGraphicBufferProducer : public HpInterface<
         H2BGraphicBufferProducerV2_0> {
 public:
     explicit HpGraphicBufferProducer(const sp<IBinder>& base) : PBase(base) {}
+
+    status_t getConfigForSurface(SurfaceConfig* outConfig) override {
+        return mBase->getConfigForSurface(outConfig);
+    }
 
     status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) override {
         return mBase->requestBuffer(slot, buf);
@@ -1716,12 +1720,26 @@ status_t BnGraphicBufferProducer::onTransact(
             status_t result = getConfigForSurface(&config);
             reply->writeInt32(result);
             if (result == NO_ERROR) {
-                reply->write(config);
+                reply->writeParcelable(config);
             }
             return NO_ERROR;
         }
     }
     return BBinder::onTransact(code, data, reply, flags);
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::writeToParcel(android::Parcel* parcel) const {
+    parcel->writeString8(consumerName);
+    parcel->writeUint32(slotCount);
+    parcel->writeBool(isSlotExpansionAllowed);
+    return NO_ERROR;
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::readFromParcel(const android::Parcel* parcel) {
+    consumerName = parcel->readString8();
+    slotCount = parcel->readUint32();
+    isSlotExpansionAllowed = parcel->readBool();
+    return NO_ERROR;
 }
 
 }; // namespace android

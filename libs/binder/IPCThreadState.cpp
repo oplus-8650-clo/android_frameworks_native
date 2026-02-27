@@ -23,6 +23,17 @@
 #include <binder/ProcessState.h>
 #include <binder/TextOutput.h>
 
+#if defined(__ANDROID__) && !defined(__TRUSTY__)
+#define PCC_LOGGING
+#endif
+#if defined(PCC_LOGGING)
+#include <android/app/privatecompute/IPccSandboxManagerNative.h>
+#include <binder/IServiceManager.h>
+#include <binder/PersistableBundle.h>
+#include <private/android_filesystem_config.h>
+#include <utils/String8.h>
+#include <chrono>
+#endif // PCC_LOGGING
 #include <utils/CallStack.h>
 #include <utils/SystemClock.h>
 
@@ -1677,6 +1688,44 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
     return result;
 }
 
+#if defined(PCC_LOGGING)
+static void logPccTransaction(BBinder* binder, uint32_t code, uid_t uid) {
+    // This condition is a re-implementation of the condition in
+    // frameworks/base/core/java/android/os/Process.java:1073 to avoid having to do an IPC to
+    // service->isPrivateComputeServicesUid();
+    bool isPccUid = uid >= AID_PCC_COMPONENT_PROCESS_START && uid <= AID_PCC_COMPONENT_PROCESS_END;
+    if (!isPccUid) {
+        return;
+    }
+
+    sp<android::app::privatecompute::IPccSandboxManagerNative> service =
+            interface_cast<app::privatecompute::IPccSandboxManagerNative>(
+                    defaultServiceManager()->waitForService(String16("pcc_sandbox_native")));
+
+    if (service == nullptr) {
+        // Rate-limit the logging, as this could be spammy.
+        [[clang::no_destroy]] static std::atomic<std::chrono::steady_clock::time_point>
+                lastLogTime(std::chrono::steady_clock::time_point::min());
+        auto now = std::chrono::steady_clock::now();
+        auto last = lastLogTime.load(std::memory_order_relaxed);
+        if ((now - last > 1s) &&
+            lastLogTime.compare_exchange_strong(last, now, std::memory_order_relaxed)) {
+            ALOGW("Failed to get IPccSandboxManager service.");
+        }
+        return;
+    }
+
+    android::os::PersistableBundle bundle;
+    bundle.putString(String16("interface_name"), String16(binder->getInterfaceDescriptor()));
+    bundle.putString(String16("method_name"), String16(binder->getFunctionName(code).c_str()));
+    ::android::binder::Status status = service->writeToAuditLog(bundle);
+    if (!status.isOk()) {
+        ALOGW("Failed to write to audit log: %s", status.toString8().c_str());
+    }
+}
+#endif // PCC_LOGGING
+
+
 status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const Parcel& data,
                                           Parcel* reply, uint32_t flags) {
     LOG_ALWAYS_FATAL_IF(binder == nullptr, "Calling transact on null Binder.");
@@ -1684,6 +1733,11 @@ status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const 
     BinderObserver::CallInfo callInfo =
             mProcess->mBinderObserver->onBeginTransaction(binder, code, getCallingUid());
 #endif
+#if defined(PCC_LOGGING)
+    // PCC Next: Audit Mode. For PCC apps, send binder tx data to the audit log.
+    uid_t uid = getCallingUid();
+    logPccTransaction(binder, code, uid);
+#endif // PCC_LOGGING
     status_t error = binder->transact(code, data, reply, flags);
 #ifdef BINDER_WITH_OBSERVERS
     mProcess->mBinderObserver->onEndTransaction(mBinderStatsQueue, callInfo);

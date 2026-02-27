@@ -1043,7 +1043,7 @@ public:
         std::optional<int> callerPriority;
         pid_t workerTid = mAllocWorkerTid.load(std::memory_order_relaxed);
         int callerScheduler = sched_getscheduler(0);
-        switch (callerScheduler) {
+        switch (callerScheduler & ~SCHED_RESET_ON_FORK) {
             // For fair policies, we can set worker thread's priority
             // to the caller thread's priority.
             case SCHED_OTHER: // i.e. SCHED_NORMAL

@@ -309,6 +309,7 @@ cc_library {
         "inputconstants-cpp",
         "libkernelconfigs",
         "libstatslog_libinput",
+        "libstatssocket_lazy",
         "libtflite_static",
         "libui-types",
     ],
@@ -333,9 +334,6 @@ cc_library {
             required: [
                 "motion_predictor_model_config",
                 "motion_predictor_model_prebuilt",
-            ],
-            static_libs: [
-                "libstatssocket_lazy",
             ],
         },
         host: {

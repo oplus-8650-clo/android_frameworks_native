@@ -172,8 +172,6 @@ Layer::Layer(const surfaceflinger::LayerCreationArgs& args)
     mDrawingState.metadata = args.metadata;
     mDrawingState.frameTimelineInfo = {};
     mDrawingState.postTime = -1;
-    mDeprecatedFrameTracker.setDisplayRefreshPeriod(
-            args.flinger->mScheduler->getPacesetterVsyncPeriod().ns());
 
     mOwnerUid = args.ownerUid;
     mOwnerPid = args.ownerPid;
@@ -651,48 +649,35 @@ void Layer::miniDump(std::string& result, const frontend::LayerSnapshot& snapsho
 }
 
 void Layer::dumpFrameStats(std::string& result) const {
-    if (FlagManager::getInstance().deprecate_frame_tracker()) {
-        FrameStats fs = FrameStats();
-        getFrameStats(&fs);
-        for (auto desired = fs.desiredPresentTimesNano.begin(),
-                  actual = fs.actualPresentTimesNano.begin(),
-                  ready = fs.frameReadyTimesNano.begin();
-             desired != fs.desiredPresentTimesNano.end() &&
-             actual != fs.actualPresentTimesNano.end() && ready != fs.frameReadyTimesNano.end();
-             ++desired, ++actual, ++ready) {
-            result.append(std::format("{}\t{}\t{}\n", *desired, *actual, *ready));
-        }
-
-        result.push_back('\n');
-    } else {
-        mDeprecatedFrameTracker.dumpStats(result);
+    FrameStats fs = FrameStats();
+    getFrameStats(&fs);
+    for (auto desired = fs.desiredPresentTimesNano.begin(),
+              actual = fs.actualPresentTimesNano.begin(), ready = fs.frameReadyTimesNano.begin();
+         desired != fs.desiredPresentTimesNano.end() && actual != fs.actualPresentTimesNano.end() &&
+         ready != fs.frameReadyTimesNano.end();
+         ++desired, ++actual, ++ready) {
+        result.append(std::format("{}\t{}\t{}\n", *desired, *actual, *ready));
     }
+
+    result.push_back('\n');
 }
 
 void Layer::clearFrameStats() {
-    if (FlagManager::getInstance().deprecate_frame_tracker()) {
-        mFrameStatsHistorySize = 0;
-    } else {
-        mDeprecatedFrameTracker.clearStats();
-    }
+    mFrameStatsHistorySize = 0;
 }
 
 void Layer::getFrameStats(FrameStats* outStats) const {
-    if (FlagManager::getInstance().deprecate_frame_tracker()) {
-        if (auto ftl = getTimeline()) {
-            nsecs_t refreshPeriod =
-                    Fps::fromValue(ftl->get().computeFps({getSequence()})).getPeriodNsecs();
-            // FPS computation requires some number of layer updates before the calculation can be
-            // made. If not enough frames are available return the projected FPS based on the
-            // pacesetter display's native refresh rate.
-            if (!refreshPeriod) {
-                refreshPeriod = mFlinger->mScheduler->getPacesetterVsyncPeriod().ns();
-            }
-            ftl->get().generateFrameStats(getSequence(), mFrameStatsHistorySize, outStats);
-            outStats->refreshPeriodNano = refreshPeriod;
+    if (auto ftl = getTimeline()) {
+        nsecs_t refreshPeriod =
+                Fps::fromValue(ftl->get().computeFps({getSequence()})).getPeriodNsecs();
+        // FPS computation requires some number of layer updates before the calculation can be
+        // made. If not enough frames are available return the projected FPS based on the
+        // pacesetter display's native refresh rate.
+        if (!refreshPeriod) {
+            refreshPeriod = mFlinger->mScheduler->getPacesetterVsyncPeriod().ns();
         }
-    } else {
-        mDeprecatedFrameTracker.getStats(outStats);
+        ftl->get().generateFrameStats(getSequence(), mFrameStatsHistorySize, outStats);
+        outStats->refreshPeriodNano = refreshPeriod;
     }
 }
 
@@ -1456,9 +1441,7 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
         handle.compositorTiming = compositorTiming;
     }
 
-    // Update mDeprecatedFrameTracker.
     nsecs_t desiredPresentTime = mBufferInfo.mDesiredPresentTime;
-    mDeprecatedFrameTracker.setDesiredPresentTime(desiredPresentTime);
 
     const int32_t layerId = getSequence();
     mFlinger->mTimeStats->setDesiredTime(layerId, mCurrentFrameNumber, desiredPresentTime);
@@ -1478,15 +1461,6 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
         }
     }
 
-    // The SurfaceFrame's AcquireFence is the same as this.
-    std::shared_ptr<FenceTime> frameReadyFence = mBufferInfo.mFenceTime;
-    if (frameReadyFence->isValid()) {
-        mDeprecatedFrameTracker.setFrameReadyFence(std::move(frameReadyFence));
-    } else {
-        // There was no fence for this frame, so assume that it was ready
-        // to be presented at the desired present time.
-        mDeprecatedFrameTracker.setFrameReadyTime(desiredPresentTime);
-    }
     if (display) {
         const auto activeMode = display->refreshRateSelector().getActiveMode();
         const Fps refreshRate = activeMode.fps;
@@ -1501,7 +1475,6 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
             mFlinger->mFrameTracer->traceFence(layerId, getCurrentBufferId(), mCurrentFrameNumber,
                                                presentFence,
                                                FrameTracer::FrameEvent::PRESENT_FENCE);
-            mDeprecatedFrameTracker.setActualPresentFence(std::shared_ptr<FenceTime>(presentFence));
         } else if (const auto displayId = asPhysicalDisplayId(display->getDisplayIdVariant());
                    displayId.has_value() && mFlinger->getHwComposer().isConnected(*displayId)) {
             // The HWC doesn't support present fences, so use the present timestamp instead.
@@ -1522,12 +1495,10 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
             mFlinger->mFrameTracer->traceTimestamp(layerId, getCurrentBufferId(),
                                                    mCurrentFrameNumber, actualPresentTime,
                                                    FrameTracer::FrameEvent::PRESENT_FENCE);
-            mDeprecatedFrameTracker.setActualPresentTime(actualPresentTime);
         }
     }
 
     mFrameStatsHistorySize++;
-    mDeprecatedFrameTracker.advanceFrame();
     mBufferInfo.mFrameLatencyNeeded = false;
 }
 
