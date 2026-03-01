@@ -964,9 +964,6 @@ void InputReader::notifyMouseCursorFadedOnTyping() {
 
 bool InputReader::setKernelWakeEnabled(DeviceId deviceId, bool enabled) {
     std::scoped_lock _l(mLock);
-    if (!com::android::input::flags::set_input_device_kernel_wake()){
-        return false;
-    }
     InputDevice* device = findInputDeviceLocked(deviceId);
     if (device) {
         return device->setKernelWakeEnabled(enabled);

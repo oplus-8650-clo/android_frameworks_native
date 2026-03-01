@@ -87,10 +87,11 @@ public:
     }
 
 #if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BQ_CONSUMER_ATTACH_CALLBACK)
-    virtual void onBufferDetached(int slot) {
+    virtual void onBufferDetached(int slot, uint64_t bufferId) {
         Parcel data, reply;
         data.writeInterfaceToken(IProducerListener::getInterfaceDescriptor());
         data.writeInt32(slot);
+        data.writeUint64(bufferId);
         remote()->transact(ON_BUFFER_DETACHED, data, &reply, IBinder::FLAG_ONEWAY);
     }
 
@@ -201,7 +202,13 @@ status_t BnProducerListener::onTransact(uint32_t code, const Parcel& data,
                 ALOGE("ON_BUFFER_DETACHED failed to read slot: %d", result);
                 return result;
             }
-            onBufferDetached(slot);
+            uint64_t bufferId;
+            result = data.readUint64(&bufferId);
+            if (result != NO_ERROR) {
+                ALOGE("ON_BUFFER_DETACHED failed to read bufferId: %d", result);
+                return result;
+            }
+            onBufferDetached(slot, bufferId);
             return NO_ERROR;
         }
         case ON_BUFFER_ATTACHED:

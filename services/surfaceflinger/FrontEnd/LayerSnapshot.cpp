@@ -19,6 +19,7 @@
 #include <PowerAdvisor/Workload.h>
 #include <aidl/android/hardware/graphics/composer3/Composition.h>
 #include <gui/LayerState.h>
+#include <utils/Log.h>
 
 #include "Layer.h"
 #include "LayerSnapshot.h"
@@ -179,7 +180,8 @@ bool LayerSnapshot::fillsColor() const {
 }
 
 bool LayerSnapshot::hasBlur() const {
-    return backgroundBlurRadius > 0 || blurRegions.size() > 0;
+    return backgroundBlurRadius > 0 || blurRegions.size() > 0 ||
+            (postProcessShader && postProcessTarget == layer_state_t::SampleTarget::Behind);
 }
 
 bool LayerSnapshot::hasBorderSettings() const {
@@ -192,7 +194,7 @@ bool LayerSnapshot::hasBoxShadowSettings() const {
 
 bool LayerSnapshot::hasEffect() const {
     return fillsColor() || drawShadows() || hasBlur() || hasBorderSettings() ||
-            hasBoxShadowSettings();
+            hasBoxShadowSettings() || postProcessShader;
 }
 
 bool LayerSnapshot::hasSomethingToDraw() const {
@@ -400,8 +402,8 @@ Hwc2::IComposerClient::BlendMode LayerSnapshot::getBlendMode(
 }
 
 void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate,
-                          bool displayChanges, bool forceFullDamage,
-                          uint32_t displayRotationFlags) {
+                          bool displayChanges, bool forceFullDamage, uint32_t displayRotationFlags,
+                          ShaderRegistry* shaderRegistry) {
     clientChanges = requested.what;
     changes = requested.changes;
     autoRefresh = requested.autoRefresh;
@@ -605,6 +607,23 @@ void LayerSnapshot::merge(const RequestedLayerState& requested, bool forceUpdate
     if (forceUpdate || requested.what & layer_state_t::eRenderResourceTokenChanged) {
         renderResourceToken = requested.renderResourceToken;
     }
+
+    if (forceUpdate || requested.what & layer_state_t::ePostProcessChanged) {
+        postProcessShader = requested.postProcessShader;
+        postProcessUniforms = requested.postProcessUniforms;
+        postProcessTarget = requested.postProcessTarget;
+        if (shaderRegistry && postProcessShader) {
+            postProcessEffect = shaderRegistry->getShader(postProcessShader);
+            if (postProcessEffect) {
+                forceClientComposition = true;
+            }
+        } else {
+            postProcessEffect = nullptr;
+        }
+        isTextureSamplingBehind =
+                postProcessEffect && postProcessTarget == layer_state_t::SampleTarget::Behind;
+    }
+
     if (renderCommandBuffer != nullptr) {
         forceClientComposition = true;
     }
@@ -649,6 +668,8 @@ char LayerSnapshot::classifyCompositionForDebug(
         code = 'c'; // Solid color
     } else if (hasBufferOrSidebandStream()) {
         code = 'b';
+    } else if (postProcessShader) {
+        code = 'E'; // Effect
     }
 
     if (hwcState.lastCompositionType == Composition::CLIENT) {

@@ -4656,6 +4656,9 @@ void InputDispatcher::notifyMotion(const NotifyMotionArgs& args) {
             LOG(FATAL) << "Bad stream: " << result.error() << " caused by " << args.dump();
         } else if (*result) {
             // The verifier is empty. Remove it if the display is gone.
+            // Unfortunately, we can't erase this unconditionally, because InputReader may still
+            // generate an ACTION_CANCEL in response to a disconnected display. This ACTION_CANCEL
+            // would need to be verified against the previous events from this display.
             if (!mWindowInfos.hasDisplay(resolvedDisplayId)) {
                 mVerifiersByDisplay.erase(it);
             }

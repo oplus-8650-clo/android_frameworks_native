@@ -26,6 +26,7 @@ cc_defaults {
         "android.hardware.graphics.composer3-ndk_shared",
         "renderengine_defaults",
         "libsurfaceflinger_common_deps",
+        "librenderengine_deps",
     ],
     cflags: [
         "-DGL_GLEXT_PROTOTYPES",
@@ -57,13 +58,6 @@ cc_defaults {
         "libgui_window_info_static",
         "libipcrenderbuffer_static",
     ],
-    local_include_dirs: ["include"],
-    export_include_dirs: ["include"],
-}
-
-// Needed by FlagManager to access a #define.
-cc_library_static {
-    name: "librenderengine_includes",
     local_include_dirs: ["include"],
     export_include_dirs: ["include"],
 }
@@ -151,7 +145,6 @@ cc_library_static {
     name: "librenderengine",
     defaults: [
         "librenderengine_defaults",
-        "librenderengine_deps",
     ],
     double_loadable: true,
     cflags: [

@@ -41,6 +41,7 @@ cc_test {
         "tensorflow_headers",
     ],
     static_libs: [
+        "libPlatformProperties",
         "libflagtest",
         "libgmock",
         "libgui_window_info_static",
@@ -75,7 +76,6 @@ cc_test {
         },
     },
     shared_libs: [
-        "libPlatformProperties",
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libbinder",

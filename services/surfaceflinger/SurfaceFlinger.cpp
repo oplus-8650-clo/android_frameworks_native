@@ -2812,7 +2812,8 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
                  .mergeableHierarchyManager = FlagManager::getInstance().frontend_caching_v0()
                          ? &mMergeableHierarchyManager
                          : nullptr,
-                 .renderResourceCache = mIpcCache.get()};
+                 .renderResourceCache = mIpcCache.get(),
+                 .shaderRegistry = mShaderRegistry.get()};
 
     if (FlagManager::getInstance().frontend_caching_v0()) {
         {
@@ -9778,6 +9779,15 @@ void SurfaceFlinger::removeActivePictureListener(const sp<gui::IActivePictureLis
     mActivePictureListenersToRemove.push_back(listener);
 }
 
+bool SurfaceFlinger::registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+                                    const std::string& shaderString) {
+    return mShaderRegistry->registerShader(shaderToken, debugName, shaderString);
+}
+
+void SurfaceFlinger::unregisterShader(const sp<IBinder>& shaderToken) {
+    mShaderRegistry->unregisterShader(shaderToken);
+}
+
 std::shared_ptr<renderengine::ExternalTexture> SurfaceFlinger::getExternalTextureFromBufferData(
         BufferData& bufferData, const char* layerName, uint64_t transactionId) {
     if (bufferData.buffer &&
@@ -10022,7 +10032,8 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args)
                             .skipRoundCornersWhenProtected =
                                     !getRenderEngine().supportsProtectedContent(),
                             .renderResourceCache = mIpcCache.get(),
-                            .exclusionMask = args.exclusionMask};
+                            .exclusionMask = args.exclusionMask,
+                            .shaderRegistry = mShaderRegistry.get()};
         if (args.rootLayerId) {
             if (builderArgs.root.hasLayerCycle()) {
                 return base::unexpected(BAD_VALUE);
@@ -10846,6 +10857,28 @@ binder::Status SurfaceComposerAIDL::removeHdrLayerInfoListener(
         status = mFlinger->removeHdrLayerInfoListener(displayToken, listener);
     }
     return binderStatusFromStatusT(status);
+}
+
+binder::Status SurfaceComposerAIDL::registerShader(const sp<IBinder>& shaderToken,
+                                                   const std::string& debugName,
+                                                   const std::string& shaderString) {
+    status_t status = checkReadFrameBufferPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+    if (!mFlinger->registerShader(shaderToken, debugName, shaderString)) {
+        return binder::Status::fromExceptionCode(binder::Status::EX_SERVICE_SPECIFIC);
+    }
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::unregisterShader(const sp<IBinder>& shaderToken) {
+    status_t status = checkReadFrameBufferPermission();
+    if (status != OK) {
+        return binderStatusFromStatusT(status);
+    }
+    mFlinger->unregisterShader(shaderToken);
+    return binder::Status::ok();
 }
 
 binder::Status SurfaceComposerAIDL::addActivePictureListener(

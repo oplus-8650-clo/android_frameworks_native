@@ -403,6 +403,10 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
         desiredHdrSdrRatio = clientState.desiredHdrSdrRatio;
     }
 
+    if (clientState.what & layer_state_t::ePostProcessChanged) {
+        changes |= RequestedLayerState::Changes::PostProcess;
+    }
+
     // We can't just check requestedTransform here because LayerSnapshotBuilder uses
     // getTransform which reads destinationFrame or buffer dimensions.
     // Display rotation does not affect validity so just use ROT_0.

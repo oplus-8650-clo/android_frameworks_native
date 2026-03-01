@@ -52,6 +52,8 @@
 #include "binder_module.h"
 #include "observer/BinderObserver.h"
 
+#include "android_os_binder_flags.h"
+
 #if (defined(__ANDROID__) || defined(__Fuchsia__)) && !defined(BINDER_WITH_KERNEL_IPC)
 #error Android and Fuchsia are expected to have BINDER_WITH_KERNEL_IPC
 #endif
@@ -97,6 +99,10 @@ namespace {
 #else
         return false;
 #endif
+    }
+
+    bool enableFrozenObjectErrorCode() {
+        return android::os::binder::flags::enable_frozen_object_error();
     }
 }
 
@@ -1186,8 +1192,7 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
             goto finish;
 
         case BR_FROZEN_REPLY:
-            ALOGW("Transaction failed because process frozen.");
-            err = FAILED_TRANSACTION;
+            err = enableFrozenObjectErrorCode() ? FROZEN_OBJECT : FAILED_TRANSACTION;
             goto finish;
 
         case BR_ACQUIRE_RESULT:

@@ -142,4 +142,14 @@ flag {
   metadata {
       purpose: PURPOSE_BUGFIX
   }
-} # allocate_buffer_priority_inheritance
+}
+
+flag {
+  name: "composition_shaders"
+  namespace: "core_graphics"
+  description: "Enable composition shaders"
+  bug: "321775340"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+}
