@@ -91,7 +91,6 @@ public:
     bool connected_display_hdr_v2() const;
     bool connected_display_hdr_v3() const;
     bool correct_dpi_with_display_size() const;
-    bool deprecate_frame_tracker() const;
     bool display_command_modeset() const;
     bool enable_user_preferred_hdr_mode() const;
     bool frame_rate_category_mrr() const;

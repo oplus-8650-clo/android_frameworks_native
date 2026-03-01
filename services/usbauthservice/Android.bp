@@ -26,6 +26,7 @@ rust_defaults {
         "libueventd",
         "liblog_rust",
         "liblogger",
+        "libregex",
         "libtokio",
         "libtokio_stream",
         "libbinder_rs",

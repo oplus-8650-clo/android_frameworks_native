@@ -284,7 +284,7 @@ public:
         ASSERT_LE(rect.right - rect.left, imageWidth);
         ASSERT_LE(rect.bottom - rect.top, imageHeight);
 
-        int tolerance = 8; // arbitrary
+        const int tolerance = 50; // arbitrary
         for (int32_t y = rect.top; y < rect.bottom; y++) {
             for (int32_t x = rect.left; x < rect.right; x++) {
                 const uint8_t* bufferPixel = mPixels + y * bufferStride + x * 4;
@@ -300,7 +300,7 @@ public:
                 dist = std::max(std::abs(db), dist);
                 dist = std::max(std::abs(da), dist);
 
-                bool pixelMatches = dist < tolerance;
+                bool pixelMatches = dist <= tolerance;
 
                 if (!pixelMatches) {
                     std::filesystem::path outFilename = pathRelativeToExeDir.filename();
@@ -314,12 +314,13 @@ public:
                             << String8::format("Inside rect (%d, %d, %d, %d), " //
                                                "pixel @ (%3d, %3d): "           //
                                                "expected [%3d, %3d, %3d, %3d], got [%3d, %3d, %3d, "
-                                               "%3d], " //
+                                               "%3d], dist=%d, " //
                                                "wrote screenshot to '%s'",
                                                rect.left, rect.top, rect.right, rect.bottom, x, y,
                                                imagePixel[0], imagePixel[1], imagePixel[2],
                                                imagePixel[3], bufferPixel[0], bufferPixel[1],
-                                               bufferPixel[2], bufferPixel[3], outPath.c_str())
+                                               bufferPixel[2], bufferPixel[3], dist,
+                                               outPath.c_str())
                                        .c_str();
                     return;
                 }

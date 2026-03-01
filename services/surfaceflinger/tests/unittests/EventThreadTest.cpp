@@ -99,7 +99,7 @@ protected:
     public:
         MockEventThreadConnection(impl::EventThread* eventThread, uid_t callingUid,
                                   EventRegistrationFlags eventRegistration)
-              : EventThreadConnection(eventThread, callingUid, eventRegistration) {}
+              : EventThreadConnection(eventThread, callingUid, getpid(), eventRegistration) {}
         MOCK_METHOD1(postEvent, status_t(const DisplayEventReceiver::Event& event));
     };
 

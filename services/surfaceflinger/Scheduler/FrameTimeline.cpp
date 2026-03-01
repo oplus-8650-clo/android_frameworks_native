@@ -528,19 +528,27 @@ void SurfaceFrame::setPreviousSurfaceFrame(const std::weak_ptr<SurfaceFrame>& pr
 }
 
 SurfaceFrame::PreviousFrameData SurfaceFrame::previousFrameDataLocked() const {
-    const auto prev = mPreviousSurfaceFrame.lock();
-    if (!prev || prev->mPredictionState != PredictionState::Valid) {
-        return PreviousFrameData::unknown();
+    auto currentPrev = mPreviousSurfaceFrame.lock();
+
+    for (int i = 0; i < kMaxPreviousFrames; i++) {
+        if (!currentPrev || currentPrev->mPredictionState != PredictionState::Valid) {
+            return PreviousFrameData::unknown();
+        }
+
+        if (currentPrev->mToken > mToken) {
+            // this can happen when a RenderThread animation is running and the UI thread is late.
+            return PreviousFrameData::outOfOrder();
+        }
+
+        std::scoped_lock lock(currentPrev->mMutex);
+        if (currentPrev->mPresentState == PresentState::Presented) {
+            return PreviousFrameData::create(currentPrev->mPredictions, currentPrev->mActuals,
+                                             currentPrev->mVsyncResyncedJitter);
+        }
+        currentPrev = currentPrev->mPreviousSurfaceFrame.lock();
     }
 
-    if (prev->mToken > mToken) {
-        // this can happen when a RenderThread animation is running and the UI thread is late.
-        return PreviousFrameData::outOfOrder();
-    }
-
-    std::scoped_lock lock(prev->mMutex);
-    return PreviousFrameData::create(prev->mPredictions, prev->mActuals,
-                                     prev->mVsyncResyncedJitter);
+    return PreviousFrameData::tooFarBack();
 }
 
 // TODO(b/316171339): migrate from perfetto side
@@ -928,6 +936,11 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
                 case PreviousFrameData::Status::Unknown:
                     // We can't do any classification if the previous frame is unknown
                     mFramePresentMetadata.experimental() = FramePresentMetadata::UnknownPresent;
+                    break;
+                case PreviousFrameData::Status::FrameHistoryTooLong:
+                    // We can't do any classification if the history is too long
+                    mFramePresentMetadata.experimental() = FramePresentMetadata::UnknownPresent;
+                    mJankDebugMetadata = -1.0f;
                     break;
                 case PreviousFrameData::Status::OutOfOrder:
                     // This can happen if the frame is significantly delayed on the UI thread,

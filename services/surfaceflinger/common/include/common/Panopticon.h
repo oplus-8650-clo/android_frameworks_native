@@ -214,13 +214,25 @@ private:
 class ExclusiveToken {
 public:
     ExclusiveToken(std::string id);
-    ~ExclusiveToken();
+    ~ExclusiveToken() { cleanup(); }
 
     // ban copies
     ExclusiveToken(const ExclusiveToken&) = delete;
     ExclusiveToken& operator=(const ExclusiveToken&) = delete;
-    ExclusiveToken(ExclusiveToken&& other) = default;
-    ExclusiveToken& operator=(ExclusiveToken&& other) = default;
+    ExclusiveToken(ExclusiveToken&& other) {
+        mMovedFrom = other.mMovedFrom;
+        other.mMovedFrom = true;
+    }
+    // This operator is deleted, since it seems difficult to use correctly with
+    // our current `cleanup` implementation; see discussion on
+    // ag/38394850/comment/350611e0_abf207a5/ . If this is needed, cleanup()
+    // will need to search for the right entry.
+    ExclusiveToken& operator=(ExclusiveToken&& other) = delete;
+
+private:
+    bool mMovedFrom = false;
+
+    void cleanup();
 };
 
 // Bunch o' typedefs for common containers that are "reasonably" sized

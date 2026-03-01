@@ -195,11 +195,17 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     mSurfaceControlHandle = surfaceControlHandle;
 
     IGraphicBufferProducer::SurfaceConfig config;
-    if (auto status = mGraphicBufferProducer->getConfigForSurface(&config); status == OK) {
+    status_t status = mGraphicBufferProducer->getConfigForSurface(&config);
+    if (status == OK) {
+        ALOGI("Creating surface for consumer %s with slotExpansion=%d for %zu slots",
+              config.consumerName.c_str(), config.isSlotExpansionAllowed, config.slotCount);
+        mDebugName = config.consumerName;
         mIsSlotExpansionAllowed = config.isSlotExpansionAllowed;
         if (config.slotCount > mSlots.size()) {
             mSlots.resize(config.slotCount);
         }
+    } else {
+        ALOGE("Failed to get surface config from BQ. Error: %d", status);
     }
 
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
@@ -2538,6 +2544,11 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
 #endif // !defined(NO_BINDER)
 
     return err;
+}
+
+void Surface::setProducerControlledByApp(bool controlledByApp) {
+    Mutex::Autolock lock(mMutex);
+    mProducerControlledByApp = controlledByApp;
 }
 
 int Surface::detachNextBuffer(sp<GraphicBuffer>* outBuffer,

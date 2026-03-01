@@ -221,8 +221,10 @@ ExclusiveToken::ExclusiveToken(std::string id) {
     sExclusiveIdStack.emplace_back(std::move(id));
 }
 
-ExclusiveToken::~ExclusiveToken() {
-    sExclusiveIdStack.pop_back();
+void ExclusiveToken::cleanup() {
+    if (!mMovedFrom) {
+        sExclusiveIdStack.pop_back();
+    }
 }
 
 void make(std::string id, Source source, int64_t vsyncId) {
