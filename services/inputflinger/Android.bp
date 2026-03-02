@@ -181,10 +181,10 @@ cc_library_shared {
     shared_libs: [
         // This should consist only of dependencies from inputflinger. Other dependencies should be
         // in cc_defaults so that they are included in the tests.
-        "libPlatformProperties",
         "libinputreporter",
     ],
     static_libs: [
+        "libPlatformProperties",
         "libinputdispatcher",
     ],
     export_static_lib_headers: [

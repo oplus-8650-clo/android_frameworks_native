@@ -48,6 +48,8 @@
 #include <utils/SystemClock.h>
 #include "binder/IServiceManagerUnitTestHelper.h"
 
+#include <android_os_binder_flags.h>
+
 #include <linux/android/binderfs.h>
 #include <linux/sched.h>
 #include <sys/epoll.h>
@@ -79,6 +81,13 @@ using testing::WithParamInterface;
 MATCHER_P(StatusEq, expected, (negation ? "not " : "") + statusToString(expected)) {
     *result_listener << statusToString(arg);
     return expected == arg;
+}
+
+// The error code that is expected when a transaction is sent to a frozen
+// process.
+int frozenError() {
+    return android::os::binder::flags::enable_frozen_object_error() ? FROZEN_OBJECT
+                                                                    : FAILED_TRANSACTION;
 }
 
 static ::testing::AssertionResult IsPageAligned(void *buf) {
@@ -712,7 +721,7 @@ TEST_F(BinderLibTest, Freeze) {
     }
 
     EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, true, 1000));
-    EXPECT_EQ(FAILED_TRANSACTION, m_server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
+    EXPECT_EQ(frozenError(), m_server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
 
     uint32_t sync_received, async_received;
 
@@ -724,6 +733,23 @@ TEST_F(BinderLibTest, Freeze) {
 
     EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
     EXPECT_EQ(NO_ERROR, m_server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
+}
+
+TEST_F(BinderLibTest, FreezeTxn) {
+    if (!checkFreezeSupport()) {
+        GTEST_SKIP() << "Skipping test for kernels that do not support proceess freezing";
+        return;
+    }
+    Parcel data, reply, replypid;
+    sp<IBinder> server = addServer();
+    ASSERT_TRUE(server != nullptr);
+    EXPECT_THAT(server->transact(BINDER_LIB_TEST_GETPID, data, &replypid), StatusEq(NO_ERROR));
+    int32_t pid = replypid.readInt32();
+
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, true, 1000));
+    EXPECT_EQ(frozenError(), server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
+    EXPECT_EQ(NO_ERROR, IPCThreadState::self()->freeze(pid, false, 0));
+    EXPECT_EQ(NO_ERROR, server->transact(BINDER_LIB_TEST_NOP_TRANSACTION, data, &reply));
 }
 
 TEST_F(BinderLibTest, SetError) {

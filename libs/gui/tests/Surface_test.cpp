@@ -1122,6 +1122,15 @@ public:
         return binder::Status::ok();
     }
 
+    binder::Status registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+                                  const std::string& shaderString) override {
+        return binder::Status::ok();
+    }
+
+    binder::Status unregisterShader(const sp<IBinder>& shader) override {
+        return binder::Status::ok();
+    }
+
 protected:
     IBinder* onAsBinder() override { return nullptr; }
 

@@ -26,6 +26,7 @@
 
 namespace android::surfaceflinger {
 class RenderResourceCache;
+class ShaderRegistry;
 }
 
 namespace android::surfaceflinger::frontend {
@@ -75,6 +76,7 @@ public:
         caching::MergeableHierarchyManager* mergeableHierarchyManager = nullptr;
         RenderResourceCache* renderResourceCache = nullptr;
         uint32_t exclusionMask = 0;
+        ShaderRegistry* shaderRegistry = nullptr;
     };
     LayerSnapshotBuilder();
 

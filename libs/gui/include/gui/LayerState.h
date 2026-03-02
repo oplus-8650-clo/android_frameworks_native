@@ -175,7 +175,7 @@ public:
  * Used to communicate layer information between SurfaceFlinger and its clients.
  */
 struct layer_state_t {
-    using LayerChangedSet = BitSet<64>;
+    using LayerChangedSet = BitSet<65>;
 
     enum Permission {
         ACCESS_SURFACE_FLINGER = 0x1,
@@ -276,6 +276,7 @@ struct layer_state_t {
     static constexpr auto eRenderResourceTokenChanged = LayerChangedSet{61};
     static constexpr auto eDesiredMaxHdrHeadroomChanged = LayerChangedSet{62};
     static constexpr auto eCompositionFilterFlagChanged = LayerChangedSet{63};
+    static constexpr auto ePostProcessChanged = LayerChangedSet{64};
     // When adding a change flag, update LayerChangedSet to reflect new size requirement
 
     layer_state_t();
@@ -327,7 +328,7 @@ struct layer_state_t {
             layer_state_t::eBoxShadowSettingsChanged |
             layer_state_t::eRenderCommandBufferFrameIdChanged |
             layer_state_t::eRenderCommandBufferChanged |
-            layer_state_t::eDesiredMaxHdrHeadroomChanged;
+            layer_state_t::eDesiredMaxHdrHeadroomChanged | layer_state_t::ePostProcessChanged;
 
     // Changes which invalidates the layer's visible region in CE.
     static constexpr auto CONTENT_DIRTY = layer_state_t::CONTENT_CHANGES |
@@ -543,6 +544,15 @@ struct layer_state_t {
     // Composition filter flag contains additional metadata of a layer, which affects its
     // visibility.
     uint32_t compositionFilterFlag = 0u;
+
+    sp<IBinder> postProcessShader;
+    std::shared_ptr<std::vector<uint8_t>> postProcessUniforms;
+
+    enum class SampleTarget : uint32_t {
+        Self,
+        Behind,
+    };
+    SampleTarget postProcessTarget;
 
 protected:
     struct NotDefaultComparableState {

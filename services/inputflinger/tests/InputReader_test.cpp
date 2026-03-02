@@ -277,13 +277,6 @@ public:
         mKeyCodeMapping.insert_or_assign(fromKeyCode, toKeyCode);
     }
 
-    std::optional<ui::LogicalDisplayId> getAssociatedDisplayId() const override {
-        if (mViewport) {
-            return std::make_optional(mViewport->displayId);
-        }
-        return std::nullopt;
-    }
-
 private:
     uint32_t getSources() const override { return mSources; }
 
@@ -301,14 +294,9 @@ private:
         mConfigureWasCalled = true;
 
         // Find the associated viewport if exist.
-        if (changes.test(InputReaderConfiguration::Change::DISPLAY_INFO)) {
-            const std::optional<uint8_t> displayPort =
-                    getDeviceContext().getAssociatedDisplayPort();
-            if (displayPort) {
-                mViewport = config.getDisplayViewportByPort(*displayPort);
-            } else {
-                mViewport = getDeviceContext().getAssociatedViewport();
-            }
+        const std::optional<uint8_t> displayPort = getDeviceContext().getAssociatedDisplayPort();
+        if (displayPort && changes.test(InputReaderConfiguration::Change::DISPLAY_INFO)) {
+            mViewport = config.getDisplayViewportByPort(*displayPort);
         }
 
         mStateChangedCondition.notify_all();
@@ -368,7 +356,15 @@ private:
         return mMetaState;
     }
 
-    virtual void fadePointer() {}
+    virtual void fadePointer() {
+    }
+
+    virtual std::optional<ui::LogicalDisplayId> getAssociatedDisplay() {
+        if (mViewport) {
+            return std::make_optional(mViewport->displayId);
+        }
+        return std::nullopt;
+    }
 };
 
 // --- InputReaderPolicyTest ---
@@ -3214,24 +3210,20 @@ TEST_F(InputDeviceTest, Configure_DeviceLocationAndDisplayUniqueId_CorrectlyMatc
                            /* isActive= */ true, DISPLAY_UNIQUE_ID, NO_PORT,
                            ViewportType::INTERNAL);
     mFakePolicy->addDisplayViewport(secondViewport);
-    const int32_t initialGeneration = mDevice->getGeneration();
+    const auto initialGeneration = mDevice->getGeneration();
     unused += mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
                                  InputReaderConfiguration::Change::DISPLAY_INFO);
     ASSERT_EQ(DISPLAY_UNIQUE_ID, mDevice->getAssociatedDisplayUniqueIdByPort());
     ASSERT_GT(mDevice->getGeneration(), initialGeneration);
     ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
-    ASSERT_EQ(mDevice->getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
 
     // Verify the device and display unique id association is cleared after applying some new
     // policy.
     InputReaderConfiguration config;
-    const int32_t currentGeneration = mDevice->getGeneration();
     unused = mDevice->configure(ARBITRARY_TIME, config,
                                 InputReaderConfiguration::Change::DISPLAY_INFO);
     ASSERT_EQ(std::nullopt, mDevice->getAssociatedDisplayUniqueIdByPort());
-    ASSERT_GT(mDevice->getGeneration(), currentGeneration);
     ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), INVALID_DISPLAY_ID);
-    ASSERT_EQ(mDevice->getAssociatedDisplayId(), std::nullopt);
 }
 
 TEST_F(InputDeviceTest, Configure_DeviceDescriptorAndDisplayUniqueId_CorrectlyMatches) {
@@ -3251,24 +3243,20 @@ TEST_F(InputDeviceTest, Configure_DeviceDescriptorAndDisplayUniqueId_CorrectlyMa
             createViewport(SECONDARY_DISPLAY_ID, DISPLAY_WIDTH, DISPLAY_HEIGHT, ui::ROTATION_0,
                            /*isActive=*/true, DISPLAY_UNIQUE_ID, NO_PORT, ViewportType::INTERNAL);
     mFakePolicy->addDisplayViewport(secondViewport);
-    const int32_t initialGeneration = mDevice->getGeneration();
+    const auto initialGeneration = mDevice->getGeneration();
     unused = mDevice->configure(ARBITRARY_TIME, mFakePolicy->getReaderConfiguration(),
                                 InputReaderConfiguration::Change::DISPLAY_INFO);
     ASSERT_EQ(DISPLAY_UNIQUE_ID, mDevice->getAssociatedDisplayUniqueIdByDescriptor());
     ASSERT_GT(mDevice->getGeneration(), initialGeneration);
     ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
-    ASSERT_EQ(mDevice->getAssociatedDisplayId(), SECONDARY_DISPLAY_ID);
 
     // Verify the device and display unique id association is cleared after applying some new
     // policy.
     InputReaderConfiguration config;
-    const int32_t currentGeneration = mDevice->getGeneration();
     unused = mDevice->configure(ARBITRARY_TIME, config,
                                 InputReaderConfiguration::Change::DISPLAY_INFO);
     ASSERT_EQ(std::nullopt, mDevice->getAssociatedDisplayUniqueIdByDescriptor());
-    ASSERT_GT(mDevice->getGeneration(), currentGeneration);
     ASSERT_EQ(mDevice->getDeviceInfo().getAssociatedDisplayId(), INVALID_DISPLAY_ID);
-    ASSERT_EQ(mDevice->getAssociatedDisplayId(), std::nullopt);
 }
 
 /**

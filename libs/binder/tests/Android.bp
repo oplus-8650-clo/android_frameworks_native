@@ -241,6 +241,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
+        "android.os.binder.flags-aconfig-cc",
         "libgmock",
         "libselinux",
     ],

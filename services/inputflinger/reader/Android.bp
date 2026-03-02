@@ -83,7 +83,6 @@ cc_defaults {
     srcs: [":libinputreader_sources"],
     shared_libs: [
         "android.companion.virtualdevice.flags-aconfig-cc",
-        "libPlatformProperties",
         "libbase",
         "libcap",
         "libcrypto",
@@ -97,6 +96,7 @@ cc_defaults {
         "libutils",
     ],
     static_libs: [
+        "libPlatformProperties",
         "libchrome-gestures",
         "libexpresslog",
         "libstatslog_express",

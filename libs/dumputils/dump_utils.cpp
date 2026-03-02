@@ -65,7 +65,6 @@ static const char* hidl_hal_interfaces_to_dump[] {
         "android.hardware.automotive.can@1.0::ICanBus",
         "android.hardware.automotive.can@1.0::ICanController",
         "android.hardware.automotive.evs@1.0::IEvsCamera",
-        "android.hardware.automotive.sv@1.0::ISurroundViewService",
         "android.hardware.automotive.vehicle@2.0::IVehicle",
         "android.hardware.biometrics.face@1.0::IBiometricsFace",
         "android.hardware.biometrics.fingerprint@2.1::IBiometricsFingerprint",

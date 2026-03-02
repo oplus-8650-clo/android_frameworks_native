@@ -2616,6 +2616,21 @@ SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<Surfa
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setPostProcess(
+        const sp<SurfaceControl>& sc, const sp<IBinder>& shader,
+        const std::shared_ptr<std::vector<uint8_t>>& uniforms, layer_state_t::SampleTarget target) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::ePostProcessChanged;
+    s->postProcessShader = shader;
+    s->postProcessUniforms = uniforms;
+    s->postProcessTarget = target;
+    return *this;
+}
+
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderResourceToken(
         const sp<SurfaceControl>& sc, const sp<IBinder>& token) {
     layer_state_t* s = getLayerState(sc);
@@ -3389,6 +3404,22 @@ status_t SurfaceComposerClient::removeActivePictureListener(
     binder::Status status =
             ComposerServiceAIDL::getComposerService()->removeActivePictureListener(listener);
     return statusTFromBinderStatus(status);
+}
+
+sp<IBinder> SurfaceComposerClient::registerShader(const std::string& debugName,
+                                                  const std::string& shaderString) {
+    if (!com_android_graphics_libgui_flags_composition_shaders()) {
+        return nullptr;
+    }
+    sp<IBinder> token = sp<BBinder>::make();
+    binder::Status status =
+            ComposerServiceAIDL::getComposerService()->registerShader(token, debugName,
+                                                                      shaderString);
+    return status.isOk() ? token : nullptr;
+}
+
+void SurfaceComposerClient::unregisterShader(const sp<IBinder> shader) {
+    ComposerServiceAIDL::getComposerService()->unregisterShader(shader);
 }
 
 status_t SurfaceComposerClient::notifyPowerBoost(int32_t boostId) {

@@ -261,6 +261,15 @@ status_t layer_state_t::write(Parcel& output) const
     }
 
     SAFE_PARCEL(output.writeUint32, compositionFilterFlag);
+    SAFE_PARCEL(output.writeStrongBinder, postProcessShader);
+    SAFE_PARCEL(output.writeUint32, static_cast<uint32_t>(postProcessTarget));
+    if (postProcessUniforms) {
+        SAFE_PARCEL(output.writeBool, true);
+        SAFE_PARCEL(output.writeByteArray, postProcessUniforms->size(),
+                    postProcessUniforms->data());
+    } else {
+        SAFE_PARCEL(output.writeBool, false);
+    }
 
     return NO_ERROR;
 }
@@ -463,6 +472,18 @@ status_t layer_state_t::read(const Parcel& input)
         SAFE_PARCEL(input.readUint64, &renderCommandBufferFrameId);
     }
     SAFE_PARCEL(input.readUint32, &compositionFilterFlag);
+
+    SAFE_PARCEL(input.readNullableStrongBinder, &postProcessShader);
+    uint32_t tmpPostProcessTarget;
+    SAFE_PARCEL(input.readUint32, &tmpPostProcessTarget);
+    postProcessTarget = static_cast<SampleTarget>(tmpPostProcessTarget);
+    bool hasPostProcessUniforms;
+    SAFE_PARCEL(input.readBool, &hasPostProcessUniforms);
+    if (hasPostProcessUniforms) {
+        postProcessUniforms = std::make_shared<std::vector<uint8_t>>();
+        SAFE_PARCEL(input.readByteVector, postProcessUniforms.get());
+    }
+
     return NO_ERROR;
 }
 
@@ -914,6 +935,12 @@ void layer_state_t::merge(const layer_state_t& other) {
         what |= eCompositionFilterFlagChanged;
         compositionFilterFlag = other.compositionFilterFlag;
     }
+    if (other.what & ePostProcessChanged) {
+        what |= ePostProcessChanged;
+        postProcessShader = other.postProcessShader;
+        postProcessUniforms = other.postProcessUniforms;
+        postProcessTarget = other.postProcessTarget;
+    }
     if ((other.what & what) != other.what) {
         ALOGE("Unmerged SurfaceComposer Transaction properties. LayerState::merge needs updating? "
               "unmerged flags=%s",
@@ -1015,6 +1042,7 @@ layer_state_t::LayerChangedSet layer_state_t::diff(const layer_state_t& other) c
         if (other.what & eRenderResourceTokenChanged) diff |= eRenderResourceTokenChanged;
     }
     CHECK_DIFF(diff, eCompositionFilterFlagChanged, other, compositionFilterFlag);
+    if (other.what & ePostProcessChanged) diff |= ePostProcessChanged;
 
     return diff;
 }

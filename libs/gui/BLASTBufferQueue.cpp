@@ -1215,9 +1215,11 @@ public:
                 [listener = mListener, slots = slots]() { listener->onBuffersDiscarded(slots); });
     }
 
-    void onBufferDetached(int slot) override {
+    void onBufferDetached(int slot, uint64_t bufferId) override {
         AsyncProducerListenerWorker::getInstance().post(
-                [listener = mListener, slot = slot]() { listener->onBufferDetached(slot); });
+                [listener = mListener, slot = slot, bufferId = bufferId]() {
+                    listener->onBufferDetached(slot, bufferId);
+                });
     }
 
     void onBufferAcquired(uint64_t bufferId, uint64_t frameNumber) override {

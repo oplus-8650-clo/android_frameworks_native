@@ -110,6 +110,7 @@
 #include "Scheduler/ISchedulerCallback.h"
 #include "Scheduler/RefreshRateSelector.h"
 #include "Scheduler/Scheduler.h"
+#include "ShaderRegistry.h"
 #include "SurfaceFlingerFactory.h"
 #include "ThreadContext.h"
 #include "Tracing/LayerTracing.h"
@@ -687,6 +688,10 @@ private:
     void addActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
     void removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
+
+    bool registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+                        const std::string& shaderString);
+    void unregisterShader(const sp<IBinder>& shaderToken);
 
     // IBinder::DeathRecipient overrides:
     void binderDied(const wp<IBinder>& who) override;
@@ -1759,6 +1764,8 @@ private:
     // used to resolve resources during layer snapshotting.
     sp<RenderResourceCache> mIpcCache = sp<RenderResourceCache>::make();
 
+    sp<ShaderRegistry> mShaderRegistry = sp<ShaderRegistry>::make();
+
     // NotifyExpectedPresentHint
     enum class NotifyExpectedPresentHintStatus {
         // Represents that framework can start sending hint if required.
@@ -1959,6 +1966,9 @@ public:
     binder::Status resetForcedPacesetter() override;
     binder::Status registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) override;
     binder::Status unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) override;
+    binder::Status registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+                                  const std::string& shaderString) override;
+    binder::Status unregisterShader(const sp<IBinder>& shader) override;
 
 private:
     static const constexpr bool kUsePermissionCache = true;

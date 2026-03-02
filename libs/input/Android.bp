@@ -282,7 +282,6 @@ cc_library {
 
     shared_libs: [
         "com.android.window.flags.window-aconfig_flags_c_lib",
-        "libPlatformProperties",
         "libaconfig_storage_read_api_cc",
         "libbase",
         "libbinder",
@@ -307,6 +306,7 @@ cc_library {
 
     static_libs: [
         "inputconstants-cpp",
+        "libPlatformProperties",
         "libkernelconfigs",
         "libstatslog_libinput",
         "libstatssocket_lazy",

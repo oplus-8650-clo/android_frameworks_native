@@ -18,6 +18,8 @@
 
 #include "SkiaRenderEngine.h"
 
+#include <string_view>
+
 #include <SkBlendMode.h>
 #include <SkBlurTypes.h>
 #include <SkCanvas.h>
@@ -103,6 +105,10 @@ static const bool kGaneshFlushAfterEveryLayer = kPrintLayerSettings;
 } // namespace
 
 // Utility functions related to SkRect
+
+namespace android {
+namespace renderengine {
+namespace skia {
 
 namespace {
 
@@ -245,9 +251,10 @@ static inline std::pair<SkRRect, SkRRect> getBoundsAndClip(
     return {SkRRect::MakeRect(bounds), clip};
 }
 
-static inline bool layerHasBlur(const android::renderengine::LayerSettings& layer,
-                                bool colorTransformModifiesAlpha) {
-    if (layer.backgroundBlurRadius > 0 || layer.blurRegions.size()) {
+static inline bool layerSamplesBehind(const android::renderengine::LayerSettings& layer,
+                                      bool colorTransformModifiesAlpha) {
+    if (layer.backgroundBlurRadius > 0 || layer.blurRegions.size() ||
+        layer.postProcessTarget == LayerSettings::SampleTarget::Behind) {
         // return false if the content is opaque and would therefore occlude the blur
         const bool opaqueContent = !layer.source.buffer.buffer || layer.source.buffer.isOpaque;
         const bool opaqueAlpha = layer.alpha == 1.0f && !colorTransformModifiesAlpha;
@@ -272,13 +279,6 @@ static inline SkPoint3 getSkPoint3(const android::vec3& vector) {
     return SkPoint3::Make(vector.x, vector.y, vector.z);
 }
 
-} // namespace
-
-namespace android {
-namespace renderengine {
-namespace skia {
-
-namespace {
 void trace(sp<Fence> fence) {
     static gui::FenceMonitor sMonitor("RE Completion");
     sMonitor.queueFence(std::move(fence),
@@ -619,6 +619,7 @@ void SkiaRenderEngine::cleanupPostRender() {
 sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
         const RuntimeEffectShaderParameters& parameters) {
     SFTRACE_CALL();
+
     // The given surface will be stretched by HWUI via matrix transformation
     // which gets similar results for most surfaces
     // Determine later on if we need to leverage the stretch shader within
@@ -717,15 +718,44 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
         }
 
         const auto hardwareBuffer = graphicBuffer ? graphicBuffer->toAHardwareBuffer() : nullptr;
-        return RuntimeEffectManager::createLinearEffectShader(shader, effect, runtimeEffect,
-                                                              std::move(colorTransform),
-                                                              parameters.display.maxLuminance,
-                                                              parameters.display
-                                                                      .currentLuminanceNits,
-                                                              parameters.layer.source.buffer
-                                                                      .maxLuminanceNits,
-                                                              hardwareBuffer,
-                                                              parameters.display.renderIntent);
+        shader = RuntimeEffectManager::createLinearEffectShader(shader, effect, runtimeEffect,
+                                                                std::move(colorTransform),
+                                                                parameters.display.maxLuminance,
+                                                                parameters.display
+                                                                        .currentLuminanceNits,
+                                                                parameters.layer.source.buffer
+                                                                        .maxLuminanceNits,
+                                                                hardwareBuffer,
+                                                                parameters.display.renderIntent);
+    }
+    if (parameters.layer.postProcessEffect &&
+        parameters.layer.postProcessTarget == LayerSettings::SampleTarget::Self) {
+        const auto& effect = parameters.layer.postProcessEffect;
+        sk_sp<SkData> uniforms = nullptr;
+        if (parameters.layer.postProcessUniforms) {
+            uniforms = SkData::MakeWithCopy(parameters.layer.postProcessUniforms->data(),
+                                            parameters.layer.postProcessUniforms->size());
+        }
+
+        auto childrenList = effect->children();
+        if (childrenList.size() == 1 && childrenList[0].name == "inLayer") {
+            auto oldShader = shader;
+            shader = effect->makeShader(uniforms, &shader, 1);
+            if (!shader) {
+                ALOGE("SkiaRenderEngine: makeShader failed! Uniforms size: %zu, Expected: %zu",
+                      uniforms ? uniforms->size() : 0, effect->uniformSize());
+                for (const auto& child : childrenList) {
+                    ALOGE("SkiaRenderEngine: Child: %s", std::string(child.name).c_str());
+                }
+                shader = oldShader; // Fallback to avoid complete blackness if failure
+            }
+        } else {
+            ALOGE("SkiaRenderEngine: Shader children mismatch. Count: %zu", childrenList.size());
+            if (childrenList.size() > 0) {
+                ALOGE("SkiaRenderEngine: First child: %s",
+                      std::string(childrenList[0].name).c_str());
+            }
+        }
     }
     return shader;
 }
@@ -945,10 +975,14 @@ void SkiaRenderEngine::drawLayersInternal(
         bool hasBlur = false;
         for (const auto& layer : layers) {
             // if the layer doesn't have blur or it is not visible then continue
-            if (!layerHasBlur(layer, ctModifiesAlpha)) {
+            if (!layerSamplesBehind(layer, ctModifiesAlpha)) {
                 continue;
             }
             hasBlur = true;
+            if (layer.postProcessEffect &&
+                layer.postProcessTarget == LayerSettings::SampleTarget::Behind) {
+                requiresCompositionLayer = true;
+            }
             if (layer.backgroundBlurRadius > 0 &&
                 layer.backgroundBlurRadius < mBlurFilter->getMaxCrossFadeRadius()) {
                 requiresCompositionLayer = true;
@@ -1051,7 +1085,7 @@ void SkiaRenderEngine::drawLayersInternal(
                                  layer.geometry.roundedCornersRadii);
 
         // TODO (b/270314344): Enable blurs in protected context.
-        if (mBlurFilter && layerHasBlur(layer, ctModifiesAlpha) && !mInProtectedContext) {
+        if (mBlurFilter && layerSamplesBehind(layer, ctModifiesAlpha) && !mInProtectedContext) {
             std::unordered_map<uint32_t, sk_sp<SkImage>> cachedBlurs;
 
             // rect to be blurred in the coordinate space of blurInput
@@ -1117,18 +1151,52 @@ void SkiaRenderEngine::drawLayersInternal(
                                                 blurRect, blurredImage, blurInput);
                 }
 
-                canvas->concat(getSkM44(layer.blurRegionTransform).asM33());
-                for (auto region : layer.blurRegions) {
-                    if (cachedBlurs[region.blurRadius] == nullptr) {
-                        SFTRACE_NAME("BlurRegion");
-                        cachedBlurs[region.blurRadius] =
-                                mBlurFilter->generate(context, display, region.blurRadius,
-                                                      blurInput, blurRect);
-                    }
+                if (layer.blurRegions.size()) {
+                    SkAutoCanvasRestore acr(canvas, true);
+                    canvas->concat(getSkM44(layer.blurRegionTransform).asM33());
+                    for (auto region : layer.blurRegions) {
+                        if (cachedBlurs[region.blurRadius] == nullptr) {
+                            SFTRACE_NAME("BlurRegion");
+                            cachedBlurs[region.blurRadius] =
+                                    mBlurFilter->generate(context, display, region.blurRadius,
+                                                          blurInput, blurRect);
+                        }
 
-                    mBlurFilter->drawBlurRegion(canvas, getBlurRRect(region), region.blurRadius,
-                                                1.0f, region.alpha, blurRect,
-                                                cachedBlurs[region.blurRadius], blurInput);
+                        mBlurFilter->drawBlurRegion(canvas, getBlurRRect(region), region.blurRadius,
+                                                    1.0f, region.alpha, blurRect,
+                                                    cachedBlurs[region.blurRadius], blurInput);
+                    }
+                }
+
+                if (layer.postProcessTarget == renderengine::LayerSettings::SampleTarget::Behind &&
+                    layer.postProcessEffect) {
+                    const auto drawInverse =
+                            canvas->getTotalMatrix().invert().value_or(SkMatrix::I());
+                    auto inputShader =
+                            blurInput->makeShader(SkSamplingOptions(SkFilterMode::kLinear),
+                                                  drawInverse);
+                    if (inputShader) {
+                        sk_sp<SkData> uniforms = nullptr;
+                        if (layer.postProcessUniforms) {
+                            uniforms = SkData::MakeWithCopy(layer.postProcessUniforms->data(),
+                                                            layer.postProcessUniforms->size());
+                        }
+                        auto shader =
+                                layer.postProcessEffect->makeShader(uniforms, &inputShader, 1);
+                        if (shader) {
+                            SkPaint paint;
+                            paint.setShader(shader);
+                            paint.setAlphaf(layer.alpha);
+                            // We need to overwrite the background with the distorted version
+                            paint.setBlendMode(SkBlendMode::kSrc);
+                            if (!bounds.isRect()) {
+                                paint.setAntiAlias(true);
+                                canvas->drawRRect(bounds, paint);
+                            } else {
+                                canvas->drawRect(bounds.rect(), paint);
+                            }
+                        }
+                    }
                 }
             }
         }

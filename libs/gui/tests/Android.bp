@@ -54,6 +54,7 @@ cc_test {
         // Allow access to buffer queue core private members
         "-DENABLE_BQC_TESTING",
         "-fexceptions",
+        "-Wno-unused-parameter",
     ],
 
     srcs: [

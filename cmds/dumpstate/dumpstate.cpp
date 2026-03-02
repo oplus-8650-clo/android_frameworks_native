@@ -2635,10 +2635,6 @@ void Dumpstate::DumpstateBoard(int out_fd) {
     std::shared_ptr<dumpstate_hal_aidl::IDumpstateDevice> dumpstate_hal_handle_aidl(
         GetDumpstateBoardAidlService());
     if (dumpstate_hal_handle_aidl == nullptr) {
-        MYLOGI("No IDumpstateDevice AIDL implementation\n");
-    }
-
-    if (dumpstate_hal_handle_aidl == nullptr) {
         MYLOGE("Could not find IDumpstateDevice implementation\n");
         return;
     }
@@ -2671,10 +2667,8 @@ void Dumpstate::DumpstateBoard(int out_fd) {
     // will kill the HAL and grab whatever it dumped in time.
     constexpr size_t timeout_sec = 45;
 
-    if (dumpstate_hal_handle_aidl != nullptr) {
-        DoDumpstateBoardAidl(dumpstate_hal_handle_aidl, dumpstate_fds, options_->bugreport_mode,
-                             timeout_sec);
-    }
+    DoDumpstateBoardAidl(dumpstate_hal_handle_aidl, dumpstate_fds, options_->bugreport_mode,
+                         timeout_sec);
     if (mount_debugfs) {
         auto keep_debugfs_mounted =
             android::base::GetProperty("persist.dbg.keep_debugfs_mounted", "");

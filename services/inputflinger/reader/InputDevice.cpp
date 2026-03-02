@@ -24,7 +24,6 @@
 #include <android/sysprop/InputProperties.sysprop.h>
 #include <com_android_input_flags.h>
 #include <ftl/flags.h>
-#include <ftl/optional.h>
 #include <input/Input.h>
 
 #include "CursorInputMapper.h"
@@ -440,13 +439,7 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                 }
             }
 
-            // Do not fall back to the mappers for detecting associated display id changes because
-            // they have not been reconfigured yet.
-            const std::optional<ui::LogicalDisplayId> newAssociatedDisplayId =
-                    ftl::Optional(mAssociatedViewport).transform([](const DisplayViewport& v) {
-                        return v.displayId;
-                    });
-            if (newAssociatedDisplayId != oldAssociatedDisplayId) {
+            if (getAssociatedDisplayId() != oldAssociatedDisplayId) {
                 bumpGeneration();
             }
         }

@@ -56,7 +56,7 @@ public:
     //
     // This is called without any lock held and can be called concurrently by
     // multiple threads.
-    virtual void onBufferDetached(int /*slot*/) {} // Asynchronous
+    virtual void onBufferDetached(int /*slot*/, uint64_t /*bufferId*/) {} // Asynchronous
 
     virtual void onBufferAcquired(uint64_t /*bufferId*/, uint64_t /*frameNumber*/) {}
     virtual bool needsAcquiredNotify() { return false; }

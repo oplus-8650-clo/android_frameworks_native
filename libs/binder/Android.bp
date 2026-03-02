@@ -590,6 +590,9 @@ cc_defaults {
         ":libbinder_observer_sources",
         ":android-os-binderstatsconsumer-aidl",
     ],
+    static_libs: [
+        "android.os.binder.flags-aconfig-cc",
+    ],
     target: {
         vendor: {
             exclude_srcs: [
@@ -1125,4 +1128,25 @@ cc_binary {
         "libutils",
         "android.debug_aidl-cpp",
     ],
+}
+
+/////////////////////////////////////////////////
+// flags
+/////////////////////////////////////////////////
+aconfig_declarations {
+    name: "android.os.binder.flags-aconfig",
+    package: "android.os.binder.flags",
+    container: "system",
+    srcs: ["flags.aconfig"],
+}
+
+cc_aconfig_library {
+    name: "android.os.binder.flags-aconfig-cc",
+    aconfig_declarations: "android.os.binder.flags-aconfig",
+    mode: "force-read-only",
+    vendor_available: true,
+    recovery_available: true,
+    host_supported: true,
+    native_bridge_supported: true,
+    cmake_snapshot_supported: true,
 }

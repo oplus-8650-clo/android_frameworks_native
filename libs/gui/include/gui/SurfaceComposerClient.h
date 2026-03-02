@@ -311,6 +311,11 @@ public:
 
     static status_t removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
+    static sp<IBinder> registerShader(const std::string& debugName,
+                                      const std::string& shaderString);
+
+    static void unregisterShader(const sp<IBinder> shader);
+
     /*
      * Sends a power boost to the composer. This function is asynchronous.
      *
@@ -643,6 +648,9 @@ public:
         Transaction& setApi(const sp<SurfaceControl>& sc, int32_t api);
         Transaction& setSidebandStream(const sp<SurfaceControl>& sc,
                                        const sp<NativeHandle>& sidebandStream);
+        Transaction& setPostProcess(const sp<SurfaceControl>& sc, const sp<IBinder>& shader,
+                                    const std::shared_ptr<std::vector<uint8_t>>& uniforms,
+                                    layer_state_t::SampleTarget target);
         Transaction& setDesiredPresentTime(nsecs_t desiredPresentTime);
         Transaction& setColorSpaceAgnostic(const sp<SurfaceControl>& sc, const bool agnostic);
 

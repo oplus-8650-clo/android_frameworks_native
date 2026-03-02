@@ -44,10 +44,10 @@
 #include <unordered_set>
 
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-#include "../../QtiExtension/QtiSurfaceExtension.h"
+#include "../../libs/gui/QtiExtension/QtiSurfaceExtension.h"
 // QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 // QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
-#include "../../QtiExtension/QtiSurfaceExtensionGPP.h"
+#include "../../libs/gui/QtiExtension/QtiSurfaceExtensionGPP.h"
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 namespace android {
 
@@ -614,7 +614,7 @@ protected:
             return mSurfaceListener->needsReleaseNotify();
         }
 
-        virtual void onBufferDetached(int slot) override {
+        virtual void onBufferDetached(int slot, uint64_t /*bufferId*/) {
             mSurfaceListener->onBufferDetached(slot);
         }
 

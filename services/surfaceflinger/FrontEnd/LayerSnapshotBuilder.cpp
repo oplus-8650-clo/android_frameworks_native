@@ -39,6 +39,7 @@
 #include "LayerLog.h"
 #include "LayerSnapshotBuilder.h"
 #include "RenderResourceCache.h"
+#include "ShaderRegistry.h"
 #include "TimeStats/TimeStats.h"
 #include "Tracing/TransactionTracing.h"
 
@@ -402,7 +403,7 @@ bool LayerSnapshotBuilder::tryFastUpdate(const Args& args) {
                     args.layerLifecycleManager.getLayerFromId(snapshot->path.id);
             if (!requested) continue;
             snapshot->merge(*requested, forceUpdate, args.displayChanges, args.forceFullDamage,
-                            primaryDisplayRotationFlags);
+                            primaryDisplayRotationFlags, args.shaderRegistry);
         }
         return false;
     }
@@ -412,7 +413,7 @@ bool LayerSnapshotBuilder::tryFastUpdate(const Args& args) {
         auto range = mIdToSnapshots.equal_range(requested->id);
         for (auto it = range.first; it != range.second; it++) {
             it->second->merge(*requested, forceUpdate, args.displayChanges, args.forceFullDamage,
-                              primaryDisplayRotationFlags);
+                              primaryDisplayRotationFlags, args.shaderRegistry);
         }
     }
 
@@ -552,7 +553,7 @@ const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
     if (newSnapshot) {
         snapshot = createSnapshot(traversalPath, *layer, parentSnapshot);
         snapshot->merge(*layer, /*forceUpdate=*/true, /*displayChanges=*/true, args.forceFullDamage,
-                        primaryDisplayRotationFlags);
+                        primaryDisplayRotationFlags, args.shaderRegistry);
         snapshot->changes |= RequestedLayerState::Changes::Created;
     }
 
@@ -843,6 +844,16 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
         snapshot.stretchEffect = (requested.stretchEffect.hasEffect())
                 ? requested.stretchEffect
                 : parentSnapshot.stretchEffect;
+    }
+
+    if (forceUpdate || snapshot.clientChanges & layer_state_t::ePostProcessChanged) {
+        snapshot.postProcessShader = requested.postProcessShader;
+        snapshot.postProcessUniforms = requested.postProcessUniforms;
+        if (args.shaderRegistry && snapshot.postProcessShader) {
+            snapshot.postProcessEffect = args.shaderRegistry->getShader(snapshot.postProcessShader);
+        } else {
+            snapshot.postProcessEffect = nullptr;
+        }
     }
 
     if (forceUpdate ||

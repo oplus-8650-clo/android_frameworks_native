@@ -134,6 +134,9 @@ struct LayerFECompositionState {
     // Background blur content scale factor, between 0.0 and 1.0
     float backgroundBlurScale{1.0f};
 
+    // If true, the layer is sampling the background (e.g. for post-processing)
+    bool isTextureSamplingBehind{false};
+
     // The transform from layer local coordinates to composition coordinates
     ui::Transform geomLayerTransform;
 

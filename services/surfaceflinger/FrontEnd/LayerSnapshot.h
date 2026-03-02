@@ -17,6 +17,7 @@
 #pragma once
 
 #include <PowerAdvisor/Workload.h>
+#include <SkRuntimeEffect.h>
 #include <android/gui/ISystemContentPriorityConstants.h>
 #include <compositionengine/LayerFECompositionState.h>
 #include <gui/CornerRadii.h>
@@ -29,6 +30,10 @@
 #include "compositionengine/LayerFE.h"
 
 struct RenderCommandBuffer;
+
+namespace android::surfaceflinger {
+class ShaderRegistry;
+}
 
 namespace android::surfaceflinger::frontend {
 
@@ -160,6 +165,11 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     // Populated when renderResourceToken changes.
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
 
+    sp<IBinder> postProcessShader;
+    std::shared_ptr<std::vector<uint8_t>> postProcessUniforms;
+    layer_state_t::SampleTarget postProcessTarget;
+    sk_sp<SkRuntimeEffect> postProcessEffect;
+
     static bool isOpaqueFormat(PixelFormat format);
     static bool isTransformValid(const ui::Transform& t);
 
@@ -183,7 +193,8 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     Hwc2::IComposerClient::BlendMode getBlendMode(const RequestedLayerState& requested) const;
     friend std::ostream& operator<<(std::ostream& os, const LayerSnapshot& obj);
     void merge(const RequestedLayerState& requested, bool forceUpdate, bool displayChanges,
-               bool forceFullDamage, uint32_t displayRotationFlags);
+               bool forceFullDamage, uint32_t displayRotationFlags,
+               ShaderRegistry* shaderRegistry = nullptr);
     // Returns a char summarizing the composition request
     // This function tries to maintain parity with planner::Plan chars.
     char classifyCompositionForDebug(

@@ -481,6 +481,17 @@ interface ISurfaceComposer {
     void removeHdrLayerInfoListener(IBinder displayToken, IHdrLayerInfoListener listener);
 
     /**
+     * Associates the given IBinder token with the AGSL shaderString. After registration the
+     * IBinder token can be used to apply shader effects to layers.
+     */
+    void registerShader(IBinder token, @utf8InCpp String debugName, @utf8InCpp String shaderString);
+
+    /**
+     * Removes the association between the given IBinder token and the AGSL shaderString.
+     */
+    void unregisterShader(IBinder token);
+
+    /**
      * Sends a power boost to the composer. This function is asynchronous.
      *
      * boostId
