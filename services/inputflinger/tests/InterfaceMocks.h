@@ -108,9 +108,8 @@ public:
     MOCK_METHOD(void, setAxisRemapping,
                 (int32_t deviceId, (const std::unordered_map<int32_t, int32_t>& axisRemapping)),
                 (override));
-    MOCK_METHOD(status_t, mapKey,
-                (int32_t deviceId, int scanCode, int usageCode, int32_t metaState,
-                 int32_t* outKeycode, int32_t* outMetaState, uint32_t* outFlags),
+    MOCK_METHOD(std::optional<MappedKey>, mapKey,
+                (int32_t deviceId, int32_t scanCode, int32_t usageCode, int32_t metaState),
                 (const));
     MOCK_METHOD(status_t, mapAxis, (int32_t deviceId, int scanCode, AxisInfo* outAxisInfo),
                 (const));

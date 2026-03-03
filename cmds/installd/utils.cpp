@@ -435,6 +435,10 @@ long get_project_id(uid_t uid, long start_project_id_range) {
     return uid - AID_APP_START + start_project_id_range;
 }
 
+long get_pcc_project_id(uid_t uid, long start_project_id_range) {
+    return uid - AID_PCC_COMPONENT_PROCESS_START + start_project_id_range;
+}
+
 bool IsLegacyUserdata(const std::string& path) {
     struct statfs s;
     if (statfs(path.c_str(), &s) != 0) {

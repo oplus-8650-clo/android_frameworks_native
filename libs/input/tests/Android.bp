@@ -47,7 +47,7 @@ cc_test {
         "libgui_window_info_static",
         "libinput",
         "libkernelconfigs",
-        "libstatslog_libinput",
+        "libstatspull-fake",
         "libstatssocket-fake",
         "libtflite_static",
         "libui-types",

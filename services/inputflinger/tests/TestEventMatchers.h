@@ -17,16 +17,18 @@
 #pragma once
 
 #include <cmath>
-#include <compare>
 #include <ios>
 
 #include <android-base/stringprintf.h>
 #include <android/input.h>
+#include <ftl/enum.h>
 #include <ftl/flags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <input/Input.h>
+#include <input/MotionEventAxis.h>
 #include <input/PrintTools.h>
+#include <linux/input-event-codes.h>
 
 #include "NotifyArgs.h"
 #include "TestConstants.h"
@@ -627,7 +629,7 @@ public:
     }
 
     void DescribeTo(std::ostream* os) const {
-        *os << "with key code " << KeyEvent::getLabel(mKeyCode);
+        *os << "with key code " << KeyEvent::getLabelOrCode(mKeyCode);
     }
 
     void DescribeNegationTo(std::ostream* os) const { *os << "wrong key code"; }
@@ -655,7 +657,7 @@ public:
     }
 
     void DescribeTo(std::ostream* os) const {
-        *os << "with scan code " << KeyEvent::getLabel(mScanCode);
+        *os << "with scan code " << InputEventLookup::getLinuxEvdevCodeLabel(EV_KEY, mScanCode);
     }
 
     void DescribeNegationTo(std::ostream* os) const { *os << "wrong scan code"; }
@@ -835,8 +837,8 @@ public:
         for (const auto& [axis, expectedValue] : mAxes) {
             const float actualValue = coords.getAxisValue(axis);
             if (!internal::valuesMatch(expectedValue, actualValue)) {
-                *os << "expected axis " << MotionEvent::getLabel(axis) << " to be " << expectedValue
-                    << " but was " << actualValue;
+                *os << "expected axis " << MotionEvent::getLabelOrCode(axis) << " to be "
+                    << expectedValue << " but was " << actualValue;
                 return false;
             }
         }
@@ -846,8 +848,7 @@ public:
     void DescribeTo(std::ostream* os) const {
         *os << "with axes "
             << dumpMap(
-                       mAxes,
-                       [](const int32_t& axis) { return std::string(MotionEvent::getLabel(axis)); },
+                       mAxes, [](const int32_t& axis) { return MotionEvent::getLabelOrCode(axis); },
                        constToString<float>);
     }
 
@@ -860,6 +861,14 @@ private:
 
 inline WithAxesMatcher WithAxes(const std::map<int32_t, float>& axes) {
     return WithAxesMatcher(0, axes);
+}
+
+inline WithAxesMatcher WithAxes(const std::map<MotionEventAxis, float>& axes) {
+    std::map<int32_t, float> rawAxes;
+    for (const auto& [axis, value] : axes) {
+        rawAxes[ftl::to_underlying(axis)] = value;
+    }
+    return WithAxesMatcher(0, rawAxes);
 }
 
 inline WithRelativeMotionMatcher WithRelativeMotion(float relX, float relY) {

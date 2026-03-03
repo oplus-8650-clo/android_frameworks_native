@@ -308,8 +308,6 @@ cc_library {
         "inputconstants-cpp",
         "libPlatformProperties",
         "libkernelconfigs",
-        "libstatslog_libinput",
-        "libstatssocket_lazy",
         "libtflite_static",
         "libui-types",
     ],
@@ -318,6 +316,7 @@ cc_library {
         "com.android.input.flags-aconfig-cc",
         "iinputflinger_aidl_lib_static",
         "libinput_rust_ffi",
+        "libstatslog_libinput_bundled",
     ],
 
     export_static_lib_headers: [
@@ -335,11 +334,19 @@ cc_library {
                 "motion_predictor_model_config",
                 "motion_predictor_model_prebuilt",
             ],
+            static_libs: [
+                "libstatspull_lazy",
+                "libstatssocket_lazy",
+            ],
         },
         host: {
             include_dirs: [
                 "bionic/libc/kernel/android/uapi/",
                 "bionic/libc/kernel/uapi",
+            ],
+            static_libs: [
+                "libstatspull-fake",
+                "libstatssocket-fake",
             ],
         },
     },
@@ -370,6 +377,24 @@ cc_fuzz {
     srcs: [
         "PropertyMap.cpp",
         "PropertyMap_fuzz.cpp",
+    ],
+}
+
+cc_atomslog_library_static {
+    name: "libstatslog_input",
+    host_supported: true,
+    atoms_module: "input",
+    namespace: "android::input",
+    basename: "statslog_input",
+    include_default_libs: "headers_only",
+}
+
+cc_library_static {
+    name: "libstatslog_libinput_bundled",
+    host_supported: true,
+    whole_static_libs: [
+        "libstatslog_input",
+        "libstatslog_libinput",
     ],
 }
 

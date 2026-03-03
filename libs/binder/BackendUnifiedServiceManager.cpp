@@ -85,7 +85,6 @@ static const char* kStaticCachableList[] = {
         "notification",
         "package",
         "package_native",
-        "pcc_sandbox_native",
         "performance_hint",
         "permission",
         "permission_checker",

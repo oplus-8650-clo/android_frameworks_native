@@ -714,6 +714,8 @@ void BpBinder::onFrozenStateChanged(bool isFrozen) {
     ALOGV("Sending frozen state change notification for proxy %p handle %d, isFrozen=%s\n", this,
           binderHandle(), isFrozen ? "true" : "false");
 
+    // The callback may be the last sp<> to this, so we must destroy it outside the lock.
+    std::vector<sp<FrozenStateChangeCallback>> callbacksToRelease;
     RpcMutexUniqueLock _l(mLock);
     if (!mFrozen) {
         return;
@@ -732,6 +734,7 @@ void BpBinder::onFrozenStateChanged(bool isFrozen) {
                                          isFrozen ? FrozenStateChangeCallback::State::FROZEN
                                                   : FrozenStateChangeCallback::State::UNFROZEN);
                 i++;
+                callbacksToRelease.emplace_back(std::move(callback)); // release sp<> ex-lock.
             } else {
                 mFrozen->callbacks.removeItemsAt(i);
             }

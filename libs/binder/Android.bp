@@ -340,8 +340,6 @@ cc_defaults {
     srcs: [
         "OS_android.cpp",
         "OS_unix_base.cpp",
-        "PersistableBundle.cpp",
-        ":pcc_sandbox_manager_native_aidl",
     ],
 
     target: {
@@ -359,9 +357,6 @@ cc_defaults {
 
     aidl: {
         export_aidl_headers: true,
-        include_dirs: [
-            "frameworks/native/aidl/binder", // For PersistableBundle.aidl
-        ],
     },
 
     product_variables: {

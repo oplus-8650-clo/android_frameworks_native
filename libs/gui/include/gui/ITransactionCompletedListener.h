@@ -78,8 +78,10 @@ public:
 };
 
 struct ReleaseBufferCallbackIdHash {
-    std::size_t operator()(const ReleaseCallbackId& key) const {
-        return std::hash<uint64_t>()(key.bufferId);
+    std::size_t operator()(const ReleaseCallbackId& callbackId) const {
+        size_t h1 = std::hash<uint64_t>{}(callbackId.bufferId);
+        size_t h2 = std::hash<uint64_t>{}(callbackId.framenumber);
+        return h1 ^ (h2 << 1);
     }
 };
 

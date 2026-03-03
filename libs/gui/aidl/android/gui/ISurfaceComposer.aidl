@@ -425,11 +425,19 @@ interface ISurfaceComposer {
     void removeTunnelModeEnabledListener(ITunnelModeEnabledListener listener);
 
     /**
-     * Sets the mode specifications for multiple displays, to be applied atomically.
+     * Specifies the desired display mode(s) that should be applied atomically.
+     * To change modes, the client must first request the `DisplayModeSpecs#defaultMode`
+     * for the new modes, then commit a display transaction with the same `applyToken`. The
+     * `DisplayModeSpecs` and transaction will then be applied atomically. To atomically change
+     * modes for multiple displays, the client must pass multiple `DesiredDisplayModeSpecs` and
+     * pass the same `applyToken` in the subsequent display transaction that commits all displays.
      *
-     * @see DisplayModeSpecs.aidl for details.
+     * applyToken
+     *     The mode apply token with which the specs should apply.
+     * desiredDisplayModeSpecs
+     *     The new desired display mode specs.
      */
-    void setDesiredDisplayModeSpecs(in DisplayModeSpecs[] specs);
+    void setDesiredDisplayModeSpecs(IBinder applyToken, in DisplayModeSpecs[] specs);
 
     DisplayModeSpecs getDesiredDisplayModeSpecs(IBinder displayToken);
 

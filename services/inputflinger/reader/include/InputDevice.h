@@ -351,10 +351,9 @@ public:
         mEventHub->setAxisRemapping(mId, axisRemapping);
     }
 
-    inline status_t mapKey(int32_t scanCode, int32_t usageCode, int32_t metaState,
-                           int32_t* outKeycode, int32_t* outMetaState, uint32_t* outFlags) const {
-        return mEventHub->mapKey(mId, scanCode, usageCode, metaState, outKeycode, outMetaState,
-                                 outFlags);
+    inline std::optional<MappedKey> mapKey(int32_t scanCode, int32_t usageCode,
+                                           int32_t metaState) const {
+        return mEventHub->mapKey(mId, scanCode, usageCode, metaState);
     }
     inline status_t mapAxis(int32_t scanCode, AxisInfo* outAxisInfo) const {
         return mEventHub->mapAxis(mId, scanCode, outAxisInfo);

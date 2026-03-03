@@ -17,6 +17,7 @@
 #define ANDROID_TRANSACTION_TEST_HARNESSES
 
 #include <com_android_graphics_libgui_flags.h>
+#include <gui/BufferItemConsumer.h>
 #include <ui/DisplayState.h>
 
 #include <android/ipcrenderbuffer/IPCRecordingCanvas.h>

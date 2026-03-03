@@ -34,6 +34,7 @@ public:
     InputReaderTracer& operator=(const InputReaderTracer&) = delete;
 
     void traceRawEvent(const RawEvent& event);
+    void traceDeviceAddition(nsecs_t timestamp, const input_trace::TracedEvdevDevice& device);
 
 private:
     std::shared_ptr<input_trace::InputTracingBackendInterface> mBackend;

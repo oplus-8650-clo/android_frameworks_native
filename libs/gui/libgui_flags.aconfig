@@ -153,3 +153,11 @@ flag {
       purpose: PURPOSE_BUGFIX
   }
 }
+
+flag {
+  name: "wb_aaos"
+  namespace: "core_graphics"
+  description: "Remove usage of IGBPs in Android Automotive OS."
+  bug: "340933948"
+  is_fixed_read_only: true
+} # wb_aaos

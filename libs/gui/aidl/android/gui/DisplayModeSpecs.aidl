@@ -58,17 +58,6 @@ parcelable DisplayModeSpecs {
     IBinder displayToken;
 
     /**
-     * The display transaction with which the specs should apply.
-     *
-     * To change the resolution, the client must first request the `DisplayModeSpecs#defaultMode`
-     * for the new resolution, then commit a display transaction with the same `applyToken`. The
-     * `DisplayModeSpecs` and transaction will then be applied atomically. To atomically change
-     * modes for multiple displays, the client must pass multiple `DesiredDisplayModeSpecs` and
-     * pass the same `applyToken` in the subsequent display transaction that commits all displays.
-     */
-    @nullable IBinder applyToken;
-
-    /**
      * Defines the work duration that should be used by SurfaceFlinger's scheduler.
      */
     parcelable WorkDuration {

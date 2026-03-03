@@ -31,6 +31,7 @@
 #include <input/DisplayViewport.h>
 #include <input/Input.h>
 #include <input/InputDevice.h>
+#include <input/KeyCode.h>
 #include <ui/LogicalDisplayId.h>
 #include <ui/Rotation.h>
 #include <utils/Errors.h>
@@ -134,38 +135,26 @@ protected:
     void resetMapper(nsecs_t when) { processArgs(mMapper->reset(when)); }
 
     void addKeyByEvdevCode(int32_t evdevCode, int32_t keyCode, int32_t flags = 0) {
-        EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, evdevCode, _, _, _, _, _))
-                .WillRepeatedly([=](int32_t, int32_t, int32_t, int32_t metaState,
-                                    int32_t* outKeycode, int32_t* outMetaState,
-                                    uint32_t* outFlags) {
-                    if (outKeycode != nullptr) {
-                        *outKeycode = keyCode;
-                    }
-                    if (outMetaState != nullptr) {
-                        *outMetaState = metaState;
-                    }
-                    if (outFlags != nullptr) {
-                        *outFlags = flags;
-                    }
-                    return NO_ERROR;
+        EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, evdevCode, _, _))
+                .WillRepeatedly([=](int32_t, int32_t, int32_t, int32_t metaState) {
+                    return MappedKey{
+                            .keyCode = keyCode,
+                            .originalKeyCode = static_cast<KeyCode>(keyCode),
+                            .metaState = metaState,
+                            .flags = static_cast<uint32_t>(flags),
+                    };
                 });
     }
 
     void addKeyByUsageCode(int32_t usageCode, int32_t keyCode, int32_t flags = 0) {
-        EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, _, usageCode, _, _, _, _))
-                .WillRepeatedly([=](int32_t, int32_t, int32_t, int32_t metaState,
-                                    int32_t* outKeycode, int32_t* outMetaState,
-                                    uint32_t* outFlags) {
-                    if (outKeycode != nullptr) {
-                        *outKeycode = keyCode;
-                    }
-                    if (outMetaState != nullptr) {
-                        *outMetaState = metaState;
-                    }
-                    if (outFlags != nullptr) {
-                        *outFlags = flags;
-                    }
-                    return NO_ERROR;
+        EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, _, usageCode, _))
+                .WillRepeatedly([=](int32_t, int32_t, int32_t, int32_t metaState) {
+                    return MappedKey{
+                            .keyCode = keyCode,
+                            .originalKeyCode = static_cast<KeyCode>(keyCode),
+                            .metaState = metaState,
+                            .flags = static_cast<uint32_t>(flags),
+                    };
                 });
     }
 
@@ -292,8 +281,8 @@ TEST_F(KeyboardInputMapperUnitTest, Process_SimpleKeyPress) {
 TEST_F(KeyboardInputMapperUnitTest, Process_UnknownKey) {
     const int32_t USAGE_UNKNOWN = 0x07ffff;
 
-    EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, KEY_UNKNOWN, USAGE_UNKNOWN, _, _, _, _))
-            .WillRepeatedly(Return(NAME_NOT_FOUND));
+    EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, KEY_UNKNOWN, USAGE_UNKNOWN, _))
+            .WillRepeatedly(Return(std::nullopt));
 
     // Key down with unknown scan code or usage code.
     process(ARBITRARY_TIME, EV_MSC, MSC_SCAN, USAGE_UNKNOWN);
@@ -825,8 +814,8 @@ TEST_F(KeyboardInputMapperUnitTest_AlphabeticKeyboard_WakeFlagEnabled, WakeBehav
     // flag is enabled.
 
     const int32_t USAGE_UNKNOWN = 0x07ffff;
-    EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, KEY_UNKNOWN, USAGE_UNKNOWN, _, _, _, _))
-            .WillRepeatedly(Return(NAME_NOT_FOUND));
+    EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, KEY_UNKNOWN, USAGE_UNKNOWN, _))
+            .WillRepeatedly(Return(std::nullopt));
 
     // Key down with unknown scan code or usage code.
     process(ARBITRARY_TIME, EV_MSC, MSC_SCAN, USAGE_UNKNOWN);

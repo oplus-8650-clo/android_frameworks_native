@@ -60,7 +60,7 @@ public:
     virtual bool needsReleaseNotify() override { return true; }
     virtual void onBufferReleased() override { mListener->onBufferReleased(); }
 
-    virtual void onBufferDetached(int /*slot*/) override {}
+    virtual void onBufferDetached(uint64_t /*bufferId*/) override {}
 
     virtual void onBuffersDiscarded(const std::vector<sp<GraphicBuffer>>& buffers) override {
         if (auto producer = mProducer.promote()) {

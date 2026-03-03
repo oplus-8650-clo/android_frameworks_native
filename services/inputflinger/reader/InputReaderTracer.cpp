@@ -31,4 +31,9 @@ void InputReaderTracer::traceRawEvent(const RawEvent& event) {
     mBackend->traceRawEvent(event);
 }
 
+void InputReaderTracer::traceDeviceAddition(nsecs_t timestamp,
+                                            const input_trace::TracedEvdevDevice& device) {
+    mBackend->traceEvdevDeviceAddition(timestamp, device);
+}
+
 } // namespace android

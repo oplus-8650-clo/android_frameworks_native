@@ -103,6 +103,17 @@ void ThreadedBackend<Backend>::traceRawEvent(const RawEvent& event) {
 }
 
 template <typename Backend>
+void ThreadedBackend<Backend>::traceEvdevDeviceAddition(nsecs_t timestamp,
+                                                        const TracedEvdevDevice& device) {
+    std::scoped_lock lock(mLock);
+    // TODO(b/394861376): populate metadata for determining trace level.
+    TracedEventMetadata metadata = {.processingTimestamp = timestamp};
+    mQueue.emplace_back(device, metadata);
+    setIdleStatus(false);
+    mThreadWakeCondition.notify_all();
+}
+
+template <typename Backend>
 void ThreadedBackend<Backend>::threadLoop() {
     std::vector<TraceEntry> entries;
 
@@ -135,7 +146,11 @@ void ThreadedBackend<Backend>::threadLoop() {
                            [&](const WindowDispatchArgs& args) {
                                mBackend.traceWindowDispatch(args, traceArgs);
                            },
-                           [&](const RawEvent& e) { mBackend.traceRawEvent(e); }},
+                           [&](const RawEvent& e) { mBackend.traceRawEvent(e); },
+                           [&](const TracedEvdevDevice& device) {
+                               mBackend.traceEvdevDeviceAddition(traceArgs.processingTimestamp,
+                                                                 device);
+                           }},
                    entry);
     }
     entries.clear();

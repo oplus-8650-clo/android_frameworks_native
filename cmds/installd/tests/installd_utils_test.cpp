@@ -23,6 +23,8 @@
 #include <android-base/scopeguard.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <private/android_filesystem_config.h>
+#include <private/android_projectid_config.h>
 
 #include "InstalldNativeService.h"
 #include "MatchExtensionGen.h"
@@ -771,6 +773,19 @@ TEST_F(UtilsTest, WaitChildTimeout) {
     int return_code = wait_child_with_timeout(pid, /*timeout_ms=*/1);
     EXPECT_FALSE(WIFEXITED(return_code));
     EXPECT_EQ(WTERMSIG(return_code), SIGKILL);
+}
+
+TEST_F(UtilsTest, GetProjectId) {
+    EXPECT_EQ(PROJECT_ID_APP_START, get_project_id(AID_APP_START, PROJECT_ID_APP_START));
+    EXPECT_EQ(PROJECT_ID_APP_CACHE_START,
+              get_project_id(AID_APP_START, PROJECT_ID_APP_CACHE_START));
+}
+
+TEST_F(UtilsTest, GetPccProjectId) {
+    EXPECT_EQ(PROJECT_ID_PCC_START,
+              get_pcc_project_id(AID_PCC_COMPONENT_PROCESS_START, PROJECT_ID_PCC_START));
+    EXPECT_EQ(PROJECT_ID_PCC_CACHE_START,
+              get_pcc_project_id(AID_PCC_COMPONENT_PROCESS_START, PROJECT_ID_PCC_CACHE_START));
 }
 
 TEST_F(UtilsTest, RemoveFileAtFd) {

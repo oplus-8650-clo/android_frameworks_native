@@ -918,6 +918,24 @@ void Layer::resetDrawingStateBufferInfo() {
     mDrawingState.releaseBufferEndpoint = nullptr;
 }
 
+bool Layer::setRenderCommandBufferFrameId(uint64_t frameId, nsecs_t postTime,
+                                          nsecs_t desiredPresentTime,
+                                          bool isAutoTimestamp,
+                                          const FrameTimelineInfo& info,
+                                          gui::GameMode gameMode) {
+    mDrawingState.desiredPresentTime = desiredPresentTime;
+    mDrawingState.isAutoTimestamp = isAutoTimestamp;
+    mDrawingState.latchedVsyncId = info.vsyncId;
+    mDrawingState.useVsyncIdForRefreshRateSelection = info.useForRefreshRateSelection;
+    mDrawingState.frameNumber = frameId;
+
+    const int32_t layerId = getSequence();
+    mFlinger->mTimeStats->setPostTime(layerId, mDrawingState.frameNumber, getName().c_str(), mOwnerUid, postTime, gameMode);
+    // TODO (b/485971052): We may need to do something similar to
+    // the "dequeueTime > 0" block in setBuffer
+    return true;
+}
+
 bool Layer::setBuffer(std::shared_ptr<renderengine::ExternalTexture>& buffer,
                       const BufferData& bufferData, nsecs_t postTime, nsecs_t desiredPresentTime,
                       bool isAutoTimestamp, const FrameTimelineInfo& info, gui::GameMode gameMode,

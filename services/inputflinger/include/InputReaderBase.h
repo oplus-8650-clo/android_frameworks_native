@@ -20,6 +20,8 @@
 #include <input/DisplayViewport.h>
 #include <input/Input.h>
 #include <input/InputDevice.h>
+#include <input/KeyCode.h>
+#include <input/MotionEventAxis.h>
 #include <input/VelocityControl.h>
 #include <input/VelocityTracker.h>
 #include <stddef.h>
@@ -28,6 +30,7 @@
 #include <utils/Errors.h>
 #include <utils/RefBase.h>
 
+#include <map>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -229,6 +232,9 @@ struct InputReaderConfiguration {
     std::unordered_map<DeviceId,
                        std::unordered_map<int32_t /* fromKeyCode */, int32_t /* toKeyCode */>>
             keyRemappingPerDevice;
+
+    // Keycodes to axes remapping per device.
+    std::map<DeviceId, std::map<KeyCode, MotionEventAxis>> keyToAxisRemappingPerDevice;
 
     // Per-device axis remapping: Only applied for joystick devices
     std::unordered_map<

@@ -61,6 +61,7 @@ public:
     void traceMotionEvent(const TracedMotionEvent&, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
     void traceRawEvent(const RawEvent&) override;
+    void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice&) override;
 
 private:
     // Implementation of the perfetto data source.

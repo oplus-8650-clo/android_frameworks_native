@@ -26,9 +26,15 @@
 #include <binder/IPCThreadState.h>
 #include <binder/IResultReceiver.h>
 #include <binder/IShellCallback.h>
+
+#if !defined(TRUSTY_USERSPACE)
+#include <binder/internal/JavaBBinderBase.h>
+#endif // !defined(TRUSTY_USERSPACE)
+
 #include <binder/Parcel.h>
 #include <binder/RecordedTransaction.h>
 #include <binder/RpcServer.h>
+#include <binder/Trace.h>
 #include <binder/unique_fd.h>
 
 #include <inttypes.h>
@@ -47,10 +53,20 @@
 namespace android {
 
 using android::binder::unique_fd;
+using android::binder::impl::make_scope_guard;
+using android::binder::impl::scope_guard;
+using ::android::binder::os::get_trace_enabled_tags;
+using ::android::binder::os::trace_begin;
+using ::android::binder::os::trace_end;
 
 constexpr uid_t kUidRoot = 0;
 
 static const char* UNKNOWN_CODE = "#";
+static const char* CPP_BACKEND = "cpp";
+#if !defined(TRUSTY_USERSPACE)
+static const char* JAVA_BACKEND = "java";
+#endif //! defined(TRUSTY_USERSPACE)
+static const size_t TRACE_BUFFER_SIZE = 512;
 
 // Internal 2-bit codes that we will store in the flags
 static constexpr uintptr_t INTERNAL_STABILITY_UNDECLARED = 0;
@@ -464,6 +480,22 @@ const String16& BBinder::getInterfaceDescriptor() const
 status_t BBinder::transact(
     uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
 {
+    bool tracingEnabled = get_trace_enabled_tags() & ATRACE_TAG_AIDL;
+    if (tracingEnabled) {
+        char traceSectionName[TRACE_BUFFER_SIZE];
+        status_t result = getTraceName(code, traceSectionName, TRACE_BUFFER_SIZE);
+        if (result == OK) {
+            trace_begin(ATRACE_TAG_AIDL, traceSectionName);
+        } else {
+            // failures are already tracked via ALOGE in getTraceName
+            tracingEnabled = false; /* avoid calling trace end*/
+        }
+    }
+
+    scope_guard guard = make_scope_guard([&]() {
+        if (tracingEnabled) trace_end(ATRACE_TAG_AIDL);
+    });
+
     const auto startTime = std::chrono::steady_clock::now();
 
     data.setDataPosition(0);
@@ -699,6 +731,86 @@ std::string BBinder::getFunctionNameAndCode(size_t code) {
         return "UNKNOWN_FUNCTION_NAME, code: " + std::to_string(code);
     }
     return *name + ", code: " + std::to_string(code);
+}
+
+status_t BBinder::getTraceName(uint32_t code, char* buffer, size_t bufferSize) {
+    const TransactionCodeData* transactionData = mPackedData.getTransactionCodeMap();
+    const char* backendType =
+            transactionData != nullptr ? transactionData->backendType : CPP_BACKEND;
+
+#if !defined(TRUSTY_USERSPACE)
+    bool isJavaBackend =
+            this->checkSubclass(android::internal::JavaBBinderBase::getExtSubclassID());
+    if (isJavaBackend) {
+        backendType = JAVA_BACKEND;
+    }
+#endif // !defined(TRUSTY_USERSPACE)
+
+    int prefixLen = snprintf(buffer, bufferSize, "AIDL::%s::", backendType);
+    if (prefixLen < 0 || static_cast<size_t>(prefixLen) >= bufferSize) {
+        ALOGE("snprintf failed for trace name prefix, error %d", prefixLen);
+        return UNKNOWN_ERROR;
+    }
+
+    size_t offset = static_cast<size_t>(prefixLen);
+
+    const String16& descriptor = getInterfaceDescriptor();
+    const char16_t* descUtf16 = descriptor.c_str();
+    size_t descUtf16Len = descriptor.size();
+
+    // Check if the required size fits in our buffer
+    if (descUtf16Len > 0) {
+        ssize_t utf8Len = utf16_to_utf8_length(descUtf16, descUtf16Len);
+        if (utf8Len < 0) {
+            ALOGE("utf16_to_utf8_length failed");
+            return BAD_VALUE;
+        }
+        size_t descUtf8RequiredSize = static_cast<size_t>(utf8Len) + 1;
+
+        if (offset + descUtf8RequiredSize > bufferSize) {
+            ALOGE("Trace name descriptor too long (required %zu, have %zu)", descUtf8RequiredSize,
+                  bufferSize - offset);
+            return NO_MEMORY;
+        }
+
+        utf16_to_utf8(descUtf16, descUtf16Len, buffer + offset, descUtf8RequiredSize);
+        offset += descUtf8RequiredSize - 1; // -1 to overwrite the null terminator
+    }
+
+    status_t status = OK;
+    auto appendSuffix = [&](const char* name) {
+        char codeStr[16];
+        if (name == nullptr) {
+            snprintf(codeStr, sizeof(codeStr), "%s%u", UNKNOWN_CODE, code);
+            name = codeStr;
+        }
+        int suffixLen = snprintf(buffer + offset, bufferSize - offset, "::%s::server", name);
+        if (suffixLen < 0 || static_cast<size_t>(suffixLen) >= bufferSize - offset) {
+            ALOGE("snprintf failed for trace name suffix, error %d", suffixLen);
+            status = UNKNOWN_ERROR;
+        }
+    };
+
+#if !defined(TRUSTY_USERSPACE)
+    if (isJavaBackend) {
+        static_cast<internal::JavaBBinderBase*>(this)
+                ->getFunctionName(code, [&appendSuffix](const char* name) { appendSuffix(name); });
+        return status;
+    }
+#endif // !defined(TRUSTY_USERSPACE)
+
+    const char* functionNameStr = nullptr;
+    if (transactionData != nullptr) {
+        const uint32_t count = transactionData->count;
+        const char* const* functionNames = transactionData->names;
+        if (count > 0 && functionNames != nullptr && code >= FIRST_CALL_TRANSACTION &&
+            (code - FIRST_CALL_TRANSACTION) < count) {
+            functionNameStr = functionNames[code - FIRST_CALL_TRANSACTION];
+        }
+    }
+
+    appendSuffix(functionNameStr);
+    return status;
 }
 
 void BBinder::setStability(int16_t level) {
