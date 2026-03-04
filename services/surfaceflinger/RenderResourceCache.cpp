@@ -31,7 +31,7 @@ void RenderResourceCache::queueRegisterGraphicBuffers(const gui::GraphicBuffersR
     SFTRACE_CALL();
 
     if (!info.renderResourceToken) {
-        ALOGW("%s: Graphic Buffer registration requested without a valid token", __func__);
+        ALOGE("%s: Graphic Buffer registration requested without a valid token", __func__);
         return;
     }
 

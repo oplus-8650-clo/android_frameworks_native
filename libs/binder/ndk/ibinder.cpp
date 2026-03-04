@@ -271,17 +271,6 @@ status_t ABBinder::dump(int fd, const ::android::Vector<String16>& args) {
 
 status_t ABBinder::onTransact(transaction_code_t code, const Parcel& data, Parcel* reply,
                               binder_flags_t flags) {
-    std::string sectionName;
-    bool tracingEnabled = get_trace_enabled_tags() & ATRACE_TAG_AIDL;
-    if (tracingEnabled) {
-        sectionName = getTraceSectionName(getClass(), code, true /*isServer*/);
-        trace_begin(ATRACE_TAG_AIDL, sectionName.c_str());
-    }
-
-    scope_guard guard = make_scope_guard([&]() {
-        if (tracingEnabled) trace_end(ATRACE_TAG_AIDL);
-    });
-
     if (isUserCommand(code)) {
         if (getClass()->writeHeader && !data.checkInterface(this)) {
             return STATUS_BAD_TYPE;

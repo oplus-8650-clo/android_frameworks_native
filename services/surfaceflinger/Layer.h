@@ -188,6 +188,11 @@ public:
                    nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/,
                    const FrameTimelineInfo& /*info*/, gui::GameMode gameMode,
                    int32_t systemContentPriority);
+    bool setRenderCommandBufferFrameId(uint64_t frameId, nsecs_t postTime,
+                                       nsecs_t desiredPresentTime,
+                                       bool isAutoTimestamp,
+                                       const FrameTimelineInfo& info,
+                                       gui::GameMode gameMode);
     void setDesiredPresentTime(nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/);
     bool setDataspace(ui::Dataspace /*dataspace*/);
     bool setExtendedRangeBrightness(float currentBufferRatio, float desiredRatio);

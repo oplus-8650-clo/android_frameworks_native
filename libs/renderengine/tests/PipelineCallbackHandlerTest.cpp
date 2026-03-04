@@ -28,6 +28,10 @@ namespace {
 // This derived class splits open the PipelineCallbackHandler for testing
 class PipelineCallbackHandlerTest : public skia::PipelineCallbackHandler {
 public:
+    PipelineCallbackHandlerTest()
+          : skia::PipelineCallbackHandler(/* isProtected= */ false,
+                                          /* storeSerializedKeys= */ true) {}
+
     struct PipelineStats {
         uint32_t mUses = 0;
         bool mHasData = false;
@@ -157,7 +161,7 @@ private:
 void run_test(SkSpan<const Action> actions) {
     std::string log;
 
-    PipelineCallbackHandlerTest handler(/* storeSerializedKeys= */ true);
+    PipelineCallbackHandlerTest handler;
 
     for (const Action& action : actions) {
         action.execute(&handler, log);

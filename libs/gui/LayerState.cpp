@@ -658,7 +658,8 @@ void layer_state_t::sanitize(int32_t permissions) {
     if (com_android_graphics_libgui_flags_out_of_process_rendering()) {
         if ((what & eRenderCommandBufferChanged) || (what & eRenderCommandBufferFrameIdChanged)) {
             if (!(permissions & layer_state_t::Permission::ACCESS_SURFACE_FLINGER)) {
-                what &= eRenderCommandBufferChanged;
+                what &= ~eRenderCommandBufferChanged;
+                what &= ~eRenderCommandBufferFrameIdChanged;
                 ALOGE("Stripped attempt to set eRenderCommandBufferChanged in sanitize");
             }
         }

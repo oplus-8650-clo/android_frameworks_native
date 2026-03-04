@@ -68,10 +68,10 @@ public:
      */
     virtual void notifyWindowResponsive(const sp<IBinder>& token, std::optional<gui::Pid> pid) = 0;
 
-    /*
-     * Warns the system that an application is close to "No Focused Window" ANR timeout.
+    /* Called before a no focused window ANR starts so the system can begin
+     * tracing or other diagnostics while the app is still alive.
      */
-    virtual void warnNoFocusedWindowAnr(
+    virtual void notifyPreNoFocusedWindowAnr(
             const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
             std::chrono::milliseconds elapsedDuration,
             std::chrono::milliseconds timeoutDuration) = 0;

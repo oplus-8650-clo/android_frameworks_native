@@ -156,6 +156,7 @@
 #include "DisplayHardware/LegacyFramebufferSurface.h"
 #include "DisplayHardware/VirtualDisplay/LegacyVirtualDisplaySurface.h"
 #include "DisplayHardware/VirtualDisplay/VirtualDisplaySurface.h"
+#include "DisplayHardware/VirtualDisplay/VirtualDisplayThreadManager.h"
 #include "Effects/Daltonizer.h"
 #include "FpsReporter.h"
 #include "FrameTracer/FrameTracer.h"
@@ -6248,6 +6249,14 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
             flags |= eTraversalNeeded;
         }
     }
+    if (what & layer_state_t::eRenderCommandBufferFrameIdChanged) {
+        // TODO(b/485971052): It seems like we also want to add the layer
+        // to mLayersWithQueuedFrames in order to ensure onCompositionPresented
+        // is invoked, but currently that is highly coupled to mBufferInfo
+        layer->setRenderCommandBufferFrameId(s.renderCommandBufferFrameId, postTime,
+                                             desiredPresentTime, isAutoTimestamp,
+                                             frameTimelineInfo, gameMode);
+    }
     if (what & layer_state_t::eBufferChanged) {
         std::optional<ui::Transform::RotationFlags> transformHint = std::nullopt;
         if (snapshot) {
@@ -7059,6 +7068,8 @@ void SurfaceFlinger::dumpDisplays(std::string& result) const {
             }
         }
     }
+
+    VirtualDisplayThreadManager::getInstance().dump(dumper);
 }
 
 void SurfaceFlinger::dumpDisplayIdentificationData(std::string& result) const {
@@ -9428,7 +9439,7 @@ void SurfaceFlinger::updateWorkDuration(const sp<DisplayDevice>& display,
 }
 
 status_t SurfaceFlinger::setDesiredDisplayModeSpecs(
-        const std::vector<gui::DisplayModeSpecs>& perDisplaySpecs) {
+        const sp<IBinder>& applyToken, const std::vector<gui::DisplayModeSpecs>& perDisplaySpecs) {
     SFTRACE_CALL();
 
     if (perDisplaySpecs.empty()) {
@@ -9485,7 +9496,6 @@ status_t SurfaceFlinger::getDesiredDisplayModeSpecs(const sp<IBinder>& displayTo
     scheduler::RefreshRateSelector::Policy policy =
             display->refreshRateSelector().getDisplayManagerPolicy();
     outSpecs->displayToken = displayToken;
-    outSpecs->applyToken = nullptr;
     outSpecs->defaultMode = ftl::to_underlying(policy.defaultMode);
     outSpecs->allowGroupSwitching = policy.allowGroupSwitching;
     outSpecs->primaryRanges = translate(policy.primaryRanges);
@@ -9630,7 +9640,7 @@ status_t SurfaceFlinger::getMaxAcquiredBufferCount(int* buffers) const {
         const sp<const DisplayDevice> display = getPacesetterDisplay();
         if (display) {
             maxRefreshRate = display->refreshRateSelector().
-                getConfigGroupSupportedRefreshRateRange().max;
+                getGlobalSupportedRefreshRateRange().max;
         }
     }
 
@@ -10803,10 +10813,10 @@ binder::Status SurfaceComposerAIDL::removeTunnelModeEnabledListener(
 }
 
 binder::Status SurfaceComposerAIDL::setDesiredDisplayModeSpecs(
-        const std::vector<gui::DisplayModeSpecs>& specs) {
+        const sp<IBinder>& applyToken, const std::vector<gui::DisplayModeSpecs>& specs) {
     status_t status = checkAccessPermission();
     if (status == OK) {
-        status = mFlinger->setDesiredDisplayModeSpecs(specs);
+        status = mFlinger->setDesiredDisplayModeSpecs(applyToken, specs);
     }
     return binderStatusFromStatusT(status);
 }

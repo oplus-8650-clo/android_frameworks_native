@@ -3002,9 +3002,10 @@ status_t SurfaceComposerClient::getActiveDisplayMode(const sp<IBinder>& display,
 }
 
 status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(
-        const std::vector<gui::DisplayModeSpecs>& specs) {
+        const sp<IBinder>& applyToken, const std::vector<gui::DisplayModeSpecs>& specs) {
     binder::Status status =
-            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(specs);
+            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(applyToken,
+                                                                                  specs);
     return statusTFromBinderStatus(status);
 }
 

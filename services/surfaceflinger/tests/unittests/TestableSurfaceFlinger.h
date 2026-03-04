@@ -20,6 +20,7 @@
 #include <memory>
 #include <variant>
 
+#include <binder/Binder.h>
 #include <android/gui/EarlyWakeupInfo.h>
 #include <ftl/fake_guard.h>
 #include <ftl/match.h>
@@ -531,7 +532,8 @@ public:
     }
 
     auto setDesiredDisplayModeSpecs(const gui::DisplayModeSpecs& specs) {
-        return mFlinger->setDesiredDisplayModeSpecs({specs});
+        sp<IBinder> applyToken = sp<BBinder>::make();
+        return mFlinger->setDesiredDisplayModeSpecs(applyToken, {specs});
     }
 
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,

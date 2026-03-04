@@ -227,7 +227,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
             break;
         }
         default: {
-            ALOGE("Unexpected op in RenderCommandBuffer");
+            ALOGE("Unexpected op in RenderCommandBuffer %d", op->type);
             break;
         }
     }
@@ -283,6 +283,27 @@ bool isDrawingOp(uint32_t type) {
     }
 }
 
+SkPaint fromShmemPaint(const ShmemPaint& paint) {
+    if (!paint.data.data) {
+        return SkPaint();
+    }
+    SkReadBuffer reader(paint.data.data.get(), paint.data.size);
+    return SkPaintPriv::Unflatten(reader);
+}
+
+bool isClear(const IPCRenderBufferOp* op) {
+    if (op->type != TYPE_DRAWPAINT) {
+        return false;
+    }
+    DrawPaintOp *dop = (DrawPaintOp *)op;
+    auto paint = fromShmemPaint(dop->paint);
+    auto color = paint.getColor4f();
+    if (color.fR == 0.0f && color.fG == 0.0f && color.fB == 0.0f && color.fA == 0.0f) {
+        return true;
+    }
+    return false;
+}
+
 bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
@@ -293,12 +314,10 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
     }
 
     sk_sp<SkSurface> boundSurface = nullptr;
+    bool renderingOffscreenLayer = false;
 
     for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
-        if (!foundFirstDrawingOp && isDrawingOp(op->type)) {
-            foundFirstDrawingOp = true;
-            // TODO: Restore optimization for clear paints if possible with new ShmemPaint
-        }
+
         if constexpr (DUMP_OPS) {
             ALOGE("Rendering op %s", opTypeToString(op->type).c_str());
             ALOGE("Details %s", opToString(op).c_str());
@@ -311,6 +330,7 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
                 }
                 return false;
             }
+            renderingOffscreenLayer = true;
 
             if (cache) {
                 BeginRenderTargetOp* co = (BeginRenderTargetOp*)op;
@@ -331,6 +351,7 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
             }
 
         } else if (op->type == TYPE_ENDRENDERTARGET) {
+            renderingOffscreenLayer = false;
             if (!boundSurface) {
                 if constexpr (DUMP_OPS) {
                     ALOGE("Encountered EndRenderTargetOp but no BeginRenderTargetOp was "
@@ -340,6 +361,18 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
             }
             boundSurface = nullptr;
         } else {
+            // TODO(b/485930305): Effectively every layer comes with a clear
+            // at the beginning. We skip this as it's not useful (e.g. it will)
+            // end up clearing whatever is underneath in the OOPR case. However
+            // it would be better to just not omit it on the client side.
+            if (!renderingOffscreenLayer && !foundFirstDrawingOp) {
+                if (isDrawingOp(op->type)) {
+                    foundFirstDrawingOp = true;
+                }
+                if (isClear(op)) {
+                    continue;
+                }
+            }
             renderOpToCanvas(cache, buffer, op, boundSurface ? boundSurface->getCanvas() : canvas,
                              renderProxyCallback);
         }
@@ -362,14 +395,6 @@ bool toShmemPaint(RenderCommandBuffer* buffer, const SkPaint& paint, ShmemPaint&
         memcpy(outPaint.data.data.get(), data->data(), data->size());
     }
     return true;
-}
-
-SkPaint fromShmemPaint(const ShmemPaint& paint) {
-    if (!paint.data.data) {
-        return SkPaint();
-    }
-    SkReadBuffer reader(paint.data.data.get(), paint.data.size);
-    return SkPaintPriv::Unflatten(reader);
 }
 
 std::string shmemPaintToString(const ShmemPaint& paint) {
@@ -881,7 +906,7 @@ void DrawImageRectOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache&
     if (it == resourceCache.bitmaps.end()) {
         // This currently only happens when a process shuts down.
         // There may be a frame remaining that references bitmaps which were destroyed.
-        ALOGE("Bitmap not found in cache");
+        ALOGE("Bitmap not found in cache id=%" PRIu64, bitmapId);
         return;
     }
     SkPaint p;

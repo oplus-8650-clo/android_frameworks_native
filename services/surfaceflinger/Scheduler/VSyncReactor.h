@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -75,13 +76,12 @@ public:
 
         std::string to_string() const {
             std::string result =
-                    base::StringPrintf("error= %.2f, actual= %.2f, predicted= %.2f, "
-                                       "VsyncTimeSource= %s, VsyncPeriod= %.2f, "
+                    base::StringPrintf("error= %.4f, actualNs= %" PRId64 ", predictedNs= %" PRId64
+                                       ", VsyncTimeSource= %s, VsyncPeriod= %.2f, "
                                        "VsyncPeriodsElapsed= %.2f, modeChangeInProgress= %d, "
                                        "accepted= %d",
                                        static_cast<float>(accuracy.modelErrorNs) / 1e6f,
-                                       static_cast<float>(accuracy.actualVsync) / 1e6f,
-                                       static_cast<float>(accuracy.predictedVsync) / 1e6f,
+                                       accuracy.actualVsync, accuracy.predictedVsync,
                                        ftl::enum_string(source).c_str(),
                                        static_cast<float>(accuracy.idealPeriod) / 1e6f,
                                        accuracy.vsyncPeriodsElapsed, modeChangeInProgress,

@@ -98,6 +98,7 @@ static constexpr const int FLAG_CLEAR_CODE_CACHE_ONLY =
         InstalldNativeService::FLAG_CLEAR_CODE_CACHE_ONLY;
 static constexpr const uid_t kTestPccAppId = kTestAppId + 20000;
 const uid_t kTestPccAppUid = multiuser_get_uid(kTestUserId, kTestPccAppId);
+const gid_t kTestPccCacheGid = multiuser_get_cache_gid(kTestUserId, kTestPccAppId);
 
 const gid_t kTestAppUid = multiuser_get_uid(kTestUserId, kTestAppId);
 static constexpr const int32_t kSecondaryUserId = 10;
@@ -212,6 +213,33 @@ static bool exists_renamed_deleted_dir(const std::string& rootDirectory) {
 static void unlink_path(const std::string& path) {
     if (unlink(path.c_str()) < 0) {
         PLOG(DEBUG) << "Failed to unlink " + path;
+    }
+}
+
+static void verifyPccStatsIncluded(std::vector<int64_t> sizesBeforePccData,
+                                   std::vector<int64_t> sizesAfterPccData,
+                                   int64_t dataBytesAfterPccData, int64_t cacheBytesAfterPccData) {
+    // Verification: Size should increase because PCC data is included
+    // Data size >= App data size + PCC data size
+    EXPECT_GE(sizesAfterPccData[1], dataBytesAfterPccData);
+    // Data size < Data written + buffer (1MB)
+    EXPECT_LE(sizesAfterPccData[1], dataBytesAfterPccData + 1 * 1024 * 1024);
+    // Data size after PCC data written should definitely be > before
+    EXPECT_GT(sizesAfterPccData[1], sizesBeforePccData[1]);
+
+    // Final cache size >= App data cache size + PCC data cache size
+    EXPECT_GE(sizesAfterPccData[2], cacheBytesAfterPccData);
+    // Data size < Data written + buffer (1MB)
+    EXPECT_LE(sizesAfterPccData[2], cacheBytesAfterPccData + 1 * 1024 * 1024);
+    // Cache data size after PCC data written should definitely be > before
+    EXPECT_GT(sizesAfterPccData[2], sizesBeforePccData[2]);
+
+    // Except for app data and cache, other sizes shouldn't be affected
+    for (size_t i = 0; i < sizesBeforePccData.size(); i++) {
+        if (i == 1 || i == 2) {
+            continue;
+        }
+        EXPECT_EQ(sizesBeforePccData[i], sizesAfterPccData[i]);
     }
 }
 
@@ -549,7 +577,7 @@ TEST_F(ServiceTest, GetAppSizeManualForMedia) {
         service->invalidateMounts();
         // call the getAppSize to get the current size of the external storage owning app
         service->getAppSize(std::nullopt, packageNames, 0, InstalldNativeService::FLAG_USE_QUOTA,
-                            externalStorageAppId, ceDataInodes, codePaths, &externalStorageSize);
+                            externalStorageAppId, 0, ceDataInodes, codePaths, &externalStorageSize);
         // add a file with 20MB size to the external storage
         std::string externalFileLocation =
                 StringPrintf("%s/Pictures/%s", getenv("EXTERNAL_STORAGE"), "External.jpg");
@@ -558,7 +586,7 @@ TEST_F(ServiceTest, GetAppSizeManualForMedia) {
         system(externalFileContentCommand.c_str());
         // call the getAppSize again to get the new size of the external storage owning app
         service->getAppSize(std::nullopt, packageNames, 0, InstalldNativeService::FLAG_USE_QUOTA,
-                            externalStorageAppId, ceDataInodes, codePaths,
+                            externalStorageAppId, 0, ceDataInodes, codePaths,
                             &externalStorageSizeAfterAddingExternalFile);
         // check that the size before adding the file and after should be the same, as the app size
         // is not changed.
@@ -581,8 +609,363 @@ TEST_F(ServiceTest, GetAppSizeWrongSizes) {
 
     EXPECT_BINDER_FAIL(service->getAppSize(std::nullopt, packageNames, 0,
                                            InstalldNativeService::FLAG_USE_QUOTA,
-                                           externalStorageAppId, ceDataInodes, codePaths,
+                                           externalStorageAppId, 0, ceDataInodes, codePaths,
                                            &externalStorageSize));
+}
+
+// TODO: b/479055375 - Write tests for PCC storage stats attribution where device supports Project
+//  IDs
+// PCC Storage Attribution Tests
+TEST_F(ServiceTest, GetAppSize_ExcludesPccWhenPccIdZero) {
+    LOG(INFO) << "GetAppSize_ExcludesPccWhenPccIdZero";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {result.ceDataInode};
+    std::vector<std::string> codePaths = {};
+
+    // Get initial size with pccId = 0 (should only count regular app data)
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, kTestAppId, 0,
+                                              ceDataInodes, codePaths, &sizes1));
+
+    // 2. Write PCC data (2MB each to PCC CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=2", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=2", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=2", pccCePath.c_str())
+                   .c_str());
+
+    // Get new size with pccId = 0
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, kTestAppId, 0,
+                                              ceDataInodes, codePaths, &sizes2));
+
+    // Verification: Sizes should be identical because PCC data is excluded when pccId = 0
+    for (int i = 0; i < sizes1.size(); i++) {
+        EXPECT_EQ(sizes1[i], sizes2[i]);
+    }
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetAppSize_ExcludesPccWhenPccIdZeroUsingQuota) {
+    LOG(INFO) << "GetAppSize_ExcludesPccWhenPccIdZeroUsingQuota";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {result.ceDataInode};
+    std::vector<std::string> codePaths = {};
+
+    // Get initial size with pccId = 0 (should only count regular app data)
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, kTestAppId, 0,
+                                              ceDataInodes, codePaths, &sizes1));
+
+    // 2. Write PCC data (2MB each to PCC CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=2", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=2", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=2", pccCePath.c_str())
+                   .c_str());
+
+    // Get new size with pccId = 0
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, kTestAppId, 0,
+                                              ceDataInodes, codePaths, &sizes2));
+
+    // Verification: Sizes should be identical because PCC data is excluded when pccId = 0
+    for (int i = 0; i < sizes1.size(); i++) {
+        EXPECT_EQ(sizes1[i], sizes2[i]);
+    }
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetAppSize_IncludesPccWhenPccIdNonZero) {
+    LOG(INFO) << "GetAppSize_IncludesPccWhenPccIdNonZero";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {result.ceDataInode};
+    std::vector<std::string> codePaths = {};
+
+    // Get initial size with pccId = kTestPccAppId
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, kTestAppId,
+                                              kTestPccAppId, ceDataInodes, codePaths, &sizes1));
+
+    // 2. Write app data (2MB each to CE, DE, and cache) to PCC path
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    // Get new size with pccId = kTestPccAppId
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, kTestAppId,
+                                              kTestPccAppId, ceDataInodes, codePaths, &sizes2));
+
+    verifyPccStatsIncluded(sizes1, sizes2, 9 * 1024 * 1024, 3 * 1024 * 1024);
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetAppSize_IncludesPccWhenPccIdNonZeroUsingQuota) {
+    LOG(INFO) << "GetAppSize_IncludesPccWhenPccIdNonZeroUsingQuota";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {result.ceDataInode};
+    std::vector<std::string> codePaths = {};
+
+    // Get initial size with pccId = kTestPccAppId
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, kTestAppId,
+                                              kTestPccAppId, ceDataInodes, codePaths, &sizes1));
+
+    // 2. Write app data (1MB each to CE, DE, and cache) to PCC path
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    // Get new size with pccId = kTestPccAppId
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, kTestAppId,
+                                              kTestPccAppId, ceDataInodes, codePaths, &sizes2));
+
+    verifyPccStatsIncluded(sizes1, sizes2, 9 * 1024 * 1024, 3 * 1024 * 1024);
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetUserSize_IncludesPccWhenPccIdNonZeroNotUsingQuota) {
+    LOG(INFO) << "GetUserSize_IncludesPccWhenPccIdNonZeroNotUsingQuota";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<int32_t> appIds = {kTestAppId};
+    std::vector<int32_t> pccIds = {kTestPccAppId};
+
+    ASSERT_BINDER_SUCCESS(service->getUserSize(testUuid, kTestUserId, 0, appIds, pccIds, &sizes1));
+
+    // 2. Write app data (1MB each to CE, DE, and cache) to PCC path
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    ASSERT_BINDER_SUCCESS(service->getUserSize(testUuid, kTestUserId, 0, appIds, pccIds, &sizes2));
+
+    verifyPccStatsIncluded(sizes1, sizes2, 9 * 1024 * 1024, 3 * 1024 * 1024);
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetUserSize_IncludesPccWhenPccIdNonZeroUsingQuota) {
+    LOG(INFO) << "GetUserSize_IncludesPccWhenPccIdNonZeroUsingQuota";
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    std::vector<int64_t> sizes1, sizes2;
+    std::vector<int32_t> appIds = {kTestAppId};
+    std::vector<int32_t> pccIds = {kTestPccAppId};
+
+    ASSERT_BINDER_SUCCESS(service->getUserSize(testUuid, kTestUserId,
+                                               InstalldNativeService::FLAG_USE_QUOTA, appIds,
+                                               pccIds, &sizes1));
+
+    // 2. Write app data (1MB each to CE, DE, and cache) to PCC path
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    ASSERT_BINDER_SUCCESS(service->getUserSize(testUuid, kTestUserId,
+                                               InstalldNativeService::FLAG_USE_QUOTA, appIds,
+                                               pccIds, &sizes2));
+
+    // Verification: Sizes should be identical because PCC data is excluded when pccId is not passed
+    verifyPccStatsIncluded(sizes1, sizes2, 9 * 1024 * 1024, 3 * 1024 * 1024);
+
+    // Cleanup
+    system(StringPrintf("rm -f %s/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", dePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", cePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccCePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/file.txt", pccDePath.c_str()).c_str());
+    system(StringPrintf("rm -f %s/cache/file.txt", pccCePath.c_str()).c_str());
+}
+
+TEST_F(ServiceTest, GetUserSize_BinderFailsWhenArgListSizeMismatch) {
+    LOG(INFO) << "GetUserSize_BinderFailsWhenArgListSizeMismatch";
+    std::vector<int64_t> sizes1;
+    std::vector<int32_t> appIds = {kTestAppId};
+    std::vector<int32_t> pccIds = {}; // Empty pccIds
+
+    ASSERT_BINDER_FAIL(service->getUserSize(testUuid, kTestUserId,
+                                            InstalldNativeService::FLAG_USE_QUOTA, appIds, pccIds,
+                                            &sizes1));
+
+    binder::Status expect_status =
+            service->getUserSize(testUuid, kTestUserId, InstalldNativeService::FLAG_USE_QUOTA,
+                                 appIds, pccIds, &sizes1);
+    ASSERT_TRUE(expect_status.exceptionCode() == binder::Status::EX_ILLEGAL_ARGUMENT);
+    ASSERT_TRUE(expect_status.exceptionMessage() == "appIds and pccIds are not of the same length");
 }
 
 class FsverityTest : public ServiceTest {
@@ -1656,6 +2039,9 @@ TEST_F(ServiceTest, CreateAppData_WithPcc) {
     // Verify cache subdirectories were also created
     EXPECT_TRUE(exists(cePath + "/cache"));
     EXPECT_TRUE(exists(pccCePath + "/cache"));
+
+    // Verify cache GID for PCC
+    EXPECT_EQ(kTestPccCacheGid, stat_gid((pccCePath + "/cache").c_str()));
 }
 
 TEST_F(ServiceTest, CreateAppData_WithPcc_InodeCheck) {

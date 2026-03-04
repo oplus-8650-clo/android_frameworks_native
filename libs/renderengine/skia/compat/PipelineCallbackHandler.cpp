@@ -41,8 +41,10 @@ void traceSerializedKey(sk_sp<SkData> data) {
 
 } // anonymous namespace
 
-PipelineCallbackHandler::PipelineCallbackHandler(bool storeSerialedKeys)
-      : mStartTime(std::chrono::steady_clock::now()), mStoreSerializedKeys(storeSerialedKeys) {}
+PipelineCallbackHandler::PipelineCallbackHandler(bool isProtected, bool storeSerializedKeys)
+      : mStartTime(std::chrono::steady_clock::now()),
+        mIsProtected(isProtected),
+        mStoreSerializedKeys(storeSerializedKeys) {}
 
 void PipelineCallbackHandler::beginWarmup() {
     std::lock_guard<std::mutex> guard(mMutex);
@@ -121,7 +123,7 @@ void PipelineCallbackHandler::report(const char* label, std::string& result) {
                             data->mFromPrecompile ? 'P' : (data->mFromWarmup ? 'W' : 'N'),
                             data->mUses, data->mCreationTime.count() / 1000.0f,
                             data->mLabel.c_str(),
-                            data->mSerializedKey ? data->mSerializedKey.get()->size() : 0);
+                            data->mSerializedKey ? data->mSerializedKey->size() : 0);
     }
 }
 

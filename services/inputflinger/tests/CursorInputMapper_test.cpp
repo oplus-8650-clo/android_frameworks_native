@@ -27,7 +27,7 @@
 #include <gtest/gtest.h>
 #include <input/AccelerationCurve.h>
 #include <input/DisplayViewport.h>
-#include <input/InputEventLabels.h>
+#include <input/Input.h>
 #include <input/ScopedFlagOverride.h>
 #include <linux/input-event-codes.h>
 #include <linux/input.h>
@@ -113,25 +113,23 @@ DisplayViewport createSecondaryViewport() {
 // ballistics was changed. To do this, we make some matchers that only check the sign of a
 // particular axis.
 MATCHER_P(WithPositiveAxis, axis, "MotionEvent with a positive axis value") {
-    *result_listener << "expected 1 pointer with a positive "
-                     << InputEventLookup::getAxisLabel(axis) << " axis but got "
-                     << arg.pointerCoords.size() << " pointers, with axis value "
-                     << arg.pointerCoords[0].getAxisValue(axis);
+    *result_listener << "expected 1 pointer with a positive " << MotionEvent::getLabelOrCode(axis)
+                     << " axis but got " << arg.pointerCoords.size()
+                     << " pointers, with axis value " << arg.pointerCoords[0].getAxisValue(axis);
     return arg.pointerCoords.size() == 1 && arg.pointerCoords[0].getAxisValue(axis) > 0;
 }
 
 MATCHER_P(WithZeroAxis, axis, "MotionEvent with a zero axis value") {
-    *result_listener << "expected 1 pointer with a zero " << InputEventLookup::getAxisLabel(axis)
+    *result_listener << "expected 1 pointer with a zero " << MotionEvent::getLabelOrCode(axis)
                      << " axis but got " << arg.pointerCoords.size()
                      << " pointers, with axis value " << arg.pointerCoords[0].getAxisValue(axis);
     return arg.pointerCoords.size() == 1 && arg.pointerCoords[0].getAxisValue(axis) == 0;
 }
 
 MATCHER_P(WithNegativeAxis, axis, "MotionEvent with a negative axis value") {
-    *result_listener << "expected 1 pointer with a negative "
-                     << InputEventLookup::getAxisLabel(axis) << " axis but got "
-                     << arg.pointerCoords.size() << " pointers, with axis value "
-                     << arg.pointerCoords[0].getAxisValue(axis);
+    *result_listener << "expected 1 pointer with a negative " << MotionEvent::getLabelOrCode(axis)
+                     << " axis but got " << arg.pointerCoords.size()
+                     << " pointers, with axis value " << arg.pointerCoords[0].getAxisValue(axis);
     return arg.pointerCoords.size() == 1 && arg.pointerCoords[0].getAxisValue(axis) < 0;
 }
 

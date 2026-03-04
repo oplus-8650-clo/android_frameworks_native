@@ -38,8 +38,6 @@
 #include "egl_trace.h"
 #include "egldefs.h"
 
-#include <com_android_graphics_egl_flags.h>
-
 namespace egl_flags = com::android::graphics::egl::flags;
 
 namespace android {
@@ -183,10 +181,8 @@ static bool should_unload_system_driver(egl_connection_t* cnx) {
     // driver apk. If the existing driver is loaded from ANGLE apk or updatable graphics driver apk,
     // it means it is the driver already loaded once by the current process, and the rest of the
     // process should keep using the same process and not unloading it.
-    if (com::android::graphics::egl::flags::do_not_unload_driver_from_updatable_apk()) {
-        if (cnx->driverInUpdatableApkLoaded) {
-            return false;
-        }
+    if (cnx->driverInUpdatableApkLoaded) {
+        return false;
     }
 
     // Return true if ANGLE namespace is set.
@@ -291,10 +287,8 @@ void* Loader::open(egl_connection_t* cnx) {
     if (android::GraphicsEnv::getInstance().shouldUseAngle()) {
         hnd = attempt_to_load_angle(cnx);
         LOG_ALWAYS_FATAL_IF(!hnd, "Failed to load ANGLE.");
-        if (com::android::graphics::egl::flags::do_not_unload_driver_from_updatable_apk()) {
-            if (android::GraphicsEnv::getInstance().getAngleNamespace() != nullptr) {
-                cnx->driverInUpdatableApkLoaded = true;
-            }
+        if (android::GraphicsEnv::getInstance().getAngleNamespace() != nullptr) {
+            cnx->driverInUpdatableApkLoaded = true;
         }
     }
 
@@ -306,10 +300,8 @@ void* Loader::open(egl_connection_t* cnx) {
         LOG_ALWAYS_FATAL_IF(android::GraphicsEnv::getInstance().getDriverNamespace() && !hnd,
                             "couldn't find an OpenGL ES implementation from %s",
                             android::GraphicsEnv::getInstance().getDriverPath().c_str());
-        if (com::android::graphics::egl::flags::do_not_unload_driver_from_updatable_apk()) {
-            if (android::GraphicsEnv::getInstance().getDriverNamespace() != nullptr) {
-                cnx->driverInUpdatableApkLoaded = true;
-            }
+        if (android::GraphicsEnv::getInstance().getDriverNamespace() != nullptr) {
+            cnx->driverInUpdatableApkLoaded = true;
         }
     }
 

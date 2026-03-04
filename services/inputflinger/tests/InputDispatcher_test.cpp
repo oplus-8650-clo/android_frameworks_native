@@ -128,6 +128,10 @@ static constexpr ftl::Flags<MotionFlag>
         EXPECTED_WALLPAPER_FLAGS{MotionFlag::WINDOW_IS_OBSCURED,
                                  MotionFlag::WINDOW_IS_PARTIALLY_OBSCURED};
 
+static const std::chrono::milliseconds DEFAULT_PRE_ANR_TIMEOUT_WINDOW = std::chrono::milliseconds(
+        android::os::IInputConstants::UNMULTIPLIED_DEFAULT_PRE_ANR_TIMEOUT_WINDOW_MILLIS *
+        base::HwTimeoutMultiplier());
+
 using ReservedInputDeviceId::VIRTUAL_KEYBOARD_ID;
 
 /**
@@ -10805,7 +10809,7 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWar
 
     const std::chrono::duration timeout = mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
     mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
-    mFakePolicy->assertWarnNoFocusedWindowAnrWasNotCalled();
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(timeout);
 }
 
 // We have a focused application, but no focused window, ANR warning flag is enabled
@@ -10836,8 +10840,87 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWar
             mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
     const std::chrono::milliseconds timeoutMillis =
             std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
     mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
-    mFakePolicy->assertWarnNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrFiresAtHalfTimeout_WhenHalfGreaterThanDefaultWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    // Pick a timeout where half clearly exceeds the default pre-ANR window.
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW * 4;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    // half > defaultPreAnrWindow, so the half-timeout path wins.
+    const auto preAnrWindow = anrTimeout / 2;
+    const auto preAnrDelay = anrTimeout - preAnrWindow;
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    // Before pre-ANR point: must NOT fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrDelay - 100ms);
+
+    // Shortly after: must fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(200ms, anrTimeout, mApplication);
+
+    // Full ANR after the remaining time.
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(preAnrWindow, mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrUsesDefaultMinimumWindow_WhenHalfLessThanDefaultWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    // Pick a timeout where half is clearly less than the default pre-ANR window.
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW + 500ms;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    // half < defaultPreAnrWindow, so the default window wins.
+    const auto preAnrWindow = DEFAULT_PRE_ANR_TIMEOUT_WINDOW;
+    const auto preAnrDelay = anrTimeout - preAnrWindow;
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    // Before pre-ANR point: must NOT fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrDelay - 100ms);
+
+    // Shortly after: must fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(200ms, anrTimeout, mApplication);
+
+    // Full ANR after the remaining time.
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(DEFAULT_PRE_ANR_TIMEOUT_WINDOW,
+                                                         mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrCancelledWhenWindowBecomesFocusableBeforePreWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW * 4;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+    // Resolve focus immediately.
+    mWindow->setFocusable(true);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(true);
+
+    // Wait past the would-have-been pre-ANR time, confirm no pre-ANR.
+    const auto preAnrWindow = anrTimeout / 2;
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrWindow + 300ms);
 }
 
 // We have a focused application, but no focused window

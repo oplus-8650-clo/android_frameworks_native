@@ -244,6 +244,15 @@ binder::Status checkArgumentAppId(int32_t appId) {
                      StringPrintf("appId %d is outside of the range", appId));
 }
 
+binder::Status checkArgumentAppIdsPccIds(const std::vector<int32_t>& appIds,
+                                         const std::vector<int32_t>& pccIds) {
+    if (appIds.size() != pccIds.size()) {
+        return exception(binder::Status::EX_ILLEGAL_ARGUMENT,
+                         "appIds and pccIds are not of the same length");
+    }
+    return ok();
+}
+
 #define ENFORCE_UID(uid) {                                  \
     binder::Status status = checkUid((uid));                \
     if (!status.isOk()) {                                   \
@@ -310,6 +319,14 @@ binder::Status checkArgumentAppId(int32_t appId) {
         if (!status.isOk()) {                                \
             return status;                                   \
         }                                                    \
+    }
+
+#define CHECK_ARGUMENT_APP_IDS_PCC_IDS(appIds, pccIds)                     \
+    {                                                                      \
+        binder::Status status = checkArgumentAppIdsPccIds(appIds, pccIds); \
+        if (!status.isOk()) {                                              \
+            return status;                                                 \
+        }                                                                  \
     }
 
 #ifdef GRANULAR_LOCKS
@@ -878,8 +895,7 @@ binder::Status InstalldNativeService::createAppDataLocked(
 
         // Prepare the PCC sibling directory.
         status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
-                                                  cacheGid, seInfo, targetMode, projectIdApp,
-                                                  projectIdCache, /* isCeStorage */ true,
+                                                  seInfo, targetMode, /* isCeStorage */ true,
                                                   pccCeDataInode);
 
         if (!status.isOk()) {
@@ -909,8 +925,7 @@ binder::Status InstalldNativeService::createAppDataLocked(
         }
 
         status = createOrDeletePccDirectoryLocked(uuid_, userId, pkgname, pccId, previousPccId,
-                                                  cacheGid, seInfo, targetMode, projectIdApp,
-                                                  projectIdCache, /* isCeStorage */ false,
+                                                  seInfo, targetMode, /* isCeStorage */ false,
                                                   pccDeDataInode);
         if (!status.isOk()) {
             return status;
@@ -2585,8 +2600,40 @@ static void deductDoubleSpaceIfNeeded(stats* stats, int64_t doubleSpaceToBeDelet
     }
 }
 
-static void collectQuotaStats(const std::string& uuid, int32_t userId,
-        int32_t appId, struct stats* stats, struct stats* extStats) {
+static void collectPccQuotaStats(const std::string& uuid, int32_t userId, int32_t pccId,
+                                 struct stats* stats) {
+    if (stats == nullptr || pccId <= 0) {
+        return;
+    }
+    int64_t space;
+    uid_t uid = multiuser_get_uid(userId, pccId);
+    static const bool supportsProjectId = internal_storage_has_project_id();
+
+    if (!supportsProjectId) {
+        if ((space = GetOccupiedSpaceForUid(uuid, uid)) != -1) {
+            stats->dataSize += space;
+        }
+        int cacheGid = multiuser_get_cache_gid(userId, pccId);
+        if (cacheGid != -1) {
+            if ((space = GetOccupiedSpaceForGid(uuid, cacheGid)) != -1) {
+                stats->cacheSize += space;
+            }
+        }
+    } else {
+        long projectId = get_pcc_project_id(uid, PROJECT_ID_PCC_START);
+        if ((space = GetOccupiedSpaceForProjectId(uuid, projectId)) != -1) {
+            stats->dataSize += space;
+        }
+        projectId = get_pcc_project_id(uid, PROJECT_ID_PCC_CACHE_START);
+        if ((space = GetOccupiedSpaceForProjectId(uuid, projectId)) != -1) {
+            stats->cacheSize += space;
+            stats->dataSize += space;
+        }
+    }
+}
+
+static void collectQuotaStats(const std::string& uuid, int32_t userId, int32_t appId, int32_t pccId,
+                              struct stats* stats, struct stats* extStats) {
     int64_t space, doubleSpaceToBeDeleted = 0;
     uid_t uid = multiuser_get_uid(userId, appId);
     static const bool supportsProjectId = internal_storage_has_project_id();
@@ -2644,6 +2691,8 @@ static void collectQuotaStats(const std::string& uuid, int32_t userId,
             }
         }
     }
+
+    collectPccQuotaStats(uuid, userId, pccId, stats);
 }
 
 static void collectManualStats(const std::string& path, struct stats* stats) {
@@ -2729,7 +2778,10 @@ static void collectManualStatsForUser(const std::string& path, struct stats* sta
             int32_t user_uid = multiuser_get_app_id(s.st_uid);
             if (!strcmp(name, ".") || !strcmp(name, "..")) {
                 continue;
-            } else if (exclude_apps && (user_uid >= AID_APP_START && user_uid <= AID_APP_END)) {
+            } else if (exclude_apps &&
+                       ((user_uid >= AID_APP_START && user_uid <= AID_APP_END) ||
+                        (user_uid >= AID_PCC_COMPONENT_PROCESS_START &&
+                         user_uid <= AID_PCC_COMPONENT_PROCESS_END))) {
                 continue;
             } else if (is_sdk_sandbox_storage) {
                 // In case of sdk sandbox storage (e.g. /data/misc_ce/0/sdksandbox/<package-name>),
@@ -2804,9 +2856,12 @@ static bool ownsExternalStorage(int32_t appId) {
     return false;
 }
 binder::Status InstalldNativeService::getAppSize(const std::optional<std::string>& uuid,
-        const std::vector<std::string>& packageNames, int32_t userId, int32_t flags,
-        int32_t appId, const std::vector<int64_t>& ceDataInodes,
-        const std::vector<std::string>& codePaths, std::vector<int64_t>* _aidl_return) {
+                                                 const std::vector<std::string>& packageNames,
+                                                 int32_t userId, int32_t flags, int32_t appId,
+                                                 int32_t pccId,
+                                                 const std::vector<int64_t>& ceDataInodes,
+                                                 const std::vector<std::string>& codePaths,
+                                                 std::vector<int64_t>* _aidl_return) {
     ENFORCE_UID(AID_SYSTEM);
     CHECK_ARGUMENT_UUID(uuid);
     if (packageNames.size() != ceDataInodes.size()) {
@@ -2873,7 +2928,7 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
         atrace_pm_end();
 
         atrace_pm_begin("quota");
-        collectQuotaStats(uuidString, userId, appId, &stats, &extStats);
+        collectQuotaStats(uuidString, userId, appId, pccId, &stats, &extStats);
         atrace_pm_end();
     } else {
         atrace_pm_begin("code");
@@ -2891,6 +2946,18 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
             auto dePath = create_data_user_de_package_path(uuid_, userId, pkgname);
             collectManualStats(dePath, &stats);
             atrace_pm_end();
+
+            if (pccId > 0) {
+                atrace_pm_begin("pcc");
+                const std::string pccPackageName = std::string(pkgname) + kPccDataSuffix;
+                auto pccCePath =
+                        create_data_user_ce_package_path(uuid_, userId, pccPackageName.c_str());
+                collectManualStats(pccCePath, &stats);
+                auto pccDePath =
+                        create_data_user_de_package_path(uuid_, userId, pccPackageName.c_str());
+                collectManualStats(pccDePath, &stats);
+                atrace_pm_end();
+            }
 
             // In case of sdk sandbox storage (e.g. /data/misc_ce/0/sdksandbox/<package-name>),
             // collect individual stats of each subdirectory (shared, storage of each sdk etc.)
@@ -3050,11 +3117,14 @@ static external_sizes getExternalSizesForUserWithQuota(const std::string& uuid, 
 }
 
 binder::Status InstalldNativeService::getUserSize(const std::optional<std::string>& uuid,
-        int32_t userId, int32_t flags, const std::vector<int32_t>& appIds,
-        std::vector<int64_t>* _aidl_return) {
+                                                  int32_t userId, int32_t flags,
+                                                  const std::vector<int32_t>& appIds,
+                                                  const std::vector<int32_t>& pccIds,
+                                                  std::vector<int64_t>* _aidl_return) {
     ENFORCE_UID(AID_SYSTEM);
     ENFORCE_VALID_USER(userId);
     CHECK_ARGUMENT_UUID(uuid);
+    CHECK_ARGUMENT_APP_IDS_PCC_IDS(appIds, pccIds);
     // NOTE: Locking is relaxed on this method, since it's limited to
     // read-only measurements without mutation.
 
@@ -3114,9 +3184,11 @@ binder::Status InstalldNativeService::getUserSize(const std::optional<std::strin
         }
         atrace_pm_begin("quota");
         int64_t dataSize = extStats.dataSize;
-        for (auto appId : appIds) {
+        for (size_t i = 0; i < appIds.size(); i++) {
+            int32_t appId = appIds[i];
+            int32_t pccId = pccIds[i];
             if (appId >= AID_APP_START) {
-                collectQuotaStats(uuidString, userId, appId, &stats, &extStats);
+                collectQuotaStats(uuidString, userId, appId, pccId, &stats, &extStats);
 #if MEASURE_DEBUG
                 // Sleep to make sure we don't lose logs
                 usleep(1);
@@ -3230,7 +3302,8 @@ binder::Status InstalldNativeService::getExternalSize(const std::optional<std::s
         memset(&extStats, 0, sizeof(extStats));
         for (auto appId : appIds) {
             if (appId >= AID_APP_START) {
-                collectQuotaStats(uuidString, userId, appId, nullptr, &extStats);
+                // PCC does not support external storage, so pccId is ignored here.
+                collectQuotaStats(uuidString, userId, appId, /*pccId=*/0, nullptr, &extStats);
             }
         }
         appSize = extStats.dataSize;
@@ -3722,8 +3795,8 @@ binder::Status InstalldNativeService::restoreconSdkDataLocked(
 
 binder::Status InstalldNativeService::createOrDeletePccDirectoryLocked(
         const char* volumeUuid, userid_t userId, const char* packageName, int32_t pccId,
-        int32_t previousPccId, int32_t cacheGid, const std::string& seInfo, mode_t targetMode,
-        long projectIdApp, long projectIdCache, bool isCeStorage, int64_t* pccDataInode) {
+        int32_t previousPccId, const std::string& seInfo, mode_t targetMode, bool isCeStorage,
+        int64_t* pccDataInode) {
     binder::Status res = ok();
 
     const std::string pccPackageName = std::string(packageName) + kPccDataSuffix;
@@ -3735,9 +3808,17 @@ binder::Status InstalldNativeService::createOrDeletePccDirectoryLocked(
         int32_t pccUid = multiuser_get_uid(userId, pccId);
         int32_t previousPccUid =
                 previousPccId > 0 ? (int32_t)multiuser_get_uid(userId, previousPccId) : -1;
+        long pccProjectIdApp = get_pcc_project_id(pccUid, PROJECT_ID_PCC_START);
+        long pccProjectIdCache = get_pcc_project_id(pccUid, PROJECT_ID_PCC_CACHE_START);
+        int32_t pccCacheGid = multiuser_get_cache_gid(userId, pccId);
+        if (pccCacheGid == -1) {
+            return exception(binder::Status::EX_ILLEGAL_STATE,
+                             StringPrintf("cacheGid cannot be -1 for pcc data"));
+        }
+
         // Create the PCC directory and its subdirectories (cache, code_cache).
-        res = createAppDataDirs(pccPath, pccId, pccUid, previousPccUid, cacheGid, seInfo,
-                                targetMode, projectIdApp, projectIdCache);
+        res = createAppDataDirs(pccPath, pccUid, pccUid, previousPccUid, pccCacheGid, seInfo,
+                                targetMode, pccProjectIdApp, pccProjectIdCache);
         if (!res.isOk()) {
             return res;
         }

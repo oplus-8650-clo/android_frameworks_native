@@ -99,7 +99,7 @@ public:
     virtual void onBuffersDiscarded(const std::vector<sp<GraphicBuffer>>& buffers) {
         mDiscardedBuffers.insert(mDiscardedBuffers.end(), buffers.begin(), buffers.end());
     }
-    virtual void onBufferDetached(int /*slot*/) {}
+    virtual void onBufferDetached(uint64_t /*bufferId*/) {}
     int getReleaseNotifyCount() const {
         return mBuffersReleased;
     }
@@ -972,7 +972,9 @@ public:
         return binder::Status::ok();
     }
 
-    binder::Status setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&) override {
+    binder::Status setDesiredDisplayModeSpecs(
+            const sp<IBinder>& /*applyToken*/,
+            const std::vector<gui::DisplayModeSpecs>&) override {
         return binder::Status::ok();
     }
 
@@ -2435,7 +2437,7 @@ TEST_F(SurfaceTest, QueueAcquireReleaseDequeue_CalledInStack_DoesNotDeadlock) {
 
         virtual bool needsReleaseNotify() override { return true; }
         virtual void onBuffersDiscarded(const std::vector<sp<GraphicBuffer>>&) override {}
-        virtual void onBufferDetached(int) override {}
+        virtual void onBufferDetached(uint64_t) override {}
 
         sp<GraphicBuffer> mBuffer;
         sp<Fence> mFence;

@@ -88,6 +88,7 @@ private:
     void traceMotionEvent(const TracedMotionEvent& entry, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs& entry, const TracedEventMetadata&) override;
     void traceRawEvent(const RawEvent& entry) override;
+    void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice& device) override {};
 };
 
 } // namespace android::input_trace

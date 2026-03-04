@@ -127,6 +127,11 @@ const std::chrono::duration DEFAULT_INPUT_DISPATCHING_TIMEOUT = std::chrono::mil
         android::os::IInputConstants::UNMULTIPLIED_DEFAULT_DISPATCHING_TIMEOUT_MILLIS *
         HwTimeoutMultiplier());
 
+// Pre-ANR timeout is the time we wait before sending a pre-ANR signal to the application.
+const std::chrono::milliseconds DEFAULT_PRE_ANR_TIMEOUT_WINDOW = std::chrono::milliseconds(
+        android::os::IInputConstants::UNMULTIPLIED_DEFAULT_PRE_ANR_TIMEOUT_WINDOW_MILLIS *
+        HwTimeoutMultiplier());
+
 // The default minimum time gap between two user activity poke events.
 const std::chrono::milliseconds DEFAULT_USER_ACTIVITY_POKE_INTERVAL = 100ms;
 
@@ -979,17 +984,15 @@ void InputDispatcher::dispatchOnce() {
             nextWakeupTime = LLONG_MIN;
         }
 
-        // Process ANR warning if we are close to ANR warning window.
-        const nsecs_t nextAnrWarningCheck =
-                com::android::input::flags::enable_anr_warning_callback_input_dispatcher()
-                ? processNoFocusedWindowAnrWarningLocked()
-                : LLONG_MAX;
-        nextWakeupTime = std::min(nextWakeupTime, nextAnrWarningCheck);
-
         // If we are still waiting for ack on some events,
-        // we might have to wake up earlier to check if an app is anr'ing.
-        const nsecs_t nextAnrCheck = processAnrsLocked();
-        nextWakeupTime = std::min(nextWakeupTime, nextAnrCheck);
+        // we might have to wake up earlier to check if an app is ANRing.
+        // This call is guarded by the enable_anr_warning_callback_input_dispatcher flag
+        nextWakeupTime = std::min({nextWakeupTime,
+                                   // Notify the process that an ANR is imminent (pre-ANR), a few
+                                   // seconds before the actual ANR handling runs.
+                                   processPreAnrsLocked(),
+                                   // The ANRs are then processed.
+                                   processAnrsLocked()});
 
         if (mPerDeviceInputLatencyMetricsFlag) {
             processLatencyStatisticsLocked();
@@ -1038,52 +1041,82 @@ void InputDispatcher::processNoFocusedWindowAnrLocked() {
 }
 
 /**
- * Processes a potential "No Focused Window" ANR and sends a warning if the timeout
+ * Processes a potential "No Focused Window" pre-ANR and sends a notification if the timeout
  * is approaching.
  *
  * This function checks if we are waiting for a focused window and if the ANR timeout
- * is close. If the remaining time is within half of the total timeout duration, it
- * triggers an ANR warning by calling warnNoFocusedWindowAnrLocked.
+ * is close. If the remaining time is within half of the total timeout duration (or the
+ * default pre-ANR timeout window, whichever is longer), it triggers a pre-ANR notification
+ * by calling onPreAnrLocked.
  *
- * Returns the time at which the next check for a "No Focused Window" ANR warning
- *         should occur. Returns LLONG_MAX if there's no pending ANR state or if the warning has
- * already been triggered.
+ * Returns the time at which the next check for a "No Focused Window" pre-ANR notification
+ *         should occur. Returns LLONG_MAX if there's no pending ANR state or if the
+ *         notification has already been triggered. Returns LLONG_MIN if a notification
+ *         was just enqueued, to ensure an immediate wakeup.
  */
-nsecs_t InputDispatcher::processNoFocusedWindowAnrWarningLocked() {
-    // We have a focused window target or ANR warning already triggered, nothing further to do.
-    if (!mNoFocusedWindowAnrState.has_value() || mNoFocusedWindowAnrState->anrWarningTriggered) {
+nsecs_t InputDispatcher::processNoFocusedWindowPreAnrLocked() {
+    // We don't have a no focused window target, or we have already notified the policy, nothing
+    // further to do.
+    if (!mNoFocusedWindowAnrState || mNoFocusedWindowAnrState->notifiedPreAnr) {
         return LLONG_MAX;
     }
 
     const nsecs_t currentTime = now();
 
-    // Notify apps at the 50% timeout window about imminent ANR.
-    const std::chrono::nanoseconds anrWarningWindow = mNoFocusedWindowAnrState->timeoutDuration / 2;
-    const std::chrono::nanoseconds timeoutDurationRemaining =
-            std::chrono::nanoseconds(mNoFocusedWindowAnrState->timeoutEndTime - currentTime);
+    // We notify the policy for pre-ANR at half of the timeout duration, or at least the default
+    // pre-ANR timeout window, whichever is longer.
+    const std::chrono::nanoseconds preAnrTimeout =
+            std::max(mNoFocusedWindowAnrState->timeoutDuration / 2, DEFAULT_PRE_ANR_TIMEOUT_WINDOW);
+    const nsecs_t preAnrTime = mNoFocusedWindowAnrState->timeoutEndTime - preAnrTimeout.count();
 
-    // Warn apps if within the ANR warning window.
-    if (timeoutDurationRemaining <= anrWarningWindow) {
-        const auto elapsedDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                mNoFocusedWindowAnrState->timeoutDuration - timeoutDurationRemaining);
-        warnNoFocusedWindowAnrLocked(mNoFocusedWindowAnrState->applicationHandle,
-                                     mNoFocusedWindowAnrState->eventId, elapsedDuration,
-                                     mNoFocusedWindowAnrState->timeoutDuration);
-        mNoFocusedWindowAnrState->anrWarningTriggered = true;
-        return LLONG_MIN;
+    // In the common case, we are not yet in the pre-ANR window.
+    if (currentTime < preAnrTime) {
+        return preAnrTime;
     }
 
-    // return the earliest time we want to trigger ANR warning.
-    return mNoFocusedWindowAnrState->timeoutEndTime - anrWarningWindow.count();
+    const std::chrono::nanoseconds elapsed = mNoFocusedWindowAnrState->timeoutDuration -
+            std::chrono::nanoseconds(mNoFocusedWindowAnrState->timeoutEndTime - currentTime);
+
+    LOG_IF(INFO, DEBUG_FOCUS) << "Potential 'No Focused Window' ANR in "
+                              << ns2ms(mNoFocusedWindowAnrState->timeoutEndTime - currentTime)
+                              << "ms. app="
+                              << mNoFocusedWindowAnrState->applicationHandle->getName()
+                              << " elapsedTime=" << elapsed.count() << "ns";
+
+    onPreAnrLocked(mNoFocusedWindowAnrState->applicationHandle, mNoFocusedWindowAnrState->eventId,
+                   std::chrono::duration_cast<std::chrono::milliseconds>(elapsed),
+                   mNoFocusedWindowAnrState->timeoutDuration);
+    mNoFocusedWindowAnrState->notifiedPreAnr = true;
+
+    // We have enqueued a pre-ANR command, so we need to wake up immediately.
+    return LLONG_MIN;
 }
 
-void InputDispatcher::warnNoFocusedWindowAnrLocked(
+/**
+ * Processes all pending pre-ANRs and returns the earliest next wakeup time.
+ *
+ * This function serves as the top-level entry point for pre-ANR processing. It delegates
+ * to type-specific helpers for each ANR category (like No Focused Window) and
+ * aggregates their results to determine the earliest time at which the next pre-ANR
+ * check should occur.
+ *
+ * Returns the earliest next wakeup time across all pre-ANR types. Returns LLONG_MAX
+ *         if the feature is disabled or no pre-ANRs require attention.
+ */
+nsecs_t InputDispatcher::processPreAnrsLocked() {
+    if (!input_flags::enable_anr_warning_callback_input_dispatcher()) {
+        return LLONG_MAX;
+    }
+    return std::min(nsecs_t{LLONG_MAX}, processNoFocusedWindowPreAnrLocked());
+}
+
+void InputDispatcher::onPreAnrLocked(
         const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
         std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration) {
     auto command = [this, app = inputApplicationHandle, eventId, elapsedDuration,
                     timeoutDuration]() REQUIRES(mLock) {
         scoped_unlock unlock(mLock);
-        mPolicy.warnNoFocusedWindowAnr(app, eventId, elapsedDuration, timeoutDuration);
+        mPolicy.notifyPreNoFocusedWindowAnr(app, eventId, elapsedDuration, timeoutDuration);
     };
     postCommandLocked(std::move(command));
 }
@@ -4510,7 +4543,7 @@ void InputDispatcher::notifyKey(const NotifyKeyArgs& args) {
             << ", source=" << inputEventSourceToString(args.source)
             << ", displayId=" << args.displayId.toString() << ", policyFlags=0x" << std::hex
             << args.policyFlags << ", action=" << KeyEvent::actionToString(args.action)
-            << ", flags=0x" << args.flags << ", keyCode=" << KeyEvent::getLabel(args.keyCode)
+            << ", flags=0x" << args.flags << ", keyCode=" << KeyEvent::getLabelOrCode(args.keyCode)
             << ", scanCode=0x" << args.scanCode << ", metaState=0x" << args.metaState
             << ", downTime=" << std::dec << args.downTime << "ns";
     Result<void> keyCheck = validateKeyEvent(args.action);

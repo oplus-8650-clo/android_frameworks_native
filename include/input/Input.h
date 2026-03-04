@@ -39,7 +39,10 @@
 #include <utils/Timers.h>
 #include <array>
 #include <limits>
+#include <optional>
 #include <queue>
+#include <string>
+#include <string_view>
 
 /*
  * Additional private constants not defined in ndk/ui/input.h.
@@ -686,7 +689,8 @@ public:
 
     inline nsecs_t getEventTime() const { return mEventTime; }
 
-    static const char* getLabel(int32_t keyCode);
+    static std::optional<std::string_view> getLabel(int32_t keyCode);
+    static std::string getLabelOrCode(int32_t keyCode);
     static std::optional<int> getKeyCodeFromLabel(const char* label);
 
     void initialize(int32_t id, DeviceId deviceId, uint32_t source, ui::LogicalDisplayId displayId,
@@ -1014,7 +1018,8 @@ public:
         return mSamplePointerCoords.data();
     }
 
-    static const char* getLabel(int32_t axis);
+    static std::optional<std::string_view> getLabel(int32_t axis);
+    static std::string getLabelOrCode(int32_t axis);
     static std::optional<int> getAxisFromLabel(const char* label);
 
     static std::string actionToString(int32_t action);

@@ -552,14 +552,15 @@ status_t InputPublisher::publishKeyEvent(uint32_t seq, int32_t eventId, DeviceId
     ATRACE_NAME_IF(ATRACE_ENABLED(),
                    StringPrintf("publishKeyEvent(inputChannel=%s, action=%s, keyCode=%s)",
                                 mChannel->getName().c_str(), KeyEvent::actionToString(action),
-                                KeyEvent::getLabel(keyCode)));
+                                KeyEvent::getLabelOrCode(keyCode).c_str()));
     ALOGD_IF(debugTransportPublisher(),
              "channel '%s' publisher ~ %s: seq=%u, id=%d, deviceId=%d, source=%s, "
              "action=%s, flags=0x%x, keyCode=%s, scanCode=%d, metaState=0x%x, repeatCount=%d, "
              "downTime=%" PRId64 "ns, eventTime=%" PRId64 "ns",
              mChannel->getName().c_str(), __func__, seq, eventId, deviceId,
              inputEventSourceToString(source).c_str(), KeyEvent::actionToString(action), flags,
-             KeyEvent::getLabel(keyCode), scanCode, metaState, repeatCount, downTime, eventTime);
+             KeyEvent::getLabelOrCode(keyCode).c_str(), scanCode, metaState, repeatCount, downTime,
+             eventTime);
 
     if (!seq) {
         ALOGE("Attempted to publish a key event with sequence number 0.");

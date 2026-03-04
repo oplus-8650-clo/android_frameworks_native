@@ -179,7 +179,8 @@ public:
     static status_t getActiveDisplayMode(const sp<IBinder>& display, ui::DisplayMode*);
 
     // Sets the mode specifications for multiple displays, to be applied atomically.
-    static status_t setDesiredDisplayModeSpecs(const std::vector<gui::DisplayModeSpecs>&);
+    static status_t setDesiredDisplayModeSpecs(const sp<IBinder>& applyToken,
+                                               const std::vector<gui::DisplayModeSpecs>&);
     // Gets the mode specifications for the display.
     static status_t getDesiredDisplayModeSpecs(const sp<IBinder>& displayToken,
                                                gui::DisplayModeSpecs*);

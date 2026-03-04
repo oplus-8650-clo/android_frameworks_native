@@ -88,10 +88,8 @@ protected:
                         {AKEYCODE_STYLUS_BUTTON_PRIMARY, AKEYCODE_STYLUS_BUTTON_SECONDARY});
 
         // Key mappings
-        EXPECT_CALL(mMockEventHub,
-                    mapKey(EVENTHUB_ID, BTN_LEFT, /*usageCode=*/0, /*metaState=*/0, testing::_,
-                           testing::_, testing::_))
-                .WillRepeatedly(Return(NAME_NOT_FOUND));
+        EXPECT_CALL(mMockEventHub, mapKey(EVENTHUB_ID, BTN_LEFT, /*usageCode=*/0, /*metaState=*/0))
+                .WillRepeatedly(Return(std::nullopt));
 
         // Input properties - only INPUT_PROP_BUTTONPAD
         EXPECT_CALL(mMockEventHub, hasInputProperty(EVENTHUB_ID, INPUT_PROP_BUTTONPAD))

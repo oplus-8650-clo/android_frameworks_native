@@ -66,7 +66,7 @@ public:
         }
     };
 
-    struct NoFocusedWindowAnrWarningResult {
+    struct PreNoFocusedWindowAnrResult {
         std::shared_ptr<InputApplicationHandle> appHandle;
         int32_t eventId;
         std::chrono::milliseconds elapsedDuration;
@@ -97,11 +97,10 @@ public:
     void assertNotifyWindowUnresponsiveWasCalled(std::chrono::nanoseconds timeout,
                                                  const sp<IBinder>& expectedToken,
                                                  std::optional<gui::Pid> expectedPid);
-    void assertWarnNoFocusedWindowAnrWasCalled(
-            std::chrono::nanoseconds waitDuration,
-            std::chrono::milliseconds expectedTimeoutDuration,
+    void assertNotifyPreNoFocusedWindowAnrWasCalled(
+            std::chrono::nanoseconds waitDuration, std::chrono::milliseconds expectedTimeout,
             const std::shared_ptr<InputApplicationHandle>& expectedApplication);
-    void assertWarnNoFocusedWindowAnrWasNotCalled();
+    void assertNotifyPreNoFocusedWindowAnrWasNotCalled(std::chrono::nanoseconds timeout);
     /** Wrap call with ASSERT_NO_FATAL_FAILURE() to ensure the return value is valid. */
     sp<IBinder> getUnresponsiveWindowToken(std::chrono::nanoseconds timeout);
     void assertNotifyWindowResponsiveWasCalled(const sp<IBinder>& expectedToken,
@@ -162,9 +161,9 @@ private:
     std::queue<sp<IBinder>> mBrokenInputChannels GUARDED_BY(mLock);
     std::condition_variable mNotifyInputChannelBroken;
 
-    // ANR warning handling
-    std::queue<NoFocusedWindowAnrWarningResult> mNoFocusedWindowAnrWarnings GUARDED_BY(mLock);
-    std::condition_variable mNotifyNoFocusedWindowAnrWarning;
+    // ANR pre-anr handling
+    std::queue<PreNoFocusedWindowAnrResult> mPreNoFocusedWindowAnrs GUARDED_BY(mLock);
+    std::condition_variable mNotifyPreNoFocusedWindowAnr;
 
     // Drag and drop
     std::queue<DropEvent> mDropEvents GUARDED_BY(mLock);
@@ -209,7 +208,7 @@ private:
     void notifyNoFocusedWindowAnr(const std::shared_ptr<InputApplicationHandle>& applicationHandle,
                                   int32_t eventId, nsecs_t eventTime,
                                   std::chrono::milliseconds timeoutDuration) override;
-    void warnNoFocusedWindowAnr(
+    void notifyPreNoFocusedWindowAnr(
             const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
             std::chrono::milliseconds elapsedDuration,
             std::chrono::milliseconds timeoutDuration) override;

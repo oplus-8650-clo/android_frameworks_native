@@ -37,7 +37,7 @@ public:
         handler->add(op, label, uniqueKeyHash, fromPrecompile, std::move(androidStyleKey));
     }
 
-    PipelineCallbackHandler(bool storeSerializedKeys = false);
+    PipelineCallbackHandler(bool isProtected, bool storeSerializedKeys);
 
     void beginWarmup() EXCLUDES(mMutex);
     void endWarmup() EXCLUDES(mMutex);
@@ -96,6 +96,10 @@ protected:
     std::unordered_map<PipelineKey, std::unique_ptr<PipelineData>, PipelineKey> mMap
             GUARDED_BY(mMutex);
     bool mInWarmup GUARDED_BY(mMutex) = false;
+    const bool mIsProtected;
+    // Although the SerializedPipelineKeyCache's behavior is separately enabled there is
+    // still extra work in this object that can be avoided if the serialized keys will
+    // never be saved.
     const bool mStoreSerializedKeys;
 };
 

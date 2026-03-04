@@ -18,6 +18,18 @@
 
 #include "JoystickInputMapper.h"
 
+#include <android-base/logging.h>
+#include <ftl/enum.h>
+#include <input/EvdevAbsCode.h>
+#include <input/EvdevKeyCode.h>
+#include <input/KeyCode.h>
+#include <input/MotionEventAxis.h>
+
+#include <map>
+
+#include "EventHub.h"
+#include "android/keycodes.h"
+
 namespace android {
 
 JoystickInputMapper::JoystickInputMapper(InputDeviceContext& deviceContext,
@@ -73,20 +85,12 @@ void JoystickInputMapper::dump(std::string& dump) {
 
     dump += INDENT3 "Axes:\n";
     for (const auto& [rawAxis, axis] : mAxes) {
-        const char* label = InputEventLookup::getAxisLabel(axis.axisInfo.axis);
-        if (label) {
-            dump += StringPrintf(INDENT4 "%s", label);
-        } else {
-            dump += StringPrintf(INDENT4 "%d", axis.axisInfo.axis);
-        }
+        dump += INDENT4;
+        dump += MotionEvent::getLabelOrCode(axis.axisInfo.axis);
         if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT) {
-            label = InputEventLookup::getAxisLabel(axis.axisInfo.highAxis);
-            if (label) {
-                dump += StringPrintf(" / %s (split at %d)", label, axis.axisInfo.splitValue);
-            } else {
-                dump += StringPrintf(" / %d (split at %d)", axis.axisInfo.highAxis,
-                                     axis.axisInfo.splitValue);
-            }
+            dump += StringPrintf(" / %s (split at %d)",
+                                 MotionEvent::getLabelOrCode(axis.axisInfo.highAxis).c_str(),
+                                 axis.axisInfo.splitValue);
         } else if (axis.axisInfo.mode == AxisInfo::MODE_INVERT) {
             dump += " (invert)";
         }
@@ -116,14 +120,27 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
             it != config.axisRemappingPerDevice.end()) {
             axisRemapping = it->second;
         }
+
+        std::map<KeyCode, MotionEventAxis> keyToAxisRemapping;
+        if (auto it = config.keyToAxisRemappingPerDevice.find(getDeviceId());
+            it != config.keyToAxisRemappingPerDevice.end()) {
+            keyToAxisRemapping = it->second;
+        }
+
         if (mAxisRemapping != axisRemapping) {
             mAxisRemapping = axisRemapping;
             getDeviceContext().setAxisRemapping(axisRemapping);
             refreshAxes = true;
-            bumpGeneration();
+        }
+
+        if (mKeyToAxisRemapping != keyToAxisRemapping) {
+            mKeyToAxisRemapping = keyToAxisRemapping;
+            refreshAxes = true;
         }
     }
+
     if (refreshAxes) {
+        bumpGeneration();
         mAxes.clear();
         // Collect all axes.
         for (int32_t abs = 0; abs <= ABS_MAX; abs++) {
@@ -146,6 +163,8 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
                 mAxes.insert({abs, createAxis(axisInfo, rawAxisInfo.value(), explicitlyMapped)});
             }
         }
+
+        addAxesMappedFromKeys();
 
         // If there are too many axes, start dropping them.
         // Prefer to keep explicitly mapped axes.
@@ -180,7 +199,98 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
             it++;
         }
     }
+
+    // Remove axes if they were pruned above.
+    std::erase_if(mEvdevKeyToEvdevAbs, [this](const auto& pair) {
+        const auto& [evdevKey, _] = pair.second;
+        return !mAxes.contains(ftl::to_underlying(evdevKey));
+    });
+
     return out;
+}
+
+void JoystickInputMapper::addAxesMappedFromKeys() {
+    mEvdevKeyToEvdevAbs.clear();
+
+    if (mKeyToAxisRemapping.empty()) {
+        return;
+    }
+
+    std::map<MotionEventAxis, std::pair<EvdevAbsCode, /*isHighAxis=*/bool>>
+            motionEventAxisToEvdevAbs{};
+    for (const auto& [abs, axis] : mAxes) {
+        auto evdevAbs = EvdevAbsCode(abs);
+        if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT) {
+            auto motionEventAxis = MotionEventAxis(axis.axisInfo.highAxis);
+            motionEventAxisToEvdevAbs.insert({motionEventAxis, {evdevAbs, /*isHighAxis=*/true}});
+        }
+        auto motionEventAxis = MotionEventAxis(axis.axisInfo.axis);
+        motionEventAxisToEvdevAbs.insert({motionEventAxis, {evdevAbs, /*isHighAxis=*/false}});
+    }
+
+    std::map<EvdevKeyCode, KeyCode> originalKeyMapping = getOriginalKeyMapping();
+
+    // All "real" axes added so far are mapped from ABS_* values lower or equal to ABS_MAX.
+    // Everything above ABS_MAX is guaranteed to not clash with the existing axes.
+    int32_t newAbs = ABS_MAX + 1;
+
+    for (const auto& [evdevKey, originalKeyCode] : originalKeyMapping) {
+        auto keyToAxisIt = mKeyToAxisRemapping.find(originalKeyCode);
+        if (keyToAxisIt == mKeyToAxisRemapping.end()) {
+            // Skip the key code if it is not remapped to any axis.
+            continue;
+        }
+
+        auto motionEventAxis = keyToAxisIt->second;
+
+        auto evdevAbsIt = motionEventAxisToEvdevAbs.find(motionEventAxis);
+        if (evdevAbsIt == motionEventAxisToEvdevAbs.end()) {
+            // The axis to which the key is mapped does not exist, create a new axis in mAxes so
+            // that it can store the value and be reported by populateDeviceInfo(). Use the next
+            // available value above ABS_MAX as the key in the map, so that it does not clash with
+            // any existing axes. This way it also easy to tell which axes were created from key to
+            // axis remappings in a bug report.
+            AxisInfo axisInfo{};
+            axisInfo.axis = ftl::to_underlying(motionEventAxis);
+            RawAbsoluteAxisInfo rawAxisInfo{.minValue = 0,
+                                            .maxValue = 1,
+                                            .flat = 0,
+                                            .fuzz = 0,
+                                            .resolution = 1};
+            newAbs++;
+            mAxes.insert({newAbs, createAxis(axisInfo, rawAxisInfo, /*explicitlyMapped=*/true)});
+            mEvdevKeyToEvdevAbs.insert(
+                    {evdevKey, {static_cast<EvdevAbsCode>(newAbs), /*isHighAxis=*/false}});
+        } else {
+            // The axis is already mapped from a "real" evdev axis, just point to it.
+            const auto& [evdevAbs, isHighAxis] = evdevAbsIt->second;
+            mEvdevKeyToEvdevAbs.insert({evdevKey, {evdevAbs, isHighAxis}});
+        }
+    }
+}
+
+std::map<EvdevKeyCode, KeyCode> JoystickInputMapper::getOriginalKeyMapping() const {
+    std::map<EvdevKeyCode, KeyCode> originalKeyMapping;
+    // Iteration over all possible evdev key codes is not ideal, however it's the most reliable way
+    // of finding which evdev key codes are mapped to a given Android key code, as the mapKey()
+    // method is relatively complex and finding the inverse mapping efficiently is not trivial.
+    for (int32_t evdevKey = 0; evdevKey <= KEY_MAX; evdevKey++) {
+        if (!getDeviceContext().hasScanCode(evdevKey)) {
+            continue;
+        }
+
+        std::optional<MappedKey> mappedKey =
+                getDeviceContext().mapKey(evdevKey, /*usageCode=*/0, /*metaState=*/0);
+        if (!mappedKey) {
+            LOG(FATAL) << "failed to map evdevKey=" << evdevKey;
+            continue;
+        }
+
+        originalKeyMapping.insert(
+                {static_cast<EvdevKeyCode>(evdevKey), mappedKey->originalKeyCode});
+    }
+
+    return originalKeyMapping;
 }
 
 JoystickInputMapper::Axis JoystickInputMapper::createAxis(const AxisInfo& axisInfo,
@@ -295,6 +405,36 @@ std::list<NotifyArgs> JoystickInputMapper::reset(nsecs_t when) {
 std::list<NotifyArgs> JoystickInputMapper::process(const RawEvent& rawEvent) {
     std::list<NotifyArgs> out;
     switch (rawEvent.type) {
+        case EV_KEY: {
+            auto evdevKey = static_cast<EvdevKeyCode>(rawEvent.code);
+            auto keyIt = mEvdevKeyToEvdevAbs.find(evdevKey);
+            if (keyIt == mEvdevKeyToEvdevAbs.end()) {
+                // Key is not mapped to any axis, no need to process it.
+                break;
+            }
+
+            const auto [evdevAbs, isHighAxis] = keyIt->second;
+
+            auto absIt = mAxes.find(ftl::to_underlying(evdevAbs));
+
+            if (absIt == mAxes.end()) {
+                LOG(FATAL) << "axis " << evdevAbs << " not found for key " << evdevKey;
+                return out;
+            }
+
+            Axis& axis = absIt->second;
+
+            auto newValue = rawEvent.value == 0 ? 0 : 1;
+            if (isHighAxis) {
+                axis.highNewValue = newValue;
+            } else {
+                axis.newValue = newValue;
+            }
+
+            axis.lastUpdateTime = rawEvent.when;
+
+            break;
+        }
         case EV_ABS: {
             auto it = mAxes.find(rawEvent.code);
             if (it != mAxes.end()) {

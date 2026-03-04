@@ -115,12 +115,15 @@ public:
             const int32_t user, const std::vector<int32_t>& retainSnapshotIds);
 
     binder::Status getAppSize(const std::optional<std::string>& uuid,
-            const std::vector<std::string>& packageNames, int32_t userId, int32_t flags,
-            int32_t appId, const std::vector<int64_t>& ceDataInodes,
-            const std::vector<std::string>& codePaths, std::vector<int64_t>* _aidl_return);
-    binder::Status getUserSize(const std::optional<std::string>& uuid,
-            int32_t userId, int32_t flags, const std::vector<int32_t>& appIds,
-            std::vector<int64_t>* _aidl_return);
+                              const std::vector<std::string>& packageNames, int32_t userId,
+                              int32_t flags, int32_t appId, int32_t pccId,
+                              const std::vector<int64_t>& ceDataInodes,
+                              const std::vector<std::string>& codePaths,
+                              std::vector<int64_t>* _aidl_return);
+    binder::Status getUserSize(const std::optional<std::string>& uuid, int32_t userId,
+                               int32_t flags, const std::vector<int32_t>& appIds,
+                               const std::vector<int32_t>& pccIds,
+                               std::vector<int64_t>* _aidl_return);
     binder::Status getExternalSize(const std::optional<std::string>& uuid,
             int32_t userId, int32_t flags, const std::vector<int32_t>& appIds,
             std::vector<int64_t>* _aidl_return);
@@ -289,9 +292,8 @@ private:
 
     binder::Status createOrDeletePccDirectoryLocked(const char* volumeUuid, userid_t userId,
                                                     const char* packageName, int32_t pccId,
-                                                    int32_t previousPccId, int32_t cacheGid,
+                                                    int32_t previousPccId,
                                                     const std::string& seInfo, mode_t targetMode,
-                                                    long projectIdApp, long projectIdCache,
                                                     bool isCeStorage, int64_t* pccDataInode);
 };
 

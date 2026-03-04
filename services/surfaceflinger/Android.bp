@@ -21,12 +21,21 @@ aconfig_declarations {
 
 cc_aconfig_library {
     name: "libsurfaceflingerflags",
+    host_supported: true,
     aconfig_declarations: "surfaceflinger_flags",
     vendor_available: true,
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
 
 cc_defaults {
     name: "surfaceflinger_defaults",
+    defaults: [
+        "no_bti",
+    ],
     tidy: true,
     tidy_flags: [
         // Only check our headers
@@ -361,6 +370,7 @@ cc_binary {
     defaults: [
         "libsurfaceflinger_binary",
         "libqtisurfaceflingerextension_defaults",
+        "no_bti",
     ],
 // QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     init_rc: ["surfaceflinger.rc"],

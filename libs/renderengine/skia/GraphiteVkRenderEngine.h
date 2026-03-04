@@ -55,18 +55,21 @@ private:
 
     skgpu::graphite::PersistentPipelineStorage* graphitePersistentPipelineStorage(
             const void* identity, ssize_t size, bool isProtected);
+    PipelineCallbackHandler* graphiteSerializedPipelineKeyCache(const void* identity, ssize_t size,
+                                                                bool isProtected);
 
     std::thread mPrecompilePipelinesTask;
     std::vector<graphite::BackendSemaphore> mStagedWaitSemaphores;
 
-    PipelineCallbackHandler mPipelineCallbackHandler;
-    PipelineCallbackHandler mProtectedPipelineCallbackHandler;
+    std::unique_ptr<PipelineCallbackHandler> mProtectedPipelineCallbackHandler;
+    std::unique_ptr<PipelineCallbackHandler> mUnprotectedPipelineCallbackHandler;
 
     std::unique_ptr<skgpu::graphite::PersistentPipelineStorage> mProtectedPersistentPipelineStorage;
     std::unique_ptr<skgpu::graphite::PersistentPipelineStorage>
             mUnprotectedPersistentPipelineStorage;
 
     bool mInitializedGraphiteDiskCache = false;
+    bool mInitializedGraphiteSerializedPipelineKeyCache = false;
 };
 
 } // namespace android::renderengine::skia

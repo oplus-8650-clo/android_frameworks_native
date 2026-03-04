@@ -20,8 +20,9 @@
 #include <attestation/HmacKeyManager.h>
 #include <cutils/compiler.h>
 #include <inttypes.h>
-#include <string.h>
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -394,8 +395,13 @@ std::ostream& operator<<(std::ostream& out, const InputEvent& event) {
 
 // --- KeyEvent ---
 
-const char* KeyEvent::getLabel(int32_t keyCode) {
+std::optional<std::string_view> KeyEvent::getLabel(int32_t keyCode) {
     return InputEventLookup::getLabelByKeyCode(keyCode);
+}
+
+std::string KeyEvent::getLabelOrCode(int32_t keyCode) {
+    std::optional<std::string_view> label = getLabel(keyCode);
+    return label.has_value() ? std::string(label.value()) : std::to_string(keyCode);
 }
 
 std::optional<int> KeyEvent::getKeyCodeFromLabel(const char* label) {
@@ -446,16 +452,8 @@ const char* KeyEvent::actionToString(int32_t action) {
 std::ostream& operator<<(std::ostream& out, const KeyEvent& event) {
     out << "KeyEvent { action=" << KeyEvent::actionToString(event.getAction());
 
-    // Get the keycode label and check for null
-    const char* keyLabel = KeyEvent::getLabel(event.getKeyCode());
-
-    out << ", keycode=" << event.getKeyCode() << "(";
-    if (keyLabel != nullptr) {
-        out << keyLabel;
-    } else {
-        out << "(unknown/null label)"; // Provide a placeholder if the label is null
-    }
-    out << ")";
+    out << ", keycode=" << event.getKeyCode() << "("
+        << KeyEvent::getLabel(event.getKeyCode()).value_or("unknown") << ")";
 
     if (event.getMetaState() != 0) {
         out << ", metaState=" << event.getMetaState();
@@ -1021,8 +1019,13 @@ bool MotionEvent::isTouchEvent(uint32_t source, int32_t action) {
     return false;
 }
 
-const char* MotionEvent::getLabel(int32_t axis) {
+std::optional<std::string_view> MotionEvent::getLabel(int32_t axis) {
     return InputEventLookup::getAxisLabel(axis);
+}
+
+std::string MotionEvent::getLabelOrCode(int32_t axis) {
+    std::optional<std::string_view> label = getLabel(axis);
+    return label.has_value() ? std::string(label.value()) : std::to_string(axis);
 }
 
 std::optional<int> MotionEvent::getAxisFromLabel(const char* label) {

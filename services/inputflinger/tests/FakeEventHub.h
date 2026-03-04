@@ -180,8 +180,8 @@ private:
     bool hasRelativeAxis(RawDeviceId deviceId, int axis) const override;
     bool hasInputProperty(RawDeviceId, int) const override;
     bool hasMscEvent(RawDeviceId deviceId, int mscEvent) const override final;
-    status_t mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageCode, int32_t metaState,
-                    int32_t* outKeycode, int32_t* outMetaState, uint32_t* outFlags) const override;
+    std::optional<MappedKey> mapKey(RawDeviceId deviceId, int32_t scanCode, int32_t usageCode,
+                                    int32_t metaState) const override;
     const KeyInfo* getKey(Device* device, int32_t scanCode, int32_t usageCode) const;
 
     status_t mapAxis(RawDeviceId, int32_t, AxisInfo*) const override;
