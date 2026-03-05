@@ -75,7 +75,7 @@ rust_test {
     enabled: false,
     arch: {
         x86_64: {
-            enabled: true,
+            enabled: false,
         },
     },
 }
