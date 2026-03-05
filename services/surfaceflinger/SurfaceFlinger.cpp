@@ -2528,6 +2528,13 @@ void SurfaceFlinger::onComposerHalVsync(hal::HWDisplayId hwcDisplayId, int64_t t
                          ? ftl::Concat(__func__, ' ', hwcDisplayId, ' ', *vsyncPeriod, "ns").c_str()
                          : ftl::Concat(__func__, ' ', hwcDisplayId).c_str());
 
+    if (timestamp <= 0) {
+        ALOGW("%s: Ignoring invalid timestamp %" PRId64 " from HWC display %" PRIu64, __func__,
+              timestamp, hwcDisplayId);
+        SFTRACE_FORMAT_INSTANT("%s: Ignoring invalid timestamp %" PRId64, __func__, timestamp);
+        return;
+    }
+
     Mutex::Autolock lock(mStateLock);
     if (const auto displayIdOpt = getHwComposer().onVsync(hwcDisplayId, timestamp)) {
         REQUIRE_SCHEDULER;
@@ -5127,8 +5134,16 @@ void SurfaceFlinger::requestHardwareVsync(PhysicalDisplayId displayId, bool enab
     // Query HWC for the actual Vsync time and provide it to the scheduler when enabled.
     if (enable && FlagManager::getInstance().get_display_known_vsync_sample_enabled()) {
         if (auto sample = getHwComposer().getDisplayKnownVsyncSample(displayId)) {
-            mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs,
-                                        VSyncTracker::VsyncTimeSource::HwVsyncQuery);
+            if (sample->timestampNs > 0) {
+                mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs,
+                                            VSyncTracker::VsyncTimeSource::HwVsyncQuery);
+            } else {
+                ALOGW("%s: Ignoring invalid known Vsync sample timestamp %" PRId64
+                      " for display %s",
+                      __func__, sample->timestampNs, to_string(displayId).c_str());
+                SFTRACE_FORMAT_INSTANT("%s: Ignoring invalid timestamp %" PRId64, __func__,
+                                       sample->timestampNs);
+            }
         }
     }
 }
@@ -6612,12 +6627,21 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
     if (currentMode == mode) {
         return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     }
-    mPowerModeChangeInProgress = true;
 
-    const bool isInternalDisplay = (ftl::FakeGuard(mStateLock),
-                                    mPhysicalDisplays.get(displayId)
-                                            .transform(&PhysicalDisplay::isInternal)
-                                            .value_or(false));
+    const auto physicalDisplayOpt = (ftl::FakeGuard(mStateLock), mPhysicalDisplays.get(displayId));
+
+    // SF::processHotplugDisconnect() does not immediately propagate the display removal to
+    // the Scheduler and CompositionEngine, but instead requires a call to
+    // processDisplayChangesLocked() to process the rest in the next commit. Check that the
+    // display still exists in SurfaceFlinger before setting the power mode.
+    if (!physicalDisplayOpt.has_value()) {
+        return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
+    }
+
+    const bool isInternalDisplay =
+            physicalDisplayOpt.transform(&PhysicalDisplay::isInternal).value_or(false);
+
+    mPowerModeChangeInProgress = true;
 
     const bool couldRefresh = display->isRefreshable();
     display->setPowerMode(mode);

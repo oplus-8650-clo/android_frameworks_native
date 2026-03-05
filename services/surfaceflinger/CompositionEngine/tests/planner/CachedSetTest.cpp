@@ -602,10 +602,27 @@ TEST_F(CachedSetTest, holePunch_requiresRoundedCorners) {
     auto& layerFECompositionState = mTestLayers[0]->layerFECompositionState;
     layerFECompositionState.buffer = sp<GraphicBuffer>::make();
     layerFECompositionState.blendMode = hal::BlendMode::NONE;
+    sp<mock::LayerFE> layerFE1 = mTestLayers[0]->layerFE;
 
     CachedSet cachedSet(layer1);
+    cachedSet.setHolePunchWithoutRoundedCorners(false);
+    EXPECT_CALL(*layerFE1, hasRoundedCorners()).WillRepeatedly(Return(false));
 
     EXPECT_FALSE(cachedSet.requiresHolePunch());
+}
+
+TEST_F(CachedSetTest, holePunch_withoutRoundedCorners) {
+    CachedSet::Layer& layer1 = *mTestLayers[0]->cachedSetLayer.get();
+    auto& layerFECompositionState = mTestLayers[0]->layerFECompositionState;
+    layerFECompositionState.buffer = sp<GraphicBuffer>::make();
+    layerFECompositionState.blendMode = hal::BlendMode::NONE;
+    sp<mock::LayerFE> layerFE1 = mTestLayers[0]->layerFE;
+
+    CachedSet cachedSet(layer1);
+    cachedSet.setHolePunchWithoutRoundedCorners(true);
+    EXPECT_CALL(*layerFE1, hasRoundedCorners()).WillRepeatedly(Return(false));
+
+    EXPECT_TRUE(cachedSet.requiresHolePunch());
 }
 
 TEST_F(CachedSetTest, holePunch_requiresSingleLayer) {

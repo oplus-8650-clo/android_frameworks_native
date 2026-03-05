@@ -56,6 +56,9 @@ public:
         BinderObserverConfig::TrackingInfo trackingInfo;
     };
 
+    BinderObserver() = default;
+    explicit BinderObserver(std::unique_ptr<BinderObserverConfig> config);
+
     void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue);
     CallInfo onBeginTransaction(BBinder* binder, uint32_t code, uid_t callingUid);
     void onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& queue, const CallInfo& callInfo);

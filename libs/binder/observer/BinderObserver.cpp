@@ -31,16 +31,8 @@ constexpr int kSendIntervalSec = 5;
 
 constexpr int64_t kNanoSecondsPerSec = 1000'000'000LL;
 
-/**
- * Returns the CPU time in nanoseconds, or zero if the clock is not available.
- */
-static int64_t getCpuTimeNanos() {
-    timespec now;
-    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) == -1) {
-        return 0;
-    }
-    return now.tv_sec * kNanoSecondsPerSec + now.tv_nsec;
-}
+BinderObserver::BinderObserver(std::unique_ptr<BinderObserverConfig> config)
+      : mConfig(std::move(config)) {}
 
 BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uint32_t code,
                                                             uid_t callingUid) {
@@ -76,7 +68,7 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
 
     return {
             .startTimeNanos = trackStartTime ? uptimeNanos() : 0,
-            .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? getCpuTimeNanos() : 0,
+            .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? mConfig->getCpuTimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
             // TODO(b/299356196): Reduce std::string and String16 allocations.
             .aidlMethodName = aidlMethodName,
@@ -103,7 +95,7 @@ void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& que
             .startTimeNanos = callInfo.startTimeNanos,
             .endTimeNanos = endTimeNanos,
             .cpuTimeNanos = callInfo.trackingInfo.trackCpu && callInfo.cpuUsageStartTimeNanos != 0
-                    ? getCpuTimeNanos()
+                    ? mConfig->getCpuTimeNanos() - callInfo.cpuUsageStartTimeNanos
                     : 0,
             .interfaceDescriptor = callInfo.interfaceDescriptor,
             .aidlMethodName = callInfo.aidlMethodName,

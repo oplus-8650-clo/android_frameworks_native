@@ -464,6 +464,15 @@ prop {
     prop_name: "ro.surface_flinger.enable_sdr_dimming"
 }
 
+# Allow hole punching for layers without rounded corners
+prop {
+    api_name: "force_hole_punch"
+    type: Boolean
+    scope: Internal
+    access: Readonly
+    prop_name: "ro.surface_flinger.force_hole_punch"
+}
+
 # Ignores Camera layers when calculating HDR coverage information
 prop {
     api_name: "ignore_hdr_camera_layers"
