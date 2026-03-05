@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2026 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,22 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define LOG_TAG "libbinder.Binder"
 
-#include <displayservice/DisplayService.h>
-#include <displayservice/DisplayEventReceiver.h>
+#include <binder/internal/JavaBBinderBase.h>
 
-namespace android {
-namespace frameworks {
-namespace displayservice {
-namespace V1_0 {
-namespace implementation {
+namespace android::internal {
 
-Return<sp<IDisplayEventReceiver>> DisplayService::getEventReceiver() {
-    return new DisplayEventReceiver();
+JavaBBinderBase::JavaBBinderBase() = default;
+JavaBBinderBase::~JavaBBinderBase() = default;
+
+const void* JavaBBinderBase::getSubclassID() {
+    static const char* const kSubclassID = "JavaBBinderExt";
+    return kSubclassID;
 }
 
-}  // namespace implementation
-}  // namespace V1_0
-}  // namespace displayservice
-}  // namespace frameworks
-}  // namespace android
+} // namespace android::internal

@@ -33,6 +33,7 @@
 #include <fstream>
 
 #include <SkCanvas.h>
+#include <SkDashPathEffect.h>
 #include <SkData.h>
 #include <SkEncodedImageFormat.h>
 #include <SkFont.h>
@@ -43,7 +44,9 @@
 #include <SkPath.h>
 #include <SkPathBuilder.h>
 #include <SkPngEncoder.h>
+#include <SkRuntimeEffect.h>
 #include <SkStream.h>
+#include <SkString.h>
 #include <SkSurface.h>
 #include <SkTextBlob.h>
 #include <SkTypeface.h>
@@ -338,7 +341,7 @@ TEST_F(IPCRecordingCanvasTest, DrawPoints) {
         paint.setStrokeWidth(10);
         paint.setStrokeCap(SkPaint::kRound_Cap);
         SkPoint points[] = {{20, 20}, {100, 20}, {100, 100}, {20, 100}};
-        c->drawPoints(SkCanvas::kPolygon_PointMode, 4, points, paint);
+        c->drawPoints(SkCanvas::kPolygon_PointMode, points, paint);
     };
     ASSERT_TRUE(compareRendering(drawPoints, "DrawPoints"));
 }
@@ -479,6 +482,34 @@ TEST_F(IPCRecordingCanvasTest, RenderTarget) {
     expectedSurface->getCanvas()->clear(SK_ColorRED);
 
     ASSERT_TRUE(compareSurfaces(expectedSurface, surface, "RenderTarget"));
+}
+
+TEST_F(IPCRecordingCanvasTest, DashedLine) {
+    auto drawDashedLine = [&](SkCanvas* c) {
+        SkPaint paint;
+        paint.setColor(SK_ColorRED);
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(10);
+        float intervals[] = {10.0f, 20.0f};
+        paint.setPathEffect(SkDashPathEffect::Make(intervals, 0));
+        c->drawLine(50, 50, 450, 450, paint);
+    };
+    ASSERT_TRUE(compareRendering(drawDashedLine, "DashedLine"));
+}
+
+TEST_F(IPCRecordingCanvasTest, SkSLShader) {
+    auto drawSkSL = [&](SkCanvas* c) {
+        auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(R"(
+            vec4 main(vec2 p) {
+                return vec4(1, 0, 0, 1);
+            }
+        )"));
+        ASSERT_TRUE(effect != nullptr);
+        SkPaint paint;
+        paint.setShader(effect->makeShader(nullptr, nullptr, 0, nullptr));
+        c->drawRect(SkRect::MakeWH(100, 100), paint);
+    };
+    ASSERT_TRUE(compareRendering(drawSkSL, "SkSLShader"));
 }
 
 } // namespace android

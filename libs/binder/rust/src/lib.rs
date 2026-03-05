@@ -93,7 +93,12 @@
 //! }
 //! ```
 
-#[cfg(not(any(android_ndk, trusty)))]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[macro_use]
+extern crate alloc;
+
+#[cfg(all(feature = "std", not(any(android_ndk, trusty))))]
 mod accessor;
 #[macro_use]
 mod binder;
@@ -115,7 +120,7 @@ mod write_to;
 use binder_ndk_sys as sys;
 
 pub use crate::binder_async::{BinderAsyncPool, BoxFuture};
-#[cfg(not(any(android_ndk, trusty)))]
+#[cfg(all(feature = "std", not(any(android_ndk, trusty))))]
 pub use accessor::{delegate_accessor, Accessor, AccessorProvider, ConnectionInfo};
 pub use binder::{BinderFeatures, FromIBinder, IBinder, Interface, Strong, Weak};
 pub use error::{ExceptionCode, IntoBinderResult, Status, StatusCode};
@@ -146,7 +151,7 @@ pub use state::{ProcessState, ThreadState};
 pub use write_to::WriteTo;
 
 /// Binder result containing a [`Status`] on error.
-pub type Result<T> = std::result::Result<T, Status>;
+pub type Result<T> = core::result::Result<T, Status>;
 
 /// Advanced Binder APIs needed internally by AIDL or when manually using Binder
 /// without AIDL.

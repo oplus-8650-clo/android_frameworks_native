@@ -60,7 +60,7 @@ bool VSyncReactor::updateTrackerWithSignaledFences() {
             it = mUnfiredFences.erase(it);
         } else {
             timestampAccepted &=
-                    mTracker.addVsyncTimestamp(time, VSyncTracker::VsyncTimeSource::PresentFence);
+                    addVsyncTimestampLocked(time, VSyncTracker::VsyncTimeSource::PresentFence);
 
             it = mUnfiredFences.erase(it);
         }
@@ -95,7 +95,7 @@ bool VSyncReactor::addPresentFence(std::shared_ptr<FenceTime> fence) {
         mUnfiredFences.push_back(std::move(fence));
     } else {
         timestampAccepted &=
-                mTracker.addVsyncTimestamp(signalTime, VSyncTracker::VsyncTimeSource::PresentFence);
+                addVsyncTimestampLocked(signalTime, VSyncTracker::VsyncTimeSource::PresentFence);
     }
 
     if (!timestampAccepted) {
@@ -210,10 +210,10 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
             *periodFlushed = true;
         }
 
-        if (mLastHwVsync.get() &&!mLastHwVsync.isFirst()) {
-            mTracker.addVsyncTimestamp(*mLastHwVsync.get(), source);
+        if (mLastHwVsync.get() && !mLastHwVsync.isFirst()) {
+            addVsyncTimestampLocked(*mLastHwVsync.get(), source);
         }
-        mTracker.addVsyncTimestamp(timestamp, source);
+        addVsyncTimestampLocked(timestamp, source);
 
         endPeriodTransition();
         mMoreSamplesNeeded = mTracker.needsMoreSamples();
@@ -222,14 +222,14 @@ bool VSyncReactor::addHwVsyncTimestamp(nsecs_t timestamp, std::optional<nsecs_t>
         mLastHwVsync.set(timestamp);
         // Add the first vsync callback to the tracker to be based on a fresh vsync
         if (mLastHwVsync.isFirst()) {
-            mTracker.addVsyncTimestamp(*mLastHwVsync.get(), source);
+            addVsyncTimestampLocked(*mLastHwVsync.get(), source);
         }
         mMoreSamplesNeeded = true;
         *periodFlushed = false;
     } else {
         SFTRACE_FORMAT("VSR %" PRIu64 ": adding sample", mId.value);
         *periodFlushed = false;
-        mTracker.addVsyncTimestamp(timestamp, source);
+        addVsyncTimestampLocked(timestamp, source);
         mMoreSamplesNeeded = mTracker.needsMoreSamples();
     }
 
@@ -253,6 +253,21 @@ void VSyncReactor::resetModel() {
     std::lock_guard lock(mMutex);
     updateTrackerWithSignaledFences();
     mTracker.resetModel();
+}
+
+void VSyncReactor::reportModelAccuracyMetric(VSyncTracker::ModelAccuracy accuracy,
+                                             VSyncTracker::VsyncTimeSource source,
+                                             bool accepted) const {
+    const ModelAccuracyMetric metric = {accuracy, source, isModeChangeInProgress(), accepted};
+    SFTRACE_FORMAT(VSYNC_PREDICTION_ERROR_REPORT ": %s", metric.to_string().c_str());
+}
+
+bool VSyncReactor::addVsyncTimestampLocked(nsecs_t timestamp,
+                                           VSyncTracker::VsyncTimeSource source) {
+    const auto accuracy = mTracker.getModelAccuracy(timestamp);
+    const bool accepted = mTracker.addVsyncTimestamp(timestamp);
+    reportModelAccuracyMetric(accuracy, source, accepted);
+    return accepted;
 }
 
 void VSyncReactor::dump(std::string& result) const {

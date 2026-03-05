@@ -85,6 +85,26 @@ cc_library_headers {
     },
 }
 
+cc_library_headers {
+    name: "libbinder_internal_headers",
+    export_include_dirs: ["include_private"],
+    vendor_available: true,
+    recovery_available: true,
+    host_supported: true,
+    native_bridge_supported: true,
+    cmake_snapshot_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.media",
+        "com.android.media.swcodec",
+    ],
+    min_sdk_version: "29",
+    visibility: [
+        ":__subpackages__",
+        "//frameworks/base/core/jni",
+    ],
+}
+
 cc_cmake_snapshot {
     name: "binder_sdk",
     dist: {
@@ -258,6 +278,7 @@ cc_defaults {
         "FdTrigger.cpp",
         "IInterface.cpp",
         "IResultReceiver.cpp",
+        "JavaBBinderBase.cpp",
         "Parcel.cpp",
         "ParcelFileDescriptor.cpp",
         "RecordedTransaction.cpp",
@@ -274,6 +295,7 @@ cc_defaults {
 
     header_libs: [
         "libbinder_headers_base",
+        "libbinder_internal_headers",
     ],
     export_header_lib_headers: [
         "libbinder_headers_base",
@@ -612,6 +634,10 @@ cc_library {
         "libbinder_common_defaults",
         "libbinder_android_defaults",
         "libbinder_kernel_defaults",
+    ],
+
+    header_libs: [
+        "libbinder_internal_headers",
     ],
 
     version_script: "libbinder.map",

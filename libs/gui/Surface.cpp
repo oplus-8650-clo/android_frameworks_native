@@ -528,6 +528,15 @@ status_t Surface::getFrameTimestamps(uint64_t frameNumber,
     return NO_ERROR;
 }
 
+status_t Surface::getFrameEventHistoryDelta(FrameEventHistoryDelta* delta) {
+    Mutex::Autolock lock(mMutex);
+    SURF_LOGE_IF(mEnableFrameTimestamps,
+                 "Surface::getFrameEventHistoryDelta: mEnableFrameTimestamps is true when calling "
+                 "legacy delta-based call. Misconfiguration and data loss is likely.");
+    mGraphicBufferProducer->getFrameTimestamps(delta);
+    return NO_ERROR;
+}
+
 // Deprecated(b/242763577): to be removed, this method should not be used
 // The reason this method still exists here is to support compiled vndk
 // Surface support should not be tied to the display

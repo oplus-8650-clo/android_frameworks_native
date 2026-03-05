@@ -368,6 +368,62 @@ TEST_F(ScreenCaptureTest, CaptureLayerExclude) {
     mCapture->checkPixel(0, 0, 200, 200, 200);
 }
 
+TEST_F(ScreenCaptureTest, CaptureLayerExcludeWithExclusionMask) {
+    auto fgHandle = mFGSurfaceControl->getHandle();
+
+    sp<SurfaceControl> child1 = createSurface(mClient, "Child surface", 10, 10,
+                                              PIXEL_FORMAT_RGBA_8888, 0, mFGSurfaceControl.get());
+    TransactionUtils::fillSurfaceRGBA8(child1, 200, 200, 200);
+    sp<SurfaceControl> child2 = createSurface(mClient, "Child surface", 10, 10,
+                                              PIXEL_FORMAT_RGBA_8888, 0, mFGSurfaceControl.get());
+    TransactionUtils::fillSurfaceRGBA8(child2, 200, 0, 200);
+
+    SurfaceComposerClient::Transaction()
+            .show(child1)
+            .show(child2)
+            .setLayer(child1, 1)
+            .setLayer(child2, 2)
+            .setCompositionFilterFlag(child2, 1u << 2)
+            .apply(true);
+
+    // Child2 would be excluded in the screenshot due to the mask, so we should see child1 color
+    // instead.
+    LayerCaptureArgs captureArgs;
+    captureArgs.layerHandle = fgHandle;
+    captureArgs.childrenOnly = true;
+    captureArgs.captureArgs.exclusionMask = 1u << 2;
+    ScreenCapture::captureLayers(&mCapture, captureArgs);
+    mCapture->checkPixel(10, 10, 0, 0, 0);
+    mCapture->checkPixel(0, 0, 200, 200, 200);
+}
+
+TEST_F(ScreenCaptureTest, CaptureLayerExcludeWithExclusionMaskInheritance) {
+    auto fgHandle = mFGSurfaceControl->getHandle();
+
+    sp<SurfaceControl> child1 = createSurface(mClient, "Child surface", 10, 10,
+                                              PIXEL_FORMAT_RGBA_8888, 0, mFGSurfaceControl.get());
+    TransactionUtils::fillSurfaceRGBA8(child1, 200, 200, 200);
+    sp<SurfaceControl> child2 = createSurface(mClient, "ChildChild surface", 10, 10,
+                                              PIXEL_FORMAT_RGBA_8888, 0, child1.get());
+    TransactionUtils::fillSurfaceRGBA8(child2, 200, 0, 200);
+
+    SurfaceComposerClient::Transaction()
+            .show(child1)
+            .show(child2)
+            .setLayer(child1, 1)
+            .setLayer(child2, 1)
+            .setCompositionFilterFlag(child1, 1u << 2)
+            .apply(true);
+
+    // Child1 is excluded, so Child2 should also be excluded due to inheritance.
+    LayerCaptureArgs captureArgs;
+    captureArgs.layerHandle = fgHandle;
+    captureArgs.childrenOnly = true;
+    captureArgs.captureArgs.exclusionMask = 1u << 2;
+    ScreenCapture::captureLayers(&mCapture, captureArgs);
+    mCapture->expectColor(Rect(0, 0, 10, 10), {0, 0, 0, 0});
+}
+
 TEST_F(ScreenCaptureTest, CaptureLayerExcludeThroughDisplayArgs) {
     mCaptureArgs.captureArgs.excludeHandles = {mFGSurfaceControl->getHandle()};
     ScreenCapture::captureLayers(&mCapture, mCaptureArgs);

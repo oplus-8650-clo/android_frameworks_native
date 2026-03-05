@@ -40,7 +40,6 @@
 #include <compositionengine/RenderSurface.h>
 #include <compositionengine/RenderSurfaceCreationArgs.h>
 #include <compositionengine/impl/OutputCompositionState.h>
-#include <configstore/Utils.h>
 #include <ftl/concat.h>
 #include <log/log.h>
 #include <scheduler/Fps.h>
@@ -345,7 +344,8 @@ void DisplayDevice::dump(utils::Dumper& dumper) const {
 
     dumper.dump("name"sv, '"' + mDisplayName + '"');
     dumper.dump("powerMode"sv, mPowerMode);
-    dumper.dump("optimizationPolicy"sv, mOptimizationPolicy);
+    dumper.dump("forceOptimizationPolicyForPower"sv, mForceOptimizationPolicyForPower);
+    dumper.dump("optimizationPolicy"sv, getOptimizationPolicy());
 
     if (mRefreshRateSelector) {
         mRefreshRateSelector->dump(dumper);
@@ -373,12 +373,17 @@ void DisplayDevice::setSecure(bool secure) {
 }
 
 gui::ISurfaceComposer::OptimizationPolicy DisplayDevice::getOptimizationPolicy() const {
-    return mOptimizationPolicy;
+    if (mForceOptimizationPolicyForPower) {
+        return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower;
+    }
+    if (mFlags & eOptimizationPolicyPower) {
+        return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPower;
+    }
+    return gui::ISurfaceComposer::OptimizationPolicy::optimizeForPerformance;
 }
 
-void DisplayDevice::setOptimizationPolicy(
-        gui::ISurfaceComposer::OptimizationPolicy optimizationPolicy) {
-    mOptimizationPolicy = optimizationPolicy;
+void DisplayDevice::enableForceOptimizationPolicyForPower() {
+    mForceOptimizationPolicyForPower = true;
 }
 
 const Rect DisplayDevice::getBounds() const {
@@ -500,7 +505,7 @@ void DisplayDevice::enableRefreshRateOverlay(bool enable, bool setByHwc, Fps ref
         features |= RefreshRateOverlay::Features::SetByHwc;
     }
 
-    const auto fpsRange = mRefreshRateSelector->getSupportedRefreshRateRange();
+    const auto fpsRange = mRefreshRateSelector->getGlobalSupportedRefreshRateRange();
     mRefreshRateOverlay = RefreshRateOverlay::create(fpsRange, features);
     if (mRefreshRateOverlay) {
         mRefreshRateOverlay->setLayerStack(getLayerStack());

@@ -158,6 +158,7 @@ mod tests {
                 devnode_path: Path::new("/dev/ttyACM0").to_path_buf(),
             },
             device,
+            extra_data: None,
         }])
         .boxed();
         let mut callback = MockDeviceEventCallback::new();
@@ -195,6 +196,7 @@ mod tests {
                 devnode_path: Path::new("/dev/ttyS0").to_path_buf(),
             },
             device,
+            extra_data: None,
         }])
         .boxed();
         let mut callback = MockDeviceEventCallback::new();
@@ -233,6 +235,7 @@ mod tests {
                     devnode_path: Path::new("/dev/ttyACM0").to_path_buf(),
                 },
                 device: device.clone(),
+                extra_data: None,
             },
             DeviceEvent {
                 event_type: EventType::Remove,
@@ -240,6 +243,7 @@ mod tests {
                     devnode_path: Path::new("/dev/ttyACM0").to_path_buf(),
                 },
                 device,
+                extra_data: None,
             },
         ])
         .boxed();
@@ -280,6 +284,7 @@ mod tests {
                 devnode_path: Path::new("/dev/alien").to_path_buf(),
             },
             device,
+            extra_data: None,
         }])
         .boxed();
         let mut callback = MockDeviceEventCallback::new();

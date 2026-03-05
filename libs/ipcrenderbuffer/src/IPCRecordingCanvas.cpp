@@ -338,6 +338,7 @@ void IPCRecordingCanvas::onDrawImageRect2(const SkImage* image, const SkRect& sr
 void IPCRecordingCanvas::storeSize(int width, int height) {
     mWidth = width;
     mHeight = height;
+    this->resetCanvas(width, height);
 }
 
 void IPCRecordingCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],

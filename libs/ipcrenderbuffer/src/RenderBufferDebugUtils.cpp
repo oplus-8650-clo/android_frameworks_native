@@ -194,6 +194,16 @@ std::string opToString(IPCRenderBufferOp* op) {
             return co->toString();
             break;
         }
+        case TYPE_BEGINRENDERTARGET: {
+            BeginRenderTargetOp* co = (BeginRenderTargetOp*)op;
+            return co->toString();
+            break;
+        }
+        case TYPE_ENDRENDERTARGET: {
+            BeginRenderTargetOp* co = (BeginRenderTargetOp*)op;
+            return co->toString();
+            break;
+        }
         default: {
             ALOGE("Unexpected op in RenderCommandBuffer");
             break;
@@ -286,6 +296,10 @@ std::string opTypeToString(uint32_t type) {
             return "TYPE_DRAWMESH";
         case TYPE_DRAWPROXYSURFACECONTROL:
             return "TYPE_DRAWPROXYSURFACECONTROL";
+        case TYPE_BEGINRENDERTARGET:
+            return "TYPE_BEGINRENDERTARGET";
+        case TYPE_ENDRENDERTARGET:
+            return "TYPE_ENDRENDERTARGET";
         default:
             return "Unknown op type " + std::to_string(type);
     }

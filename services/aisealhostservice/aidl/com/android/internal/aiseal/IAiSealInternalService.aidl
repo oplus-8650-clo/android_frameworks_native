@@ -24,7 +24,7 @@ interface IAiSealInternalService {
      * Called when CE storage of the given {@code userId} is unlocked.
      * At this point a CE storage of this user in the aiseal VM can also be unlocked.
      */
-    void onUserUnlocking(int userId);
+    void onUserUnlocking(int userId, String kekFile);
 
     /**
      * Called when given {@code userId} is stopped.

@@ -41,7 +41,8 @@ void traceSerializedKey(sk_sp<SkData> data) {
 
 } // anonymous namespace
 
-PipelineCallbackHandler::PipelineCallbackHandler() : mStartTime(std::chrono::steady_clock::now()) {}
+PipelineCallbackHandler::PipelineCallbackHandler(bool storeSerialedKeys)
+      : mStartTime(std::chrono::steady_clock::now()), mStoreSerializedKeys(storeSerialedKeys) {}
 
 void PipelineCallbackHandler::beginWarmup() {
     std::lock_guard<std::mutex> guard(mMutex);
@@ -54,17 +55,21 @@ void PipelineCallbackHandler::endWarmup() {
 
 void PipelineCallbackHandler::add(skgpu::graphite::ContextOptions::PipelineCacheOp op,
                                   const std::string& label, uint32_t uniqueKeyHash,
-                                  bool fromPrecompile, sk_sp<SkData> androidStyleKey) {
+                                  bool fromPrecompile, sk_sp<SkData> serializedKey) {
     std::lock_guard<std::mutex> guard(mMutex);
 
     auto iter = mMap.find(PipelineKey(&label, uniqueKeyHash));
     if (iter != mMap.end()) {
+        // Pre-existing Pipeline - just update its usage(s)
         iter->second->mUses++;
     } else {
         SkASSERT(op == skgpu::graphite::ContextOptions::PipelineCacheOp::kAddingPipeline);
 
-        if (androidStyleKey) {
-            traceSerializedKey(androidStyleKey);
+        if (serializedKey) {
+            traceSerializedKey(serializedKey);
+            if (!mStoreSerializedKeys) {
+                serializedKey.reset();
+            }
         }
 
         std::chrono::milliseconds creationTime =
@@ -72,17 +77,12 @@ void PipelineCallbackHandler::add(skgpu::graphite::ContextOptions::PipelineCache
                         std::chrono::steady_clock::now() - mStartTime);
 
         std::unique_ptr<PipelineData> newData =
-                std::make_unique<PipelineData>(label, creationTime, fromPrecompile, mInWarmup);
+                std::make_unique<PipelineData>(label, creationTime, std::move(serializedKey),
+                                               fromPrecompile, mInWarmup);
 
         mMap.emplace(
                 std::make_pair(PipelineKey(&newData->mLabel, uniqueKeyHash), std::move(newData)));
     }
-}
-
-void PipelineCallbackHandler::reset() {
-    std::lock_guard<std::mutex> guard(mMutex);
-
-    mMap.clear();
 }
 
 void PipelineCallbackHandler::report(const char* label, std::string& result) {
@@ -117,10 +117,11 @@ void PipelineCallbackHandler::report(const char* label, std::string& result) {
                         tmp.size(), label, warmupCount, normalCount, precompileCount);
 
     for (const PipelineData* data : tmp) {
-        base::StringAppendF(&result, "%c %d %.3fs %s\n",
+        base::StringAppendF(&result, "%c %d %.3fs %s %zuB\n",
                             data->mFromPrecompile ? 'P' : (data->mFromWarmup ? 'W' : 'N'),
                             data->mUses, data->mCreationTime.count() / 1000.0f,
-                            data->mLabel.c_str());
+                            data->mLabel.c_str(),
+                            data->mSerializedKey ? data->mSerializedKey.get()->size() : 0);
     }
 }
 

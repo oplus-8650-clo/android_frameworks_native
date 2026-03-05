@@ -1591,7 +1591,7 @@ protected:
         mVerifier = std::make_unique<InputVerifier>("Test verifier");
     }
 
-    base::Result<void> processMotionArgs(NotifyMotionArgs arg) {
+    base::Result<bool> processMotionArgs(NotifyMotionArgs arg) {
         return mVerifier->processMovement(arg.deviceId, arg.eventTime, arg.source, arg.action,
                                           arg.actionButton, arg.getPointerCount(),
                                           arg.pointerProperties.data(), arg.pointerCoords.data(),

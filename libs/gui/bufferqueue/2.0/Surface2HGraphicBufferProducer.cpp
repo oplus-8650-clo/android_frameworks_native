@@ -31,6 +31,8 @@
 #include <ui/Region.h>
 #include <vndk/hardware_buffer.h>
 
+#include <mutex>
+
 #include <gui/bufferqueue/2.0/Surface2HGraphicBufferProducer.h>
 
 namespace android::hardware::graphics::bufferqueue::V2_0::utils {
@@ -90,6 +92,111 @@ struct Surface2HGraphicBufferProducer::Obituary : public hardware::hidl_death_re
 Surface2HGraphicBufferProducer::Surface2HGraphicBufferProducer(const sp<Surface>& base)
       : mBase(base) {
     resetSlotsLocked();
+}
+
+status_t Surface2HGraphicBufferProducer::getConsumerUsage(uint64_t* outUsage) {
+    if (outUsage == nullptr) {
+        ALOGE("Surface2HGraphicBufferProducer::getConsumerUsage outUsage is null");
+        return BAD_VALUE;
+    }
+    return mBase->getConsumerUsage(outUsage);
+}
+
+status_t Surface2HGraphicBufferProducer::attachGraphicBuffer(int* outSlot,
+                                                             const sp<GraphicBuffer>& buffer) {
+    if (outSlot == nullptr) {
+        ALOGE("Surface2HGraphicBufferProducer::attachGraphicBuffer outSlot is null");
+        return BAD_VALUE;
+    }
+    if (buffer == nullptr) {
+        ALOGE("Surface2HGraphicBufferProducer::attachGraphicBuffer buffer is null");
+        return BAD_VALUE;
+    }
+
+    std::scoped_lock _l(mMutex);
+
+    int slot = getFreeOrEvictableSlotLocked();
+    if (slot == BufferQueue::INVALID_BUFFER_SLOT) {
+        return NO_MEMORY;
+    }
+
+    status_t ret = mBase->attachBuffer(buffer);
+    if (ret != NO_ERROR) {
+        ALOGE("Surface2HGraphicBufferProducer::attachGraphicBuffer failed: %d", ret);
+        return ret;
+    }
+
+    mSlotToInfo[slot] = {.isDequeued = true, .buffer = buffer};
+    *outSlot = slot;
+    return ret;
+}
+
+status_t Surface2HGraphicBufferProducer::queueGraphicBuffer(int slot,
+                                                            const SurfaceQueueBufferInput& input,
+                                                            SurfaceQueueBufferOutput* output) {
+    if (slot < 0 || slot >= BufferQueueDefs::NUM_BUFFER_SLOTS) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer Invalid slot: %d", slot);
+        return BAD_VALUE;
+    }
+
+    std::scoped_lock _l(mMutex);
+
+    if (!mSlotToInfo[slot].isDequeued) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer slot %d is not dequeued", slot);
+        return BAD_VALUE;
+    }
+    if (!mSlotToInfo[slot].buffer) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer slot %d has no buffer", slot);
+        return BAD_VALUE;
+    }
+
+    status_t ret = mBase->queueBuffer(mSlotToInfo[slot].buffer, input, output);
+    if (ret != NO_ERROR) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer failed: %d", ret);
+        return ret;
+    }
+    mSlotToInfo[slot].isDequeued = false;
+    return ret;
+}
+
+status_t Surface2HGraphicBufferProducer::cancelBufferSimple(int slot,
+                                                            const sp<::android::Fence>& fence) {
+    if (slot < 0 || slot >= BufferQueueDefs::NUM_BUFFER_SLOTS) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer Invalid slot: %d", slot);
+        return BAD_VALUE;
+    }
+
+    std::scoped_lock _l(mMutex);
+
+    if (!mSlotToInfo[slot].isDequeued) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer slot %d is not dequeued", slot);
+        return BAD_VALUE;
+    }
+    if (!mSlotToInfo[slot].buffer) {
+        ALOGE("Surface2HGraphicBufferProducer::queueGraphicBuffer slot %d has no buffer", slot);
+        return BAD_VALUE;
+    }
+
+    status_t ret = mBase->cancelBuffer(mSlotToInfo[slot].buffer, fence);
+    if (ret != NO_ERROR) {
+        ALOGE("Surface2HGraphicBufferProducer::cancelBufferSimple failed: %d", ret);
+        return ret;
+    }
+    mSlotToInfo[slot].isDequeued = false;
+
+    return ret;
+}
+
+void Surface2HGraphicBufferProducer::enableFrameTimestamps(bool enable) {
+    std::scoped_lock _l(mMutex);
+    mEnableFrameTimestamps = enable;
+    mBase->enableFrameTimestamps(enable);
+}
+
+status_t Surface2HGraphicBufferProducer::getFrameTimestamps(uint64_t frameNumber,
+                                                            nsecs_t* outLatchTime) {
+    return mBase->getFrameTimestamps(frameNumber, nullptr, nullptr, outLatchTime, nullptr, nullptr,
+                                     nullptr, nullptr, nullptr, nullptr);
 }
 
 Return<HStatus> Surface2HGraphicBufferProducer::setMaxDequeuedBufferCount(
@@ -318,6 +425,8 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
         return {};
     }
 
+    std::scoped_lock _l(mMutex);
+
     SurfaceQueueBufferInput sInput{
             .dataSpace = static_cast<android_dataspace>(hInput.dataSpace),
             .crop = {},
@@ -326,7 +435,7 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
             .stickyTransform = static_cast<uint32_t>(hInput.stickyTransform),
             .timestamp = hInput.timestamp,
             .isAutoTimestamp = hInput.isAutoTimestamp,
-            .getFrameTimestamps = false,
+            .getFrameTimestamps = mEnableFrameTimestamps,
     };
     // Convert crop.
     if (!h2b(hInput.crop, &sInput.crop)) {
@@ -346,7 +455,6 @@ Return<void> Surface2HGraphicBufferProducer::queueBuffer(int32_t slot,
         return {};
     }
 
-    std::scoped_lock _l(mMutex);
     sp<GraphicBuffer> buffer = mSlotToInfo[slot].buffer;
     if (!buffer) {
         _hidl_cb(HStatus::BAD_VALUE, QueueBufferOutput{});

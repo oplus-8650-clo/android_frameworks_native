@@ -16,10 +16,11 @@
 
 #pragma once
 
-#include <atomic>
-#include <stdint.h>
 #include <binder/Common.h>
 #include <binder/IBinder.h>
+#include <stdint.h>
+#include <atomic>
+#include <optional>
 
 // ---------------------------------------------------------------------------
 namespace android {
@@ -127,7 +128,17 @@ public:
                                                                 const sp<IBinder>& keepAliveBinder);
 
     LIBBINDER_EXPORTED void setTransactionCodeMap(const TransactionCodeData* data);
+    // Returns the function name OR "#<transactionCode>"
+    // Example "foo" with transaction code 12
+    // When we have the function name it returns "foo"
+    // When we don't have the function name it returns "#12"
     LIBBINDER_EXPORTED std::string getFunctionName(size_t transactionCode);
+    // Returns the function name and the code number. Useful for debugging and
+    // logs.
+    // Example "foo" with transaction code 12
+    // returns "foo, code: 12"
+    // or "UNKNOWN_FUNCTION_NAME, code: 12"
+    LIBBINDER_EXPORTED std::string getFunctionNameAndCode(size_t transactionCode);
 
     class PrivateAccessor {
     public:
@@ -202,6 +213,7 @@ private:
     void removeRpcServerLink(const sp<RpcServerLink>& link);
     [[nodiscard]] status_t startRecordingTransactions(const Parcel& data);
     [[nodiscard]] status_t stopRecordingTransactions();
+    [[nodiscard]] std::optional<std::string> tryGetFunctionName(size_t transactionCode);
 
     static std::atomic<bool> sGlobalInheritRt;
 

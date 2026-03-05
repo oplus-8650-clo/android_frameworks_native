@@ -25,6 +25,7 @@
 
 using android::base::Error;
 using android::base::Result;
+using android::input::ProcessMovementResult;
 using android::input::RustPointerProperties;
 
 using DeviceId = int32_t;
@@ -36,7 +37,7 @@ namespace android {
 InputVerifier::InputVerifier(const std::string& name)
       : mVerifier(android::input::verifier::create(rust::String::lossy(name))) {}
 
-Result<void> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime, int32_t source,
+Result<bool> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime, int32_t source,
                                             int32_t action, int32_t actionButton,
                                             uint32_t pointerCount,
                                             const PointerProperties* pointerProperties,
@@ -47,17 +48,21 @@ Result<void> InputVerifier::processMovement(DeviceId deviceId, nsecs_t eventTime
         rpp.emplace_back(RustPointerProperties{.id = pointerProperties[i].id});
     }
     rust::Slice<const RustPointerProperties> properties{rpp.data(), rpp.size()};
-    rust::String errorMessage =
+    const ProcessMovementResult result =
             android::input::verifier::process_movement(*mVerifier, deviceId, eventTime, source,
                                                        action, actionButton, properties,
                                                        static_cast<uint32_t>(flags),
                                                        static_cast<uint32_t>(buttonState),
                                                        downTime);
-    if (errorMessage.empty()) {
-        return {};
+    if (result.error.empty()) {
+        return result.is_empty;
     } else {
-        return Error() << errorMessage;
+        return Error() << result.error;
     }
+}
+
+bool InputVerifier::isEmpty() const {
+    return android::input::verifier::is_empty(*mVerifier);
 }
 
 std::string InputVerifier::dump() const {

@@ -43,6 +43,15 @@ class Surface2HGraphicBufferProducer : public HGraphicBufferProducer {
 public:
     Surface2HGraphicBufferProducer(const sp<Surface>& base);
 
+    status_t getConsumerUsage(uint64_t* outUsage);
+    status_t attachGraphicBuffer(int* outSlot, const sp<GraphicBuffer>& buffer);
+    status_t queueGraphicBuffer(int slot, const SurfaceQueueBufferInput& input,
+                                SurfaceQueueBufferOutput* output);
+    status_t cancelBufferSimple(int slot, const sp<::android::Fence>& fence);
+    void enableFrameTimestamps(bool enable);
+    status_t getFrameTimestamps(uint64_t frameNumber, nsecs_t* outLatchTime);
+
+    // HGraphicBufferProducer:
     virtual Return<HStatus> setMaxDequeuedBufferCount(int32_t maxDequeuedBuffers) override;
 
     virtual Return<void> requestBuffer(int32_t slot, requestBuffer_cb _hidl_cb) override;
@@ -109,6 +118,7 @@ private:
 
     // Stored on connect or when fetched. Used for debugging.
     std::string mConsumerName GUARDED_BY(mMutex) = "unknown-not-connected";
+    bool mEnableFrameTimestamps GUARDED_BY(mMutex) = false;
 
     sp<Surface> mBase;
     sp<Obituary> mObituary GUARDED_BY(mMutex);

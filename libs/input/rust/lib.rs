@@ -70,9 +70,10 @@ mod ffi {
             flags: u32,
             button_state: u32,
             down_time_nanos: i64,
-        ) -> String;
+        ) -> ProcessMovementResult;
         fn dump(verifier: &InputVerifier) -> String;
         fn reset_device(verifier: &mut InputVerifier, device_id: i32);
+        fn is_empty(verifier: &InputVerifier) -> bool;
     }
 
     #[namespace = "android::input::keyboardClassifier"]
@@ -117,9 +118,15 @@ mod ffi {
         pub version: u16,
         pub descriptor: String,
     }
+
+    #[derive(Debug)]
+    pub struct ProcessMovementResult {
+        pub error: String,
+        pub is_empty: bool,
+    }
 }
 
-use crate::ffi::{RustInputDeviceIdentifier, RustPointerProperties};
+use crate::ffi::{ProcessMovementResult, RustInputDeviceIdentifier, RustPointerProperties};
 
 fn create_input_verifier(name: String) -> Box<InputVerifier> {
     Box::new(InputVerifier::new(
@@ -143,7 +150,7 @@ fn process_movement(
     flags: u32,
     button_state: u32,
     down_time_nanos: i64,
-) -> String {
+) -> ProcessMovementResult {
     let Some(converted_source) = Source::from_bits(source) else {
         panic!(
             "The conversion of source 0x{source:08x} failed, please check if some sources have not \
@@ -175,10 +182,13 @@ fn process_movement(
             MotionAction::ButtonPress { action_button: _ }
             | MotionAction::ButtonRelease { action_button: _ } => {}
             _ => {
-                return format!(
-                    "Invalid {motion_action} event: has action button {motion_action_button:?} but \
-                     is not a button action"
-                );
+                return ProcessMovementResult {
+                    error: format!(
+                        "Invalid {motion_action} event: has action button {motion_action_button:?} \
+                         but is not a button action"
+                    ),
+                    is_empty: false,
+                };
             }
         }
     }
@@ -193,8 +203,8 @@ fn process_movement(
         down_time_nanos,
     });
     match result {
-        Ok(()) => "".to_string(),
-        Err(e) => e,
+        Ok(is_empty) => ProcessMovementResult { error: "".to_string(), is_empty },
+        Err(e) => ProcessMovementResult { error: e, is_empty: false },
     }
 }
 
@@ -204,6 +214,10 @@ fn dump(verifier: &InputVerifier) -> String {
 
 fn reset_device(verifier: &mut InputVerifier, device_id: i32) {
     verifier.reset_device(DeviceId(device_id));
+}
+
+fn is_empty(verifier: &InputVerifier) -> bool {
+    verifier.is_empty()
 }
 
 fn create_keyboard_classifier() -> Box<KeyboardClassifier> {
@@ -289,6 +303,7 @@ mod tests {
             0,
             0,
         )
+        .error
         .contains("button action"));
     }
 
@@ -310,6 +325,7 @@ mod tests {
             input_bindgen::AMOTION_EVENT_BUTTON_PRIMARY,
             0,
         )
+        .error
         .contains("button action"));
     }
 }

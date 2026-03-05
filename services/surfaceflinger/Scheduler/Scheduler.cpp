@@ -32,10 +32,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
-#include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
-#include <android/hardware/configstore/1.1/ISurfaceFlingerConfigs.h>
 #include <common/trace.h>
-#include <configstore/Utils.h>
 #include <ftl/concat.h>
 #include <ftl/enum.h>
 #include <ftl/fake_guard.h>
@@ -1488,8 +1485,9 @@ void Scheduler::demotePacesetterDisplay(PromotionParams params) {
         }
     }
 
-    const PhysicalDisplayId pacesetterId = FTL_FAKE_GUARD(mDisplayLock, *mPacesetterDisplayId);
-    mSchedulerCallback.enableLayerCachingTexturePool(pacesetterId, false);
+    if (const auto pacesetterIdOpt = FTL_FAKE_GUARD(mDisplayLock, mPacesetterDisplayId)) {
+        mSchedulerCallback.enableLayerCachingTexturePool(*pacesetterIdOpt, false);
+    }
 
     // Clear state that depends on the pacesetter's RefreshRateSelector.
     std::scoped_lock lock(mPolicyLock);

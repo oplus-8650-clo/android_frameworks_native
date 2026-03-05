@@ -385,6 +385,11 @@ void RequestedLayerState::merge(const ResolvedComposerState& resolvedComposerSta
         changes |= RequestedLayerState::Changes::Geometry;
     }
 
+    if (clientState.what & layer_state_t::eCompositionFilterFlagChanged) {
+        compositionFilterFlag = clientState.compositionFilterFlag;
+        changes |= RequestedLayerState::Changes::Visibility;
+    }
+
     if (clientState.what & layer_state_t::eStopLayerChanged) {
         stopLayerId = resolvedComposerState.stopLayerId;
         changes |= RequestedLayerState::Changes::Visibility;

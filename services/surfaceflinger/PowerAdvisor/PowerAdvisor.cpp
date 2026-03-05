@@ -112,6 +112,10 @@ void PowerAdvisor::onBootFinished() {
     mBootFinished.store(true);
 }
 
+void PowerAdvisor::setOptimizeForPerformance(bool enabled) {
+    mOptimizeForPerformance.store(enabled);
+}
+
 void PowerAdvisor::setExpensiveRenderingExpected(DisplayId displayId, bool expected) {
     if (!mHasExpensiveRendering) {
         ALOGV("Skipped sending EXPENSIVE_RENDERING because HAL doesn't support it");
@@ -183,7 +187,8 @@ void PowerAdvisor::notifyDisplayUpdateImminentAndCpuReset() {
 
 bool PowerAdvisor::usePowerHintSession() {
     // uses cached value since the underlying support and flag are unlikely to change at runtime
-    return mHintSessionEnabled.value_or(false) && supportsPowerHintSession();
+    return mHintSessionEnabled.value_or(false) && supportsPowerHintSession() &&
+            mOptimizeForPerformance.load();
 }
 
 bool PowerAdvisor::supportsPowerHintSession() {

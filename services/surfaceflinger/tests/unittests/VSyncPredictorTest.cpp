@@ -117,9 +117,7 @@ struct VSyncPredictorTest : testing::Test {
         nsecs_t accuracy = 0;
         {
             std::lock_guard lock(tracker.mMutex);
-            accuracy = tracker.getModelAccuracyLocked(timePoint,
-                                                      VSyncTracker::VsyncTimeSource::Unknown)
-                               .modelErrorNs;
+            accuracy = tracker.getModelAccuracyLocked(timePoint).modelErrorNs;
         }
 
         EXPECT_LT(accuracy, model.slope);

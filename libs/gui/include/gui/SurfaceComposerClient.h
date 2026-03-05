@@ -940,6 +940,8 @@ public:
 
         static status_t sendSurfaceFlushJankDataTransaction(const sp<SurfaceControl>& sc);
         void enableDebugLogCallPoints();
+        Transaction& setCompositionFilterFlag(const sp<SurfaceControl>& sc,
+                                              uint32_t compositionFilterFlag);
     };
 
     status_t clearLayerFrameStats(const sp<IBinder>& token) const;

@@ -666,7 +666,7 @@ status_t InputPublisher::publishMotionEvent(
     const status_t status = mChannel->sendMessage(&msg);
 
     if (status == OK && verifyEvents()) {
-        Result<void> result =
+        Result<bool> result =
                 mInputVerifier.processMovement(deviceId, eventTime, source, action, actionButton,
                                                pointerCount, pointerProperties, pointerCoords,
                                                flags, buttonState, downTime);

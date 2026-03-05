@@ -19,13 +19,10 @@
 #include <functional>
 
 #include <android-base/logging.h>
-#include <com_android_input_flags.h>
 #include <jni.h>
 #include <processgroup/processgroup.h>
 
 namespace android {
-
-namespace input_flags = com::android::input::flags;
 
 namespace {
 
@@ -67,10 +64,9 @@ InputThread::InputThread(std::string name, std::function<void()> loop, std::func
                          bool isInCriticalPath, JavaVM* vm)
       : mThreadWake(wake) {
     std::thread loopThread{[this, name, isInCriticalPath, loop, vm] {
-        if (input_flags::enable_input_policy_profile() && isInCriticalPath) {
-            if (!applyInputEventProfile()) {
-                LOG(ERROR) << "Couldn't apply input policy profile for " << name;
-            }
+        if (isInCriticalPath) {
+            const bool applied = applyInputEventProfile();
+            LOG_IF(ERROR, !applied) << "Couldn't apply input policy profile for " << name;
         }
 
         JvmAttacher jvmAttacher(vm, name);

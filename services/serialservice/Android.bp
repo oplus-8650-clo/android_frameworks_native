@@ -53,6 +53,7 @@ rust_binary {
         "libtracing_subscriber",
     ],
     prefer_rlib: true,
+    required: ["serialservice_overlay"],
 }
 
 rust_library {
