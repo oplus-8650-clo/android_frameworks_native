@@ -335,6 +335,10 @@ bool enable_layer_caching(bool defaultValue) {
     return SurfaceFlingerProperties::enable_layer_caching().value_or(defaultValue);
 }
 
+bool force_hole_punch(bool defaultValue) {
+    return SurfaceFlingerProperties::force_hole_punch().value_or(defaultValue);
+}
+
 bool ignore_hdr_camera_layers(bool defaultValue) {
     return SurfaceFlingerProperties::ignore_hdr_camera_layers().value_or(defaultValue);
 }

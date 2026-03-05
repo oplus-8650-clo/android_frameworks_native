@@ -370,7 +370,6 @@ cc_binary {
     defaults: [
         "libsurfaceflinger_binary",
         "libqtisurfaceflingerextension_defaults",
-        "no_bti",
     ],
 // QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     init_rc: ["surfaceflinger.rc"],
