@@ -277,6 +277,18 @@ sp<Surface> Surface::fromHidl(
 }
 #endif
 
+sp<Surface> Surface::createEvilTwin() {
+    ATRACE_CALL();
+    std::scoped_lock _l(mMutex);
+
+    SURF_LOGE("Surface::createEvilTwin created. Previous surface %s connected. This operation is "
+              "unsupported and the behavior is undefined.",
+              mConnectedToCpu ? "was" : "was not");
+
+    return sp<Surface>::make(mGraphicBufferProducer, mProducerControlledByApp,
+                             mSurfaceControlHandle);
+}
+
 bool Surface::areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b) {
     if (a == b) {
         return true;

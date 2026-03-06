@@ -723,6 +723,8 @@ private:
                                          const scheduler::FrameTargeters&) override
             REQUIRES(kMainThreadContext);
 
+    void traceCompositionSummary(const std::vector<std::pair<Layer*, LayerFE*>>& layers);
+
     void sample() override;
 
     // ISchedulerCallback overrides:

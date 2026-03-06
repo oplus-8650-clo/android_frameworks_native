@@ -3514,76 +3514,19 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Display Changes");
     }
 
-    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
-        ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
-        auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
-
-        uint64_t prevOverrideBufferId = 0;
-        for (auto& [layer, layerFE] : layers) {
-            CompositionResult compositionResult{layerFE->stealCompositionResult()};
-            if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
-                if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
-                    // add a space to separate displays
-                    compositionSummary.push_back(' ');
-                }
-                lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
-            }
-
-            // If there are N layers in a cached set they should all share the same buffer id.
-            // The first layer in the cached set will be not skipped and layers 1..N-1 will be
-            // skipped. We expect all layers in the cached set to be marked as composited by HWC.
-            // Here is a made up example of how it is visualized
-            //
-            //      [b:rrc][s:cc]
-            //
-            // This should be interpreted to mean that there are 2 cached sets.
-            // So there are only 2 non skipped layers -- b and s.
-            // The layers rrc and cc are flattened into layers b and s respectively.
-            const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
-            if (hwcState.overrideBufferId != prevOverrideBufferId) {
-                // End the existing run.
-                if (prevOverrideBufferId) {
-                    compositionSummary.push_back(']');
-                }
-                // Start a new run.
-                if (hwcState.overrideBufferId) {
-                    compositionSummary.push_back('[');
-                }
-            }
-
-            compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
-
-            if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
-                compositionSummary.push_back(':');
-            }
-            prevOverrideBufferId = hwcState.overrideBufferId;
-
-            if (layerFE->mSnapshot->hasEffect()) {
-                compositedWorkload |= adpf::Workload::EFFECTS;
-            }
-
-            if (compositionResult.lastClientCompositionFence) {
-                layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
-            }
-            if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
-                mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
-            }
-        }
-        // End the last run.
-        if (prevOverrideBufferId) {
-            compositionSummary.push_back(']');
+    traceCompositionSummary(layers);
+    for (auto& [layer, layerFE] : layers) {
+        CompositionResult compositionResult{layerFE->stealCompositionResult()};
+        if (layerFE->mSnapshot->hasEffect()) {
+            compositedWorkload |= adpf::Workload::EFFECTS;
         }
 
-        // Concisely describe the layers composited this frame using single chars. GPU composited
-        // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
-        // shadow, etc.). This provides a snapshot of the compositing workload.
-        SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
-                                  ftl::Concat("Layers: ", layers.size(), " ",
-                                              ftl::truncated<
-                                                      WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
-                                                      std::string_view(compositionSummary.begin(),
-                                                                       compositionSummary.size())))
-                                          .c_str());
+        if (compositionResult.lastClientCompositionFence) {
+            layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
+        }
+        if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
+            mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
+        }
     }
 
     mPowerAdvisor->setCompositedWorkload(compositedWorkload);
@@ -3706,6 +3649,71 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     }
 
     return resultsPerDisplay;
+}
+
+void SurfaceFlinger::traceCompositionSummary(
+        const std::vector<std::pair<Layer*, LayerFE*>>& layers) {
+    if (!SFTRACE_ENABLED()) {
+        return;
+    }
+
+    ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
+    auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
+    uint64_t prevOverrideBufferId = 0;
+
+    for (const auto& [layer, layerFE] : layers) {
+        if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
+            if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
+                // add a space to separate displays
+                compositionSummary.push_back(' ');
+            }
+            lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
+        }
+
+        // If there are N layers in a cached set they should all share the same buffer id.
+        // The first layer in the cached set will be not skipped and layers 1..N-1 will be
+        // skipped. We expect all layers in the cached set to be marked as composited by HWC.
+        // Here is a made up example of how it is visualized
+        //
+        //      [b:rrc][s:cc]
+        //
+        // This should be interpreted to mean that there are 2 cached sets.
+        // So there are only 2 non skipped layers -- b and s.
+        // The layers rrc and cc are flattened into layers b and s respectively.
+        const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
+        if (hwcState.overrideBufferId != prevOverrideBufferId) {
+            // End the existing run.
+            if (prevOverrideBufferId) {
+                compositionSummary.push_back(']');
+            }
+            // Start a new run.
+            if (hwcState.overrideBufferId) {
+                compositionSummary.push_back('[');
+            }
+        }
+
+        compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
+
+        if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
+            compositionSummary.push_back(':');
+        }
+        prevOverrideBufferId = hwcState.overrideBufferId;
+    }
+
+    // End the last run.
+    if (prevOverrideBufferId) {
+        compositionSummary.push_back(']');
+    }
+
+    // Concisely describe the layers composited this frame using single chars. GPU composited
+    // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
+    // shadow, etc.). This provides a snapshot of the compositing workload.
+    SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
+                              ftl::Concat("Layers: ", layers.size(), " ",
+                                          ftl::truncated<WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
+                                                  std::string_view(compositionSummary.begin(),
+                                                                   compositionSummary.size())))
+                                      .c_str());
 }
 
 void SurfaceFlinger::prepareLayersForComposition(

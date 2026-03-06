@@ -228,6 +228,15 @@ public:
             const sp<hardware::graphics::bufferqueue::V2_0::IGraphicBufferProducer>& token);
 #endif
 
+    /**
+     * This function should be avoided at all costs.
+     *
+     * It creates a new Surface that shares the same underlying IGraphicBufferProducer
+     * as this Surface. This can lead to unexpected behavior, as both surfaces will
+     * be connected to the same producer.
+     */
+    sp<Surface> createEvilTwin();
+
     /*
      * Null-safe check of whether two surfaces represent the same underlying object. Roughly
      * equivalent to ensuring the underlying binder objects are the same.
