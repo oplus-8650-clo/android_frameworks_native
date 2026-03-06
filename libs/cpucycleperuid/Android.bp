@@ -47,6 +47,10 @@ rust_ffi_shared {
             enabled: true,
         },
     },
+    sanitize: {
+        // Temporary disable due to b/489459325
+        fuzzer: false,
+    },
 }
 
 rust_test {

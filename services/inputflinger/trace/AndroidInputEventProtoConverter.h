@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <input/Input.h>
 #include <perfetto/config/android/android_input_event_config.pbzero.h>
 #include <perfetto/trace/android/android_input_event.pbzero.h>
 #include <perfetto/trace/evdev.pbzero.h>
@@ -253,6 +254,11 @@ public:
                 slotEntry->set_value(slotValues[slot]);
             }
         }
+    }
+
+    static void toProtoEvdevDeviceRemovalEvent(RawDeviceId deviceId, ProtoEvdev& outProto) {
+        outProto.set_device_id(deviceId);
+        outProto.set_remove_event();
     }
 
     static impl::TraceConfig parseConfig(ProtoConfigDecoder& protoConfig) {

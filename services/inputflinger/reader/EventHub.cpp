@@ -3048,6 +3048,10 @@ void EventHub::closeDeviceLocked(Device& device) {
     device.controllerNumber = 0;
     device.close();
 
+    if (mTracer) {
+        mTracer->traceDeviceRemoval(systemTime(SYSTEM_TIME_MONOTONIC), device.id);
+    }
+
     // Try to remove this device from mDevices.
     if (auto it = mDevices.find(device.id); it != mDevices.end()) {
         mClosingDevices.push_back(std::move(mDevices[device.id]));

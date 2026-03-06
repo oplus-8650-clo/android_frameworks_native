@@ -160,6 +160,9 @@ public:
 
     /** Trace an evdev device being registered with the system. */
     virtual void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice& device) = 0;
+
+    /** Trace an evdev device being removed from the system. */
+    virtual void traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) = 0;
 };
 
 } // namespace android::input_trace

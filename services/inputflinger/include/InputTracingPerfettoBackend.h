@@ -23,9 +23,9 @@
 
 #include <android/content/pm/IPackageManagerNative.h>
 #include <ftl/flags.h>
+#include <input/Input.h>
 #include <perfetto/tracing.h>
 #include <mutex>
-#include <set>
 
 namespace android::input_trace::impl {
 
@@ -62,6 +62,7 @@ public:
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
     void traceRawEvent(const RawEvent&) override;
     void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice&) override;
+    void traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) override;
 
 private:
     // Implementation of the perfetto data source.

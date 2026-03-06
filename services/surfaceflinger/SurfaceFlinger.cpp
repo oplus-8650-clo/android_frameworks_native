@@ -2528,6 +2528,13 @@ void SurfaceFlinger::onComposerHalVsync(hal::HWDisplayId hwcDisplayId, int64_t t
                          ? ftl::Concat(__func__, ' ', hwcDisplayId, ' ', *vsyncPeriod, "ns").c_str()
                          : ftl::Concat(__func__, ' ', hwcDisplayId).c_str());
 
+    if (timestamp <= 0) {
+        ALOGW("%s: Ignoring invalid timestamp %" PRId64 " from HWC display %" PRIu64, __func__,
+              timestamp, hwcDisplayId);
+        SFTRACE_FORMAT_INSTANT("%s: Ignoring invalid timestamp %" PRId64, __func__, timestamp);
+        return;
+    }
+
     Mutex::Autolock lock(mStateLock);
     if (const auto displayIdOpt = getHwComposer().onVsync(hwcDisplayId, timestamp)) {
         REQUIRE_SCHEDULER;
@@ -3507,76 +3514,19 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Display Changes");
     }
 
-    if (CC_UNLIKELY(SFTRACE_ENABLED())) {
-        ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
-        auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
-
-        uint64_t prevOverrideBufferId = 0;
-        for (auto& [layer, layerFE] : layers) {
-            CompositionResult compositionResult{layerFE->stealCompositionResult()};
-            if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
-                if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
-                    // add a space to separate displays
-                    compositionSummary.push_back(' ');
-                }
-                lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
-            }
-
-            // If there are N layers in a cached set they should all share the same buffer id.
-            // The first layer in the cached set will be not skipped and layers 1..N-1 will be
-            // skipped. We expect all layers in the cached set to be marked as composited by HWC.
-            // Here is a made up example of how it is visualized
-            //
-            //      [b:rrc][s:cc]
-            //
-            // This should be interpreted to mean that there are 2 cached sets.
-            // So there are only 2 non skipped layers -- b and s.
-            // The layers rrc and cc are flattened into layers b and s respectively.
-            const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
-            if (hwcState.overrideBufferId != prevOverrideBufferId) {
-                // End the existing run.
-                if (prevOverrideBufferId) {
-                    compositionSummary.push_back(']');
-                }
-                // Start a new run.
-                if (hwcState.overrideBufferId) {
-                    compositionSummary.push_back('[');
-                }
-            }
-
-            compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
-
-            if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
-                compositionSummary.push_back(':');
-            }
-            prevOverrideBufferId = hwcState.overrideBufferId;
-
-            if (layerFE->mSnapshot->hasEffect()) {
-                compositedWorkload |= adpf::Workload::EFFECTS;
-            }
-
-            if (compositionResult.lastClientCompositionFence) {
-                layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
-            }
-            if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
-                mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
-            }
-        }
-        // End the last run.
-        if (prevOverrideBufferId) {
-            compositionSummary.push_back(']');
+    traceCompositionSummary(layers);
+    for (auto& [layer, layerFE] : layers) {
+        CompositionResult compositionResult{layerFE->stealCompositionResult()};
+        if (layerFE->mSnapshot->hasEffect()) {
+            compositedWorkload |= adpf::Workload::EFFECTS;
         }
 
-        // Concisely describe the layers composited this frame using single chars. GPU composited
-        // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
-        // shadow, etc.). This provides a snapshot of the compositing workload.
-        SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
-                                  ftl::Concat("Layers: ", layers.size(), " ",
-                                              ftl::truncated<
-                                                      WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
-                                                      std::string_view(compositionSummary.begin(),
-                                                                       compositionSummary.size())))
-                                          .c_str());
+        if (compositionResult.lastClientCompositionFence) {
+            layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
+        }
+        if (com_android_graphics_libgui_flags_apply_picture_profiles()) {
+            mActivePictureTracker.onLayerComposed(*layer, *layerFE, compositionResult);
+        }
     }
 
     mPowerAdvisor->setCompositedWorkload(compositedWorkload);
@@ -3699,6 +3649,71 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     }
 
     return resultsPerDisplay;
+}
+
+void SurfaceFlinger::traceCompositionSummary(
+        const std::vector<std::pair<Layer*, LayerFE*>>& layers) {
+    if (!SFTRACE_ENABLED()) {
+        return;
+    }
+
+    ftl::StaticVector<char, WorkloadTracer::COMPOSITION_SUMMARY_SIZE> compositionSummary;
+    auto lastLayerStack = ui::UNASSIGNED_LAYER_STACK;
+    uint64_t prevOverrideBufferId = 0;
+
+    for (const auto& [layer, layerFE] : layers) {
+        if (lastLayerStack != layerFE->mSnapshot->outputFilter.layerStack) {
+            if (lastLayerStack != ui::UNASSIGNED_LAYER_STACK) {
+                // add a space to separate displays
+                compositionSummary.push_back(' ');
+            }
+            lastLayerStack = layerFE->mSnapshot->outputFilter.layerStack;
+        }
+
+        // If there are N layers in a cached set they should all share the same buffer id.
+        // The first layer in the cached set will be not skipped and layers 1..N-1 will be
+        // skipped. We expect all layers in the cached set to be marked as composited by HWC.
+        // Here is a made up example of how it is visualized
+        //
+        //      [b:rrc][s:cc]
+        //
+        // This should be interpreted to mean that there are 2 cached sets.
+        // So there are only 2 non skipped layers -- b and s.
+        // The layers rrc and cc are flattened into layers b and s respectively.
+        const LayerFE::HwcLayerDebugState& hwcState = layerFE->getLastHwcState();
+        if (hwcState.overrideBufferId != prevOverrideBufferId) {
+            // End the existing run.
+            if (prevOverrideBufferId) {
+                compositionSummary.push_back(']');
+            }
+            // Start a new run.
+            if (hwcState.overrideBufferId) {
+                compositionSummary.push_back('[');
+            }
+        }
+
+        compositionSummary.push_back(layerFE->mSnapshot->classifyCompositionForDebug(hwcState));
+
+        if (hwcState.overrideBufferId && !hwcState.wasSkipped) {
+            compositionSummary.push_back(':');
+        }
+        prevOverrideBufferId = hwcState.overrideBufferId;
+    }
+
+    // End the last run.
+    if (prevOverrideBufferId) {
+        compositionSummary.push_back(']');
+    }
+
+    // Concisely describe the layers composited this frame using single chars. GPU composited
+    // layers are uppercase, DPU composited are lowercase. Special chars denote effects (blur,
+    // shadow, etc.). This provides a snapshot of the compositing workload.
+    SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
+                              ftl::Concat("Layers: ", layers.size(), " ",
+                                          ftl::truncated<WorkloadTracer::COMPOSITION_SUMMARY_SIZE>(
+                                                  std::string_view(compositionSummary.begin(),
+                                                                   compositionSummary.size())))
+                                      .c_str());
 }
 
 void SurfaceFlinger::prepareLayersForComposition(
@@ -5127,8 +5142,16 @@ void SurfaceFlinger::requestHardwareVsync(PhysicalDisplayId displayId, bool enab
     // Query HWC for the actual Vsync time and provide it to the scheduler when enabled.
     if (enable && FlagManager::getInstance().get_display_known_vsync_sample_enabled()) {
         if (auto sample = getHwComposer().getDisplayKnownVsyncSample(displayId)) {
-            mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs,
-                                        VSyncTracker::VsyncTimeSource::HwVsyncQuery);
+            if (sample->timestampNs > 0) {
+                mScheduler->addResyncSample(displayId, sample->timestampNs, sample->vsyncPeriodNs,
+                                            VSyncTracker::VsyncTimeSource::HwVsyncQuery);
+            } else {
+                ALOGW("%s: Ignoring invalid known Vsync sample timestamp %" PRId64
+                      " for display %s",
+                      __func__, sample->timestampNs, to_string(displayId).c_str());
+                SFTRACE_FORMAT_INSTANT("%s: Ignoring invalid timestamp %" PRId64, __func__,
+                                       sample->timestampNs);
+            }
         }
     }
 }
@@ -6612,12 +6635,21 @@ SurfaceFlinger::setPhysicalDisplayPowerModeAsync(const sp<DisplayDevice>& displa
     if (currentMode == mode) {
         return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
     }
-    mPowerModeChangeInProgress = true;
 
-    const bool isInternalDisplay = (ftl::FakeGuard(mStateLock),
-                                    mPhysicalDisplays.get(displayId)
-                                            .transform(&PhysicalDisplay::isInternal)
-                                            .value_or(false));
+    const auto physicalDisplayOpt = (ftl::FakeGuard(mStateLock), mPhysicalDisplays.get(displayId));
+
+    // SF::processHotplugDisconnect() does not immediately propagate the display removal to
+    // the Scheduler and CompositionEngine, but instead requires a call to
+    // processDisplayChangesLocked() to process the rest in the next commit. Check that the
+    // display still exists in SurfaceFlinger before setting the power mode.
+    if (!physicalDisplayOpt.has_value()) {
+        return {ftl::yield<status_t>(NO_ERROR), ftl::FinalizerStd()};
+    }
+
+    const bool isInternalDisplay =
+            physicalDisplayOpt.transform(&PhysicalDisplay::isInternal).value_or(false);
+
+    mPowerModeChangeInProgress = true;
 
     const bool couldRefresh = display->isRefreshable();
     display->setPowerMode(mode);

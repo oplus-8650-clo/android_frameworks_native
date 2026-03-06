@@ -76,24 +76,38 @@ impl Authorizer {
         if let Some(rules) = policy.rules_by_state.get(&state) {
             for rule in rules {
                 if self.device_matches_rule(device_with_state, rule) {
-                    let authorize = rule.action == Action::Allow;
                     debug!(
                         "Device {:?} {:?} by policy",
                         &device_with_state.info.productName, rule.action
                     );
                     debug!("USB device info with state: {:#?}", device_with_state);
-                    if let Err(e) =
-                        self.authorize_device_via_sysfs(&device_with_state.info.syspath, authorize)
-                    {
-                        error!(
-                            "Failed to set authorization for device {}: {}",
-                            device_with_state.info.syspath, e
-                        );
+                    match rule.action {
+                        // For these actions, apply the authorized value right away.
+                        // In the case of Defer, we will keep denying it until it is approved (as
+                        // devices should be DENIED_AND_DEFERRED).
+                        Action::Allow | Action::Defer | Action::Deny | Action::Remove => {
+                            let authorize = rule.action == Action::Allow;
+
+                            if let Err(e) = self.authorize_device_via_sysfs(
+                                &device_with_state.info.syspath,
+                                authorize,
+                            ) {
+                                error!(
+                                    "Failed to set authorization for device {}: {}",
+                                    device_with_state.info.syspath, e
+                                );
+                            }
+                        }
+
+                        // Do nothing as a client needs to tell us what action to take.
+                        Action::AllowPersisted | Action::Ask => (),
                     }
+
                     return rule.action.clone();
                 }
             }
         }
+
         // If no matching policy is found, use the default rule if it exists. Otherwise, deny the
         // device.
         let default_action = if let Some(default_rule) = &policy.default_rule {
