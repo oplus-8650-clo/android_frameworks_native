@@ -1213,7 +1213,8 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     }
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     QtiDolphinWrapper* qtiDolphinWrapper = QtiDolphinWrapper::qtiGetDolphinWrapper();
-    if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinFilterBuffer) {
+    if (qtiDolphinWrapper && QtiDolphinWrapper::sQuickTouch &&
+            qtiDolphinWrapper->qtiDolphinFilterBuffer) {
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
         qtiDolphinWrapper->qtiDolphinFilterBuffer(mState.mIsAutoTimestamp, mState.mDesiredPresentTime, mState.mFlags);
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming

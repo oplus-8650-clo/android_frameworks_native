@@ -15,6 +15,7 @@
 namespace android {
 
 static bool sIsValid = false;
+bool QtiDolphinWrapper::sQuickTouch = true;
 
 QtiDolphinWrapper::QtiDolphinWrapper() {
     sIsValid = true;
@@ -23,12 +24,15 @@ QtiDolphinWrapper::QtiDolphinWrapper() {
         ALOGW("Unable to open libdolphin.so: %s.", dlerror());
     } else {
         qtiDolphinAppInit = (void (*) ())dlsym(mQtiDolphinHandle, "aDolphinAppInit");
+        qtiDolphinSetVsyncTime = (void (*) (nsecs_t))dlsym(mQtiDolphinHandle,
+                "aDolphinSetVsyncTime");
         qtiDolphinSmartTouchActive = (bool (*) ())dlsym(mQtiDolphinHandle,
                 "aDolphinSmartTouchActive");
         qtiDolphinQueueBuffer = (void (*) (bool))dlsym(mQtiDolphinHandle, "aDolphinQueueBuffer");
         qtiDolphinFilterBuffer = (void (*) (bool&, nsecs_t&, uint32_t&))dlsym(mQtiDolphinHandle,
                  "aDolphinFilterBuffer");
-        bool functionsFound = qtiDolphinAppInit && qtiDolphinSmartTouchActive &&
+        bool functionsFound = qtiDolphinAppInit && qtiDolphinSetVsyncTime &&
+                              qtiDolphinSmartTouchActive &&
                               qtiDolphinQueueBuffer && qtiDolphinFilterBuffer;
         if (functionsFound) {
             qtiDolphinAppInit();
@@ -36,6 +40,7 @@ QtiDolphinWrapper::QtiDolphinWrapper() {
             ALOGW("Unable to find dolphin functions!");
             dlclose(mQtiDolphinHandle);
             qtiDolphinAppInit = nullptr;
+            qtiDolphinSetVsyncTime = nullptr;
             qtiDolphinSmartTouchActive = nullptr;
             qtiDolphinQueueBuffer = nullptr;
             qtiDolphinFilterBuffer = nullptr;
