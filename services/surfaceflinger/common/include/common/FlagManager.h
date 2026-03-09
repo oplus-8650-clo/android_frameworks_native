@@ -77,6 +77,7 @@ public:
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
     bool monitor_buffer_fences() const;
+    bool mrr_full_frame_rate_list() const;
     bool offload_gpu_composition() const;
     bool re_powered_off_displays_inform_cache_budgets() const;
     bool readback_screenshot() const;

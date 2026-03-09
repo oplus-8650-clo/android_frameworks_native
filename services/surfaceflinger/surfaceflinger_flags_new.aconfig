@@ -315,6 +315,16 @@ flag {
 } # md_degrade_hdr
 
 flag {
+  name: "mrr_full_frame_rate_list"
+  namespace: "core_graphics"
+  description: "Enables all native refresh rates in the full frame rate list for MRR devices"
+  bug: "453004817"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # mrr_full_frame_rate_list
+
+flag {
   name: "mirror_uid_filtering"
   namespace: "window_surfaces"
   description: "Enables UID filtering when building layer snapshots of mirrors. Layers that have different UID from the mirror root's will be dropped "

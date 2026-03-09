@@ -124,7 +124,7 @@ class OverrideLayerNames {
         // Add platform and OEM layer names
         uint32_t oplStartIdx = GetEnumeratedLayerCount();
         for (uint32_t i = oplStartIdx; i < oemAndPlatformLayerCount; i++) {
-            names_[i] = GetLayerProperties(GetLayer(i)).layerName;
+            names_[name_count_++] = GetLayerProperties(GetLayer(i)).layerName;
         }
 
         return VK_SUCCESS;

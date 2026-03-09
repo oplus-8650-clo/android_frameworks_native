@@ -4755,5 +4755,203 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesAnchorListArr480) {
                 << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
     }
 }
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRRRealDevice) {
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    const DisplayModeId kModeId0{0};
+    const DisplayModeId kModeId1{1};
+    const DisplayModeId kModeId2{2};
+    const DisplayModeId kModeId3{3};
+    const DisplayModeId kModeId4{4};
+    const DisplayModeId kModeId5{5};
+    const DisplayModeId kModeId6{6};
+    const DisplayModeId kModeId7{7};
+    const DisplayModeId kModeId8{8};
+    const DisplayModeId kModeId9{9};
+    const DisplayModeId kModeId10{10};
+    const DisplayModeId kModeId11{11};
+    const DisplayModeId kModeId12{12};
+    const DisplayModeId kModeId13{13};
+
+    const ui::Size kRes1080p{1920, 1080};
+    const ui::Size kRes4K{3840, 2160};
+    const ui::Size kRes720p{1280, 720};
+
+    // Modes from a real MRR device.
+    DisplayModes modes = makeModes(createDisplayMode(kModeId0, 50_Hz, 0, kRes1080p),
+                                   createDisplayMode(kModeId1, 60_Hz, 6, kRes4K),
+                                   createDisplayMode(kModeId2, 59.94_Hz, 7, kRes4K),
+                                   createDisplayMode(kModeId3, 50_Hz, 8, kRes4K),
+                                   createDisplayMode(kModeId4, 30_Hz, 9, kRes4K),
+                                   createDisplayMode(kModeId5, 29.97_Hz, 10, kRes4K),
+                                   createDisplayMode(kModeId6, 25_Hz, 11, kRes4K),
+                                   createDisplayMode(kModeId7, 24_Hz, 12, kRes4K),
+                                   createDisplayMode(kModeId8, 23.98_Hz, 13, kRes4K),
+                                   createDisplayMode(kModeId9, 24_Hz, 19, kRes1080p),
+                                   createDisplayMode(kModeId10, 23.98_Hz, 20, kRes1080p),
+                                   createDisplayMode(kModeId11, 60_Hz, 27, kRes720p),
+                                   createDisplayMode(kModeId12, 59.94_Hz, 28, kRes720p),
+                                   createDisplayMode(kModeId13, 50_Hz, 29, kRes720p));
+
+    auto selector = createSelector(std::move(modes), kModeId2);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {60.0f, 59.94f, 50.0f, 30.0f, 29.97f, 25.0f, 24.0f, 23.98f};
+    EXPECT_GE(allSupportedFrameRates.size(), expected.size());
+
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRR_60_90) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    auto selector = createSelector(kModes_60_90, kModeId60);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {90.0f, 60.0f, 45.0f, 30.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRR_120_60) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    auto selector = createSelector(kModes_60_120, kModeId120);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {120.0f, 60.0f, 40.0f, 30.0f, 24.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+
+    for (size_t i = 0; i < allSupportedFrameRates.size(); i++) {
+        for (size_t j = i + 1; j < allSupportedFrameRates.size(); j++) {
+            EXPECT_GT(std::abs(allSupportedFrameRates[i] - allSupportedFrameRates[j]), 0.01f);
+        }
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesVRR_240_120) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    const DisplayModeId kModeId0{0};
+    const DisplayModeId kModeId1{1};
+
+    DisplayModes modes =
+            makeModes(createVrrDisplayMode(kModeId0, 240_Hz,
+                                           hal::VrrConfig{.minFrameIntervalNs =
+                                                                  (120_Hz).getPeriodNsecs()},
+                                           0),
+                      createVrrDisplayMode(kModeId1, 120_Hz,
+                                           hal::VrrConfig{.minFrameIntervalNs =
+                                                                  (120_Hz).getPeriodNsecs()},
+                                           1));
+
+    auto selector = createSelector(std::move(modes), kModeId1);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {120.0f, 60.0f, 40.0f, 30.0f, 24.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRR_MixedResolution) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    auto selector = createSelector(kModes_60_90_4K, kModeId60);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {60.0f, 30.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+
+    const std::vector<float> notExpected = {90.0f, 45.0f};
+    for (float rate : notExpected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Not(testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f)))));
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRR_DifferentGroupsSamePeak) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    const DisplayModeId kModeId0{0};
+    const DisplayModeId kModeId1{1};
+
+    DisplayModes modes =
+            makeModes(createDisplayMode(kModeId0, 60_Hz, 0), createDisplayMode(kModeId1, 60_Hz, 1));
+
+    auto selector = createSelector(std::move(modes), kModeId0);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {60.0f, 30.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesVRR_SmallVsyncDiff) {
+    if (!GetParam().enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+
+    const DisplayModeId kModeId0{0};
+    const DisplayModeId kModeId1{1};
+
+    DisplayModes modes =
+            makeModes(createVrrDisplayMode(kModeId0, 60_Hz,
+                                           hal::VrrConfig{.minFrameIntervalNs =
+                                                                  (60_Hz).getPeriodNsecs()},
+                                           0),
+                      createVrrDisplayMode(kModeId1, 59.94_Hz,
+                                           hal::VrrConfig{.minFrameIntervalNs =
+                                                                  (60_Hz).getPeriodNsecs()},
+                                           1));
+
+    auto selector = createSelector(std::move(modes), kModeId0);
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+
+    const std::vector<float> expected = {60.0f, 30.0f, 20.0f};
+    for (float rate : expected) {
+        EXPECT_THAT(allSupportedFrameRates,
+                    testing::Contains(
+                            testing::AllOf(testing::Ge(rate - 0.01f), testing::Le(rate + 0.01f))));
+    }
+}
 } // namespace
 } // namespace android::scheduler
