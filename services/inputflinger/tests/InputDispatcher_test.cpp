@@ -10709,6 +10709,133 @@ TEST_F(InputDispatcherMultiWindowSameTokenTests, HoverIntoClone) {
                        {getPointInWindow(mWindow2->getInfo(), PointF{150, 150})});
 }
 
+/**
+ * Set up a SPY window with a clone, and place a regular window underneath. Tap an area that goes
+ * through all 3 windows. Ensure that SPY and REGULAR window correctly receive the event. This test
+ * reproduces a crash in InputDispatcher.
+ *                                                     \/
+ * SPY CLONE (mWindow2)                         ------------------------
+ *
+ * SPY (ORIGINAL) (mWindow1)                         -------------------
+ *
+ * REGULAR WINDOW                                    ------------------------------
+ */
+TEST_F(InputDispatcherMultiWindowSameTokenTests, TapClonedSpyAndSpyWindow) {
+    // Make mWindow1 and mWindow2 SPY windows with overlapping touchable regions.
+    mWindow1->setSpy(true);
+    mWindow1->setTrustedOverlay(true);
+    mWindow1->setFrame(Rect(0, 0, 50, 50));
+
+    mWindow2->setSpy(true);
+    mWindow2->setTrustedOverlay(true);
+    mWindow2->setFrame(Rect(10, 10, 50, 50));
+    mDispatcher->onWindowInfosChanged({{*mWindow2->getInfo(), *mWindow1->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window.
+    // Since mWindow1 and mWindow2 are clones, either one can be used to consume the event. However,
+    // due to input event tracing attribution checks, we must use the actual touched window
+    NotifyMotionArgs down1 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(20).y(20))
+                                     .build();
+
+    mDispatcher->notifyMotion(down1);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(20).y(20))
+                                      .downTime(down1.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+
+    // Add another, regular window underneath both SPY windows.
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> regular = sp<FakeWindowHandle>::make(application, mDispatcher, "regular",
+                                                              ui::LogicalDisplayId::DEFAULT);
+    regular->setFrame(Rect(10, 10, 70, 70));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*mWindow2->getInfo(), *mWindow1->getInfo(), *regular->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window and normal window.
+    NotifyMotionArgs down2 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(30).y(30))
+                                     .build();
+
+    mDispatcher->notifyMotion(down2);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(30).y(30))
+                                      .downTime(down2.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+
+    // Test tap on outside of Spy window.
+    NotifyMotionArgs down3 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(60).y(60))
+                                     .build();
+
+    mDispatcher->notifyMotion(down3);
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(60).y(60))
+                                      .downTime(down3.downTime)
+                                      .build());
+    mWindow2->assertNoEvents();
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+}
+
+/**
+ * Set up a SPY window with a clone, and place a regular window underneath. Tap an area that goes
+ * through SPY CLONE and the regular window, but not the original spy. Ensure that SPY and REGULAR
+ * windows correctly receive the event. This test ensures that the InputDispatcher isn't treating
+ * cloned SPY in a special manner.
+ *                                      \/
+ * SPY CLONE (mWindow2)               ------------------------
+ *
+ * SPY (ORIGINAL) (mWindow1)                              -------------------
+ *
+ * REGULAR WINDOW              -------------------------------
+ */
+TEST_F(InputDispatcherMultiWindowSameTokenTests, TapOnlyClonedSpyWindow) {
+    // Make mWindow1 and mWindow2 SPY windows with overlapping touchable regions.
+    mWindow1->setSpy(true);
+    mWindow1->setTrustedOverlay(true);
+    mWindow1->setFrame(Rect(40, 40, 80, 80));
+
+    mWindow2->setSpy(true);
+    mWindow2->setTrustedOverlay(true);
+    mWindow2->setFrame(Rect(10, 10, 50, 50));
+
+    // Add another, regular window underneath both SPY windows.
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> regular = sp<FakeWindowHandle>::make(application, mDispatcher, "regular",
+                                                              ui::LogicalDisplayId::DEFAULT);
+    regular->setFrame(Rect(0, 0, 50, 50));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*mWindow2->getInfo(), *mWindow1->getInfo(), *regular->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window and normal window.
+    NotifyMotionArgs down = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                    .pointer(PointerBuilder(0, ToolType::FINGER).x(15).y(15))
+                                    .build();
+
+    mDispatcher->notifyMotion(down);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(15).y(15))
+                                      .downTime(down.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+}
+
 class InputDispatcherSingleWindowAnr : public InputDispatcherTest {
     virtual void SetUp() override {
         InputDispatcherTest::SetUp();

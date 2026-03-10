@@ -518,8 +518,8 @@ private:
     }
 
     std::vector<FrameRateMode> createFrameRateModes(
-            const Policy&, std::function<bool(const DisplayMode&)>&& filterModes,
-            const FpsRange&) const REQUIRES(mLock);
+            const Policy&, std::function<bool(const DisplayMode&)>&& filterModes, const FpsRange&,
+            bool onlyDivisorsForSameGroup = false) const REQUIRES(mLock);
 
     using PreferredFpsForMode = ftl::SmallMap<DisplayModeId, Fps, 8>;
     PreferredFpsForMode getPreferredFpsForMode(std::optional<int> anchorGroupOpt,

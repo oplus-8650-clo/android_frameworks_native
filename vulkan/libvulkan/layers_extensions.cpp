@@ -160,7 +160,10 @@ bool LayerLibrary::Open() {
         // (among several) we only allow them in non-user builds.
         auto app_namespace = android::GraphicsEnv::getInstance().getAppNamespace();
         if (app_namespace &&
-            !android::base::StartsWith(path_, kSystemDebugLayerLibraryDir)) {
+            !(android::base::StartsWith(path_, kSystemDebugLayerLibraryDir) ||
+              android::base::StartsWith(path_,
+                                        kSystemPlatformLayerLibraryDir) ||
+              android::base::StartsWith(path_, kSystemOEMLayerLibraryDir))) {
             char* error_msg = nullptr;
             dlhandle_ = android::OpenNativeLibraryInNamespace(
                 app_namespace, path_.c_str(), &native_bridge_, &error_msg);

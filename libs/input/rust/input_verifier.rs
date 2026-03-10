@@ -431,7 +431,7 @@ impl InputVerifier {
 
                 if !it.is_empty() {
                     return Err(format!(
-                        "{}: Removed hovering pointer {}, but pointers are still\
+                        "{}: Removed hovering pointer {}, but pointers are still \
                                hovering for device {:?}: {:?}",
                         self.name, pointer_id, event.device_id, it
                     ));

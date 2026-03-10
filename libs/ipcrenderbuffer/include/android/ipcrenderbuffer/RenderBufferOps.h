@@ -245,7 +245,7 @@ struct ResetClipOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESETCLIP;
 
     static ResetClipOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip);
     std::string toString() const;
 };
 

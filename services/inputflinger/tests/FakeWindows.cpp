@@ -310,6 +310,7 @@ sp<FakeWindowHandle> FakeWindowHandle::clone(ui::LogicalDisplayId displayId) {
     handle->mInfo.displayId = displayId;
     handle->mInfo.id = sId++;
     handle->mInputReceiver = mInputReceiver;
+    handle->mInfo.setInputConfig(InputConfig::CLONE, true);
     return handle;
 }
 

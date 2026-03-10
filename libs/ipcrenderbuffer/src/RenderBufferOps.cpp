@@ -36,7 +36,9 @@ namespace android {
 
 void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                       IPCRenderBufferOp* op, SkCanvas* canvas,
-                      const std::function<void(int)>& renderProxyCallback) {
+                      const std::function<void(int)>& renderProxyCallback,
+                      const SkMatrix& initialMatrix = SkMatrix::I(),
+                      const SkRect& initialClip = SkRect::MakeEmpty()) {
     switch (op->type) {
         case TYPE_SAVE: {
             SaveOp* co = (SaveOp*)op;
@@ -65,7 +67,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
         }
         case TYPE_SETMATRIX: {
             SetMatrixOp* co = (SetMatrixOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, initialMatrix);
             break;
         }
         case TYPE_SCALE: {
@@ -105,7 +107,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
         }
         case TYPE_RESETCLIP: {
             ResetClipOp* co = (ResetClipOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, initialMatrix, initialClip);
             break;
         }
         case TYPE_DRAWPAINT: {
@@ -313,6 +315,9 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
         ALOGE("Rendering command buffer");
     }
 
+    SkMatrix rootMatrix = canvas->getTotalMatrix();
+    SkRect rootClip = SkRect::Make(canvas->getDeviceClipBounds());
+
     sk_sp<SkSurface> boundSurface = nullptr;
     bool renderingOffscreenLayer = false;
 
@@ -373,8 +378,17 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
                     continue;
                 }
             }
+            SkMatrix initialMatrix;
+            SkRect initialClip;
+            if (boundSurface) {
+                initialMatrix = SkMatrix::I();
+                initialClip = SkRect::MakeWH(boundSurface->width(), boundSurface->height());
+            } else {
+                initialMatrix = rootMatrix;
+                initialClip = rootClip;
+            }
             renderOpToCanvas(cache, buffer, op, boundSurface ? boundSurface->getCanvas() : canvas,
-                             renderProxyCallback);
+                             renderProxyCallback, initialMatrix, initialClip);
         }
     }
     if constexpr (DUMP_OPS) {
@@ -658,8 +672,14 @@ ResetClipOp* ResetClipOp::Create(RenderCommandBuffer* commandBuffer) {
     return op;
 }
 
-void ResetClipOp::draw(SkCanvas* c, const SkMatrix&) {
+void ResetClipOp::draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip) {
     SkAndroidFrameworkUtils::ResetClip(c);
+    if (!initialClip.isEmpty()) {
+        SkMatrix ctm = c->getTotalMatrix();
+        c->setMatrix(SkMatrix::I());
+        c->clipRect(initialClip, SkClipOp::kIntersect, false);
+        c->setMatrix(ctm);
+    }
 }
 
 std::string ResetClipOp::toString() const {
@@ -945,9 +965,16 @@ SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
 
 sk_sp<SkTypeface> deserializeTypeFace(SkStream& stream, void* ctx) {
     auto* fontManager = reinterpret_cast<SkFontMgr*>(ctx);
+    if (!fontManager) {
+        ALOGE("Trying to draw text with no font manager!");
+        return nullptr;
+    }
 
     const auto* info = reinterpret_cast<const ShmemTypeface*>(stream.getMemoryBase());
-    LOG_ALWAYS_FATAL_IF(info == nullptr, "TextBlob deserial stream not memory based");
+    if (info == nullptr) {
+        ALOGE("TextBlob deserial stream not memory based");
+        return nullptr;
+    }
 
     SkFontStyle style(info->weight, info->width, info->slant);
     sk_sp<SkTypeface> tf = fontManager->matchFamilyStyle(info->name.data.get(), style);
