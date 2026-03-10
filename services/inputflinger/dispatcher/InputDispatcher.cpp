@@ -1564,6 +1564,15 @@ std::vector<sp<WindowInfoHandle>> InputDispatcher::findTouchedSpyWindowsAt(
             // The first touched non-spy window was found, so return the spy windows touched so far.
             return spyWindows;
         }
+
+        const bool spyWithSameTokenAlreadyAdded =
+                std::ranges::any_of(spyWindows, [&windowHandle](const sp<WindowInfoHandle>& spy) {
+                    return spy->getToken() == windowHandle->getToken();
+                });
+        if (spyWithSameTokenAlreadyAdded) {
+            // A clone of this window is already receiving the event
+            continue;
+        }
         spyWindows.push_back(windowHandle);
     }
     return spyWindows;

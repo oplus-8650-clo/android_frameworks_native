@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 #include <input/InputEventBuilders.h>
 #include <input/InputTransport.h>
+#include <sys/ioctl.h>
 #include <utils/StopWatch.h>
 #include <utils/StrongPointer.h>
 #include <utils/Timers.h>
@@ -435,38 +436,81 @@ TEST_F(InputChannelTest, FinishedMessageCapacityInSocket) {
 
 /**
  * Similar to above, but for motion messages.
+ *
+ * The effective capacity depends on the kernel's memory allocation (sk_wmem_alloc),
+ * which is heavily influenced by the slab allocator's power-of-two buckets and
+ * hardware cache-line alignment.
  */
 TEST_F(InputChannelTest, MotionMessageCapacityInSocket) {
-    std::unique_ptr<InputChannel> serverChannel, clientChannel;
-    status_t result =
-            InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel);
-    ASSERT_EQ(OK, result) << "should have successfully opened a channel pair";
+    // Total footprint = slab_bucket(sk_buff) + slab_bucket(aligned payload + aligned tail).
+    //
+    // 1. sk_buff bucket: The struct itself is 232 bytes, which the slab allocator
+    //    places into a 256-byte bucket. Overhead = 256 bytes.
+    // 2. Data bucket: Contains a 168-byte MotionMessage payload and a ~320-byte tail
+    //    struct (skb_shared_info). To prevent false sharing, the kernel aligns both
+    //    independently to the CPU's L1 cache line.
+    //
+    // - 64-byte cache line (Modern ARM/x86):
+    //   ALIGN(168, 64) + ALIGN(320, 64) = 192 + 320 = 512 bytes.
+    //   Fits exactly into the 512-byte slab bucket.
+    //   Total Footprint: 256 (sk_buff) + 512 (data) = 768 bytes.
+    constexpr int kFootprint64ByteCacheLine = 768;
+    constexpr uint32_t kCapacity64ByteCacheLine = 87;
 
+    // - 128-byte cache line (Legacy ARM):
+    //   ALIGN(168, 128) + ALIGN(320, 128) = 256 + 384 = 640 bytes.
+    //   Overflows the 512-byte limit, forcing the use of a 1024-byte slab bucket.
+    //   Total Footprint: 256 (sk_buff) + 1024 (data) = 1280 bytes.
+    constexpr int kFootprint128ByteCacheLine = 1280;
+    constexpr uint32_t kCapacity128ByteCacheLine = 53;
+
+    // Note: Smaller payloads like the 24-byte FinishedMessage maintain a 768-byte footprint
+    // across all architectures because ALIGN(24, 128) + ALIGN(320, 128) = 128 + 384 = 512 bytes.
+
+    std::unique_ptr<InputChannel> serverChannel, clientChannel;
+    ASSERT_EQ(OK, InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel));
+
+    int footprint = 0;
     uint32_t seq = 1;
+    status_t status = OK;
+
     for (;;) {
-        InputMessage motionMessage = InputMessageBuilder{InputMessage::Type::MOTION, seq}
-                                             .deviceId(0)
-                                             .action(AMOTION_EVENT_ACTION_MOVE)
-                                             .build();
-        status_t status = serverChannel->sendMessage(&motionMessage);
+        InputMessage msg = InputMessageBuilder{InputMessage::Type::MOTION, seq}
+                                   .deviceId(0)
+                                   .action(AMOTION_EVENT_ACTION_MOVE)
+                                   .build();
+
+        status = serverChannel->sendMessage(&msg);
         if (status != OK) {
             break;
+        }
+
+        // TIOCOUTQ returns the total kernel memory allocated for the socket's write
+        // queue (sk_wmem_alloc). Because this footprint fluctuates based on the
+        // architecture's cache line size and slab allocator rules, we dynamically
+        // measure the first message's footprint to correctly assert the expected
+        // socket capacity and prevent test flakiness across different devices.
+        if (seq == 1) {
+            ASSERT_EQ(0, ioctl(serverChannel->getFd(), TIOCOUTQ, &footprint))
+                    << "Failed to read socket memory footprint";
         }
         seq++;
     }
 
-// The size() of the InputMessage struct remains the same for Motion messages for both host
-// and device. However the actual message size in the socket (as measured by TIOCOUTQ) shows them
-// differing. This means that the number of messages to fill the socket also differs. We add this
-// conditional to maintain compatibility with host tests.
-#if defined(__ANDROID__)
-    const uint32_t expected_capacity = 53;
-#elif defined(__x86_64__) || defined(__i386__) // Host
-    const uint32_t expected_capacity = 87;
-#else
-    GTEST_SKIP() << "Unexpected architecture";
-#endif
-    ASSERT_EQ(seq, expected_capacity) << "server should have sent " << expected_capacity
-                                      << " motion messages, instead sent " << seq;
+    ASSERT_EQ(WOULD_BLOCK, status)
+            << "Expected sendMessage to return WOULD_BLOCK when the socket is full";
+
+    if (footprint == kFootprint64ByteCacheLine) {
+        ASSERT_EQ(seq, kCapacity64ByteCacheLine);
+    } else if (footprint == kFootprint128ByteCacheLine) {
+        ASSERT_EQ(seq, kCapacity128ByteCacheLine);
+    } else {
+        // If a future kernel changes the sk_buff layout or slab allocator rules,
+        // we don't want to break the test. We just need to guarantee the socket
+        // can still hold a safe minimum number of messages to prevent dropped inputs.
+        ASSERT_GE(seq, kCapacity128ByteCacheLine)
+                << "Unrecognized kernel footprint (" << footprint << " bytes). "
+                << "Socket capacity broke at " << seq << ", which is below the safe minimum";
+    }
 }
 } // namespace android
