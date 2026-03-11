@@ -3033,11 +3033,14 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         gui::GameMode gameMode = (snapshot) ? snapshot->gameMode : gui::GameMode::Unsupported;
         mLayersWithQueuedFrames.emplace(it->second, gameMode);
 
-        if (snapshot && snapshot->isVisible) {
-            Rect& bounds = snapshot->transformedBoundsWithoutTransparentRegion;
-            mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
-                    *it->second->getPendingBufferCounter(), bounds.getWidth(), bounds.getHeight());
-        }
+        const Rect& bounds = (snapshot) ? snapshot->transformedBoundsWithoutTransparentRegion :
+                                       Rect::INVALID_RECT;
+        bool focused = snapshot &&
+                       Layer::isLayerFocusedBasedOnPriority(snapshot->frameRateSelectionPriority);
+        bool isVisible = snapshot && snapshot->isVisible;
+        mQtiSFExtnIntf->qtiDolphinTrackBufferDecrement(it->second->getDebugName(),
+                it->second->getSequence(), *it->second->getPendingBufferCounter(), bounds,
+                focused, isVisible);
     }
 
     updateLayerHistory(latchTime);
@@ -6030,7 +6033,9 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
             }
 
 // QTI_END: 2024-06-10: Display: sf: reduce scope of mSmomoMutex
+            int32_t layerId = (layer) ? layer->getSequence() : -1;
             mQtiSFExtnIntf->qtiDolphinTrackBufferIncrement(layerName.c_str(),
+                                                           layerId,
                                                            transactionState.mIsAutoTimestamp,
                                                            transactionState.mFlags,
                                                            transactionState.mDesiredPresentTime);

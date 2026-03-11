@@ -20,10 +20,12 @@ QtiDolphinWrapper::QtiDolphinWrapper(int width, int height) {
         qtiDolphinInit = (bool (*) (int, int))dlsym(mQtiDolphinHandle, "dolphinInit");
         qtiDolphinSetVsyncPeriod = (void (*) (nsecs_t)) dlsym(mQtiDolphinHandle,
                 "dolphinSetVsyncPeriod");
-        qtiDolphinTrackBufferIncrement = (void (*) (const char*, bool, uint32_t, nsecs_t))dlsym(
-                 mQtiDolphinHandle, "dolphinTrackBufferIncrement");
-        qtiDolphinTrackBufferDecrement = (void (*) (const char*, int, int, int))dlsym(mQtiDolphinHandle,
-                "dolphinTrackBufferDecrement");
+        qtiDolphinTrackBufferIncrement =
+                (void (*) (const char*, int32_t, bool, uint32_t, nsecs_t))dlsym(
+                mQtiDolphinHandle, "dolphinTrackBufferIncrement");
+        qtiDolphinTrackBufferDecrement =
+                (void (*) (const char*, int32_t, int, const Rect&, bool, bool))dlsym(
+                mQtiDolphinHandle, "dolphinTrackBufferDecrement");
         qtiDolphinTrackVsyncSignal = (void (*) ())dlsym(mQtiDolphinHandle,
                 "dolphinTrackVsyncSignal");
         qtiDolphinUnblockPendingBuffer = (void (*) ())dlsym(mQtiDolphinHandle,
