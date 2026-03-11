@@ -10,11 +10,13 @@ namespace android {
 
 class QtiDolphinWrapper {
 public:
+    static bool sQuickTouch; // the flag to mark QuickTouch V1 state
     static QtiDolphinWrapper* qtiGetDolphinWrapper();
     static QtiDolphinWrapper* qtiGetInstanceForGame();
     QtiDolphinWrapper();
     ~QtiDolphinWrapper();
     void (*qtiDolphinAppInit)() = nullptr;
+    void (*qtiDolphinSetVsyncTime)(nsecs_t vsyncTimestamp) = nullptr;
     bool (*qtiDolphinSmartTouchActive)() = nullptr;
     void (*qtiDolphinQueueBuffer)(bool) = nullptr;
     void (*qtiDolphinFilterBuffer)(bool& isAutoTimestamp, nsecs_t& desiredPresentTime,

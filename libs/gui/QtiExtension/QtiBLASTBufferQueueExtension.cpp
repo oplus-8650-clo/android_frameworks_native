@@ -60,7 +60,7 @@ static void qtiInitAppType() {
         if (appType == GAME_TYPE) {
             sQtiIsGame = true;
             if (isQuickTouchDisabled) {
-                return;
+                QtiDolphinWrapper::sQuickTouch = false;
             }
 
             sQtiDolphinWrapper = QtiDolphinWrapper::qtiGetInstanceForGame();

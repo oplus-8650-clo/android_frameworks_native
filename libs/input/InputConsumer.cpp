@@ -243,9 +243,6 @@ InputConsumer::ConsumeResult InputConsumer::consume(InputEventFactoryInterface* 
                                                     uint32_t* outSeq, InputEvent** outEvent) {
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     QtiInputDolphinWrapper* qtiDolphinWrapper = QtiInputDolphinWrapper::qtiGetDolphinWrapper();
-    if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinConsumeInputNow) {
-        qtiDolphinWrapper->qtiDolphinConsumeInputNow(consumeBatches);
-    }
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
     ALOGD_IF(DEBUG_TRANSPORT_CONSUMER,
              "channel '%s' consumer ~ consume: consumeBatches=%s, frameTime=%" PRId64,
@@ -276,6 +273,11 @@ InputConsumer::ConsumeResult InputConsumer::consume(InputEventFactoryInterface* 
                 // Trace the event processing timeline - event was just read from the socket
                 ATRACE_ASYNC_BEGIN(mProcessingTraceTag.c_str(), /*cookie=*/mMsg.header.seq);
             } else {
+                // QTI_BEGIN: 2026-03-06: Performance: native: smart touch consuming
+                if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinConsumeInputNow) {
+                    qtiDolphinWrapper->qtiDolphinConsumeInputNow(consumeBatches);
+                }
+                // QTI_END: 2026-03-06: Performance: native: smart touch consuming
                 // Consume the next batched event unless batches are being held for later.
                 if (consumeBatches || result.error().code() != WOULD_BLOCK) {
                     result = android::base::Error(
