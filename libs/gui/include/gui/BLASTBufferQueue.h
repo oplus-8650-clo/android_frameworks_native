@@ -44,9 +44,7 @@
 
 #include <com_android_graphics_libgui_flags.h>
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #include "../../libs/gui/QtiExtension/QtiBLASTBufferQueueExtension.h"
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace android {
 
 // Sizes determined empirically to avoid allocations during common activity.
