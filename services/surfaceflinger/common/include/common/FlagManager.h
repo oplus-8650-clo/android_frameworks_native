@@ -73,7 +73,6 @@ public:
     bool graphite_renderengine_preview_rollout() const;
     bool graphite_renderengine_preview2_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
-    bool jank_classification_v2() const;
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
     bool monitor_buffer_fences() const;
@@ -85,6 +84,9 @@ public:
     bool set_power_mode_async() const;
     bool use_content_priority_for_jank_classification() const;
     bool use_experimental_jank_classification() const;
+    bool use_last_vsync_predict() const;
+    bool vd_aware_scheduler() const;
+    bool virtual_display_content_filtering() const;
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts

@@ -29,6 +29,7 @@ namespace android {
 
 // Type-safe wrapper for Android axis codes, also known as AMOTION_EVENT_AXIS_* values.
 enum class MotionEventAxis : int32_t {
+    UNKNOWN = -1,
     BRAKE = AMOTION_EVENT_AXIS_BRAKE,
     GAS = AMOTION_EVENT_AXIS_GAS,
     HAT_X = AMOTION_EVENT_AXIS_HAT_X,

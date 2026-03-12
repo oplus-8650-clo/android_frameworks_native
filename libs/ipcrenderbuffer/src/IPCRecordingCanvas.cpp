@@ -46,6 +46,7 @@ IPCRecordingCanvas::IPCRecordingCanvas(IPCClientResourceCache& resourceCache)
 }
 
 sk_sp<SkSurface> IPCRecordingCanvas::onNewSurface(const SkImageInfo&, const SkSurfaceProps&) {
+    ALOGE("onNewSurface Not implemented");
     return nullptr;
 }
 
@@ -75,6 +76,7 @@ void IPCRecordingCanvas::willSave() {
     mCurrentRenderCommandBuffer->pushOp(op);
 }
 SkCanvas::SaveLayerStrategy IPCRecordingCanvas::getSaveLayerStrategy(const SaveLayerRec&) {
+    ALOGE("getSaveLayerStrategy Not implemented");
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 void IPCRecordingCanvas::willRestore() {

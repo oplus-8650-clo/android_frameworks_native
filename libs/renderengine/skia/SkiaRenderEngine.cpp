@@ -1546,6 +1546,12 @@ void SkiaRenderEngine::drawLayersInternal(
             SFTRACE_NAME("RenderCommandBuffer");
             if (layer.renderResourceCache) {
                 for (auto& [id, bitmap] : layer.renderResourceCache->bitmaps) {
+                    if (!bitmap.buffer) {
+                        // This could be a heap based bitmap which is uploaded by
+                        // renderCommandBufferToCanvas
+                        continue;
+                    }
+
                     bool isRenderTarget =
                             bitmap.buffer->getUsage() & GraphicBuffer::USAGE_HW_RENDER;
                     auto imageTextureRef = getOrCreateBackendTexture(bitmap.buffer, isRenderTarget);

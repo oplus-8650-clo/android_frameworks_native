@@ -800,9 +800,9 @@ VirtualTouchscreen::VirtualTouchscreen(unique_fd fd) : VirtualInputDevice(std::m
 VirtualTouchscreen::~VirtualTouchscreen() {}
 
 bool VirtualTouchscreen::isValidPointerId(int32_t pointerId, UinputAction uinputAction) {
-    if (pointerId < -1 || pointerId >= (int)MAX_POINTERS) {
-        ALOGE("Virtual touch event has invalid pointer id %d; value must be between -1 and %zu",
-              pointerId, MAX_POINTERS - 0);
+    if (pointerId < 0 || pointerId >= (int)MAX_POINTERS) {
+        ALOGE("Virtual touch event has invalid pointer id %d; value must be between 0 and %zu",
+              pointerId, MAX_POINTERS - 1);
         return false;
     }
 
