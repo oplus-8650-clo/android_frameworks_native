@@ -85,6 +85,8 @@ public:
         uint64_t hi = mHi.load(std::memory_order_relaxed);
         return mBuffer[hi % N];
     }
+
+    T& at(uint64_t index) { return mBuffer[index % N]; }
 };
 
 } // namespace android

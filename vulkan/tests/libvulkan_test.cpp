@@ -183,7 +183,8 @@ class AImageReaderVulkanSwapchainTest : public ::testing::Test {
     }
 
     void createDeviceAndGetQueue(std::vector<const char*>& layers,
-                                 std::vector<const char*> inExtensions = {}) {
+                                 std::vector<const char*> inExtensions = {},
+                                 void* pNext = nullptr) {
         ASSERT_NE((void*)VK_NULL_HANDLE, mPhysicalDev);
         ASSERT_NE(UINT32_MAX, mPresentQueueFamily);
 
@@ -196,6 +197,7 @@ class AImageReaderVulkanSwapchainTest : public ::testing::Test {
 
         VkDeviceCreateInfo deviceInfo{};
         deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        deviceInfo.pNext = pNext;
         deviceInfo.queueCreateInfoCount = 1;
         deviceInfo.pQueueCreateInfos = &queueInfo;
         deviceInfo.enabledLayerCount = layers.size();
@@ -1434,6 +1436,177 @@ TEST_F(AImageReaderVulkanSwapchainTest, TestKhrFeaturesCorrectlyExposed) {
     // Our feature should have been populated!
     ASSERT_EQ(presentIdFeatures.presentId, VK_TRUE);
 }
+
+namespace {
+
+struct OnAcquiredCallbackData {
+    ANativeWindow_OnAcquiredCallback callback = nullptr;
+    void* data = nullptr;
+};
+
+int Hook_ANativeWindow_Perform_SetCallback(ANativeWindow* window,
+                                           ANativeWindow_performFn perform,
+                                           void* data,
+                                           int operation,
+                                           va_list args) {
+    if (operation == NATIVE_WINDOW_API_SET_ON_ACQUIRED_CALLBACK) {
+        ALOGI("Intercepted NATIVE_WINDOW_API_SET_ON_ACQUIRED_CALLBACK");
+        if (data) {
+            va_list args_copy;
+            va_copy(args_copy, args);
+            auto* captured = static_cast<OnAcquiredCallbackData*>(data);
+            captured->callback = va_arg(args_copy, ANativeWindow_OnAcquiredCallback);
+            captured->data = va_arg(args_copy, void*);
+            va_end(args_copy);
+        }
+    }
+
+    return perform(window, operation, args);
+}
+
+TEST_F(AImageReaderVulkanSwapchainTest, SurfaceDestroyedBeforeOnAcquiredCallback) {
+    // Verify that the callback from the consumer (AImageReader) doesn't cause a
+    // crash if the surface has already been destroyed.
+    std::vector<const char*> instanceLayers = {};
+    std::vector<const char*> deviceLayers = {};
+    std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_PRESENT_ID_2_EXTENSION_NAME,
+        VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME,
+        VK_EXT_PRESENT_TIMING_EXTENSION_NAME,
+    };
+    OnAcquiredCallbackData callbackData;
+
+    createVulkanInstance(instanceLayers);
+    // Don't set listener, we will acquire manually
+    createAImageReader(640, 480, AIMAGE_FORMAT_PRIVATE, 1, false);
+    getANativeWindowFromReader();
+
+
+    int result = mWindow->perform(
+        mWindow, NATIVE_WINDOW_SET_PERFORM_INTERCEPTOR,
+        Hook_ANativeWindow_Perform_SetCallback, &callbackData);
+    ASSERT_EQ(result, 0);
+
+    createVulkanSurface();
+    pickPhysicalDeviceAndQueueFamily();
+
+    uint32_t extensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(mPhysicalDev, nullptr, &extensionCount,
+                                         nullptr);
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(mPhysicalDev, nullptr, &extensionCount,
+                                         availableExtensions.data());
+
+    bool presentId2Supported = false;
+    bool presentWait2Supported = false;
+    bool presentTimingSupported = false;
+    for (const auto& extension : availableExtensions) {
+        if (strcmp(extension.extensionName,
+                   VK_KHR_PRESENT_ID_2_EXTENSION_NAME) == 0) {
+            presentId2Supported = true;
+        }
+        if (strcmp(extension.extensionName,
+                   VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME) == 0) {
+            presentWait2Supported = true;
+        }
+        if (strcmp(extension.extensionName,
+                   VK_EXT_PRESENT_TIMING_EXTENSION_NAME) == 0) {
+            presentTimingSupported = true;
+        }
+    }
+
+    if (!presentId2Supported || !presentWait2Supported ||
+        !presentTimingSupported) {
+        GTEST_SKIP() << "VK_KHR_present_id2, VK_KHR_present_wait2, or "
+                        "VK_EXT_present_timing not supported";
+    }
+
+    VkPhysicalDevicePresentWait2FeaturesKHR presentWait2Features = {};
+    presentWait2Features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR;
+    presentWait2Features.presentWait2 = VK_TRUE;
+
+    VkPhysicalDevicePresentId2FeaturesKHR presentId2Features = {};
+    presentId2Features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR;
+    presentId2Features.presentId2 = VK_TRUE;
+    presentId2Features.pNext = &presentWait2Features;
+
+    VkPhysicalDevicePresentTimingFeaturesEXT presentTimingFeatures = {};
+    presentTimingFeatures.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT;
+    presentTimingFeatures.presentTiming = VK_TRUE;
+    presentTimingFeatures.presentAtAbsoluteTime = VK_TRUE;
+    presentTimingFeatures.pNext = &presentId2Features;
+
+    createDeviceAndGetQueue(deviceLayers, deviceExtensions,
+                            &presentTimingFeatures);
+
+    VkSurfaceCapabilitiesKHR surfaceCaps{};
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mPhysicalDev, mSurface,
+                                                       &surfaceCaps));
+
+    uint32_t imageCount = surfaceCaps.minImageCount + 1;
+    if (surfaceCaps.maxImageCount > 0 &&
+        imageCount > surfaceCaps.maxImageCount) {
+        imageCount = surfaceCaps.maxImageCount;
+    }
+
+    VkSwapchainCreateInfoKHR swapchainInfo{};
+    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainInfo.surface = mSurface;
+    swapchainInfo.minImageCount = imageCount;
+    swapchainInfo.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    swapchainInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    swapchainInfo.imageExtent = surfaceCaps.currentExtent;
+    swapchainInfo.imageArrayLayers = 1;
+    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainInfo.preTransform = surfaceCaps.currentTransform;
+    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchainInfo.clipped = VK_TRUE;
+    swapchainInfo.flags = VK_SWAPCHAIN_CREATE_PRESENT_WAIT_2_BIT_KHR;
+
+    VkResult res =
+        vkCreateSwapchainKHR(mDevice, &swapchainInfo, nullptr, &mSwapchain);
+    VK_CHECK(res);
+    ASSERT_NE(mSwapchain, (VkSwapchainKHR)VK_NULL_HANDLE);
+
+    uint32_t imageIndex;
+    res = vkAcquireNextImageKHR(mDevice, mSwapchain, UINT64_MAX, VK_NULL_HANDLE,
+                                VK_NULL_HANDLE, &imageIndex);
+    VK_CHECK(res);
+
+    uint64_t presentId = 1;
+    VkPresentId2KHR presentIdInfo = {};
+    presentIdInfo.sType = VK_STRUCTURE_TYPE_PRESENT_ID_2_KHR;
+    presentIdInfo.swapchainCount = 1;
+    presentIdInfo.pPresentIds = &presentId;
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext = &presentIdInfo;
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &mSwapchain;
+    presentInfo.pImageIndices = &imageIndex;
+
+    res = vkQueuePresentKHR(mPresentQueue, &presentInfo);
+    VK_CHECK(res);
+
+    // Destroy the swapchain and surface immediately after present
+    vkDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
+    mSwapchain = VK_NULL_HANDLE;
+    vkDestroySurfaceKHR(mVkInstance, mSurface, nullptr);
+    mSurface = VK_NULL_HANDLE;
+
+    // Trigger the callback manually (AImageReader acquire).
+    // This used to crash if the surface was already destroyed.
+    callbackData.callback(0 /*bufferId*/, 0 /*frameId*/, callbackData.data);
+    cleanUpSwapchainForTest();
+}
+
+}  // namespace
 
 }  // namespace libvulkantest
 

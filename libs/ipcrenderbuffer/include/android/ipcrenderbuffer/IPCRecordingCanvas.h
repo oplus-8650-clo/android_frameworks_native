@@ -118,6 +118,8 @@ public:
         return mRenderCommandBufferProducer;
     }
 
+    RenderCommandBuffer* getRenderCommandBuffer() { return mCurrentRenderCommandBuffer; }
+
 private:
     typedef SkCanvasVirtualEnforcer<SkNoDrawCanvas> INHERITED;
     std::shared_ptr<RenderCommandBufferProducer> mRenderCommandBufferProducer;

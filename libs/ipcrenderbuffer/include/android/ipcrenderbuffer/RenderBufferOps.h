@@ -62,6 +62,7 @@
 
 #include <functional>
 #include <map>
+#include <mutex>
 
 #include <android/ipcrenderbuffer/RenderBufferDebugUtils.h>
 #include <android/ipcrenderbuffer/RenderBufferOpTypes.h>
@@ -76,14 +77,7 @@
 namespace android {
 
 struct IPCClientBitmap {
-    enum State {
-        UNREGISTERED,
-        PENDING_REGISTER,
-        REGISTERED,
-        PENDING_DEREGISTER,
-    };
     uint64_t id = 0;
-    State state = UNREGISTERED;
     sp<GraphicBuffer> buffer;
 
     // If this image is backed by a heap bitmap then this will be set.
@@ -508,5 +502,16 @@ struct EndRenderTargetOp final : IPCRenderBufferOp {
     void draw(SkCanvas* c, const SkMatrix&);
     std::string toString() const;
 };
+
+// Structs are defined in RenderCommandBuffer.h in libgui.
+
+UploadBitmap* UploadBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId,
+                                  const SkBitmap& bitmap);
+void UploadBitmap_execute(UploadBitmap* op, IPCServerResourceCache& resourceCache);
+std::string UploadBitmap_toString(const UploadBitmap* op);
+
+FreeBitmap* FreeBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId);
+void FreeBitmap_execute(FreeBitmap* op, IPCServerResourceCache& resourceCache);
+std::string FreeBitmap_toString(const FreeBitmap* op);
 
 } // namespace android

@@ -69,6 +69,8 @@ protected:
 
         setupAxis(ABS_X, /*valid=*/true, /*min=*/-127, /*max=*/127, /*resolution=*/0);
         setupAxis(ABS_Y, /*valid=*/true, /*min=*/-127, /*max=*/127, /*resolution=*/0);
+        setAxisMapping(EvdevAbsCode::X, MotionEventAxis::X);
+        setAxisMapping(EvdevAbsCode::Y, MotionEventAxis::Y);
     }
 
     void setAxisMapping(EvdevAbsCode evdevAbs, MotionEventAxis axis) {
@@ -133,6 +135,35 @@ TEST_F(JoystickInputMapperTest, Configure_AssignsDisplayUniqueId) {
     mFakeListener.expectMotion(WithDisplayId(viewport.displayId));
 }
 
+TEST_F(JoystickInputMapperTest, Configure_AssignsGenericAxisIdsToUnmappedAxes) {
+    setupAxis(ABS_GAS, /*valid=*/true, /*min=*/0, /*max=*/100, /*resolution=*/0);
+    setupAxis(ABS_BRAKE, /*valid=*/true, /*min=*/0, /*max=*/100, /*resolution=*/0);
+    setupAxis(ABS_RZ, /*valid=*/true, /*min=*/0, /*max=*/100, /*resolution=*/0);
+
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    process(EV_ABS, ABS_GAS, 25);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{AMOTION_EVENT_AXIS_GENERIC_1, 0.25f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_2, 0.f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_3, 0.f}})));
+
+    process(EV_ABS, ABS_BRAKE, 50);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{AMOTION_EVENT_AXIS_GENERIC_1, 0.25f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_2, 0.5f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_3, 0.0f}})));
+
+    process(EV_ABS, ABS_RZ, 75);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{AMOTION_EVENT_AXIS_GENERIC_1, 0.25f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_2, 0.5f},
+                                               {AMOTION_EVENT_AXIS_GENERIC_3, 0.75f}})));
+}
+
 TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
     // Two raw axes, ABS_X and ABS_Y, will be mapped to the same logical axis,
     // AMOTION_EVENT_AXIS_X. We need to ensure that the most recent event is the one
@@ -171,6 +202,136 @@ TEST_F(JoystickInputMapperTest, MappedAxes_PrioritizesMostRecentUpdate) {
     process(eventTime, EV_SYN, SYN_REPORT, 0);
     mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
                                      WithAxes({{AMOTION_EVENT_AXIS_X, 0}})));
+}
+
+TEST_F(JoystickInputMapperTest, AxisRemappedToUnknown_DoesNotGenerateMotionEvents) {
+    setupAxis(ABS_GAS, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/0);
+    setAxisMapping(EvdevAbsCode::GAS, MotionEventAxis::UNKNOWN);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    process(EV_ABS, ABS_GAS, 100);
+    process(EV_SYN, SYN_REPORT, 0);
+
+    mFakeListener.assertNoEvents();
+}
+
+TEST_F(JoystickInputMapperTest,
+       AxisRemappedToUnknown_PopulateDeviceInfo_DoesNotReturnDisabledMotionRange) {
+    setupAxis(ABS_GAS, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/4);
+    setAxisMapping(EvdevAbsCode::GAS, MotionEventAxis::UNKNOWN);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+    InputDeviceInfo info;
+
+    mMapper->populateDeviceInfo(info);
+
+    EXPECT_EQ(info.getMotionRange(ftl::to_underlying(MotionEventAxis::UNKNOWN),
+                                  AINPUT_SOURCE_JOYSTICK),
+              nullptr);
+    EXPECT_EQ(info.getMotionRange(ftl::to_underlying(MotionEventAxis::GAS),
+                                  AINPUT_SOURCE_JOYSTICK),
+              nullptr);
+}
+
+TEST_F(JoystickInputMapperTest, AxisRemapping_SplitAxis_LowDisabled) {
+    setupAxis(ABS_THROTTLE, /*valid=*/true, /*min=*/0, /*max=*/100, /*resolution=*/4);
+    AxisInfo axisInfo;
+    axisInfo.axis = ftl::to_underlying(MotionEventAxis::UNKNOWN);
+    axisInfo.highAxis = ftl::to_underlying(MotionEventAxis::BRAKE);
+    axisInfo.mode = AxisInfo::MODE_SPLIT;
+    axisInfo.splitValue = 50;
+    setAxisMapping(EvdevAbsCode::THROTTLE, axisInfo);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    // Low axis events are not generated.
+    process(EV_ABS, ABS_THROTTLE, 48);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
+
+    // High axis events are generated.
+    process(EV_ABS, ABS_THROTTLE, 90);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{MotionEventAxis::BRAKE, 0.8f}})));
+
+    // Value below split value resets high axis value.
+    process(EV_ABS, ABS_THROTTLE, 45);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{MotionEventAxis::BRAKE, 0.f}})));
+}
+
+TEST_F(JoystickInputMapperTest, AxisRemapping_SplitAxis_LowDisabled_ReturnsCorrectMotionRanges) {
+    setupAxis(ABS_THROTTLE, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/4);
+    AxisInfo axisInfo;
+    axisInfo.axis = ftl::to_underlying(MotionEventAxis::UNKNOWN);
+    axisInfo.highAxis = ftl::to_underlying(MotionEventAxis::GAS);
+    axisInfo.mode = AxisInfo::MODE_SPLIT;
+    axisInfo.splitValue = 128;
+    setAxisMapping(EvdevAbsCode::THROTTLE, axisInfo);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+    InputDeviceInfo info;
+
+    mMapper->populateDeviceInfo(info);
+
+    auto unknownRange = info.getMotionRange(ftl::to_underlying(MotionEventAxis::UNKNOWN),
+                                            AINPUT_SOURCE_JOYSTICK);
+    auto gasRange =
+            info.getMotionRange(ftl::to_underlying(MotionEventAxis::GAS), AINPUT_SOURCE_JOYSTICK);
+    EXPECT_EQ(unknownRange, nullptr);
+    ASSERT_NE(gasRange, nullptr);
+    EXPECT_EQ(gasRange->min, 0);
+    EXPECT_EQ(gasRange->max, 1);
+}
+
+TEST_F(JoystickInputMapperTest, AxisRemapping_SplitAxis_HighDisabled) {
+    setupAxis(ABS_THROTTLE, /*valid=*/true, /*min=*/0, /*max=*/200, /*resolution=*/4);
+    AxisInfo axisInfo;
+    axisInfo.axis = ftl::to_underlying(MotionEventAxis::BRAKE);
+    axisInfo.highAxis = ftl::to_underlying(MotionEventAxis::UNKNOWN);
+    axisInfo.mode = AxisInfo::MODE_SPLIT;
+    axisInfo.splitValue = 100;
+    setAxisMapping(EvdevAbsCode::THROTTLE, axisInfo);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+
+    // High axis events are not generated.
+    process(EV_ABS, ABS_THROTTLE, 101);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.assertNoEvents();
+
+    // Low axis events are generated.
+    process(EV_ABS, ABS_THROTTLE, 70);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{MotionEventAxis::BRAKE, 0.3f}})));
+
+    // Value above split value resets low axis value.
+    process(EV_ABS, ABS_THROTTLE, 110);
+    process(EV_SYN, SYN_REPORT, 0);
+    mFakeListener.expectMotion(AllOf(WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
+                                     WithAxes({{MotionEventAxis::BRAKE, 0.0f}})));
+}
+
+TEST_F(JoystickInputMapperTest, AxisRemapping_SplitAxis_HighDisabled_ReturnsCorrectMotionRanges) {
+    setupAxis(ABS_THROTTLE, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/4);
+    AxisInfo axisInfo;
+    axisInfo.axis = ftl::to_underlying(MotionEventAxis::BRAKE);
+    axisInfo.highAxis = ftl::to_underlying(MotionEventAxis::UNKNOWN);
+    axisInfo.mode = AxisInfo::MODE_SPLIT;
+    axisInfo.splitValue = 128;
+    setAxisMapping(EvdevAbsCode::THROTTLE, axisInfo);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+    InputDeviceInfo info;
+
+    mMapper->populateDeviceInfo(info);
+
+    auto unknownRange = info.getMotionRange(ftl::to_underlying(MotionEventAxis::UNKNOWN),
+                                            AINPUT_SOURCE_JOYSTICK);
+    auto brakeRange =
+            info.getMotionRange(ftl::to_underlying(MotionEventAxis::BRAKE), AINPUT_SOURCE_JOYSTICK);
+    EXPECT_EQ(unknownRange, nullptr);
+    ASSERT_NE(brakeRange, nullptr);
+    EXPECT_EQ(brakeRange->min, 0);
+    EXPECT_EQ(brakeRange->max, 1);
 }
 
 TEST_F(JoystickInputMapperTest,
