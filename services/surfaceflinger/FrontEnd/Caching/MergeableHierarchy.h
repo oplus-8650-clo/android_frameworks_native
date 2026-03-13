@@ -43,6 +43,8 @@ public:
     struct HierarchyState {
         uint32_t layerId;
         const LayerHierarchy* hierarchy;
+
+        bool operator==(const HierarchyState&) const = default;
     };
 
     // Accumulates LayerHierarchies to construct an MergeableHierarchy.
@@ -56,15 +58,11 @@ public:
         bool canBuild() { return !mHierarchies.empty(); }
 
         // Builds an MergeableHierarchy, and ascribes an owner for it.
-        std::unique_ptr<MergeableHierarchy> build() {
-            mSnapshots.clear();
-            return std::make_unique<MergeableHierarchy>(std::move(mHierarchies));
-        }
+        MergeableHierarchy build() { return MergeableHierarchy(std::move(mHierarchies)); }
 
     private:
         nsecs_t mTime;
         std::vector<HierarchyState> mHierarchies;
-        std::vector<LayerSnapshot*> mSnapshots;
     };
 
     MergeableHierarchy(std::vector<HierarchyState>&& hierarchies)
@@ -74,6 +72,8 @@ public:
 
     uint32_t getFirstLayer() const { return mHierarchies.front().layerId; }
     uint32_t getLastLayer() const { return mHierarchies.back().layerId; }
+
+    bool isValid() const { return !mHierarchies.empty(); }
 
     bool hasLayer(uint32_t id) const {
         return std::any_of(mHierarchies.cbegin(), mHierarchies.cend(),
@@ -90,7 +90,7 @@ public:
     void materializeSnapshot(std::vector<std::unique_ptr<LayerSnapshot>> snapshots,
                              compositionengine::CompositionEngine& compositionEngine);
 
-    std::unique_ptr<LayerSnapshot> getSnapshotCopy() {
+    std::unique_ptr<LayerSnapshot> getSnapshotCopy() const {
         if (!mSnapshot) {
             return nullptr;
         }
@@ -99,6 +99,10 @@ public:
     };
 
     void dump(std::ostream& out) const;
+
+    bool operator==(const MergeableHierarchy& other) const {
+        return mHierarchies == other.mHierarchies;
+    }
 
 private:
     std::vector<HierarchyState> mHierarchies;

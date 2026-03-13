@@ -161,3 +161,11 @@ flag {
   bug: "340933948"
   is_fixed_read_only: true
 } # wb_aaos
+
+flag {
+  name: "wb_biometrics"
+  namespace: "biometrics_framework"
+  description: "Remove usage of IGBPs in Biometrics."
+  bug: "340933948"
+  is_fixed_read_only: true
+} # wb_biometrics

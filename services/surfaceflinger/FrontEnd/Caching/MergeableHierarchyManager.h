@@ -83,21 +83,19 @@ public:
     void constructSnapshots(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
                             compositionengine::CompositionEngine& compositionEngine);
 
-    MergeableHierarchy* getOwnedHierarchy(uint32_t id) const {
-        auto hierarchy =
-                std::find_if(mMergeableHierarchies.begin(), mMergeableHierarchies.end(),
-                             [id](const auto& hierarchy) { return hierarchy->getId() == id; });
+    std::unique_ptr<LayerSnapshot> findLayerSnapshotCopy(uint32_t id) {
+        auto hierarchy = findOwnedHierarchy(id);
 
-        if (hierarchy != mMergeableHierarchies.end()) {
-            return hierarchy->get();
-        } else {
+        if (hierarchy == mMergeableHierarchies.end()) {
             return nullptr;
         }
+
+        return hierarchy->getSnapshotCopy();
     }
 
     bool isMemberOfAnyHierarchy(uint32_t id) const {
         return std::any_of(mMergeableHierarchies.cbegin(), mMergeableHierarchies.cend(),
-                           [id](const auto& hierarchy) { return hierarchy->hasLayer(id); });
+                           [id](const auto& hierarchy) { return hierarchy.hasLayer(id); });
     }
 
     // Dumps all tracked MergeableHiearchies to a string
@@ -112,24 +110,59 @@ public:
         out << "\nMergeable Hierarchies\n";
         for (const auto& mergeableHierarchy : mMergeableHierarchies) {
             out << "  ";
-            mergeableHierarchy->dump(out);
+            mergeableHierarchy.dump(out);
             out << "\n";
         }
     }
 
 private:
-    void add(std::unique_ptr<MergeableHierarchy>&& mergeableHierarchy) {
+    void add(MergeableHierarchy&& mergeableHierarchy) {
         mMergeableHierarchies.emplace_back(std::move(mergeableHierarchy));
     }
     void remove(uint32_t id) {
         std::erase_if(mMergeableHierarchies, [id](const auto& mergeableHierarchy) {
-            return mergeableHierarchy->getId() == id;
+            return mergeableHierarchy.isValid() && mergeableHierarchy.getId() == id;
         });
     }
-    void update(const LayerHierarchy* hierarchy, MergeableHierarchy::Accumulator& accumulator);
+    void update(const LayerHierarchy* hierarchy, MergeableHierarchy::Accumulator& accumulator,
+                std::vector<MergeableHierarchy>& incomingHierarchies);
+
+    std::vector<MergeableHierarchy>::iterator findOwnedHierarchy(uint32_t id) {
+        return std::find_if(mMergeableHierarchies.begin(), mMergeableHierarchies.end(),
+                            [id](const auto& hierarchy) {
+                                return hierarchy.isValid() && hierarchy.getId() == id;
+                            });
+    }
+
+    std::vector<MergeableHierarchy>::iterator findPreexistingHierarchy(
+            const MergeableHierarchy& mergeableHierarchy) {
+        auto candidate = findOwnedHierarchy(mergeableHierarchy.getId());
+
+        if (candidate == mMergeableHierarchies.end()) {
+            return mMergeableHierarchies.end();
+        }
+
+        if (*candidate != mergeableHierarchy) {
+            return mMergeableHierarchies.end();
+        }
+
+        return candidate;
+    }
+
+    void pushToIncomingHierarchy(MergeableHierarchy::Accumulator accumulator,
+                                 std::vector<MergeableHierarchy>& incomingHierarchies) {
+        auto newHierarchy = accumulator.build();
+        auto preexistingHierarchy = findPreexistingHierarchy(newHierarchy);
+
+        if (preexistingHierarchy != mMergeableHierarchies.end()) {
+            incomingHierarchies.emplace_back(std::move(*preexistingHierarchy));
+        } else {
+            incomingHierarchies.emplace_back(std::move(newHierarchy));
+        }
+    }
     // TODO: use a better data structure for this. Conceptually we want a set of sets
     // so that destroying a LayerHierarchy won't cause a linear time search.
-    std::vector<std::unique_ptr<caching::MergeableHierarchy>> mMergeableHierarchies;
+    std::vector<MergeableHierarchy> mMergeableHierarchies;
 };
 
 } // namespace caching

@@ -35,6 +35,7 @@ cc_test {
         "VelocityControl_test.cpp",
         "VelocityTracker_test.cpp",
         "VerifiedInputEvent_test.cpp",
+        "VirtualInputDevice_test.cpp",
     ],
     header_libs: [
         "flatbuffer_headers",

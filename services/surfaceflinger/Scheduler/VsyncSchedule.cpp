@@ -60,7 +60,7 @@ VsyncSchedule::VsyncSchedule(ftl::NonNull<DisplayModePtr> modePtr, FeatureFlags 
                              RequestHardwareVsync requestHardwareVsync)
       : mId(modePtr->getPhysicalDisplayId()),
         mRequestHardwareVsync(std::move(requestHardwareVsync)),
-        mTracker(createTracker(modePtr)),
+        mTracker(createTracker(modePtr, features)),
         mDispatch(createDispatch(mTracker)),
         mController(createController(modePtr->getPhysicalDisplayId(), *mTracker, features)),
         mTracer(features.test(Feature::kTracePredictedVsync)
@@ -111,14 +111,26 @@ void VsyncSchedule::dump(std::string& out) const {
     mDispatch->dump(out);
 }
 
-VsyncSchedule::TrackerPtr VsyncSchedule::createTracker(ftl::NonNull<DisplayModePtr> modePtr) {
-    // TODO(b/144707443): Tune constants.
-    constexpr size_t kHistorySize = 20;
-    constexpr size_t kMinSamplesForPrediction = 6;
+VsyncSchedule::TrackerPtr VsyncSchedule::createTracker(ftl::NonNull<DisplayModePtr> modePtr,
+                                                       FeatureFlags features) {
+    size_t historySize = 20;
+    size_t minSamples = 6;
+    const bool isVrr = modePtr->getVrrConfig().has_value();
+    const bool hasPresentFences = features.test(Feature::kPresentFences);
+    if (FlagManager::getInstance().use_last_vsync_predict() && isVrr && hasPresentFences) {
+        ALOGI("%s: Using one sample prediction mode for display %s", __func__,
+              to_string(modePtr->getPhysicalDisplayId()).c_str());
+        historySize = 1;
+        minSamples = 1;
+    } else {
+        ALOGI("%s: Using default prediction mode for display %s", __func__,
+              to_string(modePtr->getPhysicalDisplayId()).c_str());
+    }
+
     constexpr uint32_t kDiscardOutlierPercent = 20;
 
-    return std::make_unique<VSyncPredictor>(std::make_unique<SystemClock>(), modePtr, kHistorySize,
-                                            kMinSamplesForPrediction, kDiscardOutlierPercent);
+    return std::make_unique<VSyncPredictor>(std::make_unique<SystemClock>(), modePtr, historySize,
+                                            minSamples, kDiscardOutlierPercent);
 }
 
 VsyncSchedule::DispatchPtr VsyncSchedule::createDispatch(TrackerPtr tracker) {
