@@ -222,8 +222,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
     }
 // QTI_END: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
-// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
 #if !defined(NO_BINDER)
+// QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     property_get("vendor.gpp.create_frc_extension", value, "0");
     intValue = atoi(value);
     if (!mQtiSurfaceGPPExtn && intValue == 1) {
@@ -232,8 +232,8 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
             this, IGraphicBufferProducer::asBinder(bufferProducer), &mGraphicBufferProducer);
 // QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     }
-#endif // !defined(NO_BINDER)
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
+#endif // !defined(NO_BINDER)
 
 }
 

@@ -29,9 +29,7 @@
 
 #include <com_android_graphics_surfaceflinger_flags.h>
 
-// QTI_BEGIN: 2026-03-06: Performance: native: smart touch consuming
 #include "QtiExtension/QtiDolphinWrapper.h"
-// QTI_END: 2026-03-06: Performance: native: smart touch consuming
 
 namespace android {
 using namespace com::android::graphics::surfaceflinger;
@@ -143,12 +141,10 @@ int DisplayEventDispatcher::handleEvent(int, int events, void*) {
         mWaitingForVsync = false;
         mLastVsyncCount = vsyncCount;
         dispatchVsync(vsyncTimestamp, vsyncDisplayId, vsyncCount, vsyncEventData);
-// QTI_BEGIN: 2026-03-06: Performance: native: smart touch consuming
         QtiDolphinWrapper* qtiDolphinWrapper = QtiDolphinWrapper::qtiGetDolphinWrapper();
         if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinSetVsyncTime) {
             qtiDolphinWrapper->qtiDolphinSetVsyncTime(vsyncTimestamp);
         }
-// QTI_END: 2026-03-06: Performance: native: smart touch consuming
     }
 
     if (mWaitingForVsync) {
