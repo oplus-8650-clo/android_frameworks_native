@@ -168,7 +168,7 @@ public:
     T& experimental() { return mExperimentalValue; }
 
     T value() const {
-        const bool useExperimental =
+        const bool useExperimental = FlagManager::getInstance().jank_classification_v2() &&
                 FlagManager::getInstance().use_experimental_jank_classification();
         if (useExperimental) {
             return mExperimentalValue;
@@ -177,7 +177,7 @@ public:
     }
 
     T altValue() const {
-        const bool useExperimental =
+        const bool useExperimental = FlagManager::getInstance().jank_classification_v2() &&
                 FlagManager::getInstance().use_experimental_jank_classification();
         if (useExperimental) {
             return mLegacyValue;

@@ -29,9 +29,6 @@ namespace android {
 enum class EvdevAbsCode : uint16_t {
     GAS = ABS_GAS,
     THROTTLE = ABS_THROTTLE,
-    X = ABS_X,
-    Y = ABS_Y,
-    Z = ABS_Z,
     MAX = ABS_MAX,
 };
 

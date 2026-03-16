@@ -186,11 +186,7 @@ bool VSyncPredictor::addVsyncTimestamp(nsecs_t timestamp) {
     traceInt64("VSP-numSamples", static_cast<int64_t>(numSamples));
     mOldestVsync = oldestTs;
     const auto minNumSamples = getMinSamplesRequiredForPrediction();
-    if (numSamples < minNumSamples || numSamples == 1) {
-        // In one sample prediction mode (minNumSamples == 1), we can't run regression with
-        // only one sample. Instead, we anchor the model to the latest pulse (mOldestVsync)
-        // and trust that the hardware is running at the ideal period. Setting intercept to 0
-        // makes the next prediction exactly: last_pulse + ideal_period.
+    if (numSamples < minNumSamples) {
         mRateMap[idealPeriod()] = {idealPeriod(), 0};
         return true;
     }

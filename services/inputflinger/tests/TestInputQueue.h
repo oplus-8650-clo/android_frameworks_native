@@ -22,7 +22,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
-#include <source_location>
 
 #include "NotifyArgs.h"
 #include "TestEventMatchers.h"
@@ -35,9 +34,7 @@ public:
     // Add an event to the queue.
     void addEvent(const NotifyArgs& event);
 
-    NotifyMotionArgs expectMotion(
-            testing::Matcher<const NotifyMotionArgs&> matcher,
-            const std::source_location location = std::source_location::current());
+    NotifyMotionArgs expectMotion(testing::Matcher<const NotifyMotionArgs&> matcher);
     /**
      * Consume events until the received event matches the provided matcher.
      * Note: this will consume all event types (and discard them), not just motions, until the
@@ -50,15 +47,14 @@ public:
     NotifyDeviceResetArgs expectDeviceReset(testing::Matcher<const NotifyDeviceResetArgs&> matcher);
 
     // Check that the queue is empty. This will fail if the queue is not empty.
-    void assertNoEvents(const std::source_location location = std::source_location::current());
+    void assertNoEvents();
 
 private:
     // Get the next event from the queue. This will block until an event is available.
     std::optional<NotifyArgs> expectEvent();
 
     template <typename T>
-    T expectAndVerify(const char* expectedType, testing::Matcher<const T&> matcher,
-                      const std::source_location location = std::source_location::current());
+    T expectAndVerify(const char* expectedType, testing::Matcher<const T&> matcher);
 
     std::queue<NotifyArgs> mEventQueue GUARDED_BY(mLock);
     std::mutex mLock;

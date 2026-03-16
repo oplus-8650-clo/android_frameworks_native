@@ -1019,10 +1019,6 @@ private:
     /** Stores the value of the input flag for per device input latency metrics. */
     const bool mPerDeviceInputLatencyMetricsFlag =
             com::android::input::flags::enable_per_device_input_latency_metrics();
-
-    /** Stores the value of the flag for ANR warning callback from input dispatcher. */
-    bool mAnrWarningCallbackInputDispatcherEnabled{
-            com::android::input::flags::enable_anr_warning_callback_input_dispatcher()};
 };
 
 } // namespace android::inputdispatcher

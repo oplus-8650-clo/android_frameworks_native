@@ -45,7 +45,7 @@ class BufferItemConsumerTest : public ::testing::Test {
         : public BufferItemConsumer::BufferFreedListener {
         explicit BufferFreedListener(BufferItemConsumerTest* test)
             : mTest(test) {}
-        void onBufferFreed(const sp<GraphicBuffer>& /* gBuffer */) override {
+        void onBufferFreed(const wp<GraphicBuffer>& /* gBuffer */) override {
             mTest->HandleBufferFreed();
         }
         BufferItemConsumerTest* mTest;

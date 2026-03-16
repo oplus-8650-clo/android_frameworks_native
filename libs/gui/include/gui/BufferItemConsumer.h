@@ -43,7 +43,7 @@ class BufferItemConsumer: public ConsumerBase
     typedef BufferFreedCallback BufferFreedCallback;
 
     struct BufferFreedListener : public virtual RefBase {
-        virtual void onBufferFreed(const sp<GraphicBuffer>& graphicBuffer) = 0;
+        virtual void onBufferFreed(const wp<GraphicBuffer>& graphicBuffer) = 0;
     };
 
     enum { DEFAULT_MAX_BUFFERS = -1 };

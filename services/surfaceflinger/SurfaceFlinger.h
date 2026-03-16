@@ -575,8 +575,6 @@ private:
 
     sp<IBinder> getPhysicalDisplayToken(PhysicalDisplayId displayId) const;
     status_t setTransactionState(TransactionState&& state, const sp<IBinder>& applyToken) override;
-    status_t registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) override;
-    status_t unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) override;
     void bootFinished();
     status_t getSupportedFrameTimestamps(std::vector<FrameEvent>* outSupported) const;
     sp<IDisplayEventConnection> createDisplayEventConnection(
@@ -1971,6 +1969,8 @@ public:
     binder::Status removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
     binder::Status forcePacesetter(int64_t displayId) override;
     binder::Status resetForcedPacesetter() override;
+    binder::Status registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) override;
+    binder::Status unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) override;
     binder::Status registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
                                   const std::string& shaderString) override;
     binder::Status unregisterShader(const sp<IBinder>& shader) override;

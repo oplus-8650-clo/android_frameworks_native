@@ -6013,16 +6013,6 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
     return NO_ERROR;
 }
 
-status_t SurfaceFlinger::registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) {
-    mIpcCache->queueRegisterGraphicBuffers(info);
-    return NO_ERROR;
-}
-
-status_t SurfaceFlinger::unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) {
-    mIpcCache->queueUnregisterGraphicBuffers(info);
-    return NO_ERROR;
-}
-
 bool SurfaceFlinger::applyTransactionState(
         const FrameTimelineInfo& frameTimelineInfo, std::vector<ResolvedComposerState>& states,
         std::vector<DisplayState>& displays, uint32_t flags,
@@ -7622,8 +7612,6 @@ status_t SurfaceFlinger::CheckTransactCodeCredentials(uint32_t code) {
         case GET_DISPLAY_COLOR_MODES:
         case GET_DISPLAY_MODES:
         case GET_SCHEDULING_POLICY:
-        case REGISTER_GRAPHIC_BUFFERS:
-        case UNREGISTER_GRAPHIC_BUFFERS:
         // Calling setTransactionState is safe, because you need to have been
         // granted a reference to Client* and Handle* to do anything with it.
         case SET_TRANSACTION_STATE: {
@@ -10013,7 +10001,6 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::copyMergedSnapshots(
                 }
 
                 auto it = mLegacyLayers.find(snapshot.sequence);
-
                 LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
                                                 "Couldnt find layer object for %s",
                                                 snapshot.getDebugString().c_str());
@@ -11219,6 +11206,18 @@ binder::Status SurfaceComposerAIDL::resetForcedPacesetter() {
     }
 
     mFlinger->sfdo_resetForcedPacesetter();
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::registerGraphicBuffers(
+        const gui::GraphicBuffersRegisterInfo& info) {
+    mFlinger->mIpcCache->queueRegisterGraphicBuffers(info);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::unregisterGraphicBuffers(
+        const gui::GraphicBuffersUnregisterInfo& info) {
+    mFlinger->mIpcCache->queueUnregisterGraphicBuffers(info);
     return binder::Status::ok();
 }
 

@@ -187,7 +187,6 @@ void InputMapperTest::SetUp(ftl::Flags<InputDeviceClass> classes, int bus) {
     mDevice = newDevice(DEVICE_ID, DEVICE_NAME, DEVICE_LOCATION, EVENTHUB_ID, classes, bus);
     // Consume the device reset notification generated when adding a new device.
     mFakeListener->assertNotifyDeviceResetWasCalled();
-    mFakeListener->assertNotifyInputDevicesChangedWasCalled();
 }
 
 void InputMapperTest::SetUp() {

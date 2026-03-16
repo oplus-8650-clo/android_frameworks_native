@@ -21,35 +21,35 @@
 namespace android::surfaceflinger::frontend::caching {
 
 void MergeableHierarchyManager::update(const LayerHierarchy& hierarchy) {
-    std::vector<MergeableHierarchy> incomingHierarchies;
     MergeableHierarchy::Accumulator accumulator;
-    update(&hierarchy, accumulator, incomingHierarchies);
+    update(&hierarchy, accumulator);
 
     if (accumulator.canBuild()) {
-        pushToIncomingHierarchy(accumulator, incomingHierarchies);
+        auto mergeableHierarchy = accumulator.build();
+        remove(mergeableHierarchy->getFirstLayer());
+        add(std::move(mergeableHierarchy));
     }
-
-    mMergeableHierarchies = std::move(incomingHierarchies);
 }
 
 void MergeableHierarchyManager::update(const LayerHierarchy* hierarchy,
-                                       MergeableHierarchy::Accumulator& accumulator,
-                                       std::vector<MergeableHierarchy>& incomingHierarchies) {
+                                       MergeableHierarchy::Accumulator& accumulator) {
     if (!accumulator.add(hierarchy) && accumulator.canBuild()) {
-        pushToIncomingHierarchy(accumulator, incomingHierarchies);
+        auto mergeableHierarchy = accumulator.build();
+        remove(mergeableHierarchy->getFirstLayer());
+        add(std::move(mergeableHierarchy));
         accumulator = MergeableHierarchy::Accumulator();
     }
 
     for (auto& [childHierarchy, _] : hierarchy->mChildren) {
-        update(childHierarchy, accumulator, incomingHierarchies);
+        update(childHierarchy, accumulator);
     }
 }
 
 void MergeableHierarchyManager::constructSnapshots(
         LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
         compositionengine::CompositionEngine& compositionEngine) {
-    for (auto& hierarchy : mMergeableHierarchies) {
-        hierarchy.constructSnapshot(builder, args, compositionEngine);
+    for (const auto& hierarchy : mMergeableHierarchies) {
+        hierarchy->constructSnapshot(builder, args, compositionEngine);
     }
 }
 

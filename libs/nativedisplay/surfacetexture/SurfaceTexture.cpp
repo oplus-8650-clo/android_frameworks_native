@@ -459,7 +459,7 @@ std::shared_ptr<FenceTime> SurfaceTexture::getCurrentFenceTime() const {
     return mCurrentFenceTime;
 }
 
-void SurfaceTexture::onBufferFreed(const sp<GraphicBuffer>& maybeBuffer) {
+void SurfaceTexture::onBufferFreed(const wp<GraphicBuffer>& maybeBuffer) {
     std::unique_lock lock(mMutex, std::try_to_lock);
     if (lock.owns_lock()) {
         onBufferFreedLocked(maybeBuffer);
@@ -480,7 +480,8 @@ void SurfaceTexture::clearPendingFreedBuffersLocked() {
     }
 }
 
-void SurfaceTexture::onBufferFreedLocked(const sp<GraphicBuffer>& buffer) {
+void SurfaceTexture::onBufferFreedLocked(const wp<GraphicBuffer>& maybeBuffer) {
+    sp<GraphicBuffer> buffer = maybeBuffer.promote();
     if (buffer == nullptr) {
         return;
     }

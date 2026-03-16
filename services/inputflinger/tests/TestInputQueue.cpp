@@ -15,7 +15,6 @@
  */
 
 #include "TestInputQueue.h"
-#include <source_location>
 
 namespace android {
 
@@ -39,8 +38,7 @@ std::optional<NotifyArgs> TestInputQueue::expectEvent() {
 }
 
 template <typename T>
-T TestInputQueue::expectAndVerify(const char* expectedType, testing::Matcher<const T&> matcher,
-                                  const std::source_location location) {
+T TestInputQueue::expectAndVerify(const char* expectedType, testing::Matcher<const T&> matcher) {
     std::optional<NotifyArgs> args = expectEvent();
     if (!args) {
         ADD_FAILURE() << "Did not get an event, expected " << expectedType << " " << matcher;
@@ -51,13 +49,12 @@ T TestInputQueue::expectAndVerify(const char* expectedType, testing::Matcher<con
         return {};
     }
     T eventArgs = std::get<T>(*args);
-    EXPECT_THAT(eventArgs, matcher) << " at " << location.file_name() << ":" << location.line();
+    EXPECT_THAT(eventArgs, matcher);
     return eventArgs;
 }
 
-NotifyMotionArgs TestInputQueue::expectMotion(testing::Matcher<const NotifyMotionArgs&> matcher,
-                                              const std::source_location location) {
-    return expectAndVerify<NotifyMotionArgs>("NotifyMotionArgs", matcher, location);
+NotifyMotionArgs TestInputQueue::expectMotion(testing::Matcher<const NotifyMotionArgs&> matcher) {
+    return expectAndVerify<NotifyMotionArgs>("NotifyMotionArgs", matcher);
 }
 
 NotifyMotionArgs TestInputQueue::consumeUntilAndExpectMotion(
@@ -96,11 +93,9 @@ NotifyDeviceResetArgs TestInputQueue::expectDeviceReset(
     return expectAndVerify<NotifyDeviceResetArgs>("NotifyDeviceResetArgs", matcher);
 }
 
-void TestInputQueue::assertNoEvents(const std::source_location location) {
+void TestInputQueue::assertNoEvents() {
     std::scoped_lock lock(mLock);
-    EXPECT_THAT(mEventQueue, testing::IsEmpty())
-            << "at " << location.file_name() << ":" << location.line() << "\n"
-            << mEventQueue.front();
+    ASSERT_TRUE(mEventQueue.empty());
 }
 
 } // namespace android

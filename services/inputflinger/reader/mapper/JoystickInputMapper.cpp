@@ -42,23 +42,13 @@ uint32_t JoystickInputMapper::getSources() const {
     return AINPUT_SOURCE_JOYSTICK;
 }
 
-static bool isAxisEnabled(const int32_t axisId) {
-    return MotionEventAxis(axisId) != MotionEventAxis::UNKNOWN;
-}
-
-static bool isAxisDisabled(const int32_t axisId) {
-    return !isAxisEnabled(axisId);
-}
-
 void JoystickInputMapper::populateDeviceInfo(InputDeviceInfo& info) {
     InputMapper::populateDeviceInfo(info);
 
     for (const auto& [_, axis] : mAxes) {
-        if (isAxisEnabled(axis.axisInfo.axis)) {
-            addMotionRange(axis.axisInfo.axis, axis, info);
-        }
+        addMotionRange(axis.axisInfo.axis, axis, info);
 
-        if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT && isAxisEnabled(axis.axisInfo.highAxis)) {
+        if (axis.axisInfo.mode == AxisInfo::MODE_SPLIT) {
             addMotionRange(axis.axisInfo.highAxis, axis, info);
         }
     }
@@ -169,13 +159,7 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
                     // Axis is not explicitly mapped, will choose a generic axis later.
                     axisInfo.mode = AxisInfo::MODE_NORMAL;
                     axisInfo.axis = -1;
-                } else if (isAxisDisabled(axisInfo.axis)) {
-                    if (axisInfo.mode != AxisInfo::MODE_SPLIT ||
-                        isAxisDisabled(axisInfo.highAxis)) {
-                        continue;
-                    }
                 }
-
                 mAxes.insert({abs, createAxis(axisInfo, rawAxisInfo.value(), explicitlyMapped)});
             }
         }
@@ -195,7 +179,7 @@ std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,
         int32_t nextGenericAxisId = AMOTION_EVENT_AXIS_GENERIC_1;
         for (auto it = mAxes.begin(); it != mAxes.end(); /*increment it inside loop*/) {
             Axis& axis = it->second;
-            if (axis.axisInfo.axis < 0 && !axis.explicitlyMapped) {
+            if (axis.axisInfo.axis < 0) {
                 while (nextGenericAxisId <= AMOTION_EVENT_MAXIMUM_VALID_AXIS_VALUE &&
                        haveAxis(nextGenericAxisId)) {
                     nextGenericAxisId += 1;
@@ -474,13 +458,6 @@ std::list<NotifyArgs> JoystickInputMapper::process(const RawEvent& rawEvent) {
                                     axis.highOffset;
                         } else {
                             newValue = 0.0f;
-                            highNewValue = 0.0f;
-                        }
-
-                        if (isAxisDisabled(axis.axisInfo.axis)) {
-                            newValue = 0.0f;
-                        }
-                        if (isAxisDisabled(axis.axisInfo.highAxis)) {
                             highNewValue = 0.0f;
                         }
                         break;

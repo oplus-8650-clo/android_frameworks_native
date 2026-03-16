@@ -76,7 +76,6 @@ rust_test {
         "liblog",
     ],
     require_root: true,
-    test_suites: ["general-tests"],
     enabled: false,
     arch: {
         x86_64: {

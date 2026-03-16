@@ -97,8 +97,8 @@ private:
 
     VulkanFuncs mFuncs;
 
-    std::vector<std::string> mEnabledInstanceExtNames;
-    std::vector<std::string> mEnabledDeviceExtNames;
+    std::vector<std::string> mInstanceExtensionNames;
+    std::vector<std::string> mDeviceExtensionNames;
 };
 
 } // namespace skia

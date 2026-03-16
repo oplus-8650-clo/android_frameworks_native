@@ -35,7 +35,6 @@
 #include <gui/GraphicBuffersRegisterInfo.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/SurfaceComposerClient.h>
-#include <private/gui/ComposerService.h>
 
 namespace android {
 
@@ -1283,7 +1282,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
     gui::GraphicBuffersRegisterInfo registerInfo;
     registerInfo.renderResourceToken = renderResourceToken;
     registerInfo.buffers.push_back(buffer);
-    ComposerService::getComposerService()->registerGraphicBuffers(registerInfo);
+    ComposerServiceAIDL::getComposerService()->registerGraphicBuffers(registerInfo);
 
     // Populate the cache with the GraphicBuffer id
     IPCClientResourceCache clientCache;
@@ -1314,7 +1313,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBuffer) {
     gui::GraphicBuffersUnregisterInfo unregisterInfo;
     unregisterInfo.renderResourceToken = renderResourceToken;
     unregisterInfo.bufferIds.push_back(buffer->getId());
-    ComposerService::getComposerService()->unregisterGraphicBuffers(unregisterInfo);
+    ComposerServiceAIDL::getComposerService()->unregisterGraphicBuffers(unregisterInfo);
 }
 
 TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBufferRenderTarget) {
@@ -1344,7 +1343,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBufferRenderTarget)
     gui::GraphicBuffersRegisterInfo registerInfo;
     registerInfo.renderResourceToken = renderResourceToken;
     registerInfo.buffers.push_back(buffer);
-    ComposerService::getComposerService()->registerGraphicBuffers(registerInfo);
+    ComposerServiceAIDL::getComposerService()->registerGraphicBuffers(registerInfo);
 
     // Populate the cache
     IPCClientResourceCache clientCache;
@@ -1391,7 +1390,7 @@ TEST_P(LayerTypeAndRenderTypeTransactionTest, RegisterGraphicBufferRenderTarget)
     gui::GraphicBuffersUnregisterInfo unregisterInfo;
     unregisterInfo.renderResourceToken = renderResourceToken;
     unregisterInfo.bufferIds.push_back(buffer->getId());
-    ComposerService::getComposerService()->unregisterGraphicBuffers(unregisterInfo);
+    ComposerServiceAIDL::getComposerService()->unregisterGraphicBuffers(unregisterInfo);
 }
 
 TEST_P(LayerTypeAndRenderTypeTransactionTest, CropElevationShadowByParent) {

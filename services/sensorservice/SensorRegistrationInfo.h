@@ -39,8 +39,7 @@ public:
     }
 
     SensorRegistrationInfo(int32_t handle, const String8& packageName, int64_t samplingRateNs,
-                           int64_t maxReportLatencyNs, bool activate, status_t registerStatus,
-                           int64_t totalDuration = 0, int64_t activeDuration = 0) {
+                           int64_t maxReportLatencyNs, bool activate, status_t registerStatus) {
         mSensorHandle = handle;
         mPackageName = packageName;
         mRegisteredStatus = registerStatus;
@@ -48,8 +47,6 @@ public:
         mSamplingRateUs = static_cast<int64_t>(samplingRateNs/1000);
         mMaxReportLatencyUs = static_cast<int64_t>(maxReportLatencyNs/1000);
         mActivated = activate;
-        mTotalDuration = totalDuration;
-        mActiveDuration = activeDuration;
 
         IPCThreadState *thread = IPCThreadState::self();
         mPid = (thread != nullptr) ? thread->getCallingPid() : -1;
@@ -77,13 +74,16 @@ public:
         ss << std::dec << std::setfill(' ') << " pid=" << std::setw(5) << mPid
            << " uid=" << std::setw(5) << mUid;
 
-        std::string samplingRate = mActivated ? std::to_string(mSamplingRateUs) : "  N/A  ";
-        std::string batchingInterval = mActivated ? std::to_string(mMaxReportLatencyUs) : "  N/A  ";
-        ss << " samplingPeriod=" << std::setfill(' ') << std::setw(8) << samplingRate << "us"
-           << " batchingPeriod=" << std::setfill(' ') << std::setw(8) << batchingInterval << "us"
-           << " result=" << statusToString(mRegisteredStatus);
-
-        ss << " (sensor, package): (" << std::setfill(' ') << std::left << std::setw(27);
+        std::string samplingRate =
+            mActivated ? std::to_string(mSamplingRateUs) : "  N/A  ";
+        std::string batchingInterval =
+            mActivated ? std::to_string(mMaxReportLatencyUs) : "  N/A  ";
+        ss << " samplingPeriod=" << std::setfill(' ') << std::setw(8)
+           << samplingRate << "us" << " batchingPeriod=" << std::setfill(' ')
+           << std::setw(8) << batchingInterval << "us"
+           << " result=" << statusToString(mRegisteredStatus)
+           << " (sensor, package): (" << std::setfill(' ') << std::left
+           << std::setw(27);
 
         if (sensorService != nullptr) {
           ss << sensorService->getSensorName(mSensorHandle);
@@ -91,23 +91,6 @@ public:
           ss << "null";
         }
         ss << ", " << mPackageName << ")";
-
-        if (!mActivated) {
-            constexpr int64_t kSecondsToNanoseconds = 1000000000LL;
-            int64_t totalDurationSec = mTotalDuration / kSecondsToNanoseconds;
-            int64_t suspendedDurationNs = mTotalDuration - mActiveDuration;
-            int64_t suspendedDurationSec = suspendedDurationNs / kSecondsToNanoseconds;
-            int percentage = mTotalDuration > 0
-                    ? static_cast<int>((mActiveDuration * 100.0) / mTotalDuration) : 0;
-
-            ss << "\n    Final Duration: " << std::right << std::setfill('0') << std::setw(2)
-               << totalDurationSec / 3600 << ":" << std::setw(2) << (totalDurationSec % 3600) / 60
-               << ":" << std::setw(2) << totalDurationSec % 60 << " | Active Time: " << percentage
-               << "%"
-               << " (Suspended for " << std::setw(2) << suspendedDurationSec / 3600 << ":"
-               << std::setw(2) << (suspendedDurationSec % 3600) / 60 << ":" << std::setw(2)
-               << suspendedDurationSec % 60 << " due to sensor access restriction)";
-        }
 
         return ss.str();
     }
@@ -144,8 +127,6 @@ private:
     bool mActivated;
     time_t mRealtimeSec;
     status_t mRegisteredStatus;
-    int64_t mTotalDuration;
-    int64_t mActiveDuration;
 };
 
 } // namespace android;

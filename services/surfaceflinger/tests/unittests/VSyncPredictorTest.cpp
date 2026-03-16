@@ -1250,42 +1250,6 @@ TEST_F(VSyncPredictorTest, reportsCorrectAccuracyForPastTimePointAfterVSync) {
 
     verifyAccuracy(kMinimumSamplesForPrediction, slope, intercept, timePoint);
 }
-
-TEST_F(VSyncPredictorTest, synchronizesWithSingleSample) {
-    auto constexpr kPeriod = 10'000'000;
-    auto constexpr kRefreshRate = Fps::fromPeriodNsecs(kPeriod);
-    hal::VrrConfig vrrConfig{.minFrameIntervalNs = kPeriod};
-    const auto mode =
-            ftl::as_non_null(createVrrDisplayMode(DisplayModeId(0), kRefreshRate, vrrConfig));
-
-    constexpr size_t kHistorySize = 1;
-    constexpr size_t kMinSamples = 1;
-    VSyncPredictor vrrTracker{std::make_unique<ClockWrapper>(mClock), mode, kHistorySize,
-                              kMinSamples, kOutlierTolerancePercent};
-
-    EXPECT_TRUE(vrrTracker.needsMoreSamples());
-
-    // First sample synchronizes
-    nsecs_t timestamp = 1'000'000'000;
-    EXPECT_TRUE(vrrTracker.addVsyncTimestamp(timestamp));
-    EXPECT_FALSE(vrrTracker.needsMoreSamples());
-    EXPECT_TRUE(vrrTracker.isCurrentMode(mode));
-
-    // Subsequent valid samples also accepted and update the model
-    for (int i = 1; i < 5; i++) {
-        timestamp += kPeriod;
-        EXPECT_TRUE(vrrTracker.addVsyncTimestamp(timestamp));
-        EXPECT_FALSE(vrrTracker.needsMoreSamples());
-        EXPECT_THAT(vrrTracker.nextAnticipatedVSyncTimeFrom(timestamp), Eq(timestamp + kPeriod));
-    }
-
-    // Outlier sample (e.g., 50% out of phase) is rejected
-    const auto outlierTimestamp = timestamp + kPeriod + (kPeriod / 2);
-    EXPECT_FALSE(vrrTracker.addVsyncTimestamp(outlierTimestamp));
-
-    // Model still predicts based on the last valid sample
-    EXPECT_THAT(vrrTracker.nextAnticipatedVSyncTimeFrom(timestamp), Eq(timestamp + kPeriod));
-}
 } // namespace android::scheduler
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues

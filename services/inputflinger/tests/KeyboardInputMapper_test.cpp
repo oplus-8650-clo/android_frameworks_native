@@ -925,10 +925,6 @@ TEST_F(KeyboardInputMapperTest, Configure_AssignsDisplayPort) { // keyboard 1.
             newDevice(SECOND_DEVICE_ID, DEVICE_NAME2, USB2, SECOND_EVENTHUB_ID,
                       ftl::Flags<InputDeviceClass>(0));
 
-    ASSERT_NO_FATAL_FAILURE(
-            mFakeListener->assertNotifyDeviceResetWasCalled(WithDeviceId(device2->getId())));
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyInputDevicesChangedWasCalled());
-
     mFakeEventHub->addKey(SECOND_EVENTHUB_ID, KEY_UP, 0, AKEYCODE_DPAD_UP, 0);
     mFakeEventHub->addKey(SECOND_EVENTHUB_ID, KEY_RIGHT, 0, AKEYCODE_DPAD_RIGHT, 0);
     mFakeEventHub->addKey(SECOND_EVENTHUB_ID, KEY_DOWN, 0, AKEYCODE_DPAD_DOWN, 0);
@@ -974,10 +970,6 @@ TEST_F(KeyboardInputMapperTest, Configure_AssignsDisplayPort) { // keyboard 1.
     // Device should be enabled after the associated display is found.
     ASSERT_TRUE(mDevice->isEnabled());
     ASSERT_TRUE(device2->isEnabled());
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyInputDevicesChangedWasCalled());
-    ASSERT_NO_FATAL_FAILURE(
-            mFakeListener->assertNotifyDeviceResetWasCalled(WithDeviceId(device2->getId())));
-    ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyInputDevicesChangedWasCalled());
 
     // Test pad key events
     ASSERT_NO_FATAL_FAILURE(testDPadKeyRotation(mapper, KEY_UP, AKEYCODE_DPAD_UP, DISPLAY_ID));

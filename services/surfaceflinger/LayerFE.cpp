@@ -469,10 +469,7 @@ void LayerFE::setReleaseFence(const FenceResult& releaseFence) {
 // LayerFEs are reused and a new fence needs to be created whevever a buffer is latched.
 ftl::Future<FenceResult> LayerFE::createReleaseFenceFuture() {
     if (mReleaseFencePromiseStatus == ReleaseFencePromiseStatus::INITIALIZED) {
-        LOG_ALWAYS_FATAL_IF(!FlagManager::getInstance().frontend_caching_v0(),
-                            "Attempting to create a new promise while one is still unfulfilled.");
-        ALOGW("Creating a new promise while one is still unfulfilled. Fulfilling with NO_FENCE.");
-        mReleaseFence.set_value(Fence::NO_FENCE);
+        LOG_ALWAYS_FATAL("Attempting to create a new promise while one is still unfulfilled.");
     }
     mReleaseFence = std::promise<FenceResult>();
     mReleaseFencePromiseStatus = ReleaseFencePromiseStatus::INITIALIZED;

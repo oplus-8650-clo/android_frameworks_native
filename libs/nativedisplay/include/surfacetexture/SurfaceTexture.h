@@ -337,8 +337,8 @@ protected:
     status_t releaseBufferLocked(const sp<GraphicBuffer>& graphicBuffer);
 
     // BufferItemConsumer::BufferFreedListener:
-    virtual void onBufferFreed(const sp<GraphicBuffer>& graphicBuffer) override;
-    void onBufferFreedLocked(const sp<GraphicBuffer>& graphicBuffer);
+    virtual void onBufferFreed(const wp<GraphicBuffer>& graphicBuffer) override;
+    void onBufferFreedLocked(const wp<GraphicBuffer>& graphicBuffer);
     void clearPendingFreedBuffersLocked();
 
     // BufferItemConsumer::FrameAvailableListener:
@@ -363,7 +363,7 @@ protected:
     static const uint64_t DEFAULT_USAGE_FLAGS = GraphicBuffer::USAGE_HW_TEXTURE;
 
     mutable std::mutex mPendingFreedBuffersLock;
-    typedef ftl::SmallVector<sp<GraphicBuffer>, 8> PendingFreedBuffers;
+    typedef ftl::SmallVector<wp<GraphicBuffer>, 8> PendingFreedBuffers;
     PendingFreedBuffers mPendingFreedBuffers GUARDED_BY(mPendingFreedBuffersLock);
 
     mutable std::mutex mMutex;

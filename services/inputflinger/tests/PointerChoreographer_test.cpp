@@ -470,7 +470,6 @@ TEST_F(PointerChoreographerTest, MouseMovesPointerAndReturnsNewArgs) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -501,7 +500,6 @@ TEST_F(PointerChoreographerTest, AbsoluteMouseMovesPointerAndReturnsNewArgs) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -540,7 +538,6 @@ TEST_F(PointerChoreographerTest,
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE, ui::LogicalDisplayId::INVALID),
               generateTestDeviceInfo(SECOND_DEVICE_ID, AINPUT_SOURCE_MOUSE, ANOTHER_DISPLAY_ID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto unassociatedMousePc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, unassociatedMousePc->getDisplayId());
     auto associatedMousePc = assertPointerControllerCreated(ControllerType::MOUSE);
@@ -578,7 +575,6 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForMouseRelativeSource) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -590,13 +586,11 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForMouseRelativeSource) {
             {/*id=*/1,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE_RELATIVE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     mChoreographer.notifyPointerCaptureChanged(
             NotifyPointerCaptureChangedArgs(/*id=*/2, systemTime(SYSTEM_TIME_MONOTONIC),
                                             PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
                                                                   /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
-    mTestListener.assertNotifyCaptureWasCalled();
 
     // Notify motion as if pointer capture is enabled.
     mChoreographer.notifyMotion(
@@ -1680,7 +1674,6 @@ TEST_F(PointerChoreographerTest, TouchpadMovesPointerAndReturnsNewArgs) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE | AINPUT_SOURCE_TOUCHPAD,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -1711,7 +1704,6 @@ TEST_F(PointerChoreographerTest, TouchpadAddsPointerPositionToTheCoords) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE | AINPUT_SOURCE_TOUCHPAD,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -1793,7 +1785,6 @@ TEST_F(PointerChoreographerTest,
                                      ui::LogicalDisplayId::INVALID),
               generateTestDeviceInfo(SECOND_DEVICE_ID, AINPUT_SOURCE_MOUSE | AINPUT_SOURCE_TOUCHPAD,
                                      ANOTHER_DISPLAY_ID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto unassociatedMousePc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, unassociatedMousePc->getDisplayId());
     auto associatedMousePc = assertPointerControllerCreated(ControllerType::MOUSE);
@@ -1831,7 +1822,6 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForTouchpadSource) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE | AINPUT_SOURCE_TOUCHPAD,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -1844,7 +1834,6 @@ TEST_F(PointerChoreographerTest, DoesNotMovePointerForTouchpadSource) {
                                             PointerCaptureRequest(PointerCaptureMode::ABSOLUTE,
                                                                   /*window=*/sp<BBinder>::make(),
                                                                   /*seq=*/0)));
-    mTestListener.assertNotifyCaptureWasCalled();
 
     // Notify motion as if pointer capture is enabled.
     mChoreographer.notifyMotion(MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_TOUCHPAD)
@@ -1990,7 +1979,6 @@ TEST_F(PointerChoreographerTest, A11yPointerMotionFilterMouse) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -2025,7 +2013,6 @@ TEST_F(PointerChoreographerTest, A11yPointerMotionFilterTouchpad) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE | AINPUT_SOURCE_TOUCHPAD,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -2061,7 +2048,6 @@ TEST_F(PointerChoreographerTest, A11yPointerMotionFilterApplyTransform) {
             {/*id=*/0,
              {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE,
                                      ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     ASSERT_EQ(DISPLAY_ID, pc->getDisplayId());
 
@@ -3045,7 +3031,6 @@ TEST_P(PointerChoreographerDisplayTopologyCursorTestFixture,
 
     mChoreographer.notifyInputDevicesChanged(
             {/*id=*/0, {generateTestDeviceInfo(DEVICE_ID, device, ui::LogicalDisplayId::INVALID)}});
-    mTestListener.assertNotifyInputDevicesChangedWasCalled();
 
     auto pc = assertPointerControllerCreated(pointerControllerType);
     ASSERT_EQ(DISPLAY_CENTER_ID, pc->getDisplayId());

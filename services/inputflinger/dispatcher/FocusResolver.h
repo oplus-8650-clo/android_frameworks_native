@@ -22,7 +22,6 @@
 
 #include <android/gui/FocusRequest.h>
 #include <binder/Binder.h>
-#include <ftl/expected.h>
 #include <gui/WindowInfo.h>
 
 namespace android::inputdispatcher {
@@ -90,13 +89,15 @@ private:
     // we expect the focusability of the windows to match since its hard to reason why one window
     // can receive focus events and the other cannot when both are backed by the same input channel.
     //
-    static ftl::Expected<sp<android::gui::WindowInfoHandle>, Focusability> isTokenFocusable(
+    static Focusability isTokenFocusable(
             const sp<IBinder>& token,
-            const std::vector<sp<android::gui::WindowInfoHandle>>& windows);
+            const std::vector<sp<android::gui::WindowInfoHandle>>& windows,
+            sp<android::gui::WindowInfoHandle>& outFocusableWindow);
 
-    static ftl::Expected<sp<android::gui::WindowInfoHandle>, Focusability> getResolvedFocusWindow(
+    static FocusResolver::Focusability getResolvedFocusWindow(
             const sp<IBinder>& token,
-            const std::vector<sp<android::gui::WindowInfoHandle>>& windows);
+            const std::vector<sp<android::gui::WindowInfoHandle>>& windows,
+            sp<android::gui::WindowInfoHandle>& outFocusableWindow);
 
     // Focus tracking for keys, trackball, etc. A window token can be associated with one or
     // more InputWindowHandles. If a window is mirrored, the window and its mirror will share

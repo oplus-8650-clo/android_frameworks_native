@@ -315,13 +315,6 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
         ALOGE("Rendering command buffer");
     }
 
-    for (IPCRenderBufferOp* op = buffer->mUploadsHead.get(); op; op = op->next) {
-        if (op->type == kTypeUploadBitmap) {
-            UploadBitmap* uo = (UploadBitmap*)op;
-            if (cache) UploadBitmap_execute(uo, *cache);
-        }
-    }
-
     SkMatrix rootMatrix = canvas->getTotalMatrix();
     SkRect rootClip = SkRect::Make(canvas->getDeviceClipBounds());
 
@@ -401,15 +394,6 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
     if constexpr (DUMP_OPS) {
         ALOGE("Done rendering command buffer");
     }
-    for (IPCRenderBufferOp* op = buffer->mUploadsHead.get(); op; op = op->next) {
-        if (op->type == kTypeFreeBitmap) {
-            FreeBitmap* fo = (FreeBitmap*)op;
-            if (cache) FreeBitmap_execute(fo, *cache);
-        }
-    }
-
-    buffer->mUploadsHead = nullptr;
-    buffer->mUploadsTail = nullptr;
     return true;
 }
 
@@ -1197,66 +1181,6 @@ void EndRenderTargetOp::draw(SkCanvas* c, const SkMatrix&) {}
 
 std::string EndRenderTargetOp::toString() const {
     return "EndRenderTargetOp";
-}
-
-UploadBitmap* UploadBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId,
-                                  const SkBitmap& bitmap) {
-    UploadBitmap* op = commandBuffer->allocAligned<UploadBitmap>();
-    OP_REQUIRE(op);
-    op->type = kTypeUploadBitmap;
-    op->imageId = imageId;
-    op->width = bitmap.width();
-    op->height = bitmap.height();
-    op->colorType = (int32_t)bitmap.colorType();
-    op->alphaType = (int32_t)bitmap.alphaType();
-    op->rowBytes = bitmap.rowBytes();
-
-    size_t pixelSize = bitmap.computeByteSize();
-    OP_REQUIRE(SetRSpan(op->pixels, commandBuffer, (const uint8_t*)bitmap.getPixels(), pixelSize));
-
-    commandBuffer->pushUploadCmd(op);
-    return op;
-}
-
-void UploadBitmap_execute(UploadBitmap* op, IPCServerResourceCache& resourceCache) {
-    SkImageInfo info = SkImageInfo::Make(op->width, op->height, (SkColorType)op->colorType,
-                                         (SkAlphaType)op->alphaType);
-    if (op->pixels.data.get()) {
-        SkBitmap bitmap;
-        if (bitmap.tryAllocPixels(info, op->rowBytes)) {
-            memcpy(bitmap.getPixels(), op->pixels.data.get(), op->pixels.size);
-            bitmap.setImmutable();
-            sk_sp<SkImage> image = SkImages::RasterFromBitmap(bitmap);
-            resourceCache.bitmaps[op->imageId] = {nullptr, image, nullptr};
-        } else {
-            ALOGE("Failed to allocate pixels for UploadBitmap");
-        }
-    }
-}
-
-std::string UploadBitmap_toString(const UploadBitmap* op) {
-    return std::string("UploadBitmap id=") + std::to_string(op->imageId) + std::string(" w=") +
-            std::to_string(op->width) + std::string(" h=") + std::to_string(op->height) +
-            std::string(" ct=") + std::to_string(op->colorType) + std::string(" at=") +
-            std::to_string(op->alphaType) + std::string(" rb=") + std::to_string(op->rowBytes) +
-            std::string(" sz=") + std::to_string(op->pixels.size);
-}
-
-FreeBitmap* FreeBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId) {
-    FreeBitmap* op = commandBuffer->allocAligned<FreeBitmap>();
-    OP_REQUIRE(op);
-    op->type = kTypeFreeBitmap;
-    op->imageId = imageId;
-    commandBuffer->pushUploadCmd(op);
-    return op;
-}
-
-void FreeBitmap_execute(FreeBitmap* op, IPCServerResourceCache& resourceCache) {
-    resourceCache.bitmaps.erase(op->imageId);
-}
-
-std::string FreeBitmap_toString(const FreeBitmap* op) {
-    return std::string("FreeBitmap id=") + std::to_string(op->imageId);
 }
 
 } // namespace android

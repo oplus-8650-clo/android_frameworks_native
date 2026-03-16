@@ -290,6 +290,13 @@ flag {
 } # hdcp_negotiation
 
 flag {
+  name: "jank_classification_v2"
+  namespace: "core_graphics"
+  description: "Refined jank classification"
+  bug: "416904263"
+} # jank_classification_v2
+
+flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"
@@ -474,27 +481,6 @@ flag {
     description: "Use experimental jank classification"
     bug: "416904263"
 } # use_experimental_jank_classification
-
-flag {
-    name: "use_last_vsync_predict"
-    namespace: "core_graphics"
-    description: "Use the latest VSYNC timestamp for prediction on ARR devices with stable VSYNC signals."
-    bug: "362803698"
-} # use_last_vsync_predict
-
-flag {
-  name: "vd_aware_scheduler"
-  namespace: "core_graphics"
-  description: "Extend scheduler with support for virtual displays"
-  bug: "480207885"
-} # vd_aware_scheduler
-
-flag {
-    name: "virtual_display_content_filtering"
-    namespace: "window_surfaces"
-    description: "Secure apps from unauthorized content capture"
-    bug: "293903721"
-} # virtual_display_content_filtering
 
 flag {
   name: "wb_framebuffersurface2"

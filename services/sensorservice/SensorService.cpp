@@ -514,9 +514,6 @@ void SensorService::onUidStateChanged(uid_t uid, UidState state) {
     for (const sp<SensorEventConnection>& conn : connLock.getActiveConnections()) {
         if (conn->getUid() == uid) {
             dev.setUidStateForConnection(conn.get(), state);
-            // Update sensor subscriptions if needed
-            bool hasAccess = hasSensorAccessLocked(conn->getUid(), conn->getOpPackageName());
-            conn->onSensorAccessChanged(hasAccess);
         }
     }
 
@@ -2388,18 +2385,13 @@ status_t SensorService::disable(const sp<SensorEventConnection>& connection, int
         return mInitCheck;
 
     Mutex::Autolock _l(mLock);
-    int64_t totalDurationNs = 0;
-    int64_t activeDurationNs = 0;
-    connection->getSensorDurationStats(handle, &totalDurationNs, &activeDurationNs);
-
     status_t err = cleanupWithoutDisableLocked(connection, handle);
     if (err == NO_ERROR) {
         std::shared_ptr<SensorInterface> sensor = getSensorInterfaceFromHandle(handle);
         err = sensor != nullptr ? sensor->activate(connection.get(), false) : status_t(BAD_VALUE);
     }
     mLastNSensorRegistrations.editItemAt(mNextSensorRegIndex) =
-            SensorRegistrationInfo(handle, connection->getPackageName(), 0, 0, /*activate=*/false,
-                                   err, totalDurationNs, activeDurationNs);
+            SensorRegistrationInfo(handle, connection->getPackageName(), 0, 0, /*activate=*/ false, err);
     mNextSensorRegIndex = (mNextSensorRegIndex + 1) % SENSOR_REGISTRATIONS_BUF_SIZE;
     return err;
 }

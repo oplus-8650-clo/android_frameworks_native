@@ -22,7 +22,7 @@
 #include <string>
 #include "RPointer.h"
 
-constexpr int RENDER_COMMAND_BUFFER_DEFAULT_SIZE = 16 * 1024 * 1024;
+constexpr int RENDER_COMMAND_BUFFER_DEFAULT_SIZE = 1024 * 1024;
 
 constexpr bool RENDER_COMMAND_BUFFER_VERBOSE = false;
 
@@ -31,23 +31,6 @@ namespace android {
 struct IPCRenderBufferOp {
     RPointer<IPCRenderBufferOp> next;
     uint32_t type;
-};
-
-static constexpr uint32_t kTypeUploadBitmap = 1;
-static constexpr uint32_t kTypeFreeBitmap = 2;
-
-struct UploadBitmap : IPCRenderBufferOp {
-    uint64_t imageId;
-    int32_t width;
-    int32_t height;
-    int32_t colorType;
-    int32_t alphaType;
-    size_t rowBytes;
-    RSpan<uint8_t> pixels;
-};
-
-struct FreeBitmap : IPCRenderBufferOp {
-    uint64_t imageId;
 };
 
 class RenderCommandBuffer {
@@ -59,7 +42,6 @@ public:
 
     // op must be allocated by this RenderCommandBuffer
     void pushOp(IPCRenderBufferOp* op);
-    void pushUploadCmd(IPCRenderBufferOp* cmd);
 
     void reset();
 
@@ -94,8 +76,6 @@ public:
     static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
     RPointer<IPCRenderBufferOp> mTail;
     RPointer<IPCRenderBufferOp> mHead;
-    RPointer<IPCRenderBufferOp> mUploadsHead;
-    RPointer<IPCRenderBufferOp> mUploadsTail;
     // These are somewhat awkward, and used to achieve compatibility with the buffer based geometry
     // calculations. Effectively this is the size that the buffer would have been in the normal
     // rendering mode.

@@ -1104,7 +1104,7 @@ nsecs_t InputDispatcher::processNoFocusedWindowPreAnrLocked() {
  *         if the feature is disabled or no pre-ANRs require attention.
  */
 nsecs_t InputDispatcher::processPreAnrsLocked() {
-    if (!mAnrWarningCallbackInputDispatcherEnabled) {
+    if (!input_flags::enable_anr_warning_callback_input_dispatcher()) {
         return LLONG_MAX;
     }
     return std::min(nsecs_t{LLONG_MAX}, processNoFocusedWindowPreAnrLocked());

@@ -52,9 +52,4 @@ parcelable JankData {
    * Delta between expected and actual present time.
    */
   long presentDelayNs;
-
-  /**
-   * Jank severity score.
-   */
-  double jankScore;
 }
