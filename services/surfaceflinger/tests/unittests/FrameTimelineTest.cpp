@@ -2814,7 +2814,6 @@ TEST_F(FrameTimelineTest, jankClassification_presentOnTimeDoesNotClassify_Experi
 }
 
 TEST_F(FrameTimelineTest, jankClassification_displayPowerChangeInProgress) {
-    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
     SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, true);
     // Layer specific increment
     EXPECT_CALL(*mTimeStats, incrementJankyFrames(_));
@@ -4790,8 +4789,6 @@ TEST_F(FrameTimelineTest, surfaceFrameRenderRateUsingAppFrameRate) {
 }
 
 TEST_F(FrameTimelineTest, presviousSurfaceFrame) {
-    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
-
     int64_t token1 = mTokenManager->generateTokenForPredictions({1, 1, 1});
     FrameTimelineInfo ftInfo1;
     ftInfo1.vsyncId = token1;

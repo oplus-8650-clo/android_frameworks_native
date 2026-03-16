@@ -555,6 +555,7 @@ TEST_F(UnwantedInteractionBlockerTest, DumpCanBeAccessedOnAnotherThread) {
  */
 TEST_F(UnwantedInteractionBlockerTest, HeuristicFilterWorks) {
     mBlocker->notifyInputDevicesChanged({/*id=*/0, {generateTestDeviceInfo()}});
+    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     // Small touch down
     mBlocker->notifyMotion(generateMotionArgs(/*downTime=*/0, /*eventTime=*/0, DOWN, {{1, 2, 3}}));
     mTestListener.assertNotifyMotionWasCalled(WithMotionAction(DOWN));
@@ -580,6 +581,7 @@ TEST_F(UnwantedInteractionBlockerTest, StylusIsNotBlocked) {
     NotifyInputDevicesChangedArgs deviceChangedArgs = {/*id=*/0, {generateTestDeviceInfo()}};
     deviceChangedArgs.inputDeviceInfos[0].addSource(AINPUT_SOURCE_STYLUS);
     mBlocker->notifyInputDevicesChanged(deviceChangedArgs);
+    mTestListener.assertNotifyInputDevicesChangedWasCalled();
     NotifyMotionArgs args1 = generateMotionArgs(/*downTime=*/0, /*eventTime=*/0, DOWN, {{1, 2, 3}});
     args1.pointerProperties[0].toolType = ToolType::STYLUS;
     mBlocker->notifyMotion(args1);
@@ -610,6 +612,7 @@ TEST_F(UnwantedInteractionBlockerTest, TouchIsBlockedWhenMixedWithStylus) {
     NotifyInputDevicesChangedArgs deviceChangedArgs = {/*id=*/0, {generateTestDeviceInfo()}};
     deviceChangedArgs.inputDeviceInfos[0].addSource(AINPUT_SOURCE_STYLUS);
     mBlocker->notifyInputDevicesChanged(deviceChangedArgs);
+    mTestListener.assertNotifyInputDevicesChangedWasCalled();
 
     // Touch down
     NotifyMotionArgs args1 = generateMotionArgs(/*downTime=*/0, /*eventTime=*/0, DOWN, {{1, 2, 3}});

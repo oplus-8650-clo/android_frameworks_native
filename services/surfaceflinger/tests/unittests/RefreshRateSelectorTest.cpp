@@ -4645,9 +4645,28 @@ TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRRNonGroupMode) {
     if (!enableFrameRateOverride) {
         return;
     }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, false);
     const auto selector = createSelector(kModes_1_10_60_90G1_120, kModeId90);
 
     const std::vector<float> expected = {90.0f, 45.0f, 30.0f, 22.5f};
+    const auto allSupportedFrameRates = selector.getSupportedFrameRates();
+    ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
+    constexpr float kEpsilon = 0.001f;
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_TRUE(std::abs(expected[i] - allSupportedFrameRates[i]) <= kEpsilon)
+                << "expected " << expected[i] << " received " << allSupportedFrameRates[i];
+    }
+}
+
+TEST_P(RefreshRateSelectorTest, getSupportedFrameRatesMRRNonGroupMode_FullList) {
+    const bool enableFrameRateOverride = GetParam().enableFrameRateOverride;
+    if (!enableFrameRateOverride) {
+        return;
+    }
+    SET_FLAG_FOR_TEST(flags::mrr_full_frame_rate_list, true);
+    const auto selector = createSelector(kModes_1_10_60_90G1_120, kModeId90);
+
+    const std::vector<float> expected = {120.0f, 90.0f, 60.0f, 45.0f, 30.0f, 22.5f, 10.0f, 1.0f};
     const auto allSupportedFrameRates = selector.getSupportedFrameRates();
     ASSERT_EQ(expected.size(), allSupportedFrameRates.size());
     constexpr float kEpsilon = 0.001f;

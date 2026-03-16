@@ -51,6 +51,10 @@ void MergeableHierarchy::constructSnapshot(
         return;
     }
 
+    if (mHierarchies.empty()) {
+        return;
+    }
+
     auto localArgs = args;
     localArgs.forceUpdate = LayerSnapshotBuilder::ForceUpdateFlags::ALL;
 
@@ -95,6 +99,13 @@ void MergeableHierarchy::materializeSnapshot(
         compositionengine::CompositionEngine& compositionEngine) {
     auto& firstSnapshot = *snapshots.begin();
     auto bounds = Rect(firstSnapshot->sourceBounds());
+    if (bounds.isEmpty()) {
+        mSnapshot = nullptr;
+        return;
+    }
+
+    auto layerStack = firstSnapshot->outputFilter.layerStack;
+
     auto width = std::min(3000u, static_cast<uint32_t>(bounds.getWidth()));
     auto height = std::min(3000u, static_cast<uint32_t>(bounds.getHeight()));
 
@@ -113,10 +124,27 @@ void MergeableHierarchy::materializeSnapshot(
                                                  renderengine::impl::ExternalTexture::Usage::
                                                          WRITEABLE);
 
+    std::vector<sp<compositionengine::LayerFE>> ceLayerFEs;
+    std::vector<sp<LayerFE>> layerFEs;
+    for (auto& snapshot : snapshots) {
+        if (!snapshot->hasSomethingToDraw()) {
+            continue;
+        }
+        auto layerFE = sp<LayerFE>::make("Hierarchy");
+        layerFE->mSnapshot = std::move(snapshot);
+        layerFEs.emplace_back(layerFE);
+        ceLayerFEs.emplace_back(layerFE);
+    }
+
+    if (layerFEs.empty()) {
+        mSnapshot = nullptr;
+        return;
+    }
+
     std::shared_ptr<ScreenCaptureOutput> output = createScreenCaptureOutput(
             ScreenCaptureOutputArgs{.compositionEngine = compositionEngine,
                                     .colorProfile = {},
-                                    .layerStack = firstSnapshot->outputFilter.layerStack,
+                                    .layerStack = layerStack,
                                     .sourceCrop = bounds,
                                     .buffer = texture,
                                     .displayIdVariant = std::nullopt,
@@ -132,19 +160,12 @@ void MergeableHierarchy::materializeSnapshot(
                                     .enableLocalTonemapping = false,
                                     .debugName = "HierarchyFlattener"});
 
-    std::vector<sp<compositionengine::LayerFE>> ceLayerFEs;
-    std::vector<sp<LayerFE>> layerFEs;
-    for (auto& snapshot : snapshots) {
-        if (!snapshot->hasSomethingToDraw()) {
-            continue;
-        }
-        auto layerFE = sp<LayerFE>::make("Hierarchy");
-        layerFE->mSnapshot = std::move(snapshot);
-        layerFEs.emplace_back(layerFE);
-        ceLayerFEs.emplace_back(layerFE);
-    }
-
     sp<LayerFE> firstLayer = layerFEs.back();
+
+    for (auto& layer : layerFEs) {
+        // drop this on the floor for now
+        ftl::Future<FenceResult> futureFence = layer->createReleaseFenceFuture();
+    }
 
     compositionengine::CompositionRefreshArgs refreshArgs{
             .outputs = {output},

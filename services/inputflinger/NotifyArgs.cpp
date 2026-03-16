@@ -201,7 +201,10 @@ const std::string toString(const NotifyArgs& args) {
             [&](const NotifyMotionArgs& motionArgs) { return motionArgs.dump(); },
             [&](const NotifySensorArgs&) -> std::string { return "NotifySensorArgs"; },
             [&](const NotifySwitchArgs&) -> std::string { return "NotifySwitchArgs"; },
-            [&](const NotifyDeviceResetArgs&) -> std::string { return "NotifyDeviceResetArgs"; },
+            [&](const NotifyDeviceResetArgs& resetArgs) -> std::string {
+                return std::string("NotifyDeviceResetArgs (deviceId=") +
+                        std::to_string(resetArgs.deviceId) + ")";
+            },
             [&](const NotifyPointerCaptureChangedArgs&) -> std::string {
                 return "NotifyPointerCaptureChangedArgs";
             },
