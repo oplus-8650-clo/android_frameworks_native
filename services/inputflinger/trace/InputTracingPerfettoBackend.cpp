@@ -305,10 +305,16 @@ void PerfettoBackend::traceWindowDispatch(const WindowDispatchArgs& dispatchArgs
     });
 }
 
-void PerfettoBackend::traceRawEvent(const RawEvent& event) {
+void PerfettoBackend::traceRawEvent(const RawEvent& event, const TracedEventMetadata& metadata) {
     InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        auto dataSource = ctx.GetDataSourceLocked();
+        if (!dataSource.valid()) {
+            return;
+        }
         // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
-        // TODO(b/394861376): check the current trace level.
+        if (dataSource->resolveTraceLevel(metadata) != TraceLevel::TRACE_LEVEL_COMPLETE) {
+            return;
+        }
         auto tracePacket = ctx.NewTracePacket();
         tracePacket->set_timestamp(event.readTime);
         tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
@@ -317,24 +323,38 @@ void PerfettoBackend::traceRawEvent(const RawEvent& event) {
     });
 }
 
-void PerfettoBackend::traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice& device) {
+void PerfettoBackend::traceEvdevDeviceAddition(const TracedEvdevDevice& device,
+                                               const TracedEventMetadata& metadata) {
     InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        auto dataSource = ctx.GetDataSourceLocked();
+        if (!dataSource.valid()) {
+            return;
+        }
         // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
-        // TODO(b/394861376): check the current trace level.
+        if (dataSource->resolveTraceLevel(metadata) != TraceLevel::TRACE_LEVEL_COMPLETE) {
+            return;
+        }
         auto tracePacket = ctx.NewTracePacket();
-        tracePacket->set_timestamp(timestamp);
+        tracePacket->set_timestamp(metadata.processingTimestamp);
         tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
         auto* evdevEvent = tracePacket->set_evdev_event();
         ProtoConverter::toProtoEvdevDeviceAdditionEvent(device, *evdevEvent);
     });
 }
 
-void PerfettoBackend::traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) {
+void PerfettoBackend::traceEvdevDeviceRemoval(RawDeviceId deviceId,
+                                              const TracedEventMetadata& metadata) {
     InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        auto dataSource = ctx.GetDataSourceLocked();
+        if (!dataSource.valid()) {
+            return;
+        }
         // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
-        // TODO(b/394861376): check the current trace level.
+        if (dataSource->resolveTraceLevel(metadata) != TraceLevel::TRACE_LEVEL_COMPLETE) {
+            return;
+        }
         auto tracePacket = ctx.NewTracePacket();
-        tracePacket->set_timestamp(timestamp);
+        tracePacket->set_timestamp(metadata.processingTimestamp);
         tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
         auto* evdevEvent = tracePacket->set_evdev_event();
         ProtoConverter::toProtoEvdevDeviceRemovalEvent(deviceId, *evdevEvent);

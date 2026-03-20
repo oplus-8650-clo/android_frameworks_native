@@ -67,6 +67,7 @@ int RenderCommandBufferProducer::getFd() {
 
 RenderCommandBuffer* RenderCommandBufferProducer::startRecording() {
     RenderCommandBuffer* buffer = &mRenderRegion->mCommandBuffers.getWriteSlot();
+    buffer->mRegion = mRenderRegion;
     buffer->reset();
     return buffer;
 }

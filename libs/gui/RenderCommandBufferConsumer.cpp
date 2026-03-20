@@ -51,11 +51,6 @@ void RenderCommandBufferConsumer::consumerAcquire(uint64_t frameNumber) {
             return;
         }
 
-        // Copy commands from current buffer to next buffer
-        RenderCommandBuffer& curr = mRenderRegion->mCommandBuffers.at(lo);
-        RenderCommandBuffer& next = mRenderRegion->mCommandBuffers.at(lo + 1);
-        copyUploadCommands(curr, next);
-
         mRenderRegion->mCommandBuffers.popFront();
     }
 }
@@ -73,39 +68,6 @@ void RenderCommandBufferConsumer::setContext(void* context,
                                              std::function<void(void*)> contextFreeCallback) {
     mContextFreeCallback = std::move(contextFreeCallback);
     mContext = context;
-}
-
-void RenderCommandBufferConsumer::copyUploadCommands(RenderCommandBuffer& curr,
-                                                     RenderCommandBuffer& next) {
-    for (IPCRenderBufferOp* op = curr.mUploadsHead.get(); op; op = op->next) {
-        if (op->type == kTypeUploadBitmap) {
-            UploadBitmap* oldOp = (UploadBitmap*)op;
-            UploadBitmap* newOp = next.allocAligned<UploadBitmap>();
-            if (newOp) {
-                *newOp = *oldOp;
-                if (oldOp->pixels.size > 0) {
-                    if (!SetRSpan(newOp->pixels, &next, oldOp->pixels.data.get(),
-                                  oldOp->pixels.size)) {
-                        ALOGE("Failed to allocate pixels for copied UploadBitmap");
-                    }
-                } else {
-                    newOp->pixels.data = nullptr;
-                }
-                next.pushUploadCmd(newOp);
-            } else {
-                ALOGE("Failed to allocate copied UploadBitmap");
-            }
-        } else if (op->type == kTypeFreeBitmap) {
-            FreeBitmap* oldOp = (FreeBitmap*)op;
-            FreeBitmap* newOp = next.allocAligned<FreeBitmap>();
-            if (newOp) {
-                *newOp = *oldOp;
-                next.pushUploadCmd(newOp);
-            } else {
-                ALOGE("Failed to allocate copied FreeBitmap");
-            }
-        }
-    }
 }
 
 } // namespace android

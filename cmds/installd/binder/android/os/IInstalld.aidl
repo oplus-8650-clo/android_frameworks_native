@@ -180,11 +180,12 @@ interface IInstalld {
      * @param appId The app ID the destination path belongs to (used for ownership).
      * @param seInfo The SELinux label to apply to the destination.
      * @param flags Operation flags.
+     * @param callerUid The UID of the caller who requested the operation.
      * @param callback Callback for status updates.
      */
     oneway void copyAppDataPath(@nullable @utf8InCpp String uuid, @utf8InCpp String fromPath,
             @utf8InCpp String toPath, int userId, int appId, @utf8InCpp String seInfo, int flags,
-            IAppDataOperationCallback callback);
+            int callerUid, IAppDataOperationCallback callback);
 
     /**
      * Asynchronously moves a file or directory from one app data location to another.
@@ -196,11 +197,12 @@ interface IInstalld {
      * @param appId The app ID the destination path belongs to (used for ownership).
      * @param seInfo The SELinux label to apply to the destination.
      * @param flags Operation flags.
+     * @param callerUid The UID of the caller who requested the operation.
      * @param callback Callback for status updates.
      */
     oneway void moveAppDataPath(@nullable @utf8InCpp String uuid, @utf8InCpp String fromPath,
             @utf8InCpp String toPath, int userId, int appId, @utf8InCpp String seInfo, int flags,
-            IAppDataOperationCallback callback);
+            int callerUid, IAppDataOperationCallback callback);
 
     const int FLAG_STORAGE_DE = 0x1;
     const int FLAG_STORAGE_CE = 0x2;

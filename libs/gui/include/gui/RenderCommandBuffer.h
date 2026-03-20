@@ -22,7 +22,7 @@
 #include <string>
 #include "RPointer.h"
 
-constexpr int RENDER_COMMAND_BUFFER_DEFAULT_SIZE = 16 * 1024 * 1024;
+constexpr int RENDER_COMMAND_BUFFER_DEFAULT_SIZE = 1024 * 1024;
 
 constexpr bool RENDER_COMMAND_BUFFER_VERBOSE = false;
 
@@ -33,35 +33,14 @@ struct IPCRenderBufferOp {
     uint32_t type;
 };
 
-static constexpr uint32_t kTypeUploadBitmap = 1;
-static constexpr uint32_t kTypeFreeBitmap = 2;
+template <size_t Size>
+struct IpcArena {
+    IpcArena() { memset(mBytes, 0, sizeof(mBytes)); }
 
-struct UploadBitmap : IPCRenderBufferOp {
-    uint64_t imageId;
-    int32_t width;
-    int32_t height;
-    int32_t colorType;
-    int32_t alphaType;
-    size_t rowBytes;
-    RSpan<uint8_t> pixels;
-};
+    uint8_t mBytes[Size];
+    size_t mUsed = 0;
 
-struct FreeBitmap : IPCRenderBufferOp {
-    uint64_t imageId;
-};
-
-class RenderCommandBuffer {
-public:
-    RenderCommandBuffer() { memset(mBytes, 0, sizeof(mBytes)); }
-    ~RenderCommandBuffer() {}
-
-    IPCRenderBufferOp* getOps() { return mHead.get(); }
-
-    // op must be allocated by this RenderCommandBuffer
-    void pushOp(IPCRenderBufferOp* op);
-    void pushUploadCmd(IPCRenderBufferOp* cmd);
-
-    void reset();
+    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
 
     template <typename T>
     T* allocAligned(size_t count = 1) {
@@ -74,6 +53,38 @@ public:
         mUsed = aligned + allocationSize;
         return reinterpret_cast<T*>(ptr);
     }
+
+    void resetArena() { mUsed = 0; }
+};
+
+template <typename T, typename A>
+inline bool SetRSpan(RSpan<T>& span, A* allocator, const T* data, size_t count) {
+    span.data = allocator->template allocAligned<T>(count);
+    if (!span.data) {
+        return false;
+    }
+    span.size = count;
+    if (data) {
+        memcpy(span.data.get(), data, count * sizeof(T));
+    }
+    return true;
+}
+
+struct IpcRenderRegion;
+
+class RenderCommandBuffer : public IpcArena<RENDER_COMMAND_BUFFER_DEFAULT_SIZE> {
+public:
+    RenderCommandBuffer() {}
+    ~RenderCommandBuffer() {}
+
+    RPointer<IpcRenderRegion> mRegion;
+
+    IPCRenderBufferOp* getOps() { return mHead.get(); }
+
+    // op must be allocated by this RenderCommandBuffer
+    void pushOp(IPCRenderBufferOp* op);
+
+    void reset();
 
     bool dumpToFile(const char* filename) const;
     static RenderCommandBuffer* loadFromFile(const char* filename);
@@ -88,14 +99,8 @@ public:
         height = mHeight;
     }
 
-    uint8_t mBytes[RENDER_COMMAND_BUFFER_DEFAULT_SIZE];
-    size_t mUsed = 0;
-
-    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
     RPointer<IPCRenderBufferOp> mTail;
     RPointer<IPCRenderBufferOp> mHead;
-    RPointer<IPCRenderBufferOp> mUploadsHead;
-    RPointer<IPCRenderBufferOp> mUploadsTail;
     // These are somewhat awkward, and used to achieve compatibility with the buffer based geometry
     // calculations. Effectively this is the size that the buffer would have been in the normal
     // rendering mode.
@@ -103,23 +108,33 @@ public:
     int mHeight = 0;
 };
 
-template <typename T>
-inline bool SetRSpan(RSpan<T>& span, RenderCommandBuffer* commandBuffer, const T* data,
-                     size_t count) {
-    span.data = commandBuffer->allocAligned<T>(count);
-    if (!span.data) {
-        return false;
-    }
-    span.size = count;
-    if (data) {
-        memcpy(span.data.get(), data, count * sizeof(T));
-    }
-    return true;
-}
-
 struct IpcRenderRegion {
-    LocklessStaticQueue<RenderCommandBuffer, 8> mCommandBuffers;
+    LocklessStaticQueue<RenderCommandBuffer, 4> mCommandBuffers;
     std::atomic<uint64_t> mFrameNumber;
+
+    IpcArena<16 * 1024 * 1024> mArena;
+
+    template <typename T>
+    T* allocAligned(size_t count = 1) {
+        return mArena.allocAligned<T>(count);
+    }
+
+    RPointer<IPCRenderBufferOp> mUploadsHead;
+    RPointer<IPCRenderBufferOp> mUploadsTail;
+
+    void pushUploadCmd(IPCRenderBufferOp* cmd) {
+        assert(reinterpret_cast<const uint8_t*>(cmd) > mArena.mBytes &&
+               reinterpret_cast<const uint8_t*>(cmd) < mArena.mBytes + sizeof(mArena.mBytes));
+
+        if (mUploadsTail) {
+            mUploadsTail->next = cmd;
+        }
+        if (!mUploadsHead) {
+            mUploadsHead = cmd;
+        }
+        mUploadsTail = cmd;
+        cmd->next = nullptr;
+    }
 };
 
 } // namespace android

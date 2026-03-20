@@ -45,9 +45,11 @@ public:
     void traceKeyEvent(const TracedKeyEvent&, const TracedEventMetadata&) override;
     void traceMotionEvent(const TracedMotionEvent&, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
-    void traceRawEvent(const RawEvent&) override;
-    void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice&) override;
-    void traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) override;
+    void traceRawEvent(const RawEvent& event, const TracedEventMetadata& metadata) override;
+    void traceEvdevDeviceAddition(const TracedEvdevDevice& device,
+                                  const TracedEventMetadata& metadata) override;
+    void traceEvdevDeviceRemoval(RawDeviceId deviceId,
+                                 const TracedEventMetadata& metadata) override;
 
     /** Returns a function that, when called, will block until the tracing thread is idle. */
     std::function<void()> getIdleWaiterForTesting();

@@ -95,31 +95,27 @@ void ThreadedBackend<Backend>::traceWindowDispatch(const WindowDispatchArgs& dis
 }
 
 template <typename Backend>
-void ThreadedBackend<Backend>::traceRawEvent(const RawEvent& event) {
+void ThreadedBackend<Backend>::traceRawEvent(const RawEvent& event,
+                                             const TracedEventMetadata& metadata) {
     std::scoped_lock lock(mLock);
-    // TODO(b/394861376): populate metadata for determining trace level.
-    TracedEventMetadata metadata = {};
     mQueue.emplace_back(event, metadata);
     setIdleStatus(false);
     mThreadWakeCondition.notify_all();
 }
 
 template <typename Backend>
-void ThreadedBackend<Backend>::traceEvdevDeviceAddition(nsecs_t timestamp,
-                                                        const TracedEvdevDevice& device) {
+void ThreadedBackend<Backend>::traceEvdevDeviceAddition(const TracedEvdevDevice& device,
+                                                        const TracedEventMetadata& metadata) {
     std::scoped_lock lock(mLock);
-    // TODO(b/394861376): populate metadata for determining trace level.
-    TracedEventMetadata metadata = {.processingTimestamp = timestamp};
     mQueue.emplace_back(device, metadata);
     setIdleStatus(false);
     mThreadWakeCondition.notify_all();
 }
 
 template <typename Backend>
-void ThreadedBackend<Backend>::traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) {
+void ThreadedBackend<Backend>::traceEvdevDeviceRemoval(RawDeviceId deviceId,
+                                                       const TracedEventMetadata& metadata) {
     std::scoped_lock lock(mLock);
-    // TODO(b/394861376): populate metadata for determining trace level.
-    TracedEventMetadata metadata = {.processingTimestamp = timestamp};
     mQueue.emplace_back(deviceId, metadata);
     setIdleStatus(false);
     mThreadWakeCondition.notify_all();
@@ -158,14 +154,12 @@ void ThreadedBackend<Backend>::threadLoop() {
                            [&](const WindowDispatchArgs& args) {
                                mBackend.traceWindowDispatch(args, traceArgs);
                            },
-                           [&](const RawEvent& e) { mBackend.traceRawEvent(e); },
+                           [&](const RawEvent& e) { mBackend.traceRawEvent(e, traceArgs); },
                            [&](const TracedEvdevDevice& device) {
-                               mBackend.traceEvdevDeviceAddition(traceArgs.processingTimestamp,
-                                                                 device);
+                               mBackend.traceEvdevDeviceAddition(device, traceArgs);
                            },
                            [&](RawDeviceId deviceId) {
-                               mBackend.traceEvdevDeviceRemoval(traceArgs.processingTimestamp,
-                                                                deviceId);
+                               mBackend.traceEvdevDeviceRemoval(deviceId, traceArgs);
                            }},
                    entry);
     }

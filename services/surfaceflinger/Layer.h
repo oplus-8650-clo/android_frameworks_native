@@ -164,6 +164,9 @@ public:
         int64_t latchedVsyncId = 0;
         bool useVsyncIdForRefreshRateSelection = false;
         bool useLuts = false;
+        bool hasRenderCommandBufferFrameId = false;
+        uint64_t renderCommandBufferFrameId = 0;
+        nsecs_t renderCommandBufferFrameIdQueueTime = 0;
     };
 
     explicit Layer(const surfaceflinger::LayerCreationArgs& args);
@@ -188,11 +191,10 @@ public:
                    nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/,
                    const FrameTimelineInfo& /*info*/, gui::GameMode gameMode,
                    int32_t systemContentPriority);
-    bool setRenderCommandBufferFrameId(uint64_t frameId, nsecs_t postTime,
-                                       nsecs_t desiredPresentTime,
-                                       bool isAutoTimestamp,
-                                       const FrameTimelineInfo& info,
-                                       gui::GameMode gameMode);
+    bool setRenderCommandBufferFrameId(uint64_t frameId, nsecs_t renderCommandBufferFrameIdQueueTime,
+                                       nsecs_t postTime, nsecs_t desiredPresentTime,
+                                       bool isAutoTimestamp, const FrameTimelineInfo& info,
+                                       gui::GameMode gameMode, int32_t systemContentPriority);
     void setDesiredPresentTime(nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/);
     bool setDataspace(ui::Dataspace /*dataspace*/);
     bool setExtendedRangeBrightness(float currentBufferRatio, float desiredRatio);
@@ -313,7 +315,7 @@ public:
     // creates its tracks by buffer id and has no way of associating a buffer back to the process
     // that created it, the current implementation is only sufficient for cases where a buffer is
     // only used within a single layer.
-    uint64_t getCurrentBufferId() const { return getBuffer() ? getBuffer()->getId() : 0; }
+    uint64_t getLatchedBufferId() const { return getBuffer() ? getBuffer()->getId() : 0; }
 
     void writeCompositionStateToProto(perfetto::protos::LayerProto* layerProto,
                                       ui::LayerStack layerStack);
@@ -532,7 +534,8 @@ private:
     // Latch sideband stream and returns true if the dirty region should be updated.
     bool latchSidebandStream(bool& recomputeVisibleRegions);
 
-    void updateTexImage(nsecs_t latchTime, nsecs_t expectedPresentTime, bool bgColorOnly = false);
+    void latchBufferStatsAndHandles(
+            nsecs_t latchTime, nsecs_t expectedPresentTime, bool bgColorOnly = false);
 
     // Crop that applies to the buffer
     Rect computeBufferCrop(const State& s);
@@ -603,6 +606,10 @@ private:
     std::optional<std::reference_wrapper<scheduler::FrameTimeline>> getTimeline() const {
         return *mFlinger->mFrameTimeline;
     }
+
+    uint64_t getPendingBufferId();
+    nsecs_t getAcquireSignalTime();
+    void gatherBufferInfoRenderCommandBuffer();
 };
 
 std::ostream& operator<<(std::ostream& stream, const Layer::FrameRate& rate);

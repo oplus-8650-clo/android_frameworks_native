@@ -245,8 +245,8 @@ public:
     }
 
 private:
-    static constexpr uint32_t kGraphiteKeyProtected = 123456789;
     static constexpr uint32_t kGraphiteKeyUnprotected = 987654321;
+    static constexpr uint32_t kGraphiteKeyProtected = 123456789;
 
     const bool mIsProtected;
 
@@ -263,10 +263,10 @@ GraphiteVkRenderEngine::graphitePersistentPipelineStorage(const void* identity, 
         if (!mInitializedGraphiteDiskCache) {
             ShaderCache::get(RenderEngine::SkiaBackend::Graphite)
                     .initShaderDiskCache(identity, size);
-            mProtectedPersistentPipelineStorage =
-                    std::make_unique<GraphitePipelineDiskStorage>(true);
             mUnprotectedPersistentPipelineStorage =
-                    std::make_unique<GraphitePipelineDiskStorage>(false);
+                    std::make_unique<GraphitePipelineDiskStorage>(/* isProtected= */ false);
+            mProtectedPersistentPipelineStorage =
+                    std::make_unique<GraphitePipelineDiskStorage>(/* isProtected= */ true);
             mInitializedGraphiteDiskCache = true;
         }
     }
@@ -280,11 +280,11 @@ PipelineCallbackHandler* GraphiteVkRenderEngine::graphiteSerializedPipelineKeyCa
     if (!mInitializedGraphiteSerializedPipelineKeyCache) {
         const bool kStoreSerializedKeys = false;
 
-        mProtectedPipelineCallbackHandler =
-                std::make_unique<PipelineCallbackHandler>(/* isProtected= */ true,
-                                                          kStoreSerializedKeys);
         mUnprotectedPipelineCallbackHandler =
                 std::make_unique<PipelineCallbackHandler>(/* isProtected= */ false,
+                                                          kStoreSerializedKeys);
+        mProtectedPipelineCallbackHandler =
+                std::make_unique<PipelineCallbackHandler>(/* isProtected= */ true,
                                                           kStoreSerializedKeys);
         mInitializedGraphiteSerializedPipelineKeyCache = true;
     }

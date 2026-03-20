@@ -361,7 +361,17 @@ status_t Parcel::readPartialRpcObject(T* val) const {
 }
 
 status_t Parcel::readRpcObjectType(int32_t* objectType) const {
-    return readPartialRpcObject(objectType);
+    if (status_t status = readPartialRpcObject(objectType); status != OK) {
+        return status;
+    }
+    switch (*objectType) {
+        case RpcFields::TYPE_BINDER_NULL:
+        case RpcFields::TYPE_BINDER:
+        case RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR:
+            return OK;
+        default:
+            return BAD_VALUE;
+    }
 }
 
 status_t Parcel::readRpcBinderAddress(uint64_t* addr) const {
@@ -374,14 +384,14 @@ status_t Parcel::readRpcFdIndex(int32_t* fdIndex) const {
 
 constexpr size_t Parcel::getRpcObjectSize(int32_t objectType) {
     switch (objectType) {
+        case RpcFields::TYPE_BINDER_NULL:
+            return sizeof(RpcFields::ObjectType);
         case RpcFields::TYPE_BINDER:
             return sizeof(RpcFields::ObjectType) + sizeof(uint64_t);
-            break;
         case RpcFields::TYPE_NATIVE_FILE_DESCRIPTOR:
             return sizeof(RpcFields::ObjectType) + sizeof(int32_t);
-            break;
         default:
-            LOG_ALWAYS_FATAL("Unknown RpcFields type: %" PRId32, objectType);
+            LOG_ALWAYS_FATAL("BUG: Unknown RpcFields type: %" PRId32, objectType);
     }
 }
 

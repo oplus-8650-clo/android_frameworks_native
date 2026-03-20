@@ -62,7 +62,6 @@ public:
     bool bugfix_virtual_display_refresh_rate() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
-    bool deprecate_vsync_sf_v2() const;
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
     bool fence_handling() const;

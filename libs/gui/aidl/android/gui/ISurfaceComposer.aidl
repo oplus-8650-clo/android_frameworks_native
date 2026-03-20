@@ -60,11 +60,6 @@ import android.gui.WindowInfosListenerInfo;
 /** @hide */
 interface ISurfaceComposer {
 
-    enum VsyncSource {
-        eVsyncSourceApp = 0,
-        eVsyncSourceSurfaceFlinger = 1
-    }
-
     enum EventRegistration {
         modeChanged = 1 << 0,
         frameRateOverride = 1 << 1,
@@ -91,7 +86,7 @@ interface ISurfaceComposer {
      *     surface creation, see ISurfaceComposerClient::createSurface. Set to null if no layer
      *     association should be made.
      */
-    @nullable IDisplayEventConnection createDisplayEventConnection(VsyncSource vsyncSource,
+    @nullable IDisplayEventConnection createDisplayEventConnection(
             EventRegistration eventRegistration, @nullable IBinder layerHandle);
 
     /**
@@ -492,7 +487,7 @@ interface ISurfaceComposer {
      * Associates the given IBinder token with the AGSL shaderString. After registration the
      * IBinder token can be used to apply shader effects to layers.
      */
-    void registerShader(IBinder token, @utf8InCpp String debugName, @utf8InCpp String shaderString);
+    void registerShader(IBinder token, @utf8InCpp String uniqueShaderName, @utf8InCpp String shaderString);
 
     /**
      * Removes the association between the given IBinder token and the AGSL shaderString.

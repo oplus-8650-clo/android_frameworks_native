@@ -4381,10 +4381,9 @@ TEST_F(FrameTimelineTest, jankClassification_appVsyncResyncJitter) {
               JankType::AppResyncedJitter | JankType::SurfaceFlingerScheduling);
     EXPECT_EQ(surfaceFrame3->getFramePresentMetadata(), FramePresentMetadata::EarlyPresent);
 
-    const float w_s = std::log2((/*presentDelay*/ 10.f + /*expectedPresentDelta*/ 20.f) /
-                                /*expectedPresentDelta*/ 20.f);
-    const float w_f = std::sqrt(/*expectedPresentDelta*/ 20.f /
-                                static_cast<float>((120_Hz).getPeriodNsecs()));
+    const float w_s = std::log2((/*presentDelay*/ 10.f + /*interval*/ 10.f) /
+                                /*interval*/ 10.f);
+    const float w_f = std::sqrt(/*interval*/ 10.f / static_cast<float>((120_Hz).getPeriodNsecs()));
     EXPECT_FLOAT_EQ(*surfaceFrame3->getJankSeverityScore(), w_s * w_f);
 
     EXPECT_EQ(*surfaceFrame5->getJankType(), JankType::None);
