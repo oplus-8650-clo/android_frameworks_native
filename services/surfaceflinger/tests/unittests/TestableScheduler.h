@@ -73,12 +73,8 @@ public:
         Scheduler::onFrameSignal(compositor, vsyncId, expectedVsyncTime);
     }
 
-    void setEventThread(Cycle cycle, std::unique_ptr<EventThread> eventThreadPtr) {
-        if (cycle == Cycle::Render) {
-            mRenderEventThread = std::move(eventThreadPtr);
-        } else {
-            mLastCompositeEventThread = std::move(eventThreadPtr);
-        }
+    void setEventThread(std::unique_ptr<EventThread> eventThreadPtr) {
+        mEventThread = std::move(eventThreadPtr);
     }
 
     auto refreshRateSelector() { return pacesetterSelectorPtr(); }

@@ -25,13 +25,16 @@ void ShaderRegistry::binderDied(const wp<IBinder>& who) {
     mRegistry.erase(who);
 }
 
-bool ShaderRegistry::registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+bool ShaderRegistry::registerShader(const sp<IBinder>& shaderToken,
+                                    const std::string& uniqueShaderName,
                                     const std::string& shaderString) {
     if (!shaderToken) {
         ALOGE("Attempted to register shader with null token");
         return false;
     }
-    auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(shaderString.c_str()), {});
+    SkRuntimeEffect::Options options;
+    options.fName = uniqueShaderName;
+    auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(shaderString), options);
     if (!effect) {
         ALOGE("Failed to create SkRuntimeEffect: %s", error.c_str());
         return false;
@@ -40,7 +43,7 @@ bool ShaderRegistry::registerShader(const sp<IBinder>& shaderToken, const std::s
     shaderToken->linkToDeath(sp<DeathRecipient>::fromExisting(this));
 
     std::scoped_lock lock(mMutex);
-    mRegistry.emplace(shaderToken, RegisteredShader{effect, debugName});
+    mRegistry.emplace(shaderToken, RegisteredShader{effect, uniqueShaderName});
     return true;
 }
 

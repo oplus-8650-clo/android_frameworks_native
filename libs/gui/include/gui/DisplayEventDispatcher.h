@@ -34,8 +34,6 @@ public:
 
 protected:
     explicit DisplayEventDispatcher(const sp<Looper>& looper,
-                                    gui::ISurfaceComposer::VsyncSource vsyncSource =
-                                            gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp,
                                     EventRegistrationFlags eventRegistration = {},
                                     const sp<IBinder>& layerHandle = nullptr);
 

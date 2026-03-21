@@ -1918,4 +1918,56 @@ TEST_F(BufferQueueUnlimitedTest, GetReleasedBuffersExtended) {
                 << "Slots that are still held in the queue are not released.";
     }
 }
+
+TEST_F(BufferQueueTest, TestUsageChangeNotifiesConsumer) {
+    createBufferQueue();
+    struct MockConsumerListener : public MockConsumer {
+        MOCK_METHOD(void, onFrameAvailable, (const BufferItem&), (override));
+        MOCK_METHOD(void, onBuffersReleased, (), (override));
+    };
+
+    sp<MockConsumerListener> mc = sp<MockConsumerListener>::make();
+    ASSERT_EQ(OK, mConsumer->consumerConnect(mc, false));
+
+    IGraphicBufferProducer::QueueBufferOutput output;
+    ASSERT_EQ(OK,
+              mProducer->connect(new StubProducerListener, NATIVE_WINDOW_API_CPU, false, &output));
+
+    int slot;
+    sp<Fence> fence;
+    sp<GraphicBuffer> buffer;
+
+    // 1. Dequeue with usage A
+    uint64_t usageA = GRALLOC_USAGE_SW_READ_OFTEN;
+    ASSERT_EQ(IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION,
+              mProducer->dequeueBuffer(&slot, &fence, 100, 100, HAL_PIXEL_FORMAT_RGBA_8888, usageA,
+                                       nullptr, nullptr));
+    ASSERT_EQ(OK, mProducer->requestBuffer(slot, &buffer));
+
+    // 2. Queue and Acquire
+    IGraphicBufferProducer::QueueBufferInput input(0, false, HAL_DATASPACE_UNKNOWN,
+                                                   Rect(0, 0, 100, 100),
+                                                   NATIVE_WINDOW_SCALING_MODE_FREEZE, 0,
+                                                   Fence::NO_FENCE);
+    EXPECT_CALL(*mc, onFrameAvailable(testing::_)).Times(1);
+    ASSERT_EQ(OK, mProducer->queueBuffer(slot, input, &output));
+
+    BufferItem item;
+    ASSERT_EQ(OK, mConsumer->acquireBuffer(&item, 0));
+
+    // 3. Release (buffer is now FREE)
+    ASSERT_EQ(OK, mConsumer->releaseBuffer(item.mSlot, item.mFrameNumber, Fence::NO_FENCE));
+
+    // 4. Dequeue with usage B (different from A)
+    // This should trigger reallocation and notify the consumer via onBuffersReleased
+    uint64_t usageB = GRALLOC_USAGE_SW_WRITE_OFTEN;
+
+    // We expect onBuffersReleased to be called because the buffer in 'slot' is being reallocated.
+    EXPECT_CALL(*mc, onBuffersReleased()).Times(1);
+
+    ASSERT_EQ(IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION,
+              mProducer->dequeueBuffer(&slot, &fence, 100, 100, HAL_PIXEL_FORMAT_RGBA_8888, usageB,
+                                       nullptr, nullptr));
+}
+
 } // namespace android

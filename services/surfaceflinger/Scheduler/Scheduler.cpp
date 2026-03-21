@@ -592,24 +592,16 @@ void Scheduler::onExpectedPresentTimePosted(TimePoint expectedPresentTime) {
     }
 }
 
-void Scheduler::createEventThread(Cycle cycle, TokenManager* tokenManager,
-                                  std::chrono::nanoseconds workDuration,
+void Scheduler::createEventThread(TokenManager* tokenManager, std::chrono::nanoseconds workDuration,
                                   std::chrono::nanoseconds readyDuration) {
-    auto eventThread =
-            std::make_unique<android::impl::EventThread>(cycle == Cycle::Render ? "app" : "appSf",
-                                                         getVsyncSchedule(), tokenManager, *this,
-                                                         workDuration, readyDuration);
-
-    if (cycle == Cycle::Render) {
-        mRenderEventThread = std::move(eventThread);
-    } else {
-        mLastCompositeEventThread = std::move(eventThread);
-    }
+    mEventThread =
+            std::make_unique<android::impl::EventThread>("app", getVsyncSchedule(), tokenManager,
+                                                         *this, workDuration, readyDuration);
 }
 
 sp<IDisplayEventConnection> Scheduler::createDisplayEventConnection(
-        Cycle cycle, EventRegistrationFlags eventRegistration, const sp<IBinder>& layerHandle) {
-    const auto connection = eventThreadFor(cycle).createEventConnection(eventRegistration);
+        EventRegistrationFlags eventRegistration, const sp<IBinder>& layerHandle) {
+    const auto connection = mEventThread->createEventConnection(eventRegistration);
     const auto layerId = static_cast<int32_t>(LayerHandle::getLayerId(layerHandle));
 
     if (layerId != static_cast<int32_t>(UNASSIGNED_LAYER_ID)) {
@@ -631,29 +623,22 @@ sp<IDisplayEventConnection> Scheduler::createDisplayEventConnection(
 
 void Scheduler::dispatchHotplug(PhysicalDisplayId displayId, Hotplug hotplug) {
     if (hasEventThreads()) {
-        const bool connected = hotplug == Hotplug::Connected;
-        eventThreadFor(Cycle::Render).onHotplugReceived(displayId, connected);
-        eventThreadFor(Cycle::LastComposite).onHotplugReceived(displayId, connected);
+        mEventThread->onHotplugReceived(displayId, hotplug == Hotplug::Connected);
     }
 }
 
 void Scheduler::dispatchHotplugError(int32_t errorCode) {
     if (hasEventThreads()) {
-        eventThreadFor(Cycle::Render).onHotplugConnectionError(errorCode);
-        eventThreadFor(Cycle::LastComposite).onHotplugConnectionError(errorCode);
+        mEventThread->onHotplugConnectionError(errorCode);
     }
 }
 
 void Scheduler::enableSyntheticVsync(bool enable) {
-    eventThreadFor(Cycle::Render).enableSyntheticVsync(enable);
+    mEventThread->enableSyntheticVsync(enable);
 }
 
 void Scheduler::omitVsyncDispatching(bool omitted) {
-    eventThreadFor(Cycle::Render).omitVsyncDispatching(omitted);
-    // Note: If we don't couple Cycle::LastComposite event thread, there is a black screen
-    // after boot. This is most likely sysui or system_server dependency on sf instance
-    // Choreographer
-    eventThreadFor(Cycle::LastComposite).omitVsyncDispatching(omitted);
+    mEventThread->omitVsyncDispatching(omitted);
 }
 
 std::pair<FrameRateMode, std::vector<FrameRateOverride>> Scheduler::getFrameRateOverrides() {
@@ -679,15 +664,15 @@ void Scheduler::onFrameRateOverridesChanged() {
     auto [pacesetterMode, overrides] = getFrameRateOverrides();
 
     const auto vsyncConfigSet = getVsyncConfigsForRefreshRate(pacesetterMode.fps);
-    eventThreadFor(Cycle::Render)
-            .onModeAndFrameRateOverridesChanged(pacesetterId, pacesetterMode, std::move(overrides),
-                                                pacesetterSelectorPtr()->getSupportedFrameRates(),
-                                                vsyncConfigSet);
+    mEventThread
+            ->onModeAndFrameRateOverridesChanged(pacesetterId, pacesetterMode, std::move(overrides),
+                                                 pacesetterSelectorPtr()->getSupportedFrameRates(),
+                                                 vsyncConfigSet);
 }
 
-void Scheduler::onHdcpLevelsChanged(Cycle cycle, PhysicalDisplayId displayId,
-                                    int32_t connectedLevel, int32_t maxLevel) {
-    eventThreadFor(cycle).onHdcpLevelsChanged(displayId, connectedLevel, maxLevel);
+void Scheduler::onHdcpLevelsChanged(PhysicalDisplayId displayId, int32_t connectedLevel,
+                                    int32_t maxLevel) {
+    mEventThread->onHdcpLevelsChanged(displayId, connectedLevel, maxLevel);
 }
 
 #pragma clang diagnostic push
@@ -733,11 +718,10 @@ bool Scheduler::onDisplayModeAndFrameRateOverridesChanged(PhysicalDisplayId disp
         }();
         const auto vsyncConfigSet = getVsyncConfigsForRefreshRate(mode.fps);
         const auto [pacesetterMode, overrides] = getFrameRateOverrides();
-        eventThreadFor(Cycle::Render)
-                .onModeAndFrameRateOverridesChanged(pacesetterId, mode, overrides,
-                                                    pacesetterSelectorPtr()
-                                                            ->getSupportedFrameRates(),
-                                                    vsyncConfigSet);
+        mEventThread->onModeAndFrameRateOverridesChanged(pacesetterId, mode, overrides,
+                                                         pacesetterSelectorPtr()
+                                                                 ->getSupportedFrameRates(),
+                                                         vsyncConfigSet);
     }
 
     return isPacesetter;
@@ -745,7 +729,7 @@ bool Scheduler::onDisplayModeAndFrameRateOverridesChanged(PhysicalDisplayId disp
 
 void Scheduler::onDisplayModeRejected(PhysicalDisplayId displayId, DisplayModeId modeId) {
     if (hasEventThreads()) {
-        eventThreadFor(Cycle::Render).onModeRejected(displayId, modeId);
+        mEventThread->onModeRejected(displayId, modeId);
     }
 }
 
@@ -773,23 +757,22 @@ void Scheduler::emitPacesetterModeChangeIfNeeded() {
     if (hasEventThreads()) {
         const auto vsyncConfigSet = getVsyncConfigsForRefreshRate(mode.fps);
         const auto [pacesetterMode, overrides] = getFrameRateOverrides();
-        eventThreadFor(Cycle::Render)
-                .onModeAndFrameRateOverridesChanged(mode.modePtr->getPhysicalDisplayId(), mode,
-                                                    overrides,
-                                                    pacesetterSelectorPtr()
-                                                            ->getSupportedFrameRates(),
-                                                    vsyncConfigSet);
+        mEventThread->onModeAndFrameRateOverridesChanged(mode.modePtr->getPhysicalDisplayId(), mode,
+                                                         overrides,
+                                                         pacesetterSelectorPtr()
+                                                                 ->getSupportedFrameRates(),
+                                                         vsyncConfigSet);
     }
 }
 
-void Scheduler::dump(Cycle cycle, std::string& result) const {
-    eventThreadFor(cycle).dump(result);
+void Scheduler::dump(std::string& result) const {
+    mEventThread->dump(result);
 }
 
-void Scheduler::setDuration(Cycle cycle, std::chrono::nanoseconds workDuration,
+void Scheduler::setDuration(std::chrono::nanoseconds workDuration,
                             std::chrono::nanoseconds readyDuration) {
     if (hasEventThreads()) {
-        eventThreadFor(cycle).setDuration(workDuration, readyDuration);
+        mEventThread->setDuration(workDuration, readyDuration);
     }
 }
 
@@ -807,7 +790,7 @@ void Scheduler::updatePhaseConfiguration(PhysicalDisplayId displayId, Fps refres
         mVsyncConfiguration->setRefreshRateFps(refreshRate);
         return mVsyncConfiguration->getCurrentConfigs();
     }();
-    setVsyncConfig(mVsyncModulator->setVsyncConfigSet(currentConfigs), refreshRate.getPeriod());
+    setVsyncConfig(mVsyncModulator->setVsyncConfigSet(currentConfigs));
 }
 #pragma clang diagnostic pop
 
@@ -819,7 +802,7 @@ void Scheduler::reloadPhaseConfiguration(const FrameRateMode& mode, Duration min
                                                                    maxSfDuration, appDuration);
         return mVsyncConfiguration->getCurrentConfigs();
     }();
-    setVsyncConfig(mVsyncModulator->setVsyncConfigSet(currentConfigs), mode.fps.getPeriod());
+    setVsyncConfig(mVsyncModulator->setVsyncConfigSet(currentConfigs));
     onDisplayModeAndFrameRateOverridesChanged(mode.modePtr->getPhysicalDisplayId(), mode,
                                               /*clearContentRequirements*/ false);
 }
@@ -828,12 +811,8 @@ void Scheduler::setActiveDisplayPowerModeForRefreshRateStats(hal::PowerMode powe
     mRefreshRateStats->setPowerMode(powerMode);
 }
 
-void Scheduler::setVsyncConfig(const VsyncConfig& config, Period vsyncPeriod) {
-    setDuration(Cycle::Render,
-                /* workDuration */ config.appWorkDuration,
-                /* readyDuration */ config.sfWorkDuration);
-    setDuration(Cycle::LastComposite,
-                /* workDuration */ vsyncPeriod,
+void Scheduler::setVsyncConfig(const VsyncConfig& config) {
+    setDuration(/* workDuration */ config.appWorkDuration,
                 /* readyDuration */ config.sfWorkDuration);
     setDuration(config.sfWorkDuration);
 }
@@ -1471,8 +1450,7 @@ void Scheduler::applyNewVsyncSchedule(std::shared_ptr<VsyncSchedule> vsyncSchedu
     onNewVsyncSchedule(vsyncSchedule->getDispatch());
 
     if (hasEventThreads()) {
-        eventThreadFor(Cycle::Render).onNewVsyncSchedule(vsyncSchedule);
-        eventThreadFor(Cycle::LastComposite).onNewVsyncSchedule(vsyncSchedule);
+        mEventThread->onNewVsyncSchedule(vsyncSchedule);
     }
 }
 

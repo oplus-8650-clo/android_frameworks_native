@@ -17,6 +17,7 @@
 #include <ui/GraphicBuffer.h>
 #include <utils/LruCache.h>
 
+#include <algorithm>
 #include <cstdint>
 
 #include "HwcSlotTracker.h"
@@ -25,9 +26,11 @@ namespace android {
 
 HwcSlotTracker::HwcSlotTracker(uint32_t maxCapacity) : mCache(maxCapacity) {
     mCache.setOnEntryRemovedListener(this);
+    mOpenSlots.reserve(maxCapacity);
     for (uint32_t i = 0; i < maxCapacity; ++i) {
-        mOpenSlots.insert(i);
+        mOpenSlots.push_back(i);
     }
+    std::reverse(mOpenSlots.begin(), mOpenSlots.end());
 }
 
 HwcSlotTracker::~HwcSlotTracker() = default;
@@ -43,15 +46,20 @@ HwcSlotTracker::Slot HwcSlotTracker::getSlot(const sp<GraphicBuffer>& buffer) {
         mCache.removeOldest();
     }
 
-    uint32_t slot = *mOpenSlots.begin();
-    mOpenSlots.erase(slot);
+    uint32_t slot = mOpenSlots.back();
+    mOpenSlots.pop_back();
     mCache.put(bufferId, slot);
     return {true, slot};
 }
 
+void HwcSlotTracker::remove(const sp<GraphicBuffer>& buffer) {
+    uint64_t bufferId = buffer->getId();
+    mCache.remove(bufferId);
+}
+
 void HwcSlotTracker::operator()(uint64_t&, uint32_t& value) {
     // Since the slot is not being cached any longer, make it available for use.
-    mOpenSlots.insert(value);
+    mOpenSlots.push_back(value);
 }
 
 } // namespace android

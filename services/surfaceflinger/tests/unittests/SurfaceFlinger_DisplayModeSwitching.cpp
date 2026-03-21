@@ -260,7 +260,6 @@ void DisplayModeSwitchingTest::setupScheduler(
         std::shared_ptr<scheduler::RefreshRateSelector> selectorPtr) {
     auto eventThread = std::make_unique<mock::EventThread>();
     mAppEventThread = eventThread.get();
-    auto sfEventThread = std::make_unique<mock::EventThread>();
 
     auto vsyncController = std::make_unique<mock::VsyncController>();
     auto vsyncTracker = std::make_shared<mock::VSyncTracker>();
@@ -274,8 +273,7 @@ void DisplayModeSwitchingTest::setupScheduler(
                     TestableSurfaceFlinger::FakeHwcDisplayInjector::DEFAULT_VSYNC_PERIOD)));
     EXPECT_CALL(*vsyncTracker, nextAnticipatedVSyncTimeFrom(_, _)).WillRepeatedly(Return(0));
     mFlinger.setupScheduler(std::move(vsyncController), std::move(vsyncTracker),
-                            std::move(eventThread), std::move(sfEventThread),
-                            std::move(selectorPtr),
+                            std::move(eventThread), std::move(selectorPtr),
                             TestableSurfaceFlinger::SchedulerCallbackImpl::kNoOp);
 }
 

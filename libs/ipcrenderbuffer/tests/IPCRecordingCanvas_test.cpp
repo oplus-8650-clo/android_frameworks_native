@@ -37,7 +37,6 @@
 #include <SkData.h>
 #include <SkEncodedImageFormat.h>
 #include <SkFont.h>
-#include <SkFontMgr.h>
 #include <SkFontScanner.h>
 #include <SkFontScanner_FreeType.h>
 #include <SkImage.h>
@@ -144,26 +143,6 @@ bool compareSurfaces(const sk_sp<SkSurface>& a, const sk_sp<SkSurface>& b, const
     return compareData(da, db);
 }
 
-class TestFontLoader : public SkFontMgr_Custom::SystemFontLoader {
-public:
-    TestFontLoader() {}
-    void loadSystemFonts(const SkFontScanner* scanner,
-                         SkFontMgr_Custom::Families* families) const override {
-        std::string fontPath =
-                android::base::GetExecutableDirectory() + "/testdata/Roboto-Regular.ttf";
-
-        auto fontData = SkStreamAsset::MakeFromFile(fontPath.c_str());
-
-        auto typeface = SkTypeface_FreeType::MakeFromStream(std::move(fontData), SkFontArguments());
-
-        SkString familyName;
-        typeface->getFamilyName(&familyName);
-        SkFontStyleSet_Custom* family = new SkFontStyleSet_Custom(familyName);
-        families->push_back().reset(family);
-        family->appendTypeface(typeface);
-    }
-};
-
 class IPCRecordingCanvasTest : public ::testing::Test {
 public:
     IPCRecordingCanvasTest()
@@ -174,7 +153,6 @@ public:
 protected:
     void SetUp() override {
         Parcel p;
-        mServerCache.fontManager = sk_make_sp<SkFontMgr_Custom>(TestFontLoader());
 
         mIPCRecordingCanvas.getRenderCommandBufferProducer()->writeToParcel(&p);
         p.setDataPosition(0);
@@ -274,12 +252,19 @@ TEST_F(IPCRecordingCanvasTest, DrawPaint) {
 }
 
 TEST_F(IPCRecordingCanvasTest, DrawTextBlob) {
+    std::string fontPath = android::base::GetExecutableDirectory() + "/testdata/Roboto-Regular.ttf";
+
+    auto fontData = SkStreamAsset::MakeFromFile(fontPath.c_str());
+
+    auto typeface = SkTypeface_FreeType::MakeFromStream(std::move(fontData), SkFontArguments());
+
     auto drawTextBlob = [&](SkCanvas* c) {
         SkPaint paint;
         paint.setColor(SK_ColorDKGRAY);
         SkFont font;
         font.setSize(64);
-        font.setTypeface(mServerCache.fontManager->matchFamilyStyle("Roboto", SkFontStyle()));
+
+        font.setTypeface(typeface);
         auto blob = SkTextBlob::MakeFromString("Skia", font);
         c->drawTextBlob(blob, 50, 100, paint);
     };

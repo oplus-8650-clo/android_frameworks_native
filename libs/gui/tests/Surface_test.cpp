@@ -751,9 +751,8 @@ public:
     void setSupportsPresent(bool supportsPresent) { mSupportsPresent = supportsPresent; }
 
     binder::Status bootFinished() override { return binder::Status::ok(); }
-
     binder::Status createDisplayEventConnection(
-            VsyncSource /*vsyncSource*/, EventRegistration /*eventRegistration*/,
+            gui::ISurfaceComposer::EventRegistration /*eventRegistration*/,
             const sp<IBinder>& /*layerHandle*/,
             sp<gui::IDisplayEventConnection>* outConnection) override {
         *outConnection = nullptr;

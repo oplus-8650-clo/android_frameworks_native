@@ -139,6 +139,7 @@ cc_binary {
     required: [
         "alloctop",
         "atrace",
+        "bpftool",
         "bugreport_procdump",
         "default_screenshot",
         "dmabuf_dump",

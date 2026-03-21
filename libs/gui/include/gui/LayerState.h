@@ -540,6 +540,7 @@ struct layer_state_t {
     std::shared_ptr<RenderCommandBufferProducer> renderCommandBufferProducer;
     std::shared_ptr<RenderCommandBufferConsumer> renderCommandBufferConsumer;
     uint64_t renderCommandBufferFrameId;
+    nsecs_t renderCommandBufferFrameIdQueueTime = 0;
     sp<IBinder> renderResourceToken;
     // Composition filter flag contains additional metadata of a layer, which affects its
     // visibility.

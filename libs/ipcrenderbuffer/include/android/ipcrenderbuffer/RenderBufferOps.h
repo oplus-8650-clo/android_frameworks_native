@@ -48,6 +48,7 @@
 #include <SkSerialProcs.h>
 #include <SkTextBlob.h>
 #include <SkVertices.h>
+#include <unordered_set>
 
 #include <SkStream.h>
 #include <sys/stat.h>
@@ -85,6 +86,7 @@ struct IPCClientBitmap {
 };
 
 struct IPCClientResourceCache {
+    std::unordered_set<uint32_t> typefaces;
     std::map<uint64_t, IPCClientBitmap> bitmaps;
 };
 
@@ -95,8 +97,8 @@ struct IPCServerBitmap {
 };
 
 struct IPCServerResourceCache {
-    sk_sp<SkFontMgr> fontManager;
     std::map<uint64_t, IPCServerBitmap> bitmaps;
+    std::map<uint32_t, sk_sp<SkTypeface>> typefaces;
 };
 
 struct ShmemPaint {
@@ -406,8 +408,9 @@ struct DrawTextBlobOp final : IPCRenderBufferOp {
     RSpan<uint8_t> blobData;
 
     static DrawTextBlobOp* Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
-                                  SkScalar x_in, SkScalar y_in, const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&, sk_sp<SkFontMgr> fontMgr);
+                                  SkScalar x_in, SkScalar y_in, const SkPaint& p,
+                                  IPCClientResourceCache* cache);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* cache);
     std::string toString() const;
 };
 
@@ -505,13 +508,38 @@ struct EndRenderTargetOp final : IPCRenderBufferOp {
 
 // Structs are defined in RenderCommandBuffer.h in libgui.
 
-UploadBitmap* UploadBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId,
-                                  const SkBitmap& bitmap);
-void UploadBitmap_execute(UploadBitmap* op, IPCServerResourceCache& resourceCache);
-std::string UploadBitmap_toString(const UploadBitmap* op);
+struct UploadBitmap final : IPCRenderBufferOp {
+    static const auto kType = TYPE_UPLOADBITMAP;
+    uint64_t imageId;
+    int32_t width;
+    int32_t height;
+    int32_t colorType;
+    int32_t alphaType;
+    size_t rowBytes;
+    RSpan<uint8_t> pixels;
 
-FreeBitmap* FreeBitmap_Create(RenderCommandBuffer* commandBuffer, uint64_t imageId);
-void FreeBitmap_execute(FreeBitmap* op, IPCServerResourceCache& resourceCache);
-std::string FreeBitmap_toString(const FreeBitmap* op);
+    static UploadBitmap* Create(IpcRenderRegion* region, uint64_t imageId, const SkBitmap& bitmap);
+    void execute(IPCServerResourceCache& resourceCache);
+    std::string toString() const;
+};
+
+struct FreeBitmap final : IPCRenderBufferOp {
+    static const auto kType = TYPE_FREEBITMAP;
+    uint64_t imageId;
+
+    static FreeBitmap* Create(IpcRenderRegion* region, uint64_t imageId);
+    void execute(IPCServerResourceCache& resourceCache);
+    std::string toString() const;
+};
+
+struct UploadTypeface final : IPCRenderBufferOp {
+    static const auto kType = TYPE_UPLOADTYPEFACE;
+    uint32_t fontId;
+    RSpan<uint8_t> data;
+
+    static UploadTypeface* Create(IpcRenderRegion* region, uint32_t fontId, const SkData* data);
+    void execute(IPCServerResourceCache& resourceCache);
+    std::string toString() const;
+};
 
 } // namespace android

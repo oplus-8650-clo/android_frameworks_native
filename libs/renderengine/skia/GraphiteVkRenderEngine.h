@@ -61,12 +61,12 @@ private:
     std::thread mPrecompilePipelinesTask;
     std::vector<graphite::BackendSemaphore> mStagedWaitSemaphores;
 
-    std::unique_ptr<PipelineCallbackHandler> mProtectedPipelineCallbackHandler;
     std::unique_ptr<PipelineCallbackHandler> mUnprotectedPipelineCallbackHandler;
+    std::unique_ptr<PipelineCallbackHandler> mProtectedPipelineCallbackHandler;
 
-    std::unique_ptr<skgpu::graphite::PersistentPipelineStorage> mProtectedPersistentPipelineStorage;
     std::unique_ptr<skgpu::graphite::PersistentPipelineStorage>
             mUnprotectedPersistentPipelineStorage;
+    std::unique_ptr<skgpu::graphite::PersistentPipelineStorage> mProtectedPersistentPipelineStorage;
 
     bool mInitializedGraphiteDiskCache = false;
     bool mInitializedGraphiteSerializedPipelineKeyCache = false;

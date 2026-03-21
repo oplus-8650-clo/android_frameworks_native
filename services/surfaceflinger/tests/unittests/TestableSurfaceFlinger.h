@@ -199,7 +199,6 @@ public:
     void setupScheduler(std::unique_ptr<scheduler::VsyncController> vsyncController,
                         std::shared_ptr<scheduler::VSyncTracker> vsyncTracker,
                         std::unique_ptr<EventThread> appEventThread,
-                        std::unique_ptr<EventThread> sfEventThread,
                         DisplayModesVariant modesVariant,
                         SchedulerCallbackImpl callbackImpl = SchedulerCallbackImpl::kNoOp,
                         bool useNiceMock = false) {
@@ -237,8 +236,7 @@ public:
 
         mScheduler->initVsync(*mTokenManager, 0ms);
 
-        mScheduler->setEventThread(scheduler::Cycle::Render, std::move(appEventThread));
-        mScheduler->setEventThread(scheduler::Cycle::LastComposite, std::move(sfEventThread));
+        mScheduler->setEventThread(std::move(appEventThread));
 
         resetScheduler(mScheduler);
     }
@@ -248,7 +246,6 @@ public:
         using testing::Return;
 
         auto eventThread = makeMock<mock::EventThread>(options.useNiceMock);
-        auto sfEventThread = makeMock<mock::EventThread>(options.useNiceMock);
         auto vsyncController = makeMock<mock::VsyncController>(options.useNiceMock);
         auto vsyncTracker = makeSharedMock<mock::VSyncTracker>(options.useNiceMock);
 
@@ -260,8 +257,8 @@ public:
                         Return(Period::fromNs(FakeHwcDisplayInjector::DEFAULT_VSYNC_PERIOD)));
         EXPECT_CALL(*vsyncTracker, nextAnticipatedVSyncTimeFrom(_, _)).WillRepeatedly(Return(0));
         setupScheduler(std::move(vsyncController), std::move(vsyncTracker), std::move(eventThread),
-                       std::move(sfEventThread), DefaultDisplayMode{options.displayId},
-                       SchedulerCallbackImpl::kNoOp, options.useNiceMock);
+                       DefaultDisplayMode{options.displayId}, SchedulerCallbackImpl::kNoOp,
+                       options.useNiceMock);
     }
 
     void resetScheduler(scheduler::Scheduler* scheduler) { mFlinger->mScheduler.reset(scheduler); }

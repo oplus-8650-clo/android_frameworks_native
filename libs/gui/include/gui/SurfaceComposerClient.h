@@ -312,7 +312,7 @@ public:
 
     static status_t removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
-    static sp<IBinder> registerShader(const std::string& debugName,
+    static sp<IBinder> registerShader(const std::string& uniqueShaderName,
                                       const std::string& shaderString);
 
     static void unregisterShader(const sp<IBinder> shader);

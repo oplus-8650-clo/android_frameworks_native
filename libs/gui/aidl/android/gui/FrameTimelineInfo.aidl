@@ -49,4 +49,9 @@ parcelable FrameTimelineInfo {
 
     // The amount of time spent in dequeueBuffer waiting for an available buffer.
     long dequeueBufferDurationNanos = 0;
+
+    // Time used by animations to compute progress and render frames.
+    // 0 is first frame of animation / non-animated frame.
+    // -1 means animation time is absent/unknown.
+    long animationTime = -1;
 }

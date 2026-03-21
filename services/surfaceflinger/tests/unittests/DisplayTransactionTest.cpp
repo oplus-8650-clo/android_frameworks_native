@@ -58,7 +58,6 @@ void DisplayTransactionTest::injectMockScheduler(PhysicalDisplayId displayId) {
     mFlinger.setupScheduler(std::make_unique<mock::VsyncController>(),
                             std::make_shared<mock::VSyncTracker>(),
                             std::unique_ptr<EventThread>(mEventThread),
-                            std::unique_ptr<EventThread>(mSFEventThread),
                             TestableSurfaceFlinger::DefaultDisplayMode{displayId},
                             TestableSurfaceFlinger::SchedulerCallbackImpl::kMock);
 }

@@ -142,13 +142,13 @@ void PowerAdvisor::setExpensiveRenderingExpected(DisplayId displayId, bool expec
     }
 }
 
-void PowerAdvisor::notifyCpuLoadUp() {
+void PowerAdvisor::notifyCpuLoadUp(std::string_view reason) {
     // Only start sending this notification once the system has booted so we don't introduce an
     // early-boot dependency on Power HAL
     if (!mBootFinished.load()) {
         return;
     }
-    sendHintSessionHint(hal::SessionHint::CPU_LOAD_UP);
+    sendHintSessionHint(hal::SessionHint::CPU_LOAD_UP, reason);
 }
 
 void PowerAdvisor::notifyDisplayUpdateImminentAndCpuReset() {
@@ -202,12 +202,16 @@ bool PowerAdvisor::shouldCreateSessionWithConfig() {
     return mSessionConfigSupported && mBootFinished;
 }
 
-void PowerAdvisor::sendHintSessionHint(hal::SessionHint hint) {
+void PowerAdvisor::sendHintSessionHint(hal::SessionHint hint, std::string_view reason) {
     if (!mBootFinished || !usePowerHintSession()) {
         ALOGV("Power hint session is not enabled, skip sending session hint");
         return;
     }
-    SFTRACE_CALL();
+    if (reason.empty()) {
+        SFTRACE_CALL();
+    } else {
+        SFTRACE_FORMAT("%s - %.*s", __func__, reason.length(), reason.data());
+    }
     SFTRACE_INT("Session hint", static_cast<int>(hint));
     {
         std::scoped_lock lock(mHintSessionMutex);
@@ -806,8 +810,8 @@ void PowerAdvisor::setCommittedWorkload(ftl::Flags<Workload> workload) {
         // TODO(b/385028458) cancel load up hint
     }
 
-    bool increasedWorkload = queued == 0 && mCommittedWorkload.get() != 0;
-    if (increasedWorkload) {
+    ftl::Flags<Workload> newWorkload = ~mCompositedWorkload & mCommittedWorkload;
+    if (newWorkload.any()) {
         SFTRACE_INSTANT_FOR_TRACK(WorkloadTracer::TRACK_NAME,
                                   ftl::Concat("CommittedWorkload: ",
                                               ftl::truncated<20>(mCommittedWorkload.string()))
@@ -817,14 +821,14 @@ void PowerAdvisor::setCommittedWorkload(ftl::Flags<Workload> workload) {
 
         // Provides a load up hint only for effects that require client
         // composition, such as blur or shadows.
-        if (mCommittedWorkload.any(adpf::Workload::EFFECTS)) {
-            notifyCpuLoadUp();
+        if (newWorkload.any(adpf::Workload::EFFECTS)) {
+            notifyCpuLoadUp("Workload::EFFECTS");
         }
     }
 }
 
 void PowerAdvisor::setCompositedWorkload(ftl::Flags<Workload> composited) {
-    composited &= TRIGGER_LOAD_CHANGE_HINTS;
-    mCommittedWorkload = composited;
+    mCommittedWorkload.clear();
+    mCompositedWorkload = composited;
 }
 } // namespace android::adpf::impl

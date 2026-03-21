@@ -56,23 +56,32 @@ struct BlurRegion {
     inline bool operator!=(const BlurRegion& other) const { return !(*this == other); }
 };
 
-static inline void PrintTo(const BlurRegion& blurRegion, ::std::ostream* os) {
+namespace {
+// A newline character followed by N*4 spaces.
+static inline constexpr std::string IndentedNewline(uint8_t indent) {
+    return "\n" + std::string(static_cast<size_t>(indent * 4), ' ');
+}
+} // namespace
+
+static inline void PrintTo(const BlurRegion& blurRegion, ::std::ostream* os,
+                           const uint8_t currentIndent = 0) {
+    const std::string newline = IndentedNewline(currentIndent + 1);
     *os << "BlurRegion {";
-    *os << "\n    .blurRadius = " << blurRegion.blurRadius;
-    *os << "\n    .cornerRadiusTLX = " << blurRegion.cornerRadiusTLX;
-    *os << "\n    .cornerRadiusTLY = " << blurRegion.cornerRadiusTLY;
-    *os << "\n    .cornerRadiusTRX = " << blurRegion.cornerRadiusTRX;
-    *os << "\n    .cornerRadiusTRY = " << blurRegion.cornerRadiusTRY;
-    *os << "\n    .cornerRadiusBLX = " << blurRegion.cornerRadiusBLX;
-    *os << "\n    .cornerRadiusBLY = " << blurRegion.cornerRadiusBLY;
-    *os << "\n    .cornerRadiusBRX = " << blurRegion.cornerRadiusBRX;
-    *os << "\n    .cornerRadiusBRY = " << blurRegion.cornerRadiusBRY;
-    *os << "\n    .alpha = " << blurRegion.alpha;
-    *os << "\n    .left = " << blurRegion.left;
-    *os << "\n    .top = " << blurRegion.top;
-    *os << "\n    .right = " << blurRegion.right;
-    *os << "\n    .bottom = " << blurRegion.bottom;
-    *os << "\n}";
+    *os << newline << ".blurRadius = " << blurRegion.blurRadius;
+    *os << newline << ".cornerRadiusTLX = " << blurRegion.cornerRadiusTLX;
+    *os << newline << ".cornerRadiusTLY = " << blurRegion.cornerRadiusTLY;
+    *os << newline << ".cornerRadiusTRX = " << blurRegion.cornerRadiusTRX;
+    *os << newline << ".cornerRadiusTRY = " << blurRegion.cornerRadiusTRY;
+    *os << newline << ".cornerRadiusBLX = " << blurRegion.cornerRadiusBLX;
+    *os << newline << ".cornerRadiusBLY = " << blurRegion.cornerRadiusBLY;
+    *os << newline << ".cornerRadiusBRX = " << blurRegion.cornerRadiusBRX;
+    *os << newline << ".cornerRadiusBRY = " << blurRegion.cornerRadiusBRY;
+    *os << newline << ".alpha = " << blurRegion.alpha;
+    *os << newline << ".left = " << blurRegion.left;
+    *os << newline << ".top = " << blurRegion.top;
+    *os << newline << ".right = " << blurRegion.right;
+    *os << newline << ".bottom = " << blurRegion.bottom;
+    *os << IndentedNewline(currentIndent) << "}";
 }
 
 // copied from skia/src/core/SkBlurMask.cpp
