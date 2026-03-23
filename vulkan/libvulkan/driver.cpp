@@ -1064,6 +1064,7 @@ void QueryPresentationProperties(
 struct IcdSupport {
     bool AndroidNativeBuffer9 = false;
     bool KhrCalibratedTimestamps = false;
+    bool ExtImageCompressionControl = false;
 };
 
 IcdSupport GetIcdSupport(VkPhysicalDevice physicalDevice) {
@@ -1101,6 +1102,8 @@ IcdSupport GetIcdSupport(VkPhysicalDevice physicalDevice) {
             support.AndroidNativeBuffer9 = true;
         else if (strcmp(prop.extensionName, VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME) == 0)
             support.KhrCalibratedTimestamps = true;
+        else if (strcmp(prop.extensionName, VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME) == 0)
+            support.ExtImageCompressionControl = true;
     }
 
     return support;
@@ -1195,36 +1198,9 @@ VkResult EnumerateDeviceExtensionProperties(
                                      VK_KHR_PRESENT_WAIT_2_SPEC_VERSION});
     }
 
-    // Conditionally add VK_EXT_IMAGE_COMPRESSION_CONTROL* if feature and ANB
-    // support is provided by the driver
-    VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT
-        swapchainCompFeats = {};
-    swapchainCompFeats.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT;
-    swapchainCompFeats.pNext = nullptr;
-    swapchainCompFeats.imageCompressionControlSwapchain = false;
-    VkPhysicalDeviceImageCompressionControlFeaturesEXT imageCompFeats = {};
-    imageCompFeats.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT;
-    imageCompFeats.pNext = &swapchainCompFeats;
-    imageCompFeats.imageCompressionControl = false;
-
-    VkPhysicalDeviceFeatures2 feats2 = {};
-    feats2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    feats2.pNext = &imageCompFeats;
-
-    const auto& driver = GetData(physicalDevice).driver;
-    if (driver.GetPhysicalDeviceFeatures2 ||
-        driver.GetPhysicalDeviceFeatures2KHR) {
-        GetPhysicalDeviceFeatures2(physicalDevice, &feats2);
-    }
-
-    if (icdSupport.AndroidNativeBuffer9 && imageCompFeats.imageCompressionControl) {
-        loader_extensions.push_back(
-            {VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME,
-             VK_EXT_IMAGE_COMPRESSION_CONTROL_SPEC_VERSION});
-    }
-    if (icdSupport.AndroidNativeBuffer9 && swapchainCompFeats.imageCompressionControlSwapchain) {
+    // Conditionally add EXT_image_compression_control_swapchain if the driver
+    // supports EXT_image_compression_control
+    if (icdSupport.AndroidNativeBuffer9 && icdSupport.ExtImageCompressionControl) {
         loader_extensions.push_back(
             {VK_EXT_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_EXTENSION_NAME,
              VK_EXT_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_SPEC_VERSION});
@@ -1769,33 +1745,22 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
 
     ATRACE_CALL();
     const auto& driver = GetData(physicalDevice).driver;
+    auto icdSupport = GetIcdSupport(physicalDevice);
 
-    // Conditionally add imageCompressionControlSwapchain if
-    // imageCompressionControl is supported Check for imageCompressionControl in
-    // the pChain
-    bool imageCompressionControl = false;
-    bool imageCompressionControlInChain = false;
-    bool imageCompressionControlSwapchainInChain = false;
     VkPhysicalDeviceFeatures2* pFeats = pFeatures;
     while (pFeats) {
         switch (pFeats->sType) {
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT: {
-                const VkPhysicalDeviceImageCompressionControlFeaturesEXT*
-                    compressionFeat = reinterpret_cast<
-                        const VkPhysicalDeviceImageCompressionControlFeaturesEXT*>(
-                        pFeats);
-                imageCompressionControl =
-                    compressionFeat->imageCompressionControl;
-                imageCompressionControlInChain = true;
-            } break;
-
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT: {
-                VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*
-                    compressionFeat = reinterpret_cast<
-                        VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*>(
+                // Note: it's safe here to only consider the conditions for enabling the extension;
+                // the corresponding 'imageCompressionControl' feature is mandatory for any
+                // device that supports the EXT_image_compression_control extension.
+                if (!icdSupport.AndroidNativeBuffer9 || !icdSupport.ExtImageCompressionControl)
+                    break;
+
+                auto *features =
+                    reinterpret_cast<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*>(
                         pFeats);
-                compressionFeat->imageCompressionControlSwapchain = false;
-                imageCompressionControlSwapchainInChain = true;
+                features->imageCompressionControlSwapchain = true;
             } break;
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR: {
@@ -1859,52 +1824,6 @@ static void PopulateLoaderImplementedFeatures(VkPhysicalDevice physicalDevice,
                 break;
         }
         pFeats = reinterpret_cast<VkPhysicalDeviceFeatures2*>(pFeats->pNext);
-    }
-
-    if (!imageCompressionControlSwapchainInChain) {
-        return;
-    }
-
-    // If not in pchain, explicitly query for imageCompressionControl
-    if (!imageCompressionControlInChain) {
-        VkPhysicalDeviceImageCompressionControlFeaturesEXT imageCompFeats = {};
-        imageCompFeats.sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT;
-        imageCompFeats.pNext = nullptr;
-        imageCompFeats.imageCompressionControl = false;
-
-        VkPhysicalDeviceFeatures2 feats2 = {};
-        feats2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        feats2.pNext = &imageCompFeats;
-
-        if (driver.GetPhysicalDeviceFeatures2) {
-            driver.GetPhysicalDeviceFeatures2(physicalDevice, &feats2);
-        } else {
-            driver.GetPhysicalDeviceFeatures2KHR(physicalDevice, &feats2);
-        }
-
-        imageCompressionControl = imageCompFeats.imageCompressionControl;
-    }
-
-    // Only enumerate imageCompressionControlSwapchin if imageCompressionControl
-    if (imageCompressionControl) {
-        pFeats = pFeatures;
-        while (pFeats) {
-            switch (pFeats->sType) {
-                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT: {
-                    VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*
-                        compressionFeat = reinterpret_cast<
-                            VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*>(
-                            pFeats);
-                    compressionFeat->imageCompressionControlSwapchain = true;
-                } break;
-
-                default:
-                    break;
-            }
-            pFeats =
-                reinterpret_cast<VkPhysicalDeviceFeatures2*>(pFeats->pNext);
-        }
     }
 }
 
