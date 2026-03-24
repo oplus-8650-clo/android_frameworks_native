@@ -541,11 +541,12 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
     wideColorGamutCompositionPixelFormat =
             static_cast<ui::PixelFormat>(wcg_composition_pixel_format(ui::PixelFormat::RGBA_8888));
 
-    mLayerCachingEnabled =
-            base::GetBoolProperty("debug.sf.enable_layer_caching"s,
-                                  sysprop::SurfaceFlingerProperties::enable_layer_caching()
-                                          .value_or(false));
-
+    if (!FlagManager::getInstance().frontend_caching_v0()) {
+        mLayerCachingEnabled =
+                base::GetBoolProperty("debug.sf.enable_layer_caching"s,
+                                      sysprop::SurfaceFlingerProperties::enable_layer_caching()
+                                              .value_or(false));
+    }
     useContextPriority = use_context_priority(true);
 
     mInternalDisplayPrimaries = sysprop::getDisplayNativePrimaries();
