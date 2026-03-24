@@ -258,7 +258,8 @@ std::string toString(const RefreshRateSelector::PolicyVariant& policy) {
 
 auto RefreshRateSelector::createFrameRateModes(
         const Policy& policy, std::function<bool(const DisplayMode&)>&& filterModes,
-        const FpsRange& renderRange) const -> std::vector<FrameRateMode> {
+        const FpsRange& renderRange, bool onlyDivisorsForSameGroup) const
+        -> std::vector<FrameRateMode> {
     struct Key {
         Fps fps;
         int32_t group;
@@ -278,6 +279,7 @@ auto RefreshRateSelector::createFrameRateModes(
         }
     };
 
+    const auto& defaultMode = mDisplayModes.get(policy.defaultMode)->get();
     std::map<Key, DisplayModeIterator, KeyLess> ratesMap;
     for (auto it = mDisplayModes.begin(); it != mDisplayModes.end(); ++it) {
         const auto& [id, mode] = *it;
@@ -287,8 +289,16 @@ auto RefreshRateSelector::createFrameRateModes(
         }
         const auto vsyncRate = mode->getVsyncRate();
         const auto peakFps = mode->getPeakFps();
+
+        bool enableFrameRateOverride = mConfig.enableFrameRateOverride;
+        if (onlyDivisorsForSameGroup) {
+            if (mode->getGroup() != defaultMode->getGroup()) {
+                enableFrameRateOverride = false;
+            }
+        }
+
         const auto divisors = getModeDivisors(*mode, renderRange, kFpsAnchorList, kNumFrameRates,
-                                              mConfig.enableFrameRateOverride);
+                                              enableFrameRateOverride);
         for (auto divisor : divisors) {
             const auto fps = vsyncRate / divisor;
             using fps_approx_ops::operator<;
@@ -1611,28 +1621,31 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
                                                 return it->second->getGroup() == group;
                                             });
 
-    const auto filterRefreshRates = [&](const FpsRanges& ranges,
-                                        const char* rangeName) REQUIRES(mLock) {
+    const auto filterRefreshRates = [&](const FpsRanges& ranges, const char* rangeName,
+                                        bool allowAllGroups = false) REQUIRES(mLock) {
         const auto filterModes = [&](const DisplayMode& mode) {
             bool hdrOutputTypeMatches = FlagManager::getInstance().enable_user_preferred_hdr_mode()
                     ? mode.getHdrOutputType() == defaultMode->getHdrOutputType()
                     : true;
             return mode.getResolution() == defaultMode->getResolution() &&
                     mode.getDpi() == defaultMode->getDpi() &&
-                    (policy->allowGroupSwitching || mode.getGroup() == defaultMode->getGroup()) &&
+                    (allowAllGroups || policy->allowGroupSwitching ||
+                     mode.getGroup() == defaultMode->getGroup()) &&
                     ranges.physical.includes(mode.getPeakFps()) &&
                     (supportsFrameRateOverride() || ranges.render.includes(mode.getPeakFps())) &&
                     hdrOutputTypeMatches;
         };
 
-        auto frameRateModes = createFrameRateModes(*policy, filterModes, ranges.render);
+        auto frameRateModes = createFrameRateModes(*policy, filterModes, ranges.render,
+                                                   allowAllGroups && !mIsVrrDisplay);
         if (frameRateModes.empty()) {
             ALOGW("No matching frame rate modes for %s range. policy: %s", rangeName,
                   policy->toString().c_str());
             // TODO(b/292105422): Ideally DisplayManager should not send render ranges smaller than
             // the min supported. See b/292047939.
             //  For not we just ignore the render ranges.
-            frameRateModes = createFrameRateModes(*policy, filterModes, {});
+            frameRateModes = createFrameRateModes(*policy, filterModes, {},
+                                                  allowAllGroups && !mIsVrrDisplay);
         }
         LOG_ALWAYS_FATAL_IF(frameRateModes.empty(),
                             "No matching frame rate modes for %s range even after ignoring the "
@@ -1654,9 +1667,15 @@ void RefreshRateSelector::constructAvailableRefreshRates() {
 
     mPrimaryFrameRates = filterRefreshRates(policy->primaryRanges, "primary");
     mAppRequestFrameRates = filterRefreshRates(policy->appRequestRanges, "app request");
-    mAllFrameRates = filterRefreshRates(FpsRanges(getSupportedFrameRateRangeLocked(),
-                                                  getSupportedFrameRateRangeLocked()),
-                                        "full frame rates");
+
+    const bool useMrrFullList =
+            FlagManager::getInstance().mrr_full_frame_rate_list() && !mIsVrrDisplay;
+    const FpsRange fullRange = useMrrFullList
+            ? FpsRange{0_Hz, mGlobalMaxRefreshRateModeIt->second->getPeakFps()}
+            : getSupportedFrameRateRangeLocked();
+
+    mAllFrameRates =
+            filterRefreshRates(FpsRanges(fullRange, fullRange), "full frame rates", useMrrFullList);
 }
 
 bool RefreshRateSelector::isVrrDisplay() const {

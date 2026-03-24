@@ -121,6 +121,10 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
 
     layerSettings->borderSettings = mSnapshot->borderSettings;
     layerSettings->boxShadowSettings = mSnapshot->boxShadowSettings;
+    layerSettings->postProcessEffect = mSnapshot->postProcessEffect;
+    layerSettings->postProcessUniforms = mSnapshot->postProcessUniforms;
+    layerSettings->postProcessTarget =
+            static_cast<renderengine::LayerSettings::SampleTarget>(mSnapshot->postProcessTarget);
 
     return layerSettings;
 }

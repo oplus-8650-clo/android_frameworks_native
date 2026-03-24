@@ -87,6 +87,7 @@ enum {
     SET_PRODUCER_THROTTLING_ENABLED,
     GET_PRODUCER_THROTTLING_ENABLED,
     SET_PRESENT_MODE,
+    GET_CONFIG_FOR_SURFACE,
 };
 
 class BpGraphicBufferProducer : public BpInterface<IGraphicBufferProducer>
@@ -98,6 +99,21 @@ public:
     }
 
     ~BpGraphicBufferProducer() override;
+
+    virtual status_t getConfigForSurface(SurfaceConfig* outConfig) override {
+        Parcel data, reply;
+        data.writeInterfaceToken(IGraphicBufferProducer::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_CONFIG_FOR_SURFACE, data, &reply);
+        if (result != NO_ERROR) {
+            return result;
+        }
+
+        result = reply.readInt32();
+        if (result != NO_ERROR) {
+            return result;
+        }
+        return reply.readParcelable(outConfig);
+    }
 
     virtual status_t requestBuffer(int bufferIdx, sp<GraphicBuffer>* buf) {
         Parcel data, reply;
@@ -861,6 +877,10 @@ class HpGraphicBufferProducer : public HpInterface<
 public:
     explicit HpGraphicBufferProducer(const sp<IBinder>& base) : PBase(base) {}
 
+    status_t getConfigForSurface(SurfaceConfig* outConfig) override {
+        return mBase->getConfigForSurface(outConfig);
+    }
+
     status_t requestBuffer(int slot, sp<GraphicBuffer>* buf) override {
         return mBase->requestBuffer(slot, buf);
     }
@@ -1039,6 +1059,12 @@ IMPLEMENT_HYBRID_META_INTERFACE(GraphicBufferProducer,
         "android.gui.IGraphicBufferProducer");
 
 // ----------------------------------------------------------------------
+
+status_t IGraphicBufferProducer::getConfigForSurface(SurfaceConfig* outConfig) {
+    // No-op for IGBP other than BufferQueue.
+    (void)outConfig;
+    return INVALID_OPERATION;
+}
 
 status_t IGraphicBufferProducer::extendSlotCount(int size) {
     // No-op for IGBP other than BufferQueue.
@@ -1688,8 +1714,32 @@ status_t BnGraphicBufferProducer::onTransact(
             reply->writeInt32(result);
             return NO_ERROR;
         }
+        case GET_CONFIG_FOR_SURFACE: {
+            CHECK_INTERFACE(IGraphicBufferProducer, data, reply);
+            SurfaceConfig config;
+            status_t result = getConfigForSurface(&config);
+            reply->writeInt32(result);
+            if (result == NO_ERROR) {
+                reply->writeParcelable(config);
+            }
+            return NO_ERROR;
+        }
     }
     return BBinder::onTransact(code, data, reply, flags);
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::writeToParcel(android::Parcel* parcel) const {
+    parcel->writeString8(consumerName);
+    parcel->writeUint32(slotCount);
+    parcel->writeBool(isSlotExpansionAllowed);
+    return NO_ERROR;
+}
+
+status_t IGraphicBufferProducer::SurfaceConfig::readFromParcel(const android::Parcel* parcel) {
+    consumerName = parcel->readString8();
+    slotCount = parcel->readUint32();
+    isSlotExpansionAllowed = parcel->readBool();
+    return NO_ERROR;
 }
 
 }; // namespace android

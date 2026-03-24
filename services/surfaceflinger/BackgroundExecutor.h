@@ -20,7 +20,7 @@
 #include <semaphore.h>
 #include <thread>
 
-#include "LocklessQueue.h"
+#include <gui/LocklessQueue.h>
 
 namespace android {
 

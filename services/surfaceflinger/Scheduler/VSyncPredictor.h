@@ -151,8 +151,9 @@ private:
     bool validate(nsecs_t timestamp) const REQUIRES(mMutex);
     Model getVSyncPredictionModelLocked() const REQUIRES(mMutex);
     ModelAccuracy getModelAccuracyLocked(nsecs_t knownVsync) const REQUIRES(mMutex);
+    HwVsyncStability calculateVsyncStability(nsecs_t timestamp) const REQUIRES(mMutex);
     nsecs_t snapToVsync(nsecs_t timePoint) const REQUIRES(mMutex);
-    void calculateVsyncStability(nsecs_t timestamp) REQUIRES(mMutex);
+
     Period minFramePeriodLocked() const REQUIRES(mMutex);
     Duration ensureMinFrameDurationIsKept(TimePoint, TimePoint) REQUIRES(mMutex);
     void purgeTimelines(android::TimePoint now) REQUIRES(mMutex);
@@ -182,7 +183,7 @@ private:
     // Rolling buffer of the last n error samples relative to the ideal period.
     // Used to calculate the standard deviation (stability) of the hardware vsync signal.
     static constexpr size_t kMaxVsyncErrors = 20;
-    ui::RingBuffer<nsecs_t, kMaxVsyncErrors> mVsyncErrors GUARDED_BY(mMutex);
+    mutable ui::RingBuffer<nsecs_t, kMaxVsyncErrors> mVsyncErrors GUARDED_BY(mMutex);
 
     ftl::NonNull<DisplayModePtr> mDisplayModePtr GUARDED_BY(mMutex);
     int mNumVsyncsForFrame GUARDED_BY(mMutex);

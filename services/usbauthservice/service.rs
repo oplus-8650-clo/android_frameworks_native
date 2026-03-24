@@ -260,8 +260,15 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
+        let mock_proc = tempdir().unwrap();
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap(),
+            UsbDeviceAuthManager::with_paths(
+                mock_sys.path(),
+                mock_etc.path(),
+                mock_proc.path(),
+                false,
+            )
+            .unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
         (service, device_manager)
@@ -280,6 +287,7 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
+        let mock_proc = tempdir().unwrap();
         let policy_dir = mock_etc.path().join("usb_auth");
         fs::create_dir(&policy_dir).unwrap();
         let policy_file = policy_dir.join("policy.conf");
@@ -287,7 +295,13 @@ mod tests {
         fs::write(&policy_file, "ask when LoggedIn").unwrap();
 
         let device_manager = Arc::new(Mutex::new(
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap(),
+            UsbDeviceAuthManager::with_paths(
+                mock_sys.path(),
+                mock_etc.path(),
+                mock_proc.path(),
+                false,
+            )
+            .unwrap(),
         ));
         let service = UsbAuthServiceImpl { device_manager: device_manager.clone() };
 

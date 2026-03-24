@@ -25,7 +25,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <log/log.h>
-#include <renderengine/RenderEngine.h>
 #include <server_configurable_flags/get_flags.h>
 
 #include <android_companion_virtualdevice_flags.h>
@@ -144,6 +143,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(md_degrade_hdr);
     DUMP_ACONFIG_FLAG(mirror_uid_filtering);
     DUMP_ACONFIG_FLAG(monitor_buffer_fences);
+    DUMP_ACONFIG_FLAG(mrr_full_frame_rate_list);
     DUMP_ACONFIG_FLAG(offload_gpu_composition);
     DUMP_ACONFIG_FLAG(readback_screenshot);
     DUMP_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets);
@@ -160,7 +160,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(connected_display_hdr_v2);
     DUMP_ACONFIG_FLAG(connected_display_hdr_v3);
     DUMP_ACONFIG_FLAG(correct_dpi_with_display_size);
-    DUMP_ACONFIG_FLAG(deprecate_frame_tracker);
     DUMP_ACONFIG_FLAG(display_command_modeset);
     DUMP_ACONFIG_FLAG(enable_user_preferred_hdr_mode);
     DUMP_ACONFIG_FLAG(fence_handling);
@@ -261,7 +260,7 @@ FLAG_MANAGER_SYSPROP_FLAG(stable_edid_ids_for_external_displays_optin, /* defaul
 FLAG_MANAGER_LEGACY_SERVER_FLAG(test_flag, "", "")
 FLAG_MANAGER_LEGACY_SERVER_FLAG(use_adpf_cpu_hint, "debug.sf.enable_adpf_cpu_hint",
                                 "AdpfFeature__adpf_cpu_hint")
-FLAG_MANAGER_LEGACY_SERVER_FLAG(use_skia_tracing, PROPERTY_SKIA_ATRACE_ENABLED,
+FLAG_MANAGER_LEGACY_SERVER_FLAG(use_skia_tracing, "debug.renderengine.skia_atrace_enabled",
                                 "SkiaTracingFeature__use_skia_tracing")
 
 /// Trunk stable readonly flags ///
@@ -271,7 +270,6 @@ FLAG_MANAGER_ACONFIG_FLAG(cache_when_source_crop_layer_only_moved,
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v2, "debug.sf.connected_display_hdr_v2");
 FLAG_MANAGER_ACONFIG_FLAG(connected_display_hdr_v3, "debug.sf.connected_display_hdr_v3");
 FLAG_MANAGER_ACONFIG_FLAG(correct_dpi_with_display_size, "");
-FLAG_MANAGER_ACONFIG_FLAG(deprecate_frame_tracker, "");
 FLAG_MANAGER_ACONFIG_FLAG(display_command_modeset, "debug.sf.display_command_modeset")
 FLAG_MANAGER_ACONFIG_FLAG(fence_handling, "");
 FLAG_MANAGER_ACONFIG_FLAG(follower_arbitrary_refresh_rate_selection,
@@ -335,6 +333,7 @@ FLAG_MANAGER_ACONFIG_FLAG(jank_classification_v2, "debug.sf.jank_classification_
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_uid_filtering, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
+FLAG_MANAGER_ACONFIG_FLAG(mrr_full_frame_rate_list, "");
 FLAG_MANAGER_ACONFIG_FLAG(offload_gpu_composition, "");
 FLAG_MANAGER_ACONFIG_FLAG(re_powered_off_displays_inform_cache_budgets, "");
 FLAG_MANAGER_ACONFIG_FLAG(readback_screenshot, "")

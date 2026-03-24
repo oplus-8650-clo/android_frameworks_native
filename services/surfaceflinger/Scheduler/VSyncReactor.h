@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -65,6 +66,8 @@ public:
      * A helper struct to report the VSync prediction accuracy.
      * Used for metrics - do not change.
      */
+    // TODO(b/483155349): Use Panopticon to provide a structured metric source for this data instead
+    // of packing it into a string.
     struct ModelAccuracyMetric {
         VSyncTracker::ModelAccuracy accuracy;
         VSyncTracker::VsyncTimeSource source;
@@ -72,16 +75,26 @@ public:
         bool accepted;
 
         std::string to_string() const {
-            return base::StringPrintf("error= %.2f, actual= %.2f, predicted= %.2f, "
-                                      "VsyncTimeSource= %s, VsyncPeriod= %.2f, "
-                                      "VsyncPeriodsElapsed= %.2f, modeChangeInProgress= %d, "
-                                      "accepted= %d",
-                                      static_cast<float>(accuracy.modelErrorNs) / 1e6f,
-                                      static_cast<float>(accuracy.actualVsync) / 1e6f,
-                                      static_cast<float>(accuracy.predictedVsync) / 1e6f,
-                                      ftl::enum_string(source).c_str(),
-                                      static_cast<float>(accuracy.idealPeriod) / 1e6f,
-                                      accuracy.vsyncPeriodsElapsed, modeChangeInProgress, accepted);
+            std::string result =
+                    base::StringPrintf("error= %.4f, actualNs= %" PRId64 ", predictedNs= %" PRId64
+                                       ", VsyncTimeSource= %s, VsyncPeriod= %.2f, "
+                                       "VsyncPeriodsElapsed= %.2f, modeChangeInProgress= %d, "
+                                       "accepted= %d",
+                                       static_cast<float>(accuracy.modelErrorNs) / 1e6f,
+                                       accuracy.actualVsync, accuracy.predictedVsync,
+                                       ftl::enum_string(source).c_str(),
+                                       static_cast<float>(accuracy.idealPeriod) / 1e6f,
+                                       accuracy.vsyncPeriodsElapsed, modeChangeInProgress,
+                                       accepted);
+            if (accuracy.hwVsyncStability.error) {
+                base::StringAppendF(&result, ", hwVsyncError= %.2f",
+                                    static_cast<float>(*accuracy.hwVsyncStability.error) / 1e6f);
+            }
+            if (accuracy.hwVsyncStability.stddev) {
+                base::StringAppendF(&result, ", hwVsyncStabStd= %.2f",
+                                    static_cast<float>(*accuracy.hwVsyncStability.stddev) / 1e6f);
+            }
+            return result;
         }
     };
 

@@ -76,15 +76,15 @@ std::future<void> GraphiteVkRenderEngine::primeCache(PrimeCacheConfig config) {
     // for Graphite TEMPORARILY, and this switch may be removed in the future without warning.
     // TODO(b/380159947): remove this option, and force just precompilation to always be enabled.
     if (base::GetBoolProperty("debug.renderengine.graphite.prewarm", true)) {
-        mPipelineCallbackHandler.beginWarmup();
-        mProtectedPipelineCallbackHandler.beginWarmup();
+        mUnprotectedPipelineCallbackHandler->beginWarmup();
+        mProtectedPipelineCallbackHandler->beginWarmup();
 
         // Despite this returning a future, it is actually synchronous. This allows us to surround
         // it with begin/end-Warmup calls in order to mark the warmed up Pipelines.
         ret = SkiaVkRenderEngine::primeCache(config);
 
-        mPipelineCallbackHandler.endWarmup();
-        mProtectedPipelineCallbackHandler.endWarmup();
+        mUnprotectedPipelineCallbackHandler->endWarmup();
+        mProtectedPipelineCallbackHandler->endWarmup();
     }
 
     // Note: this sysprop is for local debugging only! Graphite's precompilation should stay
@@ -118,15 +118,16 @@ std::unique_ptr<SkiaGpuContext> GraphiteVkRenderEngine::createContext(
     graphite::PersistentPipelineStorage* persistentStorage =
             graphitePersistentPipelineStorage(&driverVersion, sizeof(driverVersion),
                                               vulkanInterface.isProtected());
+    PipelineCallbackHandler* pipelineCallbackHandler =
+            graphiteSerializedPipelineKeyCache(&driverVersion, sizeof(driverVersion),
+                                               vulkanInterface.isProtected());
 
-    return SkiaGpuContext::MakeVulkan_Graphite(
-        vulkanInterface.createSkiaVulkanBackendContext(/*threadSafeVMA=*/true),
-        persistentStorage,
-        SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
-                mRuntimeEffectManager.mKnownEffects.size()),
-        vulkanInterface.isProtected()
-                ? &mProtectedPipelineCallbackHandler
-                : &mPipelineCallbackHandler);
+    return SkiaGpuContext::MakeVulkan_Graphite(vulkanInterface.createSkiaVulkanBackendContext(
+                                                       /*threadSafeVMA=*/true),
+                                               persistentStorage,
+                                               SkSpan(mRuntimeEffectManager.mKnownEffects.data(),
+                                                      mRuntimeEffectManager.mKnownEffects.size()),
+                                               pipelineCallbackHandler);
 }
 
 void GraphiteVkRenderEngine::waitFenceImpl(SkiaGpuContext*, base::borrowed_fd fenceFd) {
@@ -212,6 +213,7 @@ class GraphitePipelineDiskStorage : public skgpu::graphite::PersistentPipelineSt
 public:
     GraphitePipelineDiskStorage(bool isProtected) : mIsProtected(isProtected) {}
 
+    // This is only called when the Graphite Context is being created
     sk_sp<SkData> load() override {
         ++mNumLoads;
 
@@ -273,11 +275,29 @@ GraphiteVkRenderEngine::graphitePersistentPipelineStorage(const void* identity, 
                        : mUnprotectedPersistentPipelineStorage.get();
 }
 
+PipelineCallbackHandler* GraphiteVkRenderEngine::graphiteSerializedPipelineKeyCache(
+        const void* identity, ssize_t size, bool isProtected) {
+    if (!mInitializedGraphiteSerializedPipelineKeyCache) {
+        const bool kStoreSerializedKeys = false;
+
+        mProtectedPipelineCallbackHandler =
+                std::make_unique<PipelineCallbackHandler>(/* isProtected= */ true,
+                                                          kStoreSerializedKeys);
+        mUnprotectedPipelineCallbackHandler =
+                std::make_unique<PipelineCallbackHandler>(/* isProtected= */ false,
+                                                          kStoreSerializedKeys);
+        mInitializedGraphiteSerializedPipelineKeyCache = true;
+    }
+
+    return isProtected ? mProtectedPipelineCallbackHandler.get()
+                       : mUnprotectedPipelineCallbackHandler.get();
+}
+
 void GraphiteVkRenderEngine::appendBackendSpecificInfoToDump(std::string& result) {
     StringAppendF(&result, "\n ------------RE Vulkan (Graphite)----------\n");
     SkiaVkRenderEngine::appendBackendSpecificInfoToDump(result);
-    mPipelineCallbackHandler.report("Unprotected", result);
-    mProtectedPipelineCallbackHandler.report("Protected", result);
+    mUnprotectedPipelineCallbackHandler->report("Unprotected", result);
+    mProtectedPipelineCallbackHandler->report("Protected", result);
 
     if (mUnprotectedPersistentPipelineStorage) {
         static_cast<GraphitePipelineDiskStorage*>(mUnprotectedPersistentPipelineStorage.get())

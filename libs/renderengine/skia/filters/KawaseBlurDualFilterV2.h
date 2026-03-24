@@ -56,7 +56,12 @@ public:
 
     void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) override;
     bool isBufferPreallocated(ui::Size displaySize) const override {
-        return mProtectedTextures[0] != nullptr && displaySize == mPreallocatedDisplaySize;
+        if (mProtectedTextures[0] == nullptr) {
+            return false;
+        }
+
+        return displaySize.width <= mPreallocatedDisplaySize.width &&
+                displaySize.height <= mPreallocatedDisplaySize.height;
     }
 
 private:

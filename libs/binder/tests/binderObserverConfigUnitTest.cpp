@@ -23,6 +23,7 @@
 #include <map>
 
 #include "../BuildFlags.h"
+#include "../observer/BinderObserver.h"
 #include "../observer/BinderObserverConfig.h"
 
 namespace android {
@@ -40,6 +41,7 @@ protected:
         MOCK_METHOD(BinderObserverConfig::ShardingConfig, getSystemServerSharding, (), (override));
         MOCK_METHOD(BinderObserverConfig::ShardingConfig, getOtherProcessesSharding, (),
                     (override));
+        MOCK_METHOD(int64_t, getCpuTimeNanos, (), (override));
         MOCK_METHOD(size_t, hashString8, (const std::string& content), (override));
         MOCK_METHOD(size_t, hashString16, (const std::u16string_view& content), (override));
     };
@@ -494,6 +496,41 @@ TEST_F(BinderObserverConfigTest, GetTrackingInfoTrackCpuWithOffset) {
         }
     }
     EXPECT_TRUE(cpuWasTracked);
+}
+
+// --- BinderObserver Tests ---
+
+TEST_F(BinderObserverConfigTest, BinderObserverCpuTimeNanosCorrect) {
+    EXPECT_CALL(*mEnv, getUid()).WillRepeatedly(Return(1000));
+    EXPECT_CALL(*mEnv, getProcessName()).WillRepeatedly(Return("system_server"));
+    EXPECT_CALL(*mEnv, getSystemServerSharding()).WillRepeatedly(Return(kMonitorEverythingSharding));
+    EXPECT_CALL(*mEnv, getCpuTimeNanos()).WillRepeatedly(Return(2000002));
+
+    std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);
+    BinderObserver observer(std::move(config));
+
+    std::shared_ptr<BinderStatsSpscQueue> queue;
+
+    BinderObserver::CallInfo callInfo;
+    callInfo.startTimeNanos = 1000;
+    callInfo.cpuUsageStartTimeNanos = 1000000; // 1ms
+
+    callInfo.trackingInfo = {.trackSpam = true, .trackLatency = true, .trackCpu = true};
+    callInfo.callingUid = 1000;
+    callInfo.code = 1;
+    callInfo.interfaceDescriptor = String16("test");
+    callInfo.aidlMethodName = String16("method");
+
+    // The first call will trigger a flush, so we need to call it twice.
+    observer.onEndTransaction(queue, callInfo);
+    observer.onEndTransaction(queue, callInfo);
+
+    ASSERT_NE(nullptr, queue);
+    auto item = queue->tryPop();
+    ASSERT_TRUE(item.has_value());
+
+    // cpuTimeNanos should be exactly 1ms and 2 ns (1000002 ns).
+    EXPECT_EQ(item->cpuTimeNanos, 1000002);
 }
 
 } // namespace android

@@ -299,6 +299,7 @@ filegroup {
         ":inputconstants_aidl",
         ":libgui_bufferqueue_sources",
         ":rendercommandbuffer_sources",
+        "AsyncWorker.cpp",
         "BitTube.cpp",
         "BLASTBufferQueue.cpp",
         "BufferItemConsumer.cpp",
@@ -339,6 +340,7 @@ filegroup {
         "bufferqueue/2.0/B2HProducerListener.cpp",
         "bufferqueue/2.0/H2BGraphicBufferProducer.cpp",
         "bufferqueue/2.0/Surface2HGraphicBufferProducer.cpp",
+        "bufferqueue/1.0/Surface2HGraphicBufferProducer.cpp",
     ],
 }
 
@@ -743,3 +745,9 @@ cc_defaults {
 // QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
 
 subdirs = ["tests"]
+
+cc_library_headers {
+    name: "liblocklessqueue_headers",
+    host_supported: true,
+    export_include_dirs: ["include"],
+}

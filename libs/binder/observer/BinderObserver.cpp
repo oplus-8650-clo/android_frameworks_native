@@ -19,6 +19,7 @@
 #include <mutex>
 
 #include <binder/IServiceManager.h>
+#include <binder/internal/JavaBBinderBase.h>
 #include <utils/SystemClock.h>
 #include "../BuildFlags.h"
 #include "BinderStatsUtils.h"
@@ -30,16 +31,8 @@ constexpr int kSendIntervalSec = 5;
 
 constexpr int64_t kNanoSecondsPerSec = 1000'000'000LL;
 
-/**
- * Returns the CPU time in nanoseconds, or zero if the clock is not available.
- */
-static int64_t getCpuTimeNanos() {
-    timespec now;
-    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) == -1) {
-        return 0;
-    }
-    return now.tv_sec * kNanoSecondsPerSec + now.tv_nsec;
-}
+BinderObserver::BinderObserver(std::unique_ptr<BinderObserverConfig> config)
+      : mConfig(std::move(config)) {}
 
 BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uint32_t code,
                                                             uid_t callingUid) {
@@ -58,14 +51,27 @@ BinderObserver::CallInfo BinderObserver::onBeginTransaction(BBinder* binder, uin
     // V2, we only need the start time if we are tracking latency for a transaction.
     bool trackStartTime =
             kBinderObserverV2Enabled ? trackingInfo.trackLatency : trackingInfo.isTracked();
+
+    String16 aidlMethodName;
+    if (trackingInfo.isTracked()) {
+        if (binder->checkSubclass(android::internal::JavaBBinderBase::getExtSubclassID())) {
+            static_cast<internal::JavaBBinderBase*>(binder)
+                    ->getFunctionName(code, [&aidlMethodName](const char* name) {
+                        if (name) {
+                            aidlMethodName = String16(name);
+                        }
+                    });
+        } else {
+            aidlMethodName = String16(binder->getFunctionName(code).c_str());
+        }
+    }
+
     return {
             .startTimeNanos = trackStartTime ? uptimeNanos() : 0,
-            .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? getCpuTimeNanos() : 0,
+            .cpuUsageStartTimeNanos = trackingInfo.trackCpu ? mConfig->getCpuTimeNanos() : 0,
             .interfaceDescriptor = interfaceDescriptor,
             // TODO(b/299356196): Reduce std::string and String16 allocations.
-            .aidlMethodName = trackingInfo.isTracked()
-                    ? String16(binder->getFunctionName(code).c_str())
-                    : String16(),
+            .aidlMethodName = aidlMethodName,
             .code = code,
             .callingUid = callingUid,
             .trackingInfo = trackingInfo,
@@ -89,7 +95,7 @@ void BinderObserver::onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& que
             .startTimeNanos = callInfo.startTimeNanos,
             .endTimeNanos = endTimeNanos,
             .cpuTimeNanos = callInfo.trackingInfo.trackCpu && callInfo.cpuUsageStartTimeNanos != 0
-                    ? getCpuTimeNanos()
+                    ? mConfig->getCpuTimeNanos() - callInfo.cpuUsageStartTimeNanos
                     : 0,
             .interfaceDescriptor = callInfo.interfaceDescriptor,
             .aidlMethodName = callInfo.aidlMethodName,

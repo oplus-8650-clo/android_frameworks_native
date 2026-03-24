@@ -43,6 +43,7 @@
 #include <gui/AidlUtil.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/LayerState.h>
+#include <gui/bufferqueue/2.0/H2BGraphicBufferProducer.h>
 #include <private/gui/ComposerService.h>
 #include <private/gui/ComposerServiceAIDL.h>
 #endif
@@ -190,7 +191,23 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     mProducerControlledByApp = controlledByApp;
     mSwapIntervalZero = false;
     mMaxBufferCount = NUM_BUFFER_SLOTS;
+    mIsSlotExpansionAllowed = false;
     mSurfaceControlHandle = surfaceControlHandle;
+
+    IGraphicBufferProducer::SurfaceConfig config;
+    status_t status = mGraphicBufferProducer->getConfigForSurface(&config);
+    if (status == OK) {
+        ALOGI("Creating surface for consumer %s with slotExpansion=%d for %zu slots",
+              config.consumerName.c_str(), config.isSlotExpansionAllowed, config.slotCount);
+        mDebugName = config.consumerName;
+        mIsSlotExpansionAllowed = config.isSlotExpansionAllowed;
+        if (config.slotCount > mSlots.size()) {
+            mSlots.resize(config.slotCount);
+        }
+    } else {
+        ALOGE("Failed to get surface config from BQ. Error: %d", status);
+    }
+
 // QTI_BEGIN: 2024-02-29: Display: gui: set buffer dequeue duration in buffer private meta data
 
     char value[PROPERTY_VALUE_MAX];
@@ -216,6 +233,7 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
 // QTI_BEGIN: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
     }
 // QTI_END: 2024-06-26: Video: gui: Introduce QTI Extensions in AOSP for Game Post Processing.
+
 }
 
 Surface::~Surface() {
@@ -241,6 +259,34 @@ Surface::~Surface() {
 
 sp<Surface> Surface::from(ANativeWindow* anw) {
     return sp<Surface>::fromExisting(static_cast<Surface*>(anw));
+}
+
+#ifndef NO_BINDER
+sp<Surface> Surface::fromHidl(
+        const sp<hardware::graphics::bufferqueue::V2_0::IGraphicBufferProducer>& token) {
+    if (token == nullptr) {
+        return nullptr;
+    }
+    using H2BGraphicBufferProducer =
+            hardware::graphics::bufferqueue::V2_0::utils::H2BGraphicBufferProducer;
+    sp<IGraphicBufferProducer> bufferProducer = sp<H2BGraphicBufferProducer>::make(token);
+    if (bufferProducer == nullptr) {
+        return nullptr;
+    }
+    return sp<Surface>::make(bufferProducer);
+}
+#endif
+
+sp<Surface> Surface::createEvilTwin() {
+    ATRACE_CALL();
+    std::scoped_lock _l(mMutex);
+
+    SURF_LOGE("Surface::createEvilTwin created. Previous surface %s connected. This operation is "
+              "unsupported and the behavior is undefined.",
+              mConnectedToCpu ? "was" : "was not");
+
+    return sp<Surface>::make(mGraphicBufferProducer, mProducerControlledByApp,
+                             mSurfaceControlHandle);
 }
 
 bool Surface::areSurfacesEquivalent(const sp<Surface>& a, const sp<Surface>& b) {
@@ -1389,12 +1435,10 @@ status_t Surface::queueBufferImpl(const sp<GraphicBuffer>& buffer, const sp<Fenc
         igbpInput.slot = slot;
     }
     nsecs_t now = systemTime();
-// QTI_BEGIN: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     if (mQtiSurfaceExtn) {
         mQtiSurfaceExtn->qtiTrackTransaction(mNextFrameNumber, now);
     }
 
-// QTI_END: 2024-12-16: Performance: gui: Update game gfx tid detection on Android-W
     // Drop the lock temporarily while we touch the underlying producer. In the case of a local
     // BufferQueue, the following should be allowable:
     //
@@ -2514,6 +2558,11 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
     return err;
 }
 
+void Surface::setProducerControlledByApp(bool controlledByApp) {
+    Mutex::Autolock lock(mMutex);
+    mProducerControlledByApp = controlledByApp;
+}
+
 int Surface::detachNextBuffer(sp<GraphicBuffer>* outBuffer,
         sp<Fence>* outFence) {
     ATRACE_CALL();
@@ -2690,6 +2739,9 @@ int Surface::setMaxDequeuedBufferCount(int maxDequeuedBuffers) {
     Mutex::Autolock lock(mMutex);
 
     if (maxDequeuedBuffers > BufferQueueDefs::NUM_BUFFER_SLOTS && !mIsSlotExpansionAllowed) {
+        SURF_LOGE("setMaxDequeuedBufferCount: maxDequeuedBuffers (%d) > NUM_BUFFER_SLOTS (%d) and "
+                  "slot expansion is not allowed",
+                  maxDequeuedBuffers, BufferQueueDefs::NUM_BUFFER_SLOTS);
         return BAD_VALUE;
     }
 
@@ -3262,11 +3314,9 @@ int Surface::setAutoPrerotation(bool autoPrerotation) {
     status_t err = mGraphicBufferProducer->setAutoPrerotation(autoPrerotation);
     if (err == NO_ERROR) {
         mAutoPrerotation = autoPrerotation;
-         /* QTI_BEGIN */
         if (mQtiSurfaceGPPExtn) {
             mQtiSurfaceGPPExtn->setAutoPrerotation(autoPrerotation);
         }
-        /* QTI_END */
     }
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setAutoPrerotation(%d) returned %s", autoPrerotation,
                  strerror(-err));

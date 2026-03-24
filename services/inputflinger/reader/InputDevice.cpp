@@ -183,14 +183,10 @@ void InputDevice::dump(std::string& dump, const std::string& eventHubDevStr) {
     if (!ranges.empty()) {
         dump += INDENT2 "Motion Ranges:\n";
         for (const auto& range : ranges) {
-            dump += INDENT3;
-            if (const char* label = InputEventLookup::getAxisLabel(range.axis); label != nullptr) {
-                dump += label;
-            } else {
-                dump += std::to_string(range.axis);
-            }
-            dump += StringPrintf(": source=%s, "
+            dump += StringPrintf(INDENT3
+                                 "%s: source=%s, "
                                  "min=%0.3f, max=%0.3f, flat=%0.3f, fuzz=%0.3f, resolution=%0.3f\n",
+                                 MotionEvent::getLabelOrCode(range.axis).c_str(),
                                  inputEventSourceToString(range.source).c_str(), range.min,
                                  range.max, range.flat, range.fuzz, range.resolution);
         }
@@ -307,7 +303,9 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                     : std::nullopt;
 
             std::optional<InputDeviceViewBehavior> viewBehaviorOverride =
-                    inputDeviceConfigurationOverride->viewBehavior;
+                    inputDeviceConfigurationOverride.has_value()
+                    ? inputDeviceConfigurationOverride->viewBehavior
+                    : std::nullopt;
 
             std::optional<bool> shouldSmoothScrollFromPropertyMap =
                     mConfiguration.getBool("device.viewBehavior_smoothScroll");
@@ -363,9 +361,8 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
             }
         }
 
+        const auto oldAssociatedDisplayId = getAssociatedDisplayId();
         if (!changes.any() || changes.test(Change::DISPLAY_INFO)) {
-            const auto oldAssociatedDisplayId = getAssociatedDisplayId();
-
             // In most situations, no port or name will be specified.
             mAssociatedDisplayPort = std::nullopt;
             mAssociatedDisplayUniqueIdByPort = std::nullopt;
@@ -436,16 +433,19 @@ std::list<NotifyArgs> InputDevice::configureInternal(nsecs_t when,
                           getName().c_str(), mAssociatedDisplayUniqueIdByPort->c_str());
                 }
             }
-
-            if (getAssociatedDisplayId() != oldAssociatedDisplayId) {
-                bumpGeneration();
-            }
         }
 
         for_each_mapper([this, when, &readerConfig, changes, &out](InputMapper& mapper) {
             out += mapper.reconfigure(when, readerConfig, changes);
             mSources |= mapper.getSources();
         });
+
+        if (!changes.any() || changes.test(Change::DISPLAY_INFO)) {
+            // Detect associated display changes after the mappers have been reconfigured.
+            if (getAssociatedDisplayId() != oldAssociatedDisplayId) {
+                bumpGeneration();
+            }
+        }
 
         if (!changes.any() || changes.test(Change::ENABLED_STATE) ||
             changes.test(Change::DISPLAY_INFO)) {

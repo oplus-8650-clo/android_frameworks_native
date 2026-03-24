@@ -36,7 +36,9 @@ namespace android {
 
 void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                       IPCRenderBufferOp* op, SkCanvas* canvas,
-                      const std::function<void(int)>& renderProxyCallback) {
+                      const std::function<void(int)>& renderProxyCallback,
+                      const SkMatrix& initialMatrix = SkMatrix::I(),
+                      const SkRect& initialClip = SkRect::MakeEmpty()) {
     switch (op->type) {
         case TYPE_SAVE: {
             SaveOp* co = (SaveOp*)op;
@@ -65,7 +67,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
         }
         case TYPE_SETMATRIX: {
             SetMatrixOp* co = (SetMatrixOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, initialMatrix);
             break;
         }
         case TYPE_SCALE: {
@@ -105,7 +107,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
         }
         case TYPE_RESETCLIP: {
             ResetClipOp* co = (ResetClipOp*)op;
-            co->draw(canvas, SkMatrix::I());
+            co->draw(canvas, initialMatrix, initialClip);
             break;
         }
         case TYPE_DRAWPAINT: {
@@ -227,7 +229,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
             break;
         }
         default: {
-            ALOGE("Unexpected op in RenderCommandBuffer");
+            ALOGE("Unexpected op in RenderCommandBuffer %d", op->type);
             break;
         }
     }
@@ -283,6 +285,27 @@ bool isDrawingOp(uint32_t type) {
     }
 }
 
+SkPaint fromShmemPaint(const ShmemPaint& paint) {
+    if (!paint.data.data) {
+        return SkPaint();
+    }
+    SkReadBuffer reader(paint.data.data.get(), paint.data.size);
+    return SkPaintPriv::Unflatten(reader);
+}
+
+bool isClear(const IPCRenderBufferOp* op) {
+    if (op->type != TYPE_DRAWPAINT) {
+        return false;
+    }
+    DrawPaintOp *dop = (DrawPaintOp *)op;
+    auto paint = fromShmemPaint(dop->paint);
+    auto color = paint.getColor4f();
+    if (color.fR == 0.0f && color.fG == 0.0f && color.fB == 0.0f && color.fA == 0.0f) {
+        return true;
+    }
+    return false;
+}
+
 bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer,
                                  SkCanvas* canvas,
                                  const std::function<void(int)>& renderProxyCallback) {
@@ -292,13 +315,14 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
         ALOGE("Rendering command buffer");
     }
 
+    SkMatrix rootMatrix = canvas->getTotalMatrix();
+    SkRect rootClip = SkRect::Make(canvas->getDeviceClipBounds());
+
     sk_sp<SkSurface> boundSurface = nullptr;
+    bool renderingOffscreenLayer = false;
 
     for (IPCRenderBufferOp* op = buffer->getOps(); op; op = op->next) {
-        if (!foundFirstDrawingOp && isDrawingOp(op->type)) {
-            foundFirstDrawingOp = true;
-            // TODO: Restore optimization for clear paints if possible with new ShmemPaint
-        }
+
         if constexpr (DUMP_OPS) {
             ALOGE("Rendering op %s", opTypeToString(op->type).c_str());
             ALOGE("Details %s", opToString(op).c_str());
@@ -311,6 +335,7 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
                 }
                 return false;
             }
+            renderingOffscreenLayer = true;
 
             if (cache) {
                 BeginRenderTargetOp* co = (BeginRenderTargetOp*)op;
@@ -331,6 +356,7 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
             }
 
         } else if (op->type == TYPE_ENDRENDERTARGET) {
+            renderingOffscreenLayer = false;
             if (!boundSurface) {
                 if constexpr (DUMP_OPS) {
                     ALOGE("Encountered EndRenderTargetOp but no BeginRenderTargetOp was "
@@ -340,8 +366,29 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
             }
             boundSurface = nullptr;
         } else {
+            // TODO(b/485930305): Effectively every layer comes with a clear
+            // at the beginning. We skip this as it's not useful (e.g. it will)
+            // end up clearing whatever is underneath in the OOPR case. However
+            // it would be better to just not omit it on the client side.
+            if (!renderingOffscreenLayer && !foundFirstDrawingOp) {
+                if (isDrawingOp(op->type)) {
+                    foundFirstDrawingOp = true;
+                }
+                if (isClear(op)) {
+                    continue;
+                }
+            }
+            SkMatrix initialMatrix;
+            SkRect initialClip;
+            if (boundSurface) {
+                initialMatrix = SkMatrix::I();
+                initialClip = SkRect::MakeWH(boundSurface->width(), boundSurface->height());
+            } else {
+                initialMatrix = rootMatrix;
+                initialClip = rootClip;
+            }
             renderOpToCanvas(cache, buffer, op, boundSurface ? boundSurface->getCanvas() : canvas,
-                             renderProxyCallback);
+                             renderProxyCallback, initialMatrix, initialClip);
         }
     }
     if constexpr (DUMP_OPS) {
@@ -362,14 +409,6 @@ bool toShmemPaint(RenderCommandBuffer* buffer, const SkPaint& paint, ShmemPaint&
         memcpy(outPaint.data.data.get(), data->data(), data->size());
     }
     return true;
-}
-
-SkPaint fromShmemPaint(const ShmemPaint& paint) {
-    if (!paint.data.data) {
-        return SkPaint();
-    }
-    SkReadBuffer reader(paint.data.data.get(), paint.data.size);
-    return SkPaintPriv::Unflatten(reader);
 }
 
 std::string shmemPaintToString(const ShmemPaint& paint) {
@@ -633,8 +672,14 @@ ResetClipOp* ResetClipOp::Create(RenderCommandBuffer* commandBuffer) {
     return op;
 }
 
-void ResetClipOp::draw(SkCanvas* c, const SkMatrix&) {
+void ResetClipOp::draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip) {
     SkAndroidFrameworkUtils::ResetClip(c);
+    if (!initialClip.isEmpty()) {
+        SkMatrix ctm = c->getTotalMatrix();
+        c->setMatrix(SkMatrix::I());
+        c->clipRect(initialClip, SkClipOp::kIntersect, false);
+        c->setMatrix(ctm);
+    }
 }
 
 std::string ResetClipOp::toString() const {
@@ -881,7 +926,7 @@ void DrawImageRectOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache&
     if (it == resourceCache.bitmaps.end()) {
         // This currently only happens when a process shuts down.
         // There may be a frame remaining that references bitmaps which were destroyed.
-        ALOGE("Bitmap not found in cache");
+        ALOGE("Bitmap not found in cache id=%" PRIu64, bitmapId);
         return;
     }
     SkPaint p;
@@ -920,9 +965,16 @@ SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
 
 sk_sp<SkTypeface> deserializeTypeFace(SkStream& stream, void* ctx) {
     auto* fontManager = reinterpret_cast<SkFontMgr*>(ctx);
+    if (!fontManager) {
+        ALOGE("Trying to draw text with no font manager!");
+        return nullptr;
+    }
 
     const auto* info = reinterpret_cast<const ShmemTypeface*>(stream.getMemoryBase());
-    LOG_ALWAYS_FATAL_IF(info == nullptr, "TextBlob deserial stream not memory based");
+    if (info == nullptr) {
+        ALOGE("TextBlob deserial stream not memory based");
+        return nullptr;
+    }
 
     SkFontStyle style(info->weight, info->width, info->slant);
     sk_sp<SkTypeface> tf = fontManager->matchFamilyStyle(info->name.data.get(), style);

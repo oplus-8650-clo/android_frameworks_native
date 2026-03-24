@@ -24,7 +24,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <android/hardware/dumpstate/1.1/types.h>
 #include <android_tracing.h>
 #include <cutils/log.h>
 #include <cutils/properties.h>
@@ -51,7 +50,6 @@ namespace os {
 namespace dumpstate {
 
 using DumpstateDeviceAidl = ::aidl::android::hardware::dumpstate::IDumpstateDevice;
-using ::android::hardware::dumpstate::V1_1::DumpstateMode;
 using ::testing::EndsWith;
 using ::testing::Eq;
 using ::testing::HasSubstr;

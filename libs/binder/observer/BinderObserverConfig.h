@@ -54,10 +54,14 @@ public:
     // within the lifecycle of a process.
     bool isEnabled() { return mEnabled; }
 
+    int64_t getCpuTimeNanos() { return mEnvironment->getCpuTimeNanos(); }
+
     TrackingInfo getTrackingInfo(const std::u16string_view& interfaceDescriptor, uint32_t txnCode);
 
 private:
     friend class BinderObserverConfigTest;
+    friend class BinderObserver_CpuTimeNanosCorrect_Test;
+    friend class CpuTimeNanosCorrectTestEnvironment;
 
     struct ShardingConfig {
         size_t processMod;
@@ -85,6 +89,7 @@ private:
         virtual std::string getProcessName();
         virtual ShardingConfig getSystemServerSharding();
         virtual ShardingConfig getOtherProcessesSharding();
+        virtual int64_t getCpuTimeNanos();
 
         virtual size_t hashString8(const std::string& content) {
             return std::hash<std::string>{}(content);
@@ -94,6 +99,9 @@ private:
             return std::hash<std::u16string_view>{}(content);
         }
     };
+
+    static std::unique_ptr<BinderObserverConfig> createConfig(
+            std::unique_ptr<BinderObserverConfig::Environment>&& environment);
 
     BinderObserverConfig(std::unique_ptr<BinderObserverConfig::Environment>&& environment,
                          bool enabled, BinderObserverConfig::ShardingConfig sharding,
@@ -113,8 +121,6 @@ private:
     }
 
     static std::tuple<size_t, size_t, size_t> getBootStableTokens(Environment& environment);
-    static std::unique_ptr<BinderObserverConfig> createConfig(
-            std::unique_ptr<BinderObserverConfig::Environment>&& environment);
 
     // Atomically Adds 1 to mLatencySequenceNumber and returns.
     // Split out to allow no_sanitize(unsigned-integer-overflow).

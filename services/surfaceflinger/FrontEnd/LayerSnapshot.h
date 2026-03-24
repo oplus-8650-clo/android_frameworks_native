@@ -17,6 +17,7 @@
 #pragma once
 
 #include <PowerAdvisor/Workload.h>
+#include <SkRuntimeEffect.h>
 #include <android/gui/ISystemContentPriorityConstants.h>
 #include <compositionengine/LayerFECompositionState.h>
 #include <gui/CornerRadii.h>
@@ -29,6 +30,10 @@
 #include "compositionengine/LayerFE.h"
 
 struct RenderCommandBuffer;
+
+namespace android::surfaceflinger {
+class ShaderRegistry;
+}
 
 namespace android::surfaceflinger::frontend {
 
@@ -71,7 +76,7 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     bool isHiddenByPolicyFromParent = false;
     bool isHiddenByPolicyFromRelativeParent = false;
     ftl::Flags<RequestedLayerState::Changes> changes;
-    uint64_t clientChanges = 0;
+    layer_state_t::LayerChangedSet clientChanges;
     // Some consumers of this snapshot (input, layer traces) rely on each snapshot to be unique.
     // For mirrored layers, snapshots will have the same sequence so this unique id provides
     // an alternative identifier when needed.
@@ -160,6 +165,11 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     // Populated when renderResourceToken changes.
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
 
+    sp<IBinder> postProcessShader;
+    std::shared_ptr<std::vector<uint8_t>> postProcessUniforms;
+    layer_state_t::SampleTarget postProcessTarget;
+    sk_sp<SkRuntimeEffect> postProcessEffect;
+
     static bool isOpaqueFormat(PixelFormat format);
     static bool isTransformValid(const ui::Transform& t);
 
@@ -183,7 +193,8 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     Hwc2::IComposerClient::BlendMode getBlendMode(const RequestedLayerState& requested) const;
     friend std::ostream& operator<<(std::ostream& os, const LayerSnapshot& obj);
     void merge(const RequestedLayerState& requested, bool forceUpdate, bool displayChanges,
-               bool forceFullDamage, uint32_t displayRotationFlags);
+               bool forceFullDamage, uint32_t displayRotationFlags,
+               ShaderRegistry* shaderRegistry = nullptr);
     // Returns a char summarizing the composition request
     // This function tries to maintain parity with planner::Plan chars.
     char classifyCompositionForDebug(

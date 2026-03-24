@@ -17,8 +17,8 @@
 #pragma once
 
 #include <binder/IBinder.h>
+#include <gui/LocklessQueue.h>
 #include <map>
-#include "LocklessQueue.h"
 
 namespace android {
 struct IPCServerResourceCache;

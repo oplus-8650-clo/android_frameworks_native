@@ -24,8 +24,8 @@
 #include <sys/mman.h>
 #include <ui/ColorSpace.h>
 
+#include <renderengine/ColorSpaces.h>
 #include "RuntimeEffectManager.h"
-#include "skia/ColorSpaces.h"
 
 using aidl::android::hardware::graphics::composer3::LutProperties;
 
@@ -353,7 +353,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
 // QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
     // de-gamma the image without changing the primaries
     return mBuilder->makeShader()->makeWithWorkingColorSpace(
-            toSkColorSpace(srcDataspace)->makeLinearGamma());
+            renderengine::toSkColorSpace(srcDataspace)->makeLinearGamma());
 }
 
 sk_sp<SkShader> LutShader::lutShader(sk_sp<SkShader>& input,

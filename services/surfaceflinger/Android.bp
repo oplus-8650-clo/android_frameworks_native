@@ -21,12 +21,21 @@ aconfig_declarations {
 
 cc_aconfig_library {
     name: "libsurfaceflingerflags",
+    host_supported: true,
     aconfig_declarations: "surfaceflinger_flags",
     vendor_available: true,
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
 
 cc_defaults {
     name: "surfaceflinger_defaults",
+    defaults: [
+        "no_bti",
+    ],
     tidy: true,
     tidy_flags: [
         // Only check our headers
@@ -253,12 +262,6 @@ cc_library_headers {
     export_static_lib_headers: ["libserviceutils"],
 }
 
-cc_library_headers {
-    name: "liblocklessqueue_headers",
-    host_supported: true,
-    export_include_dirs: ["."],
-}
-
 filegroup {
     name: "libsurfaceflinger_sources",
     srcs: [
@@ -293,7 +296,6 @@ filegroup {
         "Layer.cpp",
         "LayerFE.cpp",
         "LayerProtoHelper.cpp",
-        "LayerVector.cpp",
         "RefreshRateOverlay.cpp",
         "RegionSamplingThread.cpp",
         "Scheduler/EventThread.cpp",
@@ -313,6 +315,7 @@ filegroup {
         "Scheduler/VsyncModulator.cpp",
         "Scheduler/VsyncSchedule.cpp",
         "ScreenCaptureOutput.cpp",
+        "ShaderRegistry.cpp",
         "SurfaceFlinger.cpp",
         "SurfaceFlingerDefaultFactory.cpp",
         "Tracing/LayerDataSource.cpp",

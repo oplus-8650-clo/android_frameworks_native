@@ -16,6 +16,8 @@
 
 #include "include/InputReaderTracer.h"
 
+#include <input/Input.h>
+
 #include <memory>
 
 #include "InputTracingBackendInterface.h"
@@ -29,6 +31,15 @@ InputReaderTracer::InputReaderTracer(
 
 void InputReaderTracer::traceRawEvent(const RawEvent& event) {
     mBackend->traceRawEvent(event);
+}
+
+void InputReaderTracer::traceDeviceAddition(nsecs_t timestamp,
+                                            const input_trace::TracedEvdevDevice& device) {
+    mBackend->traceEvdevDeviceAddition(timestamp, device);
+}
+
+void InputReaderTracer::traceDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) {
+    mBackend->traceEvdevDeviceRemoval(timestamp, deviceId);
 }
 
 } // namespace android

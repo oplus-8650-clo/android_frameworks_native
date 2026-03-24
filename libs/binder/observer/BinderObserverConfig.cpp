@@ -17,6 +17,7 @@
 
 #include <cutils/android_filesystem_config.h> // for AID_SYSTEM
 #include <stdlib.h>                           // for getprogname
+#include <time.h>                             // for clock_gettime
 #include <unistd.h>                           // for getuid()
 
 #include "../BuildFlags.h"
@@ -77,6 +78,14 @@ BinderObserverConfig::Environment::getOtherProcessesSharding() {
                              .spamMod = 10,
                              .callMod = 20,
                              .cpuSamplingMod = kBinderObserverV2Enabled ? 100 : 0};
+}
+
+int64_t BinderObserverConfig::Environment::getCpuTimeNanos() {
+    timespec now;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) == -1) {
+        return 0;
+    }
+    return now.tv_sec * 1000'000'000LL + now.tv_nsec;
 }
 
 std::tuple<size_t, size_t, size_t> BinderObserverConfig::getBootStableTokens(

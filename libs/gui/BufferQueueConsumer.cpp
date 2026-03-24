@@ -352,6 +352,8 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
     ATRACE_CALL();
     ATRACE_BUFFER_INDEX(slot);
     BQ_LOGV("detachBuffer: slot %d", slot);
+
+    uint64_t bufferId = 0;
     sp<IProducerListener> listener;
     {
         std::lock_guard<std::mutex> lock(mCore->mMutex);
@@ -379,6 +381,11 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
             listener = mCore->mConnectedProducerListener;
         }
 
+        if (mSlots[slot].mGraphicBuffer) {
+            bufferId = mSlots[slot].mGraphicBuffer->getId();
+        } else {
+            BQ_LOGE("detachBuffer: slot %d has no graphic buffer. Calling back with 0.", slot);
+        }
         mSlots[slot].mBufferState.detachConsumer();
         mCore->mActiveBuffers.erase(slot);
         mCore->mFreeSlots.insert(slot);
@@ -389,7 +396,7 @@ status_t BufferQueueConsumer::detachBuffer(int slot) {
     }
 
     if (listener) {
-        listener->onBufferDetached(slot);
+        listener->onBufferDetached(slot, bufferId);
     }
     return NO_ERROR;
 }

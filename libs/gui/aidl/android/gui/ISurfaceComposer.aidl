@@ -425,11 +425,19 @@ interface ISurfaceComposer {
     void removeTunnelModeEnabledListener(ITunnelModeEnabledListener listener);
 
     /**
-     * Sets the mode specifications for multiple displays, to be applied atomically.
+     * Specifies the desired display mode(s) that should be applied atomically.
+     * To change modes, the client must first request the `DisplayModeSpecs#defaultMode`
+     * for the new modes, then commit a display transaction with the same `applyToken`. The
+     * `DisplayModeSpecs` and transaction will then be applied atomically. To atomically change
+     * modes for multiple displays, the client must pass multiple `DesiredDisplayModeSpecs` and
+     * pass the same `applyToken` in the subsequent display transaction that commits all displays.
      *
-     * @see DisplayModeSpecs.aidl for details.
+     * applyToken
+     *     The mode apply token with which the specs should apply.
+     * desiredDisplayModeSpecs
+     *     The new desired display mode specs.
      */
-    void setDesiredDisplayModeSpecs(in DisplayModeSpecs[] specs);
+    void setDesiredDisplayModeSpecs(IBinder applyToken, in DisplayModeSpecs[] specs);
 
     DisplayModeSpecs getDesiredDisplayModeSpecs(IBinder displayToken);
 
@@ -479,6 +487,17 @@ interface ISurfaceComposer {
      *
      */
     void removeHdrLayerInfoListener(IBinder displayToken, IHdrLayerInfoListener listener);
+
+    /**
+     * Associates the given IBinder token with the AGSL shaderString. After registration the
+     * IBinder token can be used to apply shader effects to layers.
+     */
+    void registerShader(IBinder token, @utf8InCpp String debugName, @utf8InCpp String shaderString);
+
+    /**
+     * Removes the association between the given IBinder token and the AGSL shaderString.
+     */
+    void unregisterShader(IBinder token);
 
     /**
      * Sends a power boost to the composer. This function is asynchronous.

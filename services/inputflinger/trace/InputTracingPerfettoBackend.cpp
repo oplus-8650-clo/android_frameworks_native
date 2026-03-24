@@ -22,6 +22,7 @@
 
 #include <android-base/logging.h>
 #include <binder/IServiceManager.h>
+#include <input/Input.h>
 #include <perfetto/trace/android/android_input_event.pbzero.h>
 #include <perfetto/trace/android/winscope_extensions.pbzero.h>
 #include <perfetto/trace/android/winscope_extensions_impl.pbzero.h>
@@ -313,6 +314,30 @@ void PerfettoBackend::traceRawEvent(const RawEvent& event) {
         tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
         auto* evdevEvent = tracePacket->set_evdev_event();
         ProtoConverter::toProtoEvdevEvent(event, *evdevEvent);
+    });
+}
+
+void PerfettoBackend::traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice& device) {
+    InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
+        // TODO(b/394861376): check the current trace level.
+        auto tracePacket = ctx.NewTracePacket();
+        tracePacket->set_timestamp(timestamp);
+        tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
+        auto* evdevEvent = tracePacket->set_evdev_event();
+        ProtoConverter::toProtoEvdevDeviceAdditionEvent(device, *evdevEvent);
+    });
+}
+
+void PerfettoBackend::traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) {
+    InputEventDataSource::Trace([&](InputEventDataSource::TraceContext ctx) {
+        // TODO(b/394861376): check whether evdev tracing is enabled in the trace configuration.
+        // TODO(b/394861376): check the current trace level.
+        auto tracePacket = ctx.NewTracePacket();
+        tracePacket->set_timestamp(timestamp);
+        tracePacket->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC);
+        auto* evdevEvent = tracePacket->set_evdev_event();
+        ProtoConverter::toProtoEvdevDeviceRemovalEvent(deviceId, *evdevEvent);
     });
 }
 

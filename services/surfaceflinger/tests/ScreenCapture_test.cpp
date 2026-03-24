@@ -1242,6 +1242,63 @@ TEST_F(ScreenCaptureChildOnlyTest, CaptureLayerIgnoresTransform) {
     verify([&] { screenshot()->expectChildColor(80, 80); });
 }
 
+TEST_F(ScreenCaptureTest, CaptureLayersDoesNotBreakSecureGlobalState) {
+    // Create Red (insecure) layer
+    sp<SurfaceControl> redLayer = createLayer("Red surface", 60, 60,
+                                              ISurfaceComposerClient::eFXSurfaceBufferState);
+    ASSERT_NO_FATAL_FAILURE(fillBufferLayerColor(redLayer, Color::RED, 60, 60));
+    Transaction().show(redLayer).setLayer(redLayer, INT32_MAX - 1).apply(true);
+
+    // Create Blue (secure) layer at 60,0
+    sp<SurfaceControl> blueLayer = createLayer("Blue surface", 60, 60,
+                                               ISurfaceComposerClient::eFXSurfaceBufferState |
+                                               ISurfaceComposerClient::eSecure);
+    ASSERT_NO_FATAL_FAILURE(fillBufferLayerColor(blueLayer, Color::BLUE, 60, 60));
+    Transaction()
+            .show(blueLayer)
+            .setLayer(blueLayer, INT32_MAX)
+            .setPosition(blueLayer, 60, 0)
+            .apply(true);
+
+    // Verify captureDisplay as SHELL shows Red (and Black for Blue)
+    {
+        UIDFaker f(AID_SHELL);
+        DisplayCaptureArgs args;
+        args.displayToken = mDisplay;
+        args.captureArgs = mCaptureArgs.captureArgs;
+        ScreenCapture::captureDisplay(args, mCaptureResults);
+        ScreenCapture sc(mCaptureResults.buffer, mCaptureResults.capturedHdrLayers);
+        sc.expectColor(Rect(0, 0, 60, 60), Color::RED);
+        sc.expectColor(Rect(60, 0, 120, 60), Color::BLACK);
+    }
+
+    // Capture Secure Layer as SYSTEM/ROOT
+    {
+        LayerCaptureArgs args;
+        args.layerHandle = blueLayer->getHandle();
+        args.captureArgs.secureLayerMode = gui::SecureLayerMode::Capture;
+
+        ScreenCaptureResults results;
+        ASSERT_EQ(NO_ERROR, ScreenCapture::captureLayers(args, results));
+        ScreenCapture sc(results.buffer, results.capturedHdrLayers);
+        sc.expectColor(Rect(0, 0, 60, 60), Color::BLUE);
+    }
+
+    // Verify captureDisplay as SHELL again. Red should still be Red.
+    // This verifies that the global state was not changed to allow the secure
+    // layer to be captured. Otherwise, red layer would be black. b/464401083
+    {
+        UIDFaker f(AID_SHELL);
+        DisplayCaptureArgs args;
+        args.displayToken = mDisplay;
+        args.captureArgs = mCaptureArgs.captureArgs;
+        ScreenCapture::captureDisplay(args, mCaptureResults);
+        ScreenCapture sc(mCaptureResults.buffer, mCaptureResults.capturedHdrLayers);
+        sc.expectColor(Rect(0, 0, 60, 60), Color::RED);
+        sc.expectColor(Rect(60, 0, 120, 60), Color::BLACK);
+    }
+}
+
 } // namespace android
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues

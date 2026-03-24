@@ -1213,7 +1213,8 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     }
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     QtiDolphinWrapper* qtiDolphinWrapper = QtiDolphinWrapper::qtiGetDolphinWrapper();
-    if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinFilterBuffer) {
+    if (qtiDolphinWrapper && QtiDolphinWrapper::sQuickTouch &&
+            qtiDolphinWrapper->qtiDolphinFilterBuffer) {
 // QTI_END: 2024-05-15: Performance: native: smart touch consuming
         qtiDolphinWrapper->qtiDolphinFilterBuffer(mState.mIsAutoTimestamp, mState.mDesiredPresentTime, mState.mFlags);
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
@@ -2616,6 +2617,21 @@ SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<Surfa
     return *this;
 }
 
+SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setPostProcess(
+        const sp<SurfaceControl>& sc, const sp<IBinder>& shader,
+        const std::shared_ptr<std::vector<uint8_t>>& uniforms, layer_state_t::SampleTarget target) {
+    layer_state_t* s = getLayerState(sc);
+    if (!s) {
+        mStatus = BAD_INDEX;
+        return *this;
+    }
+    s->what |= layer_state_t::ePostProcessChanged;
+    s->postProcessShader = shader;
+    s->postProcessUniforms = uniforms;
+    s->postProcessTarget = target;
+    return *this;
+}
+
 SurfaceComposerClient::Transaction& SurfaceComposerClient::Transaction::setRenderResourceToken(
         const sp<SurfaceControl>& sc, const sp<IBinder>& token) {
     layer_state_t* s = getLayerState(sc);
@@ -2987,9 +3003,10 @@ status_t SurfaceComposerClient::getActiveDisplayMode(const sp<IBinder>& display,
 }
 
 status_t SurfaceComposerClient::setDesiredDisplayModeSpecs(
-        const std::vector<gui::DisplayModeSpecs>& specs) {
+        const sp<IBinder>& applyToken, const std::vector<gui::DisplayModeSpecs>& specs) {
     binder::Status status =
-            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(specs);
+            ComposerServiceAIDL::getComposerService()->setDesiredDisplayModeSpecs(applyToken,
+                                                                                  specs);
     return statusTFromBinderStatus(status);
 }
 
@@ -3389,6 +3406,22 @@ status_t SurfaceComposerClient::removeActivePictureListener(
     binder::Status status =
             ComposerServiceAIDL::getComposerService()->removeActivePictureListener(listener);
     return statusTFromBinderStatus(status);
+}
+
+sp<IBinder> SurfaceComposerClient::registerShader(const std::string& debugName,
+                                                  const std::string& shaderString) {
+    if (!com_android_graphics_libgui_flags_composition_shaders()) {
+        return nullptr;
+    }
+    sp<IBinder> token = sp<BBinder>::make();
+    binder::Status status =
+            ComposerServiceAIDL::getComposerService()->registerShader(token, debugName,
+                                                                      shaderString);
+    return status.isOk() ? token : nullptr;
+}
+
+void SurfaceComposerClient::unregisterShader(const sp<IBinder> shader) {
+    ComposerServiceAIDL::getComposerService()->unregisterShader(shader);
 }
 
 status_t SurfaceComposerClient::notifyPowerBoost(int32_t boostId) {

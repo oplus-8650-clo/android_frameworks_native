@@ -1018,17 +1018,14 @@ void TouchInputMapper::configureVirtualKeys() {
         VirtualKey virtualKey;
 
         virtualKey.scanCode = virtualKeyDefinition.scanCode;
-        int32_t keyCode;
-        int32_t dummyKeyMetaState;
-        uint32_t flags;
-        if (getDeviceContext().mapKey(virtualKey.scanCode, 0, 0, &keyCode, &dummyKeyMetaState,
-                                      &flags)) {
+        std::optional<MappedKey> mappedKey = getDeviceContext().mapKey(virtualKey.scanCode, 0, 0);
+        if (!mappedKey) {
             ALOGW(INDENT "VirtualKey %d: could not obtain key code, ignoring", virtualKey.scanCode);
             continue; // drop the key
         }
 
-        virtualKey.keyCode = keyCode;
-        virtualKey.flags = flags;
+        virtualKey.keyCode = mappedKey->keyCode;
+        virtualKey.flags = mappedKey->flags;
 
         // convert the key definition's display coordinates into touch coordinates for a hit box
         int32_t halfWidth = virtualKeyDefinition.width / 2;

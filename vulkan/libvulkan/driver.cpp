@@ -1061,10 +1061,13 @@ void QueryPresentationProperties(
     }
 }
 
-VkResult GetAndroidNativeBufferSpecVersion9Support(
-    VkPhysicalDevice physicalDevice,
-    bool& support) {
-    support = false;
+struct IcdSupport {
+    bool AndroidNativeBuffer9 = false;
+    bool KhrCalibratedTimestamps = false;
+};
+
+IcdSupport GetIcdSupport(VkPhysicalDevice physicalDevice) {
+    auto support = IcdSupport {};
 
     const InstanceData& data = GetData(physicalDevice);
 
@@ -1076,7 +1079,7 @@ VkResult GetAndroidNativeBufferSpecVersion9Support(
     ATRACE_END();
 
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
-        return result;
+        return support;
     }
 
     // Call to enumerate properties
@@ -1087,23 +1090,20 @@ VkResult GetAndroidNativeBufferSpecVersion9Support(
     ATRACE_END();
 
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
-        return result;
+        return support;
     }
 
     for (uint32_t i = 0; i < propertyCount; i++) {
         auto& prop = properties[i];
 
-        if (strcmp(prop.extensionName,
-                   VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME) != 0)
-            continue;
-
-        if (prop.specVersion >= 9) {
-            support = true;
-            return result;
-        }
+        if (strcmp(prop.extensionName, VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME) == 0 &&
+                prop.specVersion >= 9)
+            support.AndroidNativeBuffer9 = true;
+        else if (strcmp(prop.extensionName, VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME) == 0)
+            support.KhrCalibratedTimestamps = true;
     }
 
-    return result;
+    return support;
 }
 
 bool CanSupportSwapchainMaintenance1Extension(VkPhysicalDevice physicalDevice) {
@@ -1139,6 +1139,8 @@ VkResult EnumerateDeviceExtensionProperties(
     uint32_t* pPropertyCount,
     VkExtensionProperties* pProperties) {
     const InstanceData& data = GetData(physicalDevice);
+    auto icdSupport = GetIcdSupport(physicalDevice);
+
     // extensions that are unconditionally exposed by the loader
     std::vector<VkExtensionProperties> loader_extensions;
     loader_extensions.push_back({
@@ -1171,8 +1173,13 @@ VkResult EnumerateDeviceExtensionProperties(
                 VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
                 VK_GOOGLE_DISPLAY_TIMING_SPEC_VERSION});
         if (flags::present_timing_ext()) {
-            loader_extensions.push_back({VK_EXT_PRESENT_TIMING_EXTENSION_NAME,
-                                         VK_EXT_PRESENT_TIMING_SPEC_VERSION});
+            // Only expose EXT_present_timing if the ICD also has
+            // KHR_calibrated_timestamps, as the spec has this as a hard
+            // dependency.
+            if (icdSupport.KhrCalibratedTimestamps) {
+                loader_extensions.push_back({VK_EXT_PRESENT_TIMING_EXTENSION_NAME,
+                                             VK_EXT_PRESENT_TIMING_SPEC_VERSION});
+            }
         }
     }
 
@@ -1212,20 +1219,12 @@ VkResult EnumerateDeviceExtensionProperties(
         GetPhysicalDeviceFeatures2(physicalDevice, &feats2);
     }
 
-    bool anb9 = false;
-    VkResult result =
-        GetAndroidNativeBufferSpecVersion9Support(physicalDevice, anb9);
-
-    if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
-        return result;
-    }
-
-    if (anb9 && imageCompFeats.imageCompressionControl) {
+    if (icdSupport.AndroidNativeBuffer9 && imageCompFeats.imageCompressionControl) {
         loader_extensions.push_back(
             {VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME,
              VK_EXT_IMAGE_COMPRESSION_CONTROL_SPEC_VERSION});
     }
-    if (anb9 && swapchainCompFeats.imageCompressionControlSwapchain) {
+    if (icdSupport.AndroidNativeBuffer9 && swapchainCompFeats.imageCompressionControlSwapchain) {
         loader_extensions.push_back(
             {VK_EXT_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_EXTENSION_NAME,
              VK_EXT_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_SPEC_VERSION});
@@ -1269,7 +1268,7 @@ VkResult EnumerateDeviceExtensionProperties(
     }
 
     ATRACE_BEGIN("driver.EnumerateDeviceExtensionProperties");
-    result = data.driver.EnumerateDeviceExtensionProperties(
+    VkResult result = data.driver.EnumerateDeviceExtensionProperties(
         physicalDevice, pLayerName, pPropertyCount, pProperties);
     ATRACE_END();
 

@@ -1232,7 +1232,7 @@ public:
 
     virtual void onBufferReleased() {}
     virtual bool needsReleaseNotify() { return true; }
-    virtual void onBufferDetached(int slot) {
+    virtual void onBufferDetached(int slot, uint64_t /* bufferId */) override {
         mDetachedSlots.push_back(slot);
     }
     const std::vector<int>& getDetachedSlots() const { return mDetachedSlots; }

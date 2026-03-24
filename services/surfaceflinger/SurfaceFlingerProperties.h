@@ -96,6 +96,8 @@ bool enable_layer_caching(bool defaultValue);
 
 bool enable_sdr_dimming(bool defaultValue);
 
+bool force_hole_punch(bool defaultValue);
+
 bool ignore_hdr_camera_layers(bool defaultValue);
 
 bool clear_slots_with_set_layer_buffer(bool defaultValue);

@@ -20,7 +20,9 @@
 #include "InputTracingBackendInterface.h"
 
 #include <android-base/thread_annotations.h>
+#include <input/Input.h>
 #include <jni.h>
+
 #include <memory>
 #include <mutex>
 #include <variant>
@@ -44,6 +46,8 @@ public:
     void traceMotionEvent(const TracedMotionEvent&, const TracedEventMetadata&) override;
     void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) override;
     void traceRawEvent(const RawEvent&) override;
+    void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice&) override;
+    void traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) override;
 
     /** Returns a function that, when called, will block until the tracing thread is idle. */
     std::function<void()> getIdleWaiterForTesting();
@@ -53,9 +57,9 @@ private:
     bool mThreadExit GUARDED_BY(mLock){false};
     std::condition_variable mThreadWakeCondition;
     Backend mBackend;
-    using TraceEntry =
-            std::pair<std::variant<TracedKeyEvent, TracedMotionEvent, WindowDispatchArgs, RawEvent>,
-                      TracedEventMetadata>;
+    using TraceEntry = std::pair<std::variant<TracedKeyEvent, TracedMotionEvent, WindowDispatchArgs,
+                                              RawEvent, TracedEvdevDevice, RawDeviceId>,
+                                 TracedEventMetadata>;
     std::vector<TraceEntry> mQueue GUARDED_BY(mLock);
 
     struct IdleWaiter {

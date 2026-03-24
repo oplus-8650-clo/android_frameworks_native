@@ -621,7 +621,10 @@ private:
     // The dispatching timeout to use for Monitors.
     std::chrono::nanoseconds mMonitorDispatchingTimeout GUARDED_BY(mLock);
 
+    nsecs_t processPreAnrsLocked() REQUIRES(mLock);
+
     nsecs_t processAnrsLocked() REQUIRES(mLock);
+
     void processLatencyStatisticsLocked() REQUIRES(mLock);
     std::chrono::nanoseconds getDispatchingTimeoutLocked(
             const std::shared_ptr<Connection>& connection) REQUIRES(mLock);
@@ -777,8 +780,8 @@ private:
         /** The configured ANR timeout threshold in milliseconds after which ANR is raised. */
         std::chrono::milliseconds timeoutDuration;
 
-        /** Whether ANR warning is triggered or not. */
-        bool anrWarningTriggered = false;
+        /** Whether a pre-ANR notification has already been sent for this ANR. */
+        bool notifiedPreAnr = false;
 
         explicit NoFocusedWindowAnrState(nsecs_t eventTime, nsecs_t timeoutEndTime,
                                          std::shared_ptr<InputApplicationHandle> applicationHandle,
@@ -820,8 +823,7 @@ private:
     ui::LogicalDisplayId mAwaitedApplicationDisplayId GUARDED_BY(mLock);
     void processNoFocusedWindowAnrLocked() REQUIRES(mLock);
 
-    nsecs_t processNoFocusedWindowAnrWarningLocked() REQUIRES(mLock);
-
+    nsecs_t processNoFocusedWindowPreAnrLocked() REQUIRES(mLock);
     /**
      * Tell policy about a window or a monitor that just became unresponsive. Starts ANR.
      *
@@ -982,10 +984,9 @@ private:
                                   const std::string& reason) REQUIRES(mLock);
     void updateLastAnrStateLocked(const std::string& windowLabel, const std::string& reason)
             REQUIRES(mLock);
-    void warnNoFocusedWindowAnrLocked(
-            const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
-            std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration)
-            REQUIRES(mLock);
+    void onPreAnrLocked(const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle,
+                        int32_t eventId, std::chrono::milliseconds elapsedDuration,
+                        std::chrono::milliseconds timeoutDuration) REQUIRES(mLock);
 
     // Input verifiers for each display.
     // In the case of mouse/touchpad cursor events, the verifier on the primary display

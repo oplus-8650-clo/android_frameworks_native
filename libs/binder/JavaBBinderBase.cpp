@@ -22,7 +22,7 @@ namespace android::internal {
 JavaBBinderBase::JavaBBinderBase() = default;
 JavaBBinderBase::~JavaBBinderBase() = default;
 
-const void* JavaBBinderBase::getSubclassID() {
+const void* JavaBBinderBase::getExtSubclassID() {
     static const char* const kSubclassID = "JavaBBinderExt";
     return kSubclassID;
 }

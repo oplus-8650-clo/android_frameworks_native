@@ -87,25 +87,51 @@ void FakeInputDispatcherPolicy::assertOnPointerDownWasNotCalled() {
             << "Expected onPointerDownOutsideFocus to not have been called";
 }
 
-void FakeInputDispatcherPolicy::assertWarnNoFocusedWindowAnrWasCalled(
-        std::chrono::nanoseconds waitDuration, std::chrono::milliseconds expectedTimeoutDuration,
+/**
+ * Asserts that notifyPreNoFocusedWindowAnr() was called within the given timeout
+ * and validates the reported application and timing information.
+ *
+ * The method blocks until either:
+ *  - a PreNoFocusedWindowAnrResult is received, or
+ *  - the provided timeout elapses.
+ *
+ * @param waitDuration Maximum duration to wait for a pre–no-focused-window ANR callback.
+ * @param expectedTimeout Expected ANR timeout duration reported by
+ *        the callback. The elapsed duration is expected to be in the range
+ *        [0, expectedTimeout] and may be 0ms if the timeout is smaller
+ *        than the window ANR timeout.
+ * @param expectedApplication The application handle expected to be associated
+ *        with the reported ANR.
+ */
+void FakeInputDispatcherPolicy::assertNotifyPreNoFocusedWindowAnrWasCalled(
+        std::chrono::nanoseconds waitDuration, std::chrono::milliseconds expectedTimeout,
         const std::shared_ptr<InputApplicationHandle>& expectedApplication) {
     std::unique_lock lock(mLock);
     android::base::ScopedLockAssertion assumeLocked(mLock);
-    std::optional<NoFocusedWindowAnrWarningResult> anrWarningResult =
-            getItemFromStorageLockedInterruptible(waitDuration, mNoFocusedWindowAnrWarnings, lock,
-                                                  mNotifyNoFocusedWindowAnrWarning);
+
+    std::optional<PreNoFocusedWindowAnrResult> anrWarningResult =
+            getItemFromStorageLockedInterruptible(waitDuration, mPreNoFocusedWindowAnrs, lock,
+                                                  mNotifyPreNoFocusedWindowAnr);
     ASSERT_TRUE(anrWarningResult.has_value()) << "Did not receive ANR warning";
 
     ASSERT_EQ(expectedApplication, anrWarningResult.value().appHandle);
-    ASSERT_GT(anrWarningResult.value().elapsedDuration.count(), 0);
-    ASSERT_LE(anrWarningResult.value().elapsedDuration.count(), expectedTimeoutDuration.count());
-    ASSERT_EQ(expectedTimeoutDuration, anrWarningResult.value().timeoutDuration);
+    // The elapsed duration should be between 0 and the timeout duration.
+    // Note that it can be 0ms (< 1000us) if the timeout is smaller than
+    // the window's anr timeout.
+    ASSERT_GE(anrWarningResult.value().elapsedDuration, 0ms);
+    ASSERT_LE(anrWarningResult.value().elapsedDuration, expectedTimeout);
+    ASSERT_EQ(expectedTimeout, anrWarningResult.value().timeoutDuration);
 }
 
-void FakeInputDispatcherPolicy::assertWarnNoFocusedWindowAnrWasNotCalled() {
-    std::scoped_lock lock(mLock);
-    ASSERT_TRUE(mNoFocusedWindowAnrWarnings.empty());
+void FakeInputDispatcherPolicy::assertNotifyPreNoFocusedWindowAnrWasNotCalled(
+        std::chrono::nanoseconds timeout) {
+    std::unique_lock lock(mLock);
+    android::base::ScopedLockAssertion assumeLocked(mLock);
+    const bool gotOne =
+            mNotifyPreNoFocusedWindowAnr.wait_for(lock, timeout, [this]() REQUIRES(mLock) {
+                return !mPreNoFocusedWindowAnrs.empty();
+            });
+    ASSERT_FALSE(gotOne) << "Unexpected pre-ANR notification was received";
 }
 
 void FakeInputDispatcherPolicy::assertNotifyNoFocusedWindowAnrWasCalled(
@@ -402,13 +428,14 @@ void FakeInputDispatcherPolicy::notifyNoFocusedWindowAnr(
     mNotifyAnr.notify_all();
 }
 
-void FakeInputDispatcherPolicy::warnNoFocusedWindowAnr(
-        const std::shared_ptr<InputApplicationHandle>& inputApplicationHandle, int32_t eventId,
-        std::chrono::milliseconds elapsedDuration, std::chrono::milliseconds timeoutDuration) {
+void FakeInputDispatcherPolicy::notifyPreNoFocusedWindowAnr(
+        const std::shared_ptr<InputApplicationHandle>& applicationHandle, int32_t expectedEventId,
+        std::chrono::milliseconds expectedElapsedDuration,
+        std::chrono::milliseconds expectedTimeout) {
     std::scoped_lock lock(mLock);
-    mNoFocusedWindowAnrWarnings.push(
-            {inputApplicationHandle, eventId, elapsedDuration, timeoutDuration});
-    mNotifyNoFocusedWindowAnrWarning.notify_all();
+    mPreNoFocusedWindowAnrs.push(
+            {applicationHandle, expectedEventId, expectedElapsedDuration, expectedTimeout});
+    mNotifyPreNoFocusedWindowAnr.notify_all();
 }
 
 void FakeInputDispatcherPolicy::notifyInputChannelBroken(const sp<IBinder>& connectionToken) {

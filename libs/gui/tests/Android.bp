@@ -53,9 +53,12 @@ cc_test {
         "-Wthread-safety",
         // Allow access to buffer queue core private members
         "-DENABLE_BQC_TESTING",
+        "-fexceptions",
+        "-Wno-unused-parameter",
     ],
 
     srcs: [
+        "BitSet_test.cpp",
         "BLASTBufferQueue_test.cpp",
         "BufferItemConsumer_test.cpp",
         "BufferQueue_test.cpp",
@@ -80,6 +83,7 @@ cc_test {
         "StreamSplitter_test.cpp",
         "Surface_test.cpp",
         "Surface2HGraphicBufferProducer_test.cpp",
+        "Surface2HGraphicBufferProducer10_test.cpp",
         "SurfaceTextureClient_test.cpp",
         "SurfaceTextureFBO_test.cpp",
         "SurfaceTextureGL_test.cpp",

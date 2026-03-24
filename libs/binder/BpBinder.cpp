@@ -721,21 +721,32 @@ void BpBinder::onFrozenStateChanged(bool isFrozen) {
     if (mFrozen->isPendingClear) {
         return;
     }
+
     bool stateChanged = !mFrozen->initialStateReceived || mFrozen->isFrozen != isFrozen;
-    if (stateChanged) {
-        mFrozen->isFrozen = isFrozen;
-        mFrozen->initialStateReceived = true;
-        for (size_t i = 0; i < mFrozen->callbacks.size();) {
-            sp<FrozenStateChangeCallback> callback = mFrozen->callbacks.itemAt(i).promote();
-            if (callback != nullptr) {
-                callback->onStateChanged(wp<BpBinder>::fromExisting(this),
-                                         isFrozen ? FrozenStateChangeCallback::State::FROZEN
-                                                  : FrozenStateChangeCallback::State::UNFROZEN);
-                i++;
-            } else {
-                mFrozen->callbacks.removeItemsAt(i);
-            }
+    if (!stateChanged) {
+        return;
+    }
+
+    std::vector<sp<FrozenStateChangeCallback>> callbacksToCall;
+    mFrozen->isFrozen = isFrozen;
+    mFrozen->initialStateReceived = true;
+    for (size_t i = 0; i < mFrozen->callbacks.size();) {
+        sp<FrozenStateChangeCallback> callback = mFrozen->callbacks.itemAt(i).promote();
+        if (callback != nullptr) {
+            callbacksToCall.emplace_back(std::move(callback));
+            i++;
+        } else {
+            mFrozen->callbacks.removeItemsAt(i);
         }
+    }
+
+    const auto newState = isFrozen ? FrozenStateChangeCallback::State::FROZEN
+                                   : FrozenStateChangeCallback::State::UNFROZEN;
+    const auto wpThis = wp<BpBinder>::fromExisting(this);
+
+    _l.unlock(); // Issue the state change callback and call the sp<> dtor outside of mLock.
+    for (const auto& callback : callbacksToCall) {
+        callback->onStateChanged(wpThis, newState);
     }
 }
 

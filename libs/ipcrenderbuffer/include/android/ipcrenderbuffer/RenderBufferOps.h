@@ -76,9 +76,18 @@
 namespace android {
 
 struct IPCClientBitmap {
+    enum State {
+        UNREGISTERED,
+        PENDING_REGISTER,
+        REGISTERED,
+        PENDING_DEREGISTER,
+    };
     uint64_t id = 0;
-    bool registeredWithServer = false;
+    State state = UNREGISTERED;
     sp<GraphicBuffer> buffer;
+
+    // If this image is backed by a heap bitmap then this will be set.
+    SkBitmap bitmap;
 };
 
 struct IPCClientResourceCache {
@@ -236,7 +245,7 @@ struct ResetClipOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESETCLIP;
 
     static ResetClipOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip);
     std::string toString() const;
 };
 

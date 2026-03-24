@@ -2835,12 +2835,6 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                     swapchain.surface.listener.associatePresentId(nativeFrameId,
                             presentId);
                 }
-
-                uint64_t frameId;
-                native_window_get_last_replaced_frame_id(window, &frameId);
-                if (frameId != 0) {
-                    swapchain.surface.listener.onFramePresented(frameId);
-                }
             }
             if (pPresentMode) {
                 if (!SetSwapchainPresentMode(window, *pPresentMode))
@@ -2860,6 +2854,14 @@ static VkResult PresentOneSwapchain(VkQueue queue,
                     img.dequeue_fence = -1;
                 }
                 img.dequeued = false;
+            }
+            if (flags::vk_khr_present_wait2_gpu() &&
+                swapchain.present_wait_enabled) {
+                uint64_t frameId;
+                native_window_get_last_replaced_frame_id(window, &frameId);
+                if (frameId != 0) {
+                    swapchain.surface.listener.onFramePresented(frameId);
+                }
             }
 
             // If the swapchain is in shared mode, immediately dequeue the

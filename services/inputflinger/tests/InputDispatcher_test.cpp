@@ -128,6 +128,10 @@ static constexpr ftl::Flags<MotionFlag>
         EXPECTED_WALLPAPER_FLAGS{MotionFlag::WINDOW_IS_OBSCURED,
                                  MotionFlag::WINDOW_IS_PARTIALLY_OBSCURED};
 
+static const std::chrono::milliseconds DEFAULT_PRE_ANR_TIMEOUT_WINDOW = std::chrono::milliseconds(
+        android::os::IInputConstants::UNMULTIPLIED_DEFAULT_PRE_ANR_TIMEOUT_WINDOW_MILLIS *
+        base::HwTimeoutMultiplier());
+
 using ReservedInputDeviceId::VIRTUAL_KEYBOARD_ID;
 
 /**
@@ -7927,6 +7931,83 @@ TEST_F(InputDispatcherTest, TransferTouchOnDisplay_CloneSurface) {
     secondWindowInSecondary->consumeMotionUp(SECOND_DISPLAY_ID, MotionFlag::NO_FOCUS_CHANGE);
 }
 
+/**
+ * When a focused window is moved from one display to another, it should either maintain focus,
+ * or it should lose it and then gain it again.
+ * This test reproduces a bug in the dispatcher - currently, even though dispatcher still thinks
+ * that the window has focus after it's been moved, the last event that's written to the window's
+ * input channel is focusEvent(hasFocus=false).
+ */
+TEST_F(InputDispatcherTest, Focus_WindowMovedToAnotherDisplay_LosesFocus) {
+    static constexpr auto DEFAULT = ui::LogicalDisplayId::DEFAULT;
+    static constexpr auto EXTERNAL = ui::LogicalDisplayId{7};
+
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> window =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Window", EXTERNAL);
+    window->setFocusable(true);
+
+    // Add another focusable window onto DEFAULT display
+    sp<FakeWindowHandle> unrelatedWindow =
+            sp<FakeWindowHandle>::make(application, mDispatcher, "Unrelated Window", DEFAULT);
+
+    mDispatcher->setFocusedApplication(EXTERNAL, application);
+    mDispatcher->setFocusedDisplay(EXTERNAL);
+    mDispatcher->onWindowInfosChanged(
+            {{*unrelatedWindow->getInfo(), *window->getInfo()}, {}, 0, 0});
+
+    // Window initially gets focus on the external display.
+    setFocusedWindow(window);
+    ASSERT_NO_FATAL_FAILURE(window->consumeFocusEvent(true));
+
+    // Display-unspecified keys are sent to this window
+    mDispatcher->notifyKey(KeyArgsBuilder(AKEY_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+    mDispatcher->notifyKey(KeyArgsBuilder(AKEY_EVENT_ACTION_UP, AINPUT_SOURCE_KEYBOARD)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+    window->consumeKeyEvent(AllOf(WithKeyAction(AKEY_EVENT_ACTION_DOWN),
+                                  WithDisplayId(ui::LogicalDisplayId::INVALID)));
+    window->consumeKeyEvent(AllOf(WithKeyAction(AKEY_EVENT_ACTION_UP),
+                                  WithDisplayId(ui::LogicalDisplayId::INVALID)));
+
+    // Now move window to another display. This won't actually happen until "onWindowInfosChanged"
+    // is fired.
+    window->editInfo()->displayId = DEFAULT;
+
+    mDispatcher->setFocusedApplication(ui::LogicalDisplayId::DEFAULT, application);
+
+    // Request focus on the default display.
+    mDispatcher->setFocusedDisplay(ui::LogicalDisplayId::DEFAULT);
+    setFocusedWindow(window);
+
+    // Not sure how this next call is ordered relative to the setFocusedWindow in practice.
+    mDispatcher->onWindowInfosChanged(
+            {{*unrelatedWindow->getInfo(), *window->getInfo()}, {}, 0, 0});
+
+    // Window gains focus on the new display.
+    ASSERT_NO_FATAL_FAILURE(window->consumeFocusEvent(true));
+
+    // TODO(b/438569310)
+    // BUG: the last event that is written to the window is FocusEvent(hasFocus=false)
+    ASSERT_NO_FATAL_FAILURE(window->consumeFocusEvent(false));
+
+    // The key is still delivered to the window correctly.
+    mDispatcher->notifyKey(KeyArgsBuilder(AKEY_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+    mDispatcher->notifyKey(KeyArgsBuilder(AKEY_EVENT_ACTION_UP, AINPUT_SOURCE_KEYBOARD)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+    window->consumeKeyEvent(AllOf(WithKeyAction(AKEY_EVENT_ACTION_DOWN),
+                                  WithDisplayId(ui::LogicalDisplayId::INVALID)));
+    window->consumeKeyEvent(AllOf(WithKeyAction(AKEY_EVENT_ACTION_UP),
+                                  WithDisplayId(ui::LogicalDisplayId::INVALID)));
+
+    window->assertNoEvents();
+}
+
 TEST_F(InputDispatcherTest, FocusedWindow_ReceivesFocusEventAndKeyEvent) {
     std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
     sp<FakeWindowHandle> window =
@@ -10628,6 +10709,133 @@ TEST_F(InputDispatcherMultiWindowSameTokenTests, HoverIntoClone) {
                        {getPointInWindow(mWindow2->getInfo(), PointF{150, 150})});
 }
 
+/**
+ * Set up a SPY window with a clone, and place a regular window underneath. Tap an area that goes
+ * through all 3 windows. Ensure that SPY and REGULAR window correctly receive the event. This test
+ * reproduces a crash in InputDispatcher.
+ *                                                     \/
+ * SPY CLONE (mWindow2)                         ------------------------
+ *
+ * SPY (ORIGINAL) (mWindow1)                         -------------------
+ *
+ * REGULAR WINDOW                                    ------------------------------
+ */
+TEST_F(InputDispatcherMultiWindowSameTokenTests, TapClonedSpyAndSpyWindow) {
+    // Make mWindow1 and mWindow2 SPY windows with overlapping touchable regions.
+    mWindow1->setSpy(true);
+    mWindow1->setTrustedOverlay(true);
+    mWindow1->setFrame(Rect(0, 0, 50, 50));
+
+    mWindow2->setSpy(true);
+    mWindow2->setTrustedOverlay(true);
+    mWindow2->setFrame(Rect(10, 10, 50, 50));
+    mDispatcher->onWindowInfosChanged({{*mWindow2->getInfo(), *mWindow1->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window.
+    // Since mWindow1 and mWindow2 are clones, either one can be used to consume the event. However,
+    // due to input event tracing attribution checks, we must use the actual touched window
+    NotifyMotionArgs down1 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(20).y(20))
+                                     .build();
+
+    mDispatcher->notifyMotion(down1);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(20).y(20))
+                                      .downTime(down1.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+
+    // Add another, regular window underneath both SPY windows.
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> regular = sp<FakeWindowHandle>::make(application, mDispatcher, "regular",
+                                                              ui::LogicalDisplayId::DEFAULT);
+    regular->setFrame(Rect(10, 10, 70, 70));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*mWindow2->getInfo(), *mWindow1->getInfo(), *regular->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window and normal window.
+    NotifyMotionArgs down2 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(30).y(30))
+                                     .build();
+
+    mDispatcher->notifyMotion(down2);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(30).y(30))
+                                      .downTime(down2.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+
+    // Test tap on outside of Spy window.
+    NotifyMotionArgs down3 = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                     .pointer(PointerBuilder(0, ToolType::FINGER).x(60).y(60))
+                                     .build();
+
+    mDispatcher->notifyMotion(down3);
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(60).y(60))
+                                      .downTime(down3.downTime)
+                                      .build());
+    mWindow2->assertNoEvents();
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+}
+
+/**
+ * Set up a SPY window with a clone, and place a regular window underneath. Tap an area that goes
+ * through SPY CLONE and the regular window, but not the original spy. Ensure that SPY and REGULAR
+ * windows correctly receive the event. This test ensures that the InputDispatcher isn't treating
+ * cloned SPY in a special manner.
+ *                                      \/
+ * SPY CLONE (mWindow2)               ------------------------
+ *
+ * SPY (ORIGINAL) (mWindow1)                              -------------------
+ *
+ * REGULAR WINDOW              -------------------------------
+ */
+TEST_F(InputDispatcherMultiWindowSameTokenTests, TapOnlyClonedSpyWindow) {
+    // Make mWindow1 and mWindow2 SPY windows with overlapping touchable regions.
+    mWindow1->setSpy(true);
+    mWindow1->setTrustedOverlay(true);
+    mWindow1->setFrame(Rect(40, 40, 80, 80));
+
+    mWindow2->setSpy(true);
+    mWindow2->setTrustedOverlay(true);
+    mWindow2->setFrame(Rect(10, 10, 50, 50));
+
+    // Add another, regular window underneath both SPY windows.
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    sp<FakeWindowHandle> regular = sp<FakeWindowHandle>::make(application, mDispatcher, "regular",
+                                                              ui::LogicalDisplayId::DEFAULT);
+    regular->setFrame(Rect(0, 0, 50, 50));
+
+    mDispatcher->onWindowInfosChanged(
+            {{*mWindow2->getInfo(), *mWindow1->getInfo(), *regular->getInfo()}, {}, 0, 0});
+
+    // Test tap on Spy window and normal window.
+    NotifyMotionArgs down = MotionArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
+                                    .pointer(PointerBuilder(0, ToolType::FINGER).x(15).y(15))
+                                    .build();
+
+    mDispatcher->notifyMotion(down);
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_DOWN));
+
+    mDispatcher->notifyMotion(MotionArgsBuilder(ACTION_UP, AINPUT_SOURCE_TOUCHSCREEN)
+                                      .pointer(PointerBuilder(0, ToolType::FINGER).x(15).y(15))
+                                      .downTime(down.downTime)
+                                      .build());
+    mWindow2->consumeMotionEvent(WithMotionAction(ACTION_UP));
+    regular->consumeMotionEvent(WithMotionAction(ACTION_UP));
+}
+
 class InputDispatcherSingleWindowAnr : public InputDispatcherTest {
     virtual void SetUp() override {
         InputDispatcherTest::SetUp();
@@ -10805,7 +11013,7 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWar
 
     const std::chrono::duration timeout = mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
     mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
-    mFakePolicy->assertWarnNoFocusedWindowAnrWasNotCalled();
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(timeout);
 }
 
 // We have a focused application, but no focused window, ANR warning flag is enabled
@@ -10836,8 +11044,87 @@ TEST_F(InputDispatcherSingleWindowAnr, FocusedApplication_NoFocusedWindow_AnrWar
             mApplication->getDispatchingTimeout(DISPATCHING_TIMEOUT);
     const std::chrono::milliseconds timeoutMillis =
             std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
     mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(timeout, mApplication);
-    mFakePolicy->assertWarnNoFocusedWindowAnrWasCalled(timeout, timeoutMillis, mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrFiresAtHalfTimeout_WhenHalfGreaterThanDefaultWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    // Pick a timeout where half clearly exceeds the default pre-ANR window.
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW * 4;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    // half > defaultPreAnrWindow, so the half-timeout path wins.
+    const auto preAnrWindow = anrTimeout / 2;
+    const auto preAnrDelay = anrTimeout - preAnrWindow;
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    // Before pre-ANR point: must NOT fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrDelay - 100ms);
+
+    // Shortly after: must fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(200ms, anrTimeout, mApplication);
+
+    // Full ANR after the remaining time.
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(preAnrWindow, mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrUsesDefaultMinimumWindow_WhenHalfLessThanDefaultWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    // Pick a timeout where half is clearly less than the default pre-ANR window.
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW + 500ms;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    // half < defaultPreAnrWindow, so the default window wins.
+    const auto preAnrWindow = DEFAULT_PRE_ANR_TIMEOUT_WINDOW;
+    const auto preAnrDelay = anrTimeout - preAnrWindow;
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+
+    // Before pre-ANR point: must NOT fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrDelay - 100ms);
+
+    // Shortly after: must fire.
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasCalled(200ms, anrTimeout, mApplication);
+
+    // Full ANR after the remaining time.
+    mFakePolicy->assertNotifyNoFocusedWindowAnrWasCalled(DEFAULT_PRE_ANR_TIMEOUT_WINDOW,
+                                                         mApplication);
+}
+
+TEST_F(InputDispatcherSingleWindowAnr,
+       NoFocusedWindow_PreAnrCancelledWhenWindowBecomesFocusableBeforePreWindow) {
+    SCOPED_FLAG_OVERRIDE(enable_anr_warning_callback_input_dispatcher, true);
+
+    const auto anrTimeout = DEFAULT_PRE_ANR_TIMEOUT_WINDOW * 4;
+    mApplication->setDispatchingTimeout(anrTimeout);
+
+    mWindow->setFocusable(false);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(false);
+
+    mDispatcher->notifyKey(generateKeyArgs(AKEY_EVENT_ACTION_DOWN, ui::LogicalDisplayId::DEFAULT));
+    // Resolve focus immediately.
+    mWindow->setFocusable(true);
+    mDispatcher->onWindowInfosChanged({{*mWindow->getInfo()}, {}, 0, 0});
+    mWindow->consumeFocusEvent(true);
+
+    // Wait past the would-have-been pre-ANR time, confirm no pre-ANR.
+    const auto preAnrWindow = anrTimeout / 2;
+    mFakePolicy->assertNotifyPreNoFocusedWindowAnrWasNotCalled(preAnrWindow + 300ms);
 }
 
 // We have a focused application, but no focused window

@@ -133,3 +133,31 @@ flag {
   description: "Enable out of process rendering"
   bug: "448153717"
 } # out_of_process_rendering
+
+flag {
+  name: "allocate_buffer_priority_inheritance"
+  namespace: "core_graphics"
+  description: "Inherit caller priority when BBQ allocates buffers"
+  bug: "479828540"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "composition_shaders"
+  namespace: "core_graphics"
+  description: "Enable composition shaders"
+  bug: "321775340"
+  metadata {
+      purpose: PURPOSE_BUGFIX
+  }
+}
+
+flag {
+  name: "wb_aaos"
+  namespace: "core_graphics"
+  description: "Remove usage of IGBPs in Android Automotive OS."
+  bug: "340933948"
+  is_fixed_read_only: true
+} # wb_aaos

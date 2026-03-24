@@ -49,7 +49,19 @@ public:
                                 SurfaceQueueBufferOutput* output);
     status_t cancelBufferSimple(int slot, const sp<::android::Fence>& fence);
     void enableFrameTimestamps(bool enable);
-    status_t getFrameTimestamps(uint64_t frameNumber, nsecs_t* outLatchTime);
+
+    struct FrameTimestamps {
+        nsecs_t requestedPresentTime;
+        nsecs_t acquireTime;
+        nsecs_t latchTime;
+        nsecs_t firstRefreshStartTime;
+        nsecs_t lastRefreshStartTime;
+        nsecs_t gpuCompositionDoneTime;
+        nsecs_t displayPresentTime;
+        nsecs_t dequeueReadyTime;
+        nsecs_t releaseTime;
+    };
+    status_t getFrameTimestamps(uint64_t frameNumber, FrameTimestamps* info);
 
     // HGraphicBufferProducer:
     virtual Return<HStatus> setMaxDequeuedBufferCount(int32_t maxDequeuedBuffers) override;

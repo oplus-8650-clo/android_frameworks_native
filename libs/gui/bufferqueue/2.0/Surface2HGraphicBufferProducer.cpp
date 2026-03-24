@@ -51,7 +51,7 @@ public:
     virtual bool needsReleaseNotify() override { return true; }
     virtual void onBufferReleased() override { mListener->onBuffersReleased(1); }
 
-    virtual void onBufferDetached(int /*slot*/) override {}
+    virtual void onBufferDetached(uint64_t /*bufferId*/) override {}
 
     virtual void onBuffersDiscarded(const std::vector<sp<GraphicBuffer>>& buffers) override {
         if (auto producer = mProducer.promote()) {
@@ -194,9 +194,19 @@ void Surface2HGraphicBufferProducer::enableFrameTimestamps(bool enable) {
 }
 
 status_t Surface2HGraphicBufferProducer::getFrameTimestamps(uint64_t frameNumber,
-                                                            nsecs_t* outLatchTime) {
-    return mBase->getFrameTimestamps(frameNumber, nullptr, nullptr, outLatchTime, nullptr, nullptr,
-                                     nullptr, nullptr, nullptr, nullptr);
+                                                            FrameTimestamps* frameTimestamps) {
+    if (frameTimestamps == NULL) {
+        ALOGE("Surface2HGraphicBufferProducer::getFrameTimestamps frameTimestamps was null");
+        return BAD_VALUE;
+    }
+    return mBase->getFrameTimestamps(frameNumber, &(frameTimestamps->requestedPresentTime),
+                                     &(frameTimestamps->acquireTime), &(frameTimestamps->latchTime),
+                                     &(frameTimestamps->firstRefreshStartTime),
+                                     &(frameTimestamps->lastRefreshStartTime),
+                                     &(frameTimestamps->gpuCompositionDoneTime),
+                                     &(frameTimestamps->displayPresentTime),
+                                     &(frameTimestamps->dequeueReadyTime),
+                                     &(frameTimestamps->releaseTime));
 }
 
 Return<HStatus> Surface2HGraphicBufferProducer::setMaxDequeuedBufferCount(
@@ -528,11 +538,12 @@ Return<void> Surface2HGraphicBufferProducer::connect(const sp<HProducerListener>
         _hidl_cb(HStatus::UNKNOWN_ERROR, QueueBufferOutput{});
         return {};
     }
-    HStatus hStatus{};
-    bool converted =
-            b2h(mBase->connect(bConnectionType, bListener, producerControlledByApp), &hStatus);
-    mConsumerName = mBase->getConsumerName();
 
+    mBase->setProducerControlledByApp(producerControlledByApp);
+
+    HStatus hStatus{};
+    bool converted = b2h(mBase->connect(bConnectionType, bListener), &hStatus);
+    // TODO: what to do about this
 #ifdef NO_BINDER
     if (converted && hListener != nullptr) {
         mObituary = new Obituary(this, hListener, hConnectionType);

@@ -196,7 +196,8 @@ scheduler::FrameRateMode DisplayModeController::getActiveMode(PhysicalDisplayId 
 }
 
 auto DisplayModeController::takeDesiredModeIfMatches(PhysicalDisplayId displayId,
-                                                     ui::Size expectedResolution)
+                                                     ui::Size expectedResolution,
+                                                     bool shouldSyncResolutionSwitch)
         -> DisplayModeRequestOpt {
     std::lock_guard lock(mDisplayLock);
     const auto& displayPtr =
@@ -206,7 +207,7 @@ auto DisplayModeController::takeDesiredModeIfMatches(PhysicalDisplayId displayId
     {
         std::scoped_lock lock(displayPtr->desiredModeLock);
 
-        if (FlagManager::getInstance().synced_resolution_switch()) {
+        if (shouldSyncResolutionSwitch) {
             if (const auto modeOpt = displayPtr->desiredModeOpt.transform(
                         [](const auto& request) { return request.mode; })) {
                 const bool resolutionMatch =

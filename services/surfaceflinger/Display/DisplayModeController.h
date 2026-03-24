@@ -89,7 +89,8 @@ public:
     // Consumes the display's desired mode if one exists. If it does not match the active resolution
     // (i.e. the DisplayModeRequest is a resolution switch), then it must match `expectedResolution`
     // for it to be consumed.
-    DisplayModeRequestOpt takeDesiredModeIfMatches(PhysicalDisplayId, ui::Size expectedResolution)
+    DisplayModeRequestOpt takeDesiredModeIfMatches(PhysicalDisplayId, ui::Size expectedResolution,
+                                                   bool shouldSyncResolutionSwitch = true)
             EXCLUDES(mDisplayLock);
 
     // TODO: Remove once `modeset_state_machine` flag is cleaned up.

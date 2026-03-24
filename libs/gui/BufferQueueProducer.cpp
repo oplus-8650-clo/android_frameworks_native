@@ -120,6 +120,19 @@ BufferQueueProducer::BufferQueueProducer(const sp<BufferQueueCore>& core,
 
 BufferQueueProducer::~BufferQueueProducer() {}
 
+status_t BufferQueueProducer::getConfigForSurface(SurfaceConfig* outConfig) {
+    ATRACE_CALL();
+    if (outConfig == nullptr) {
+        return BAD_VALUE;
+    }
+
+    std::lock_guard<std::mutex> lock(mCore->mMutex);
+    outConfig->consumerName = mCore->mConsumerName;
+    outConfig->slotCount = mSlots.size();
+    outConfig->isSlotExpansionAllowed = mCore->mAllowExtendedSlotCount;
+    return NO_ERROR;
+}
+
 status_t BufferQueueProducer::requestBuffer(int slot, sp<GraphicBuffer>* buf) {
     ATRACE_CALL();
     BQ_LOGV("requestBuffer: slot %d", slot);

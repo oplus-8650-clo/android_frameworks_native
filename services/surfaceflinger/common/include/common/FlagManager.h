@@ -77,6 +77,7 @@ public:
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
     bool monitor_buffer_fences() const;
+    bool mrr_full_frame_rate_list() const;
     bool offload_gpu_composition() const;
     bool re_powered_off_displays_inform_cache_budgets() const;
     bool readback_screenshot() const;
@@ -91,7 +92,6 @@ public:
     bool connected_display_hdr_v2() const;
     bool connected_display_hdr_v3() const;
     bool correct_dpi_with_display_size() const;
-    bool deprecate_frame_tracker() const;
     bool display_command_modeset() const;
     bool enable_user_preferred_hdr_mode() const;
     bool frame_rate_category_mrr() const;

@@ -61,7 +61,6 @@
 #include "DisplayHardware/HWComposer.h"
 #include "FrameTracker.h"
 #include "LayerFE.h"
-#include "LayerVector.h"
 #include "Scheduler/FrameTimeline.h"
 #include "Scheduler/LayerInfo.h"
 #include "SurfaceFlinger.h"
@@ -189,6 +188,11 @@ public:
                    nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/,
                    const FrameTimelineInfo& /*info*/, gui::GameMode gameMode,
                    int32_t systemContentPriority);
+    bool setRenderCommandBufferFrameId(uint64_t frameId, nsecs_t postTime,
+                                       nsecs_t desiredPresentTime,
+                                       bool isAutoTimestamp,
+                                       const FrameTimelineInfo& info,
+                                       gui::GameMode gameMode);
     void setDesiredPresentTime(nsecs_t /*desiredPresentTime*/, bool /*isAutoTimestamp*/);
     bool setDataspace(ui::Dataspace /*dataspace*/);
     bool setExtendedRangeBrightness(float currentBufferRatio, float desiredRatio);
@@ -466,8 +470,6 @@ protected:
     // statistical history needs to only be tracked by count of frames.
     // TODO: Deprecate the '--latency-clear' and get rid of this.
     std::atomic<uint32_t> mFrameStatsHistorySize;
-    // Timestamp history for UIAutomation. Thread safe.
-    FrameTracker mDeprecatedFrameTracker;
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     uint32_t mQtiLayerClass{0};

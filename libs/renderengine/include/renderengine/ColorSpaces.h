@@ -21,7 +21,6 @@
 
 namespace android {
 namespace renderengine {
-namespace skia {
 
 // Converts an android dataspace to a supported SkColorSpace
 // Supported dataspaces are
@@ -33,6 +32,5 @@ namespace skia {
 // are mapped to sRGB.
 sk_sp<SkColorSpace> toSkColorSpace(ui::Dataspace dataspace);
 
-} // namespace skia
 } // namespace renderengine
 } // namespace android

@@ -294,13 +294,17 @@ void KawaseBlurDualFilterV2::preallocateBuffer(SkiaGpuContext* protectedContext,
     SFTRACE_CALL();
     std::lock_guard<std::mutex> lock(mRenderingMutex);
 
-    mPreallocatedDisplaySize = size;
+    // Use the longer side as the ref size for the preallocated square, so that it can handle
+    // both portrait and landscape cases.
+    // TODO: use transform to handle screen rotation better.
+    int32_t side = std::max(size.width, size.height);
+    mPreallocatedDisplaySize = ui::Size(side, side);
     size_t totalBytes = 0;
     for (int i = 0; i < kMaxSurfaces; i++) {
         const int newW =
-                std::max(1, static_cast<int>(static_cast<float>(size.width) / kScales[i]));
+                std::max(1, static_cast<int>(static_cast<float>(side) / kScales[i]));
         const int newH =
-                std::max(1, static_cast<int>(static_cast<float>(size.height) / kScales[i]));
+                std::max(1, static_cast<int>(static_cast<float>(side) / kScales[i]));
 
         sp<GraphicBuffer> buffer =
                 sp<GraphicBuffer>::make(newW, newH, PIXEL_FORMAT_RGBA_8888, 1, kProtectedUsageFlags,

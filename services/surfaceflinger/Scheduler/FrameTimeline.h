@@ -292,6 +292,7 @@ public:
             Valid,
             OutOfOrder,
             Unknown,
+            FrameHistoryTooLong,
         };
         Status status;
         TimelineItem predictions;
@@ -299,6 +300,9 @@ public:
         nsecs_t vsyncResyncedJitter;
 
         static PreviousFrameData unknown() { return PreviousFrameData{Status::Unknown, {}, {}, 0}; }
+        static PreviousFrameData tooFarBack() {
+            return PreviousFrameData{Status::FrameHistoryTooLong, {}, {}, 0};
+        }
         static PreviousFrameData outOfOrder() {
             return PreviousFrameData{Status::OutOfOrder, {}, {}, 0};
         }
@@ -314,6 +318,10 @@ public:
     // TODO(b/172587309): Remove this when we have actual start times.
     static constexpr nsecs_t kPredictionExpiredStartTimeDelta =
             std::chrono::duration_cast<std::chrono::nanoseconds>(2ms).count();
+
+    // Used for finding the previously presented frame in case of render thread animations.
+    // 10 was chosen to cover up to 80ms on UI thread delay on 120hz.
+    static constexpr int32_t kMaxPreviousFrames = 10;
 
 private:
     // Friend class for testing
@@ -392,6 +400,7 @@ private:
 struct FrameTimelineDisplayState {
     bool poweredOn = true;
     bool modeChangeInProgress = false;
+    bool powerModeChangeInProgress = false;
 };
 
 /*

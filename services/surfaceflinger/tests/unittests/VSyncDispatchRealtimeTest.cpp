@@ -46,7 +46,7 @@ public:
         return mPeriod;
     }
 
-    ModelAccuracy getModelAccuracy(nsecs_t) const final { return {0, 0, 0, 0, 0}; }
+    ModelAccuracy getModelAccuracy(nsecs_t) const final { return {0, 0, 0, 0, 0, {}}; }
 
     Period minFramePeriod() const final { return Period::fromNs(currentPeriod()); }
     void resetModel() final {}

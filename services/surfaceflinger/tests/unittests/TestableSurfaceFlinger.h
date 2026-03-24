@@ -20,6 +20,7 @@
 #include <memory>
 #include <variant>
 
+#include <binder/Binder.h>
 #include <android/gui/EarlyWakeupInfo.h>
 #include <ftl/fake_guard.h>
 #include <ftl/match.h>
@@ -361,6 +362,11 @@ public:
         commit(kComposite);
     }
 
+    auto applyOptimizationPolicy(const char* where) {
+        ftl::FakeGuard guard(kMainThreadContext);
+        return mFlinger->applyOptimizationPolicy(where);
+    }
+
     auto createVirtualDisplay(const std::string& displayName, bool isSecure,
                               float requestedRefreshRate = 0.0f) {
         static const std::string kTestId =
@@ -526,7 +532,8 @@ public:
     }
 
     auto setDesiredDisplayModeSpecs(const gui::DisplayModeSpecs& specs) {
-        return mFlinger->setDesiredDisplayModeSpecs({specs});
+        sp<IBinder> applyToken = sp<BBinder>::make();
+        return mFlinger->setDesiredDisplayModeSpecs(applyToken, {specs});
     }
 
     void onNewFrontInternalDisplay(const DisplayDevice* oldFrontInternalDisplayPtr,
@@ -663,9 +670,6 @@ public:
 
     const auto& hwcPhysicalDisplayIdMap() const { return getHwComposer().mPhysicalDisplayIdMap; }
     const auto& hwcDisplayData() const { return getHwComposer().mDisplayData; }
-
-    using BootStage = SurfaceFlinger::BootStage;
-    auto& mutableBootStage() { return mFlinger->mBootStage; }
 
     auto& mutableSupportsWideColor() { return mFlinger->mSupportsWideColor; }
 

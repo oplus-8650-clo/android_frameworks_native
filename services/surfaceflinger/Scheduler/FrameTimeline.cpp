@@ -167,6 +167,11 @@ std::string jankTypeBitmaskToString(int32_t jankType) {
         jankType &= ~JankType::DisplayModeChangeInProgress;
     }
 
+    if (jankType & JankType::DisplayPowerModeChangeInProgress) {
+        janks.emplace_back("PowerModeChange in progress");
+        jankType &= ~JankType::DisplayPowerModeChangeInProgress;
+    }
+
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
     return std::accumulate(janks.begin(), janks.end(), std::string(),
@@ -312,6 +317,11 @@ int32_t jankTypeBitmaskToProto(int32_t jankType) {
         jankType &= ~JankType::DisplayModeChangeInProgress;
     }
 
+    if (jankType & JankType::DisplayPowerModeChangeInProgress) {
+        protoJank |= FrameTimelineEvent::JANK_DISPLAY_POWER_MODE_CHANGE_IN_PROGRESS;
+        jankType &= ~JankType::DisplayPowerModeChangeInProgress;
+    }
+
     // jankType should be 0 if all types of jank were checked for.
     LOG_ALWAYS_FATAL_IF(jankType != 0, "Unrecognized jank type value 0x%x", jankType);
     return protoJank;
@@ -392,7 +402,8 @@ std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
             JankType::PredictionError | JankType::SurfaceFlingerScheduling | JankType::Unknown |
             JankType::Dropped | JankType::AppResyncedJitter;
     const int32_t nonJankBitmask = JankType::BufferStuffing | JankType::SurfaceFlingerStuffing |
-            JankType::NonAnimating | JankType::DisplayNotOn | JankType::DisplayModeChangeInProgress;
+            JankType::NonAnimating | JankType::DisplayNotOn |
+            JankType::DisplayModeChangeInProgress | JankType::DisplayPowerModeChangeInProgress;
     static_assert((kJankTypeAll & ~(jankBitmask | nonJankBitmask)) == 0);
 
     if ((jankType & jankBitmask) == 0) { // Not Janky
@@ -517,19 +528,27 @@ void SurfaceFrame::setPreviousSurfaceFrame(const std::weak_ptr<SurfaceFrame>& pr
 }
 
 SurfaceFrame::PreviousFrameData SurfaceFrame::previousFrameDataLocked() const {
-    const auto prev = mPreviousSurfaceFrame.lock();
-    if (!prev || prev->mPredictionState != PredictionState::Valid) {
-        return PreviousFrameData::unknown();
+    auto currentPrev = mPreviousSurfaceFrame.lock();
+
+    for (int i = 0; i < kMaxPreviousFrames; i++) {
+        if (!currentPrev || currentPrev->mPredictionState != PredictionState::Valid) {
+            return PreviousFrameData::unknown();
+        }
+
+        if (currentPrev->mToken > mToken) {
+            // this can happen when a RenderThread animation is running and the UI thread is late.
+            return PreviousFrameData::outOfOrder();
+        }
+
+        std::scoped_lock lock(currentPrev->mMutex);
+        if (currentPrev->mPresentState == PresentState::Presented) {
+            return PreviousFrameData::create(currentPrev->mPredictions, currentPrev->mActuals,
+                                             currentPrev->mVsyncResyncedJitter);
+        }
+        currentPrev = currentPrev->mPreviousSurfaceFrame.lock();
     }
 
-    if (prev->mToken > mToken) {
-        // this can happen when a RenderThread animation is running and the UI thread is late.
-        return PreviousFrameData::outOfOrder();
-    }
-
-    std::scoped_lock lock(prev->mMutex);
-    return PreviousFrameData::create(prev->mPredictions, prev->mActuals,
-                                     prev->mVsyncResyncedJitter);
+    return PreviousFrameData::tooFarBack();
 }
 
 // TODO(b/316171339): migrate from perfetto side
@@ -918,6 +937,11 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
                     // We can't do any classification if the previous frame is unknown
                     mFramePresentMetadata.experimental() = FramePresentMetadata::UnknownPresent;
                     break;
+                case PreviousFrameData::Status::FrameHistoryTooLong:
+                    // We can't do any classification if the history is too long
+                    mFramePresentMetadata.experimental() = FramePresentMetadata::UnknownPresent;
+                    mJankDebugMetadata = -1.0f;
+                    break;
                 case PreviousFrameData::Status::OutOfOrder:
                     // This can happen if the frame is significantly delayed on the UI thread,
                     // and RT is updating meanwhile.
@@ -969,6 +993,11 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
 
     if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
         mJankType.experimental() = JankType::DisplayNotOn;
+        return;
+    }
+
+    if (displayFrameJankTypeExperimental & JankType::DisplayPowerModeChangeInProgress) {
+        mJankType.experimental() = JankType::DisplayPowerModeChangeInProgress;
         return;
     }
 
@@ -1732,6 +1761,10 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
 
     if (mJankType.experimental() != JankType::None && mDisplayState.modeChangeInProgress) {
         mJankType.experimental() |= JankType::DisplayModeChangeInProgress;
+    }
+
+    if (mJankType.experimental() != JankType::None && mDisplayState.powerModeChangeInProgress) {
+        mJankType.experimental() = JankType::DisplayPowerModeChangeInProgress;
     }
 }
 

@@ -62,6 +62,8 @@ public:
 // QTI_END: 2023-04-02: Performance: gui: Introduce QTI Extensions in AOSP
     ~BufferQueueProducer() override;
 
+    virtual status_t getConfigForSurface(SurfaceConfig* outConfig) override;
+
     // requestBuffer returns the GraphicBuffer for slot N.
     //
     // In normal operation, this is called the first time slot N is returned

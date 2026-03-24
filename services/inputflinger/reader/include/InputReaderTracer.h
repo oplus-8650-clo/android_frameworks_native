@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <input/Input.h>
+
 #include <memory>
 
 #include "InputTracingBackendInterface.h"
@@ -34,6 +36,8 @@ public:
     InputReaderTracer& operator=(const InputReaderTracer&) = delete;
 
     void traceRawEvent(const RawEvent& event);
+    void traceDeviceAddition(nsecs_t timestamp, const input_trace::TracedEvdevDevice& device);
+    void traceDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId);
 
 private:
     std::shared_ptr<input_trace::InputTracingBackendInterface> mBackend;

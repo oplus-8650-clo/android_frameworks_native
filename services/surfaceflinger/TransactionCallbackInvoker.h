@@ -16,13 +16,15 @@
 
 #pragma once
 
-#include <deque>
+#include <memory>
 #include <optional>
-#include <unordered_map>
+#include <vector>
 
 #include <android-base/thread_annotations.h>
 #include <binder/IBinder.h>
 #include <ftl/future.h>
+#include <ftl/small_map.h>
+#include <ftl/small_vector.h>
 #include <gui/BufferReleaseChannel.h>
 #include <gui/CornerRadii.h>
 #include <gui/ITransactionCompletedListener.h>
@@ -79,11 +81,10 @@ public:
     void addCallbackHandle(CallbackHandle&& handle);
 
 private:
-    TransactionStats* findOrCreateTransactionStats(const sp<IBinder>& listener,
+    TransactionStats& findOrCreateTransactionStats(const sp<IBinder>& listener,
                                                    const std::vector<CallbackId>& callbackIds);
 
-    std::unordered_map<sp<IBinder>, std::deque<TransactionStats>, IListenerHash>
-        mCompletedTransactions;
+    ftl::SmallVector<std::pair<sp<IBinder>, TransactionStats>, 10> mCompletedTransactions;
 
     struct BufferRelease {
         std::string layerName;
@@ -91,7 +92,10 @@ private:
         ReleaseCallbackId callbackId;
         sp<Fence> fence;
         uint32_t currentMaxAcquiredBufferCount;
+        std::weak_ptr<renderengine::ExternalTexture> previousBuffer;
     };
+
+    ftl::SmallMap<ReleaseCallbackId, FenceMerger, 20> mReleaseIdToFenceMerger;
     std::vector<BufferRelease> mBufferReleases;
 
     sp<Fence> mPresentFence;

@@ -20,7 +20,7 @@
 
 namespace android {
 
-void RenderCommandBuffer::pushOp(const IPCRenderBufferOp* op) {
+void RenderCommandBuffer::pushOp(IPCRenderBufferOp* op) {
     assert(reinterpret_cast<const uint8_t*>(op) > mBytes &&
            reinterpret_cast<const uint8_t*>(op) < mBytes + sizeof(mBytes));
 
@@ -31,6 +31,7 @@ void RenderCommandBuffer::pushOp(const IPCRenderBufferOp* op) {
         mHead = op;
     }
     mTail = op;
+    op->next = nullptr;
 }
 
 void RenderCommandBuffer::reset() {

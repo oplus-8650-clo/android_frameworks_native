@@ -76,6 +76,7 @@ enum class LayerStateField : uint32_t {
     CachingHint           = 1u << 20,
     DimmingEnabled        = 1u << 21,
     BlursDisabled         = 1u << 22,
+    IsTextureSamplingBehind = 1u << 23,
 };
 // clang-format on
 
@@ -237,8 +238,9 @@ public:
     Rect getDisplayFrame() const { return mDisplayFrame.get(); }
     const Region& getVisibleRegion() const { return mVisibleRegion.get(); }
     bool hasBlurBehind() const {
-        return (mBackgroundBlurRadius.get() > 0 || !mBlurRegions.get().empty()) &&
-                !mIsBlursDisabled.get();
+        return ((mBackgroundBlurRadius.get() > 0 || !mBlurRegions.get().empty()) &&
+                !mIsBlursDisabled.get()) ||
+                isTextureSamplingBehind();
     }
     int32_t getBackgroundBlurRadius() const { return mBackgroundBlurRadius.get(); }
     aidl::android::hardware::graphics::composer3::Composition getCompositionType() const {
@@ -268,6 +270,8 @@ public:
     bool isDimmingEnabled() const { return mIsDimmingEnabled.get(); }
 
     float getFps() const { return getOutputLayer()->getLayerFE().getCompositionState()->fps; }
+
+    bool isTextureSamplingBehind() const { return mIsTextureSamplingBehind.get(); }
 
     void dump(std::string& result) const;
     std::optional<std::string> compare(const LayerState& other) const;
@@ -523,7 +527,12 @@ private:
     OutputLayerState<bool, LayerStateField::BlursDisabled> mIsBlursDisabled{
             [](auto layer) { return layer->getState().ignoreBlur; }};
 
-    static const constexpr size_t kNumNonUniqueFields = 22;
+    OutputLayerState<bool, LayerStateField::IsTextureSamplingBehind> mIsTextureSamplingBehind{
+            [](auto layer) {
+                return layer->getLayerFE().getCompositionState()->isTextureSamplingBehind;
+            }};
+
+    static const constexpr size_t kNumNonUniqueFields = 23;
 
     std::array<StateInterface*, kNumNonUniqueFields> getNonUniqueFields() {
         std::array<const StateInterface*, kNumNonUniqueFields> constFields =
@@ -558,7 +567,8 @@ private:
                 &mCachingHint,
                 &mIsDimmingEnabled,
                 &mIsBlursDisabled,
-                &mRenderCommandBufferFrameId};
+                &mRenderCommandBufferFrameId,
+                &mIsTextureSamplingBehind};
     }
 };
 

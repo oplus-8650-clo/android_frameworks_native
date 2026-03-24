@@ -307,9 +307,7 @@ void IPCRecordingCanvas::onDrawImage2(const SkImage* image, SkScalar x, SkScalar
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
     auto it = mResourceCache.bitmaps.find(image->uniqueID());
     if (it == mResourceCache.bitmaps.end()) {
-        // This currently only happens when a process shuts down.
-        // There may be a frame remaining that references bitmaps which were destroyed.
-        ALOGE("Bitmap not found in cache");
+        ALOGE("Bitmap not found in cache uniqueID = %u", image->uniqueID());
         return;
     }
     auto op = DrawImageOp::Create(mCurrentRenderCommandBuffer, it->second.id, x, y, sampling, paint);
@@ -328,7 +326,10 @@ void IPCRecordingCanvas::onDrawImageRect2(const SkImage* image, const SkRect& sr
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
     auto it = mResourceCache.bitmaps.find(image->uniqueID());
-    LOG_ALWAYS_FATAL_IF(it == mResourceCache.bitmaps.end(), "Bitmap not found in cache");
+    if (it == mResourceCache.bitmaps.end()) {
+        ALOGE("Bitmap not found in cache uniqueID = %u", image->uniqueID());
+        return;
+    }
     auto op = DrawImageRectOp::Create(mCurrentRenderCommandBuffer, it->second.id, src, dst,
                                       sampling, paint, constraint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);

@@ -14,7 +14,7 @@
 
 //! Manages USB device authorization policies and decisions.
 
-use crate::authorization;
+use crate::authorization::Authorizer;
 use crate::device_info::UsbDeviceInfoWithState;
 use crate::parser::{Parser, PolicyLoadError};
 use crate::rules::{
@@ -24,10 +24,15 @@ use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthDeviceInfo::
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationStatus::UsbAuthorizationStatus;
 use android_hardware_usb_auth::aidl::android::hardware::usb::UsbAuthorizationSystemState::UsbAuthorizationSystemState;
 use log::debug;
+use regex::Regex;
 use std::any::Any;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use thiserror::Error;
+use tokio::sync::Notify;
 use ueventd::device::Device;
 
 /// Represents the possible errors that can occur in the `UsbDeviceAuthManager`.
@@ -45,6 +50,9 @@ pub enum Error {
     /// The specified device was not found.
     #[error("Device not found: {0}")]
     DeviceNotFound(String),
+    /// Error while looking for the root mountpoint.
+    #[error("Root mountpoint not found: {0}")]
+    RootMountpointNotFound(String),
 }
 
 /// Path to the usbcore authorized_default parameter.
@@ -62,6 +70,27 @@ const USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH: &str = "usb_auth/interacti
 
 /// Relative path to the internal devices configuration file.
 const USB_AUTH_INTERNAL_DEVICES_CONF_RELATIVE_PATH: &str = "usb_auth/internal_devices.conf";
+
+/// Maximum number of retry attempts for processing a device that is pending.
+const MAX_RETRY_ATTEMPTS: u8 = 5;
+
+/// Interval for checking pending devices.
+const PENDING_DEVICE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Relative path to /proc/mounts.
+const PROC_MOUNTS_PATH: &str = "mounts";
+
+/// When searching for root mountpoint, only consider block devices.
+const BLOCK_DEVICE_PREFIX: &str = "/dev/block";
+
+/// Relative path in /sys to block class device.
+const SYS_BLOCK_CLASS_PREFIX: &str = "class/block";
+
+/// Regex matching usb device sysfs paths.
+const USB_PATH_REGEX: &str = r"^.*/devices/.*/usb[0-9]+";
+
+/// Regex matching just the root hub segment.
+const USB_ROOT_HUB_REGEX: &str = r"usb[0-9]+";
 
 // Placeholder for the list of internal devices.
 struct InternalDevices;
@@ -97,12 +126,18 @@ pub struct UsbDeviceAuthManager {
     /// The root directory for the etc files. Typically /etc, but might be
     /// different for testing.
     root_etc_dir: PathBuf,
+    /// The root directory for /proc. Typically /proc, but might be different for testing.
+    root_proc_dir: PathBuf,
+    /// Used for processing authorization of device with policy rules.
+    authorizer: Authorizer,
     /// Devices that have been processed and their authorization state determined.
     processed_devices: Vec<UsbDeviceInfoWithState>,
     /// Devices whose authorization was deferred pending a system state change.
     deferred_devices: Vec<UsbDeviceInfoWithState>,
     /// Devices that require user interaction for authorization.
     ask_devices: Vec<UsbDeviceInfoWithState>,
+    /// Devices that are pending to be processed because their sysfs path did not exist.
+    pending_devices: Vec<(Device, u8)>,
     /// Devices that requires looking up previous user interaction for authorization.
     allow_persisted_devices: Vec<UsbDeviceInfoWithState>,
     /// The current system authorization state.
@@ -111,6 +146,8 @@ pub struct UsbDeviceAuthManager {
     policy: Policy,
     /// Registered callbacks for auth events.
     callbacks: Vec<Box<dyn AuthEventsCallback>>,
+    /// Notifier to wake up the pending device processing loop.
+    notify: Arc<Notify>,
 }
 
 impl UsbDeviceAuthManager {
@@ -159,26 +196,31 @@ impl UsbDeviceAuthManager {
 
     /// Creates a new `UsbDeviceAuthManager` and performs initial setup.
     pub fn new(use_interactive_policy: bool) -> Result<Self, Error> {
-        Self::with_paths("/sys", "/etc", use_interactive_policy)
+        Self::with_paths("/sys", "/etc", "/proc", use_interactive_policy)
     }
 
     /// Creates a new `UsbDeviceAuthManager` with specified root directories and performs initial setup.
     /// This function is useful for testing with mock file systems.
-    pub fn with_paths<P: AsRef<Path>, Q: AsRef<Path>>(
+    pub fn with_paths<P: AsRef<Path>>(
         root_sys_dir_path: P,
-        root_etc_dir_path: Q,
+        root_etc_dir_path: P,
+        root_proc_dir_path: P,
         use_interactive_policy: bool,
     ) -> Result<Self, Error> {
         let mut manager = Self {
+            authorizer: Authorizer::new(),
             processed_devices: Vec::new(),
             deferred_devices: Vec::new(),
             ask_devices: Vec::new(),
+            pending_devices: Vec::new(),
             allow_persisted_devices: Vec::new(),
             system_state: UsbAuthorizationSystemState::BOOTED,
             root_sys_dir: root_sys_dir_path.as_ref().to_path_buf(),
             root_etc_dir: root_etc_dir_path.as_ref().to_path_buf(),
+            root_proc_dir: root_proc_dir_path.as_ref().to_path_buf(),
             policy: create_default_policy(),
             callbacks: Vec::new(),
+            notify: Arc::new(Notify::new()),
         };
         debug!("Setting initial USB authorization state to deny all devices.");
         manager.set_default_to_deny_for_new_devices()?;
@@ -194,6 +236,8 @@ impl UsbDeviceAuthManager {
         }
         debug!("Loading internal devices list");
         manager.load_internal_devices()?;
+        debug!("Protecting boot disk from authorization if USB");
+        manager.protect_boot_disk();
         debug!("System state set to Booted");
         debug!("Binder service will be set up in main.");
         Ok(manager)
@@ -211,6 +255,143 @@ impl UsbDeviceAuthManager {
         }
         Ok(())
     }
+
+    // Find the root mount from /proc/mounts. We look only at blocks that are in /dev/block and
+    // find something matching /system (preferred) or /.
+    fn find_root_mount(&mut self) -> Result<PathBuf, Error> {
+        let file = fs::File::open(self.root_proc_dir.join(PROC_MOUNTS_PATH))
+            .map_err(|e| Error::RootMountpointNotFound(format!("Couldn't open mounts: {:?}", e)))?;
+        let reader = BufReader::new(file);
+
+        let mut block_lines: Vec<(String, String)> = vec![];
+
+        // Read all lines and find ones starting with "/dev/block".
+        for line in reader.lines().map_while(Result::ok) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[0].starts_with(BLOCK_DEVICE_PREFIX) {
+                block_lines.push((parts[0].into(), parts[1].into()));
+            }
+        }
+
+        // Find one that contains /system or /.
+        if let Some(p) = block_lines.iter().position(|(_, m)| *m == "/system") {
+            return Ok(PathBuf::from(block_lines[p].0.clone()));
+        } else if let Some(p) = block_lines.iter().position(|(_, m)| *m == "/") {
+            return Ok(PathBuf::from(block_lines[p].0.clone()));
+        }
+
+        Err(Error::RootMountpointNotFound("No /system or / mountpoints found.".to_string()))
+    }
+
+    fn find_usb_path_from(
+        &mut self,
+        target_path: PathBuf,
+        usb_regex: &Regex,
+    ) -> Result<PathBuf, Error> {
+        let slaves_dir = target_path.join("slaves");
+        if slaves_dir.exists() {
+            for entry in fs::read_dir(slaves_dir).map_err(Error::Io)?.filter_map(|e| e.ok()) {
+                if let Ok(path) = self.find_usb_path_from(entry.path(), usb_regex) {
+                    return Ok(path);
+                }
+            }
+        }
+
+        let canonical = fs::canonicalize(&target_path)
+            .map_err(|e| Error::RootMountpointNotFound(e.to_string()))?;
+
+        if usb_regex.is_match(&canonical.to_string_lossy()) {
+            Ok(canonical.to_owned())
+        } else {
+            Err(Error::RootMountpointNotFound(format!(
+                "No usb mount for {}: {}",
+                target_path.display(),
+                canonical.display()
+            )))
+        }
+    }
+
+    fn extract_usb_path(&mut self, resolved_path: &Path, root_hub_regex: &Regex) -> String {
+        let mut segments = Vec::new();
+        let mut hub_found = false;
+
+        for component in resolved_path.components() {
+            let segment = component.as_os_str().to_string_lossy();
+            // If we've already found the root hub, break at first segment with `:`. This will
+            // be the interface path.
+            if hub_found {
+                if segment.contains(':') {
+                    break;
+                }
+            } else if root_hub_regex.is_match(&segment) {
+                hub_found = true;
+            }
+
+            // Push all segments found into the list so far
+            segments.push(segment);
+        }
+
+        let mut result = PathBuf::new();
+        for s in segments {
+            result.push(s.to_string());
+        }
+
+        result.to_string_lossy().into()
+    }
+
+    fn find_usb_path_for_mount(&mut self, mount: PathBuf) -> Result<String, Error> {
+        if !mount.starts_with(BLOCK_DEVICE_PREFIX) {
+            return Err(Error::RootMountpointNotFound(format!(
+                "Not a block device path: {}",
+                mount.display()
+            )));
+        }
+
+        let suffix = mount
+            .strip_prefix(BLOCK_DEVICE_PREFIX)
+            .map_err(|e| Error::RootMountpointNotFound(e.to_string()))?;
+
+        let usb_regex = Regex::new(USB_PATH_REGEX)
+            .map_err(|_| Error::RootMountpointNotFound("Regex error".into()))?;
+        let root_hub_regex = Regex::new(USB_ROOT_HUB_REGEX)
+            .map_err(|_| Error::RootMountpointNotFound("Regex error on root hub".into()))?;
+
+        let path = self.find_usb_path_from(
+            self.root_sys_dir.join(SYS_BLOCK_CLASS_PREFIX).join(suffix),
+            &usb_regex,
+        )?;
+
+        Ok(self.extract_usb_path(&path, &root_hub_regex))
+    }
+
+    /// If the boot disk (i.e. which mounts root) is an external USB device, mark it as an internal
+    /// device in the authorizer so we don't mistakenly de-authorize it. This is necessary for
+    /// booting from external disk.
+    fn protect_boot_disk(&mut self) -> Option<String> {
+        let root_mount = match self.find_root_mount() {
+            Ok(p) => p,
+            Err(e) => {
+                // When no root mountpoint is found, assume /dev/block/sda as the external boot
+                // disk (we do not support external NVMe at boot).
+                debug!("No root mountpoint found: {:?}", e);
+                PathBuf::from("/dev/block/sda")
+            }
+        };
+
+        match self.find_usb_path_for_mount(root_mount) {
+            Ok(usb_path) => {
+                debug!("Root mountpoint is on external USB at {}", usb_path);
+                self.authorizer.add_internal_device(usb_path.clone());
+
+                Some(usb_path)
+            }
+            Err(e) => {
+                debug!("No USB path for root mountpoint: {:?}", e);
+                None
+            }
+        }
+    }
+
     /// Loads the interactive USB policy from a file or falls back to the static policy.
     fn load_interactive_policy(&mut self) -> Result<(), Error> {
         debug!("Loading interactive USB policy");
@@ -220,6 +401,7 @@ impl UsbDeviceAuthManager {
 
         Ok(())
     }
+
     /// Loads the static USB policy from a file or creates a default one if the file does not exist.
     fn load_static_policy(&mut self) -> Result<(), Error> {
         debug!("Loading static USB policy");
@@ -233,6 +415,7 @@ impl UsbDeviceAuthManager {
         }
         Ok(())
     }
+
     /// Iterates through existing USB devices and sets their 'authorized_default' to '0' (deny).
     /// This is called during the initial setup of the UsbDeviceAuthManager.
     fn set_default_to_deny_for_new_devices(&mut self) -> Result<(), Error> {
@@ -334,7 +517,7 @@ impl UsbDeviceAuthManager {
     /// appropriate list within the `UsbDeviceManager`.
     pub fn process_usb_device(&mut self, mut device_with_state: UsbDeviceInfoWithState) {
         let action =
-            authorization::authorize_device(&device_with_state, &self.policy, self.system_state);
+            self.authorizer.authorize_device(&device_with_state, &self.policy, self.system_state);
         device_with_state.authorized = action == Action::Allow;
         device_with_state.is_deferred = action == Action::Defer;
         match action {
@@ -386,7 +569,7 @@ impl UsbDeviceAuthManager {
         status: UsbAuthorizationStatus,
     ) -> Result<(), Error> {
         let authorized: bool = status == UsbAuthorizationStatus::AUTHORIZED;
-        authorization::authorize_device_via_sysfs(&device_with_state.info.syspath, authorized)?;
+        self.authorizer.authorize_device_via_sysfs(&device_with_state.info.syspath, authorized)?;
         device_with_state.authorized = authorized;
 
         for cb in &mut self.callbacks {
@@ -464,12 +647,81 @@ impl UsbDeviceAuthManager {
     /// * `Err(Error::DeviceNotFound)` if there was an issue getting device info from the `Device` object.
     pub fn add_usb_device(&mut self, device: &Device) -> Result<(), Error> {
         debug!("Add USB device: {:?}", device.name());
+        if !device.syspath().exists() {
+            debug!(
+                "Device syspath {:?} does not exist, adding to pending list with 0 retries",
+                device.syspath()
+            );
+            self.pending_devices.push((device.clone(), 0));
+            self.notify.notify_one();
+            return Ok(());
+        }
+
+        self.handle_device(device)
+    }
+
+    /// Helper function to process the result of `UsbDeviceInfoWithState::from_device`.
+    fn handle_device(&mut self, device: &Device) -> Result<(), Error> {
         match UsbDeviceInfoWithState::from_device(device) {
             Ok(device_with_state) => {
                 self.process_usb_device(device_with_state);
                 Ok(())
             }
-            Err(_) => Err(Error::DeviceNotFound(device.syspath().display().to_string())),
+            Err(e) => {
+                debug!("Failed to get UsbDeviceInfoWithState: {}", e);
+                Err(Error::DeviceNotFound(device.syspath().display().to_string()))
+            }
+        }
+    }
+
+    /// Processes pending devices that were added to the pending list because their sysfs path
+    /// did not exist.
+    fn process_pending_devices(&mut self) -> bool {
+        // Returns true if there are still pending devices after this process.
+        let mut devices_to_process = Vec::new();
+
+        self.pending_devices.retain_mut(|(device, retries)| {
+            *retries += 1;
+            if *retries > MAX_RETRY_ATTEMPTS {
+                debug!(
+                    "Giving up on pending device {:?} after {} attempts.",
+                    device.syspath(),
+                    MAX_RETRY_ATTEMPTS
+                );
+                return false;
+            }
+            if !device.syspath().exists() {
+                return true; // Keep in pending for retry
+            }
+
+            devices_to_process.push(device.clone());
+            false
+        });
+
+        for device in devices_to_process {
+            // Ignore errors for now as they are logged in handle_device
+            let _ = self.handle_device(&device);
+        }
+        !self.pending_devices.is_empty()
+    }
+
+    /// Periodically processes pending USB devices upon notification.
+    ///
+    /// This function waits for a notification from the manager, then enters a loop
+    /// to process any pending devices. If devices remain pending (e.g., waiting for
+    /// sysfs paths to appear), it sleeps for a short interval before retrying.
+    pub async fn pending_devices_worker(manager: Arc<Mutex<Self>>) {
+        let notify = manager.lock().unwrap().notify.clone();
+        loop {
+            notify.notified().await;
+            loop {
+                let has_pending = manager.lock().unwrap().process_pending_devices();
+                if has_pending {
+                    tokio::time::sleep(PENDING_DEVICE_CHECK_INTERVAL).await;
+                } else {
+                    break;
+                }
+            }
         }
     }
 
@@ -482,6 +734,7 @@ impl UsbDeviceAuthManager {
     /// * `device` - The `Device` object representing the USB device to be removed.
     pub fn remove_usb_device(&mut self, device: &Device) -> Result<(), Error> {
         if let Some(device_syspath) = device.syspath().to_str() {
+            self.pending_devices.retain(|(d, _)| d.syspath() != device.syspath());
             self.deferred_devices.retain(|d| d.info.syspath != device_syspath);
             self.ask_devices.retain(|d| d.info.syspath != device_syspath);
             self.allow_persisted_devices.retain(|d| d.info.syspath != device_syspath);
@@ -590,7 +843,7 @@ mod tests {
     }
 
     fn create_mock_sysfs_for_init() -> MockSysfs {
-        MockSysfs::new(SysfsFile::Dir(HashMap::from([
+        let mock = MockSysfs::new(SysfsFile::Dir(HashMap::from([
             (
                 "module/usbcore/parameters",
                 SysfsFile::Dir(HashMap::from([(
@@ -624,7 +877,97 @@ mod tests {
                     ),
                 ])),
             ),
+            (
+                "class/block",
+                SysfsFile::Dir(HashMap::from([
+                    (
+                        "dm-7",
+                        SysfsFile::Dir(HashMap::from([(
+                            "slaves",
+                            SysfsFile::Dir(HashMap::from([(
+                                "dm-0",
+                                SysfsFile::Symlink("../../dm-0"),
+                            )])),
+                        )])),
+                    ),
+                    (
+                        "dm-0",
+                        SysfsFile::Dir(HashMap::from([(
+                            "slaves",
+                            SysfsFile::Dir(HashMap::from([(
+                                "sda3",
+                                SysfsFile::Symlink("../../sda3"),
+                            )])),
+                        )])),
+                    ),
+                    (
+                        "sda3",
+                        SysfsFile::Symlink(
+                            "../../devices/pci0000:00/0000:00:0d.0/\
+                                                usb2/2-3/2-3:1.0/host0/\
+                                                target0:0:0/0:0:0:0/block/sda/sda3",
+                        ),
+                    ),
+                ])),
+            ),
         ])))
+        .unwrap();
+
+        // Separately create the pci path -- MockSysfs has issues.
+        let full_path = mock.path().join(
+            "devices/pci0000:00/0000:00:0d.0/usb2/2-3/2-3:1.0/\
+                host0/target0:0:0/0:0:0:0/block/sda/sda3",
+        );
+        let _ = fs::create_dir_all(&full_path);
+
+        mock
+    }
+
+    fn create_boot_usb_device(root_path: &Path) -> UsbDeviceInfoWithState {
+        UsbDeviceInfoWithState {
+            info: UsbAuthDeviceInfo {
+                syspath: root_path
+                    .join("devices/pci0000:00/0000:00:0d.0/usb2/2-3")
+                    .to_string_lossy()
+                    .to_string(),
+                ..Default::default()
+            },
+            interfaces: vec![],
+            authorized: false,
+            is_deferred: false,
+        }
+    }
+
+    // Create proc structure using MockSysfs (no difference for testing).
+    fn create_mock_proc_for_init() -> MockSysfs {
+        // proc mount contents from a real system
+        let proc_mount_contents = r#"
+tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,mode=755 0 0
+devpts /dev/pts devpts rw,seclabel,relatime,mode=600,ptmxmode=000 0 0
+proc /proc proc rw,relatime,gid=3009,hidepid=invisible 0 0
+sysfs /sys sysfs rw,seclabel,relatime 0 0
+selinuxfs /sys/fs/selinux selinuxfs rw,relatime 0 0
+tmpfs /mnt tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755,gid=1000 0 0
+/dev/block/sda17 /metadata ext4 rw,seclabel,nosuid,nodev,noatime,nodioread_nolock,discard,nodelalloc,commit=1,data=journal 0 0
+/dev/block/dm-7 / erofs ro,seclabel,nodev,relatime,user_xattr,acl,cache_strategy=readaround 0 0
+/dev/block/dm-8 /vendor erofs ro,seclabel,relatime,user_xattr,acl,cache_strategy=readaround 0 0                                                                                  /dev/block/dm-9 /system_dlkm erofs ro,seclabel,relatime,user_xattr,acl,cache_strategy=readaround 0 0
+/dev/block/dm-10 /product erofs ro,seclabel,relatime,user_xattr,acl,cache_strategy=readaround 0 0                                                                                /dev/block/dm-11 /system_ext erofs ro,seclabel,relatime,user_xattr,acl,cache_strategy=readaround 0 0
+/dev/block/dm-12 /vendor_dlkm erofs ro,seclabel,relatime,user_xattr,acl,cache_strategy=readaround 0 0
+tmpfs /apex tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0
+tmpfs /linkerconfig tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0
+tmpfs /mnt/installer tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755,gid=1000 0 0
+tmpfs /mnt/androidwritable tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755,gid=1000 0 0
+none /dev/blkio cgroup rw,nosuid,nodev,noexec,relatime,blkio 0 0
+none /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,memory_recursiveprot 0 0
+none /dev/cpuctl cgroup rw,nosuid,nodev,noexec,relatime,cpu 0 0
+none /dev/cpuset cgroup rw,nosuid,nodev,noexec,relatime,cpuset,noprefix,cpuset_v2_mode 0 0
+tmpfs /linkerconfig tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0
+tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
+        "#;
+        MockSysfs::new(SysfsFile::Dir(HashMap::from([(
+            "mounts",
+            SysfsFile::RegularFile(proc_mount_contents),
+        )])))
         .unwrap()
     }
 
@@ -633,8 +976,14 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
+        let mock_proc = tempdir().unwrap();
+        let manager = UsbDeviceAuthManager::with_paths(
+            mock_sys.path(),
+            mock_etc.path(),
+            mock_proc.path(),
+            false,
+        )
+        .unwrap();
 
         let authorized_default_path = mock_sys.path().join(USBCORE_AUTHORIZED_DEFAULT_PATH);
         assert_eq!(fs::read_to_string(authorized_default_path).unwrap(), "0");
@@ -653,13 +1002,19 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
+        let mock_proc = tempdir().unwrap();
         let policy_dir = mock_etc.path().join("usb_auth");
         fs::create_dir(&policy_dir).unwrap();
         let policy_file = policy_dir.join("policy.conf");
         fs::write(&policy_file, "allow with-interface any-of { 03:*:* }").unwrap();
 
-        let manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
+        let manager = UsbDeviceAuthManager::with_paths(
+            mock_sys.path(),
+            mock_etc.path(),
+            mock_proc.path(),
+            false,
+        )
+        .unwrap();
 
         assert_eq!(manager.policy.all_rules.len(), 1);
         assert_eq!(manager.policy.all_rules[0].action, Action::Allow);
@@ -670,8 +1025,14 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
-        let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
+        let mock_proc = tempdir().unwrap();
+        let mut manager = UsbDeviceAuthManager::with_paths(
+            mock_sys.path(),
+            mock_etc.path(),
+            mock_proc.path(),
+            false,
+        )
+        .unwrap();
 
         manager.processed_devices.push(UsbDeviceInfoWithState {
             info: UsbAuthDeviceInfo { syspath: "authorized".to_string(), ..Default::default() },
@@ -696,14 +1057,20 @@ mod tests {
         init_logger();
         let mock_sys = create_mock_sysfs_for_init();
         let mock_etc = tempdir().unwrap();
+        let mock_proc = tempdir().unwrap();
         let policy_dir = mock_etc.path().join("usb_auth");
         fs::create_dir(&policy_dir).unwrap();
         let policy_file = policy_dir.join("policy.conf");
         // Defer everything in BOOTED state
         fs::write(&policy_file, "defer when Booted").unwrap();
 
-        let mut manager =
-            UsbDeviceAuthManager::with_paths(mock_sys.path(), mock_etc.path(), false).unwrap();
+        let mut manager = UsbDeviceAuthManager::with_paths(
+            mock_sys.path(),
+            mock_etc.path(),
+            mock_proc.path(),
+            false,
+        )
+        .unwrap();
         assert_eq!(manager.policy.all_rules.len(), 1);
 
         let device = UsbDeviceInfoWithState {
@@ -720,5 +1087,31 @@ mod tests {
         assert_eq!(manager.deferred_devices().len(), 1);
         assert!(manager.ask_devices().is_empty());
         assert_eq!(manager.deferred_devices()[0].info.syspath, "test_device");
+    }
+
+    #[test]
+    fn test_protect_boot_disk() {
+        init_logger();
+        let mock_sys = create_mock_sysfs_for_init();
+        let mock_etc = tempdir().unwrap();
+        let mock_proc = create_mock_proc_for_init();
+        let mut manager = UsbDeviceAuthManager::with_paths(
+            mock_sys.path(),
+            mock_etc.path(),
+            mock_proc.path(),
+            false,
+        )
+        .unwrap();
+
+        let path = manager.protect_boot_disk();
+        let device = create_boot_usb_device(mock_sys.path());
+
+        assert!(path.is_some());
+        if let Some(p) = path {
+            assert_eq!(p, device.info.syspath);
+        }
+
+        // Boot device should now be in authorizer's internal devices list.
+        assert!(manager.authorizer.is_device_internal(&device.info));
     }
 }

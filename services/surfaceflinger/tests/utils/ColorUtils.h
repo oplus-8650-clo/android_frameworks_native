@@ -33,6 +33,11 @@ struct Color {
     static const Color WHITE;
     static const Color BLACK;
     static const Color TRANSPARENT;
+
+    bool operator==(const Color& other) const {
+        return r == other.r && g == other.g && b == other.b && a == other.a;
+    }
+    bool operator!=(const Color& other) const { return !(*this == other); }
 };
 
 const Color Color::RED{255, 0, 0, 255};
@@ -83,4 +88,5 @@ public:
     }
 };
 } // namespace
+
 } // namespace android

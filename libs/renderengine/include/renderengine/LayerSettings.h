@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <SkRuntimeEffect.h>
 #include <android/gui/BorderSettings.h>
 #include <android/gui/BoxShadowSettings.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
@@ -41,6 +42,9 @@
 
 #include <cstdint>
 #include <iosfwd>
+#include <memory>
+#include <optional>
+#include <vector>
 
 /**
  * WARNING: do NOT change default values of existing types, as existing tests and benchmarks rely
@@ -180,6 +184,17 @@ struct LayerSettings {
 
     std::shared_ptr<IPCServerResourceCache> renderResourceCache;
     std::shared_ptr<RenderCommandBuffer> renderCommandBuffer;
+
+    // A raw runtime effect and its uniforms.
+    sk_sp<SkRuntimeEffect> postProcessEffect;
+    std::shared_ptr<std::vector<uint8_t>> postProcessUniforms;
+
+    enum class SampleTarget : uint32_t {
+        Self,
+        Behind,
+    };
+    SampleTarget postProcessTarget;
+
 // QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
     bool lutSourceIsHwc = false;

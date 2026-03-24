@@ -26,6 +26,7 @@ cc_defaults {
         "android.hardware.graphics.composer3-ndk_shared",
         "renderengine_defaults",
         "libsurfaceflinger_common_deps",
+        "librenderengine_deps",
     ],
     cflags: [
         "-DGL_GLEXT_PROTOTYPES",
@@ -61,16 +62,10 @@ cc_defaults {
     export_include_dirs: ["include"],
 }
 
-// Needed by FlagManager to access a #define.
-cc_library_static {
-    name: "librenderengine_includes",
-    local_include_dirs: ["include"],
-    export_include_dirs: ["include"],
-}
-
 filegroup {
     name: "librenderengine_sources",
     srcs: [
+        "ColorSpaces.cpp",
         "ExternalTexture.cpp",
         "RenderEngine.cpp",
     ],
@@ -88,7 +83,6 @@ filegroup {
     srcs: [
         "skia/AutoBackendTexture.cpp",
         "skia/Cache.cpp",
-        "skia/ColorSpaces.cpp",
         "skia/GaneshVkRenderEngine.cpp",
         "skia/GraphiteVkRenderEngine.cpp",
         "skia/GLExtensions.cpp",
@@ -151,7 +145,6 @@ cc_library_static {
     name: "librenderengine",
     defaults: [
         "librenderengine_defaults",
-        "librenderengine_deps",
     ],
     double_loadable: true,
     cflags: [
