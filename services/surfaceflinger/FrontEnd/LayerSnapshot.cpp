@@ -139,10 +139,6 @@ LayerSnapshot::LayerSnapshot(const RequestedLayerState& state,
     frameRateSelectionPriority = state.frameRateSelectionPriority;
     layerMetadata = state.metadata;
     systemContentPriority = state.systemContentPriority;
-    bool isCroppedMirrorRequest = FlagManager::getInstance().mirror_with_crop()
-            && state.layerIdToMirror != UNASSIGNED_LAYER_ID
-            && state.croppedByLayerId != UNASSIGNED_LAYER_ID;
-    mirrorCrop = isCroppedMirrorRequest ? std::make_optional(FloatRect{}) : std::nullopt;
 }
 
 // As documented in libhardware header, formats in the range

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <cinttypes>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -45,7 +46,6 @@
 #include "InputMapperTest.h"
 #include "InstrumentedInputReader.h"
 #include "TestConstants.h"
-#include "TestEventMatchers.h"
 #include "gmock/gmock.h"
 #include "input/DisplayViewport.h"
 #include "input/Input.h"
@@ -1139,13 +1139,15 @@ TEST_F(InputReaderTest, ChangingPointerCaptureNotifiesInputListener) {
                                                   /*window=*/sp<BBinder>::make());
     mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::POINTER_CAPTURE);
     mReader->loopOnce();
-    mFakeListener->assertNotifyCaptureWasCalled(
-            AllOf(WithCaptureRequest(request), WithCaptureEnable(true)));
+    mFakeListener->assertNotifyCaptureWasCalled(&args);
+    ASSERT_TRUE(args.request.isEnable()) << "Pointer Capture should be enabled.";
+    ASSERT_EQ(args.request, request) << "Pointer Capture sequence number should match.";
 
     mFakePolicy->setPointerCapture(PointerCaptureMode::UNCAPTURED, /*window=*/nullptr);
     mReader->requestRefreshConfiguration(InputReaderConfiguration::Change::POINTER_CAPTURE);
     mReader->loopOnce();
-    mFakeListener->assertNotifyCaptureWasCalled(WithCaptureEnable(false));
+    mFakeListener->assertNotifyCaptureWasCalled(&args);
+    ASSERT_FALSE(args.request.isEnable()) << "Pointer Capture should be disabled.";
 
     // Verify that the Pointer Capture state is not updated when the configuration value
     // does not change.

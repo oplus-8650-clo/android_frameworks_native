@@ -355,14 +355,6 @@ impl<T: AsNative<sys::AIBinder>> IBinderInternal for T {
         unsafe { sys::AIBinder_setRequestingSid(self.as_native_mut(), enable) };
     }
 
-    fn set_inherit_rt(&mut self, enable: bool) {
-        // Safety: `SpIBinder` guarantees that `self` always contains a valid
-        // pointer to an `AIBinder`.
-        //
-        // This call does not affect ownership of its pointer parameter.
-        unsafe { sys::AIBinder_setInheritRt(self.as_native_mut(), enable) };
-    }
-
     #[cfg(feature = "std")]
     fn dump<F: AsRawFd>(&mut self, fp: &F, args: &[&str]) -> Result<()> {
         let args: Vec<_> = args.iter().map(|a| CString::new(*a).unwrap()).collect();

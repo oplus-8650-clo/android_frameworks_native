@@ -35,12 +35,10 @@ class BinderObserverConfigTest : public ::testing::Test {
 protected:
     class MockEnvironment : public BinderObserverConfig::Environment {
     public:
-        MOCK_METHOD(bool, fileExists, (const std::string& path), (override));
         MOCK_METHOD(std::string, readFileLine, (const std::string& path), (override));
         MOCK_METHOD(uid_t, getUid, (), (override));
         MOCK_METHOD(std::string, getProcessName, (), (override));
-        MOCK_METHOD(BinderObserverConfig::ShardingConfig, getSystemServerSharding,
-                    (bool debugMonitorAll), (override));
+        MOCK_METHOD(BinderObserverConfig::ShardingConfig, getSystemServerSharding, (), (override));
         MOCK_METHOD(BinderObserverConfig::ShardingConfig, getOtherProcessesSharding, (),
                     (override));
         MOCK_METHOD(int64_t, getCpuTimeNanos, (), (override));
@@ -48,8 +46,6 @@ protected:
         MOCK_METHOD(size_t, hashString16, (const std::u16string_view& content), (override));
     };
 
-    const std::string kFullBinderSpamDetectionConfigPath =
-            "/data/system/anomaly_service/anomaly_detection.full_binder_spam_detection";
     const std::string kBootIdPath = "/proc/sys/kernel/random/boot_id";
     const std::string kProcessOffsetToken = "16e12b27-2a84-4355"; // used for process offset
     const std::string kAidlOffsetToken = "-84cd-948348d6c998";    // used for aidl offset
@@ -101,7 +97,6 @@ protected:
         // Note: this should be owned (and destroyed) by the config class under test.
         mEnv = new MockEnvironment();
         const std::string bootId = std::string(kProcessOffsetToken) + kAidlOffsetToken;
-        ON_CALL(*mEnv, fileExists(kFullBinderSpamDetectionConfigPath)).WillByDefault(Return(false));
         ON_CALL(*mEnv, readFileLine(kBootIdPath)).WillByDefault(Return(bootId));
         ON_CALL(*mEnv, hashString8(kProcessOffsetToken)).WillByDefault(Return(5678));
         ON_CALL(*mEnv, hashString8(kAidlOffsetToken)).WillByDefault(Return(6789));
@@ -188,7 +183,7 @@ TEST_F(BinderObserverConfigTest, CreateConfigSystemServerEnabledByHash) {
     EXPECT_CALL(*mEnv, getProcessName()).WillOnce(Return("system_server"));
     ON_CALL(*mEnv, hashString8(kProcessOffsetToken)).WillByDefault(Return(234));
     ON_CALL(*mEnv, hashString8("system_server")).WillByDefault(Return(306)); // process hash
-    EXPECT_CALL(*mEnv, getSystemServerSharding(false)).WillOnce(Return(kModerateSharding));
+    EXPECT_CALL(*mEnv, getSystemServerSharding()).WillOnce(Return(kModerateSharding));
 
     std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);
 
@@ -201,7 +196,7 @@ TEST_F(BinderObserverConfigTest, CreateConfigSystemServerDisabledByHash) {
     EXPECT_CALL(*mEnv, getProcessName()).WillOnce(Return("system_server"));
     ON_CALL(*mEnv, hashString8(kProcessOffsetToken)).WillByDefault(Return(234));
     ON_CALL(*mEnv, hashString8("system_server")).WillByDefault(Return(345)); // process hash
-    EXPECT_CALL(*mEnv, getSystemServerSharding(false)).WillOnce(Return(kModerateSharding));
+    EXPECT_CALL(*mEnv, getSystemServerSharding()).WillOnce(Return(kModerateSharding));
 
     std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);
 
@@ -209,27 +204,12 @@ TEST_F(BinderObserverConfigTest, CreateConfigSystemServerDisabledByHash) {
     EXPECT_FALSE(config->isEnabled());
 }
 
-TEST_F(BinderObserverConfigTest, CreateConfigSystemServerEnableMonitorAll) {
-    EXPECT_CALL(*mEnv, fileExists(kFullBinderSpamDetectionConfigPath)).WillOnce(Return(true));
-    EXPECT_CALL(*mEnv, getUid()).WillOnce(Return(1000));
-    EXPECT_CALL(*mEnv, getProcessName()).WillOnce(Return("system_server"));
-    ON_CALL(*mEnv, hashString8(kProcessOffsetToken)).WillByDefault(Return(234));
-    ON_CALL(*mEnv, hashString8("system_server")).WillByDefault(Return(345)); // process hash
-    EXPECT_CALL(*mEnv, getSystemServerSharding(true)).WillOnce(Return(kMonitorEverythingSharding));
-
-    std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);
-
-    // Expect enabled.
-    EXPECT_TRUE(config->isEnabled());
-}
-
 TEST_F(BinderObserverConfigTest, CreateConfigFakeSystemServer) {
     EXPECT_CALL(*mEnv, getUid()).WillOnce(Return(123)); // not the right uid
     EXPECT_CALL(*mEnv, getProcessName()).WillOnce(Return("system_server"));
     ON_CALL(*mEnv, hashString8(kProcessOffsetToken)).WillByDefault(Return(234));
     ON_CALL(*mEnv, hashString8("other_process")).WillByDefault(Return(345)); // process hash
-    ON_CALL(*mEnv, getSystemServerSharding(false))
-            .WillByDefault(Return(kMonitorEverythingSharding));
+    ON_CALL(*mEnv, getSystemServerSharding()).WillByDefault(Return(kMonitorEverythingSharding));
     EXPECT_CALL(*mEnv, getOtherProcessesSharding()).WillOnce(Return(kMonitorNothingSharding));
 
     std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);
@@ -523,8 +503,7 @@ TEST_F(BinderObserverConfigTest, GetTrackingInfoTrackCpuWithOffset) {
 TEST_F(BinderObserverConfigTest, BinderObserverCpuTimeNanosCorrect) {
     EXPECT_CALL(*mEnv, getUid()).WillRepeatedly(Return(1000));
     EXPECT_CALL(*mEnv, getProcessName()).WillRepeatedly(Return("system_server"));
-    EXPECT_CALL(*mEnv, getSystemServerSharding(false))
-            .WillRepeatedly(Return(kMonitorEverythingSharding));
+    EXPECT_CALL(*mEnv, getSystemServerSharding()).WillRepeatedly(Return(kMonitorEverythingSharding));
     EXPECT_CALL(*mEnv, getCpuTimeNanos()).WillRepeatedly(Return(2000002));
 
     std::unique_ptr<BinderObserverConfig> config = createConfig(mEnv);

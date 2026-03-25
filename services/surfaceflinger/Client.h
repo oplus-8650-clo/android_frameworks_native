@@ -52,7 +52,6 @@ private:
 
     binder::Status mirrorSurface(const sp<IBinder>& mirrorFromHandle,
                                  const sp<IBinder>& stopAtHandle,
-                                 const sp<IBinder>& cropByHandle,
                                  gui::CreateSurfaceResult* outResult) override;
 
     binder::Status mirrorLayerStack(int64_t displayId,

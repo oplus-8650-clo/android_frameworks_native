@@ -106,19 +106,6 @@ AidlRect translate(IComposerClient::Rect x) {
     };
 }
 
-Error handleStatus(const ndk::ScopedAStatus& status, const char* funcName) {
-    if (status.isOk()) {
-        return Error::NONE;
-    }
-    const auto error = static_cast<Error>(status.getServiceSpecificError());
-    if (error == Error::UNSUPPORTED) {
-        ALOGW("%s is UNSUPPORTED", funcName);
-    } else {
-        ALOGE("%s failed %s", funcName, status.getDescription().c_str());
-    }
-    return error;
-}
-
 template <>
 AidlFRect translate(IComposerClient::FRect x) {
     return AidlFRect{
@@ -688,9 +675,9 @@ Error AidlComposer::getHdrCapabilities(Display display, std::vector<Hdr>* outTyp
     AidlHdrCapabilities capabilities;
     const auto status =
             mAidlComposerClient->getHdrCapabilities(translate<int64_t>(display), &capabilities);
-    const auto error = handleStatus(status, __func__);
-    if (error != Error::NONE) {
-        return error;
+    if (!status.isOk()) {
+        ALOGE("getHdrCapabilities failed %s", status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
     }
 
     *outTypes = capabilities.types;
@@ -1664,9 +1651,9 @@ Error AidlComposer::getPreferredBootDisplayConfig(Display display, Config* confi
     const auto status =
             mAidlComposerClient->getPreferredBootDisplayConfig(translate<int64_t>(display),
                                                                &displayConfig);
-    const auto error = handleStatus(status, __func__);
-    if (error != Error::NONE) {
-        return error;
+    if (!status.isOk()) {
+        ALOGE("getPreferredBootDisplayConfig failed %s", status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
     }
     *config = translate<uint32_t>(displayConfig);
     return Error::NONE;
@@ -1676,10 +1663,10 @@ Error AidlComposer::getHdrConversionCapabilities(
         std::vector<AidlHdrConversionCapability>* hdrConversionCapabilities) {
     const auto status =
             mAidlComposerClient->getHdrConversionCapabilities(hdrConversionCapabilities);
-    const auto error = handleStatus(status, __func__);
-    if (error != Error::NONE) {
+    if (!status.isOk()) {
         hdrConversionCapabilities = {};
-        return error;
+        ALOGE("getHdrConversionCapabilities failed %s", status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
     }
     return Error::NONE;
 }
@@ -1831,9 +1818,9 @@ Error AidlComposer::getPhysicalDisplayOrientation(Display displayId,
 Error AidlComposer::getMaxLayerPictureProfiles(Display display, int32_t* outMaxProfiles) {
     const auto status = mAidlComposerClient->getMaxLayerPictureProfiles(translate<int64_t>(display),
                                                                         outMaxProfiles);
-    const auto error = handleStatus(status, __func__);
-    if (error != Error::NONE) {
-        return error;
+    if (!status.isOk()) {
+        ALOGE("getMaxLayerPictureProfiles failed %s", status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
     }
     return Error::NONE;
 }
@@ -1950,9 +1937,9 @@ Error AidlComposer::getDisplayKnownVsyncSample(Display display,
     }
     const auto status = mAidlComposerClient->getDisplayKnownVsyncSample(translate<int64_t>(display),
                                                                         outVsyncSample);
-    const auto error = handleStatus(status, __func__);
-    if (error != Error::NONE) {
-        return error;
+    if (!status.isOk()) {
+        ALOGE("getDisplayKnownVsyncSample failed %s", status.getDescription().c_str());
+        return static_cast<Error>(status.getServiceSpecificError());
     }
     return Error::NONE;
 }

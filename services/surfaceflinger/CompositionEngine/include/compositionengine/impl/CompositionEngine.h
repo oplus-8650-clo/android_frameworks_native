@@ -52,9 +52,6 @@ public:
 
     FeatureFlags getFeatureFlags() const override;
 
-    bool isPowerHintSessionEnabled() const override;
-    void setPowerHintSessionEnabled(bool) override;
-
     // Debugging
     void dump(std::string&) const override;
 
@@ -62,7 +59,6 @@ public:
     void setNeedsAnotherUpdateForTest(bool);
 
 private:
-    bool mPowerHintSessionEnabled = true;
     HWComposer* mHwComposer;
     renderengine::RenderEngine* mRenderEngine;
     std::shared_ptr<TimeStats> mTimeStats;

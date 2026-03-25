@@ -36,11 +36,10 @@ cc_fuzz {
 
     fuzz_config: {
         cc: [
+            "smoreland@google.com",
             "waghpawan@google.com",
-            "devinmoore@google.com",
-            "fmayle@google.com",
         ],
-        triage_assignee: "devinmoore@google.com",
+        triage_assignee: "smoreland@google.com",
         use_for_presubmit: true,
     },
 

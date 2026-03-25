@@ -476,23 +476,20 @@ const String16& BBinder::getInterfaceDescriptor() const
     return sBBinder;
 }
 
-__attribute__((noinline)) bool BBinder::startTrace(uint32_t code) {
-    char traceSectionName[TRACE_BUFFER_SIZE];
-    status_t result = getTraceName(code, traceSectionName, TRACE_BUFFER_SIZE);
-    // failures are already tracked via ALOGE in getTraceName
-    if (result != OK) return false;
-
-    trace_begin(ATRACE_TAG_AIDL, traceSectionName);
-    return true;
-}
-
 // NOLINTNEXTLINE(google-default-arguments)
 status_t BBinder::transact(
     uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
 {
     bool tracingEnabled = get_trace_enabled_tags() & ATRACE_TAG_AIDL;
     if (tracingEnabled) {
-        tracingEnabled = startTrace(code);
+        char traceSectionName[TRACE_BUFFER_SIZE];
+        status_t result = getTraceName(code, traceSectionName, TRACE_BUFFER_SIZE);
+        if (result == OK) {
+            trace_begin(ATRACE_TAG_AIDL, traceSectionName);
+        } else {
+            // failures are already tracked via ALOGE in getTraceName
+            tracingEnabled = false; /* avoid calling trace end*/
+        }
     }
 
     scope_guard guard = make_scope_guard([&]() {

@@ -150,30 +150,6 @@ cc_test {
     }),
 }
 
-cc_test {
-    name: "binderIPCThreadStateUnitTest",
-    host_supported: true,
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
-    srcs: [
-        "binderIPCThreadStateUnitTest.cpp",
-    ],
-    shared_libs: [
-        "libbinder",
-        "libcutils",
-        "libutils",
-        "liblog",
-    ],
-    static_libs: [
-        "libgmock",
-        "libfakeservicemanager",
-    ],
-    test_suites: ["general-tests"],
-}
-
 // unit test only, which can run on host and doesn't use /dev/binder
 cc_test {
     name: "binderUnitTest",
@@ -268,7 +244,6 @@ cc_test {
         "android.os.binder.flags-aconfig-cc",
         "libgmock",
         "libselinux",
-        "libfakeservicemanager",
     ],
     test_suites: [
         "general-tests",

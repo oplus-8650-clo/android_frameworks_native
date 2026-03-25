@@ -267,7 +267,6 @@ mod tests {
                 mock_etc.path(),
                 mock_proc.path(),
                 false,
-                false,
             )
             .unwrap(),
         ));
@@ -300,7 +299,6 @@ mod tests {
                 mock_sys.path(),
                 mock_etc.path(),
                 mock_proc.path(),
-                false,
                 false,
             )
             .unwrap(),

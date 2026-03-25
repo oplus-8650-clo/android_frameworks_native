@@ -17,7 +17,6 @@
 #include "RecentEventLogger.h"
 #include "SensorServiceUtils.h"
 
-#include <android-base/stringprintf.h>
 #include <android/util/ProtoOutputStream.h>
 #include <frameworks/base/core/proto/android/service/sensor_service.proto.h>
 #include <utils/Timers.h>
@@ -58,32 +57,33 @@ void RecentEventLogger::setLastEventStale() {
 std::string RecentEventLogger::dump() const {
     std::lock_guard<std::mutex> lk(mLock);
 
-    std::string buffer;
+    //TODO: replace String8 with std::string completely in this function
+    String8 buffer;
 
-    android::base::StringAppendF(&buffer, "last %zu events\n", mRecentEvents.size());
+    buffer.appendFormat("last %zu events\n", mRecentEvents.size());
     int j = 0;
-    for (int i = static_cast<int>(mRecentEvents.size()) - 1; i >= 0; --i) {
+    for (int i = mRecentEvents.size() - 1; i >= 0; --i) {
         const auto& ev = mRecentEvents[i];
         struct tm * timeinfo = localtime(&(ev.mWallTime.tv_sec));
-        android::base::StringAppendF(&buffer, "\t%2d (ts=%.9f, wall=%02d:%02d:%02d.%03d) ",
+        buffer.appendFormat("\t%2d (ts=%.9f, wall=%02d:%02d:%02d.%03d) ",
                 ++j, ev.mEvent.timestamp/1e9, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec,
                 (int) ns2ms(ev.mWallTime.tv_nsec));
 
         // data
         if (!mMaskData) {
             if (mSensorType == SENSOR_TYPE_STEP_COUNTER) {
-                android::base::StringAppendF(&buffer, "%" PRIu64 ", ", ev.mEvent.u64.step_counter);
+                buffer.appendFormat("%" PRIu64 ", ", ev.mEvent.u64.step_counter);
             } else {
                 for (size_t k = 0; k < mEventSize; ++k) {
-                    android::base::StringAppendF(&buffer, "%.2f, ", ev.mEvent.data[k]);
+                    buffer.appendFormat("%.2f, ", ev.mEvent.data[k]);
                 }
             }
         } else {
-            buffer += "[value masked]";
+            buffer.append("[value masked]");
         }
-        buffer += "\n";
+        buffer.append("\n");
     }
-    return buffer;
+    return std::string(buffer.c_str());
 }
 
 /**

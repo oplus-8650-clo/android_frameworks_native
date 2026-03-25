@@ -15,79 +15,41 @@
  */
 
 #include <FrontEnd/LayerHierarchy.h>
-#include "FrontEnd/Caching/MergeableHierarchy.h"
 
 #include "MergeableHierarchyManager.h"
 
 namespace android::surfaceflinger::frontend::caching {
 
 void MergeableHierarchyManager::update(const LayerHierarchy& hierarchy) {
-    std::vector<HierarchyEntry> topHierarchies;
-    std::vector<HierarchyEntry> dependentHierarchies;
-    update(&hierarchy, topHierarchies, dependentHierarchies);
-    mMergeableHierarchies.clear();
-    mMergeableHierarchies.insert(mMergeableHierarchies.end(),
-                                 std::make_move_iterator(topHierarchies.begin()),
-                                 std::make_move_iterator(topHierarchies.end()));
-    mMergeableHierarchies.insert(mMergeableHierarchies.end(),
-                                 std::make_move_iterator(dependentHierarchies.begin()),
-                                 std::make_move_iterator(dependentHierarchies.end()));
+    std::vector<MergeableHierarchy> incomingHierarchies;
+    MergeableHierarchy::Accumulator accumulator;
+    update(&hierarchy, accumulator, incomingHierarchies);
+
+    if (accumulator.canBuild()) {
+        pushToIncomingHierarchy(accumulator, incomingHierarchies);
+    }
+
+    mMergeableHierarchies = std::move(incomingHierarchies);
 }
 
-MergeableHierarchyManager::UpdatePayload MergeableHierarchyManager::update(
-        const LayerHierarchy* hierarchy, std::vector<HierarchyEntry>& topHierarchies,
-        std::vector<HierarchyEntry>& dependentHierarchies) {
-    nsecs_t lastUpdateTime = 0;
-    int32_t numInterestingChildren = 0;
-    std::vector<HierarchyEntry> descendentHierarchies;
+void MergeableHierarchyManager::update(const LayerHierarchy* hierarchy,
+                                       MergeableHierarchy::Accumulator& accumulator,
+                                       std::vector<MergeableHierarchy>& incomingHierarchies) {
+    if (!accumulator.add(hierarchy) && accumulator.canBuild()) {
+        pushToIncomingHierarchy(accumulator, incomingHierarchies);
+        accumulator = MergeableHierarchy::Accumulator();
+    }
+
     for (auto& [childHierarchy, _] : hierarchy->mChildren) {
-        auto updatePayload = update(childHierarchy, descendentHierarchies, dependentHierarchies);
-
-        if (updatePayload.containsMergedHierarchy) {
-            numInterestingChildren++;
-        }
-
-        lastUpdateTime = std::max(lastUpdateTime, updatePayload.lastUpdateTimeIncludingChilderen);
+        update(childHierarchy, accumulator, incomingHierarchies);
     }
-
-    if (hierarchy->getLayer() != nullptr) {
-        lastUpdateTime = std::max(lastUpdateTime, hierarchy->getLayer()->lastUpdateTime);
-    }
-
-    if (lastUpdateTime > 0 && canAddNode(hierarchy, lastUpdateTime)) {
-        // Don't generate equivalent hierarchies that aren't interesting.
-        // So check that the root node actually has stuff to draw, or that there's multiple children
-        // that also can be updated.
-        if (hierarchy->getLayer()->hasSomethingToDraw() || numInterestingChildren > 1) {
-            auto newHierarchy =
-                    createOrReuseHierarchy({hierarchy->getLayer()->id, hierarchy, lastUpdateTime});
-
-            for (auto& descendentHierarchy : descendentHierarchies) {
-                descendentHierarchy.isTop = false;
-            }
-
-            dependentHierarchies.insert(dependentHierarchies.end(),
-                                        std::make_move_iterator(descendentHierarchies.begin()),
-                                        std::make_move_iterator(descendentHierarchies.end()));
-
-            topHierarchies.emplace_back(HierarchyEntry{std::move(newHierarchy), true});
-            return {lastUpdateTime, true};
-        }
-    }
-
-    topHierarchies.insert(topHierarchies.end(),
-                          std::make_move_iterator(descendentHierarchies.begin()),
-                          std::make_move_iterator(descendentHierarchies.end()));
-
-    return {lastUpdateTime, false};
 }
 
 void MergeableHierarchyManager::constructSnapshots(
         LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
-        compositionengine::CompositionEngine& compositionEngine,
-        std::unordered_map<uint32_t, sp<Layer>>& legacyLayers) {
+        compositionengine::CompositionEngine& compositionEngine) {
     for (auto& hierarchy : mMergeableHierarchies) {
-        hierarchy.hierarchy.constructSnapshot(builder, args, compositionEngine, legacyLayers);
+        hierarchy.constructSnapshot(builder, args, compositionEngine);
     }
 }
 

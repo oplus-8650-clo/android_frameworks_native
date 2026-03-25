@@ -64,7 +64,6 @@ rust_binary {
     srcs: ["usbauthservice.rs"],
     init_rc: ["usbauthservice.rc"],
     rustlibs: [
-        "librustutils",
         "libusbauthservice_core",
         "libusb_flags_lib_rust",
     ],
@@ -77,7 +76,6 @@ rust_test {
     defaults: ["libusbauthservice_defaults"],
     srcs: ["usbauthservice.rs"],
     rustlibs: [
-        "librustutils",
         "libusbauthservice_core",
         "libusb_flags_lib_rust",
     ],

@@ -81,7 +81,6 @@ cc_defaults {
     ],
 }
 
-// delete me and/or convert to AIDL
 cc_binary {
     name: "lshal",
     defaults: ["lshal_defaults"],

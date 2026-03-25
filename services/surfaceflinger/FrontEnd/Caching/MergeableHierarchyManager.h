@@ -80,31 +80,22 @@ public:
 
     void update(const LayerHierarchy& hierarchy);
 
-    bool canAddNode(const LayerHierarchy* hierarchy, nsecs_t lastUpdateTime) {
-        if (!hierarchy->getLayer()) {
-            return false;
-        }
-
-        return systemTime(SYSTEM_TIME_MONOTONIC) - lastUpdateTime >
-                std::chrono::nanoseconds(Tunables::kDefaultActiveLayerTimeout).count();
-    }
-
     void constructSnapshots(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
-                            compositionengine::CompositionEngine& compositionEngine,
-                            std::unordered_map<uint32_t, sp<Layer>>& legacyLayers);
+                            compositionengine::CompositionEngine& compositionEngine);
 
     std::unique_ptr<LayerSnapshot> findLayerSnapshotCopy(uint32_t id) {
-        auto hierarchy = findTopHierarchy(id);
+        auto hierarchy = findOwnedHierarchy(id);
 
         if (hierarchy == mMergeableHierarchies.end()) {
             return nullptr;
         }
 
-        return hierarchy->hierarchy.getSnapshotCopy();
+        return hierarchy->getSnapshotCopy();
     }
 
     bool isMemberOfAnyHierarchy(uint32_t id) const {
-        return findHierarchy(id) != mMergeableHierarchies.end();
+        return std::any_of(mMergeableHierarchies.cbegin(), mMergeableHierarchies.cend(),
+                           [id](const auto& hierarchy) { return hierarchy.hasLayer(id); });
     }
 
     // Dumps all tracked MergeableHiearchies to a string
@@ -125,77 +116,53 @@ public:
     }
 
 private:
-    struct HierarchyEntry;
+    void add(MergeableHierarchy&& mergeableHierarchy) {
+        mMergeableHierarchies.emplace_back(std::move(mergeableHierarchy));
+    }
+    void remove(uint32_t id) {
+        std::erase_if(mMergeableHierarchies, [id](const auto& mergeableHierarchy) {
+            return mergeableHierarchy.isValid() && mergeableHierarchy.getId() == id;
+        });
+    }
+    void update(const LayerHierarchy* hierarchy, MergeableHierarchy::Accumulator& accumulator,
+                std::vector<MergeableHierarchy>& incomingHierarchies);
 
-    struct UpdatePayload {
-        nsecs_t lastUpdateTimeIncludingChilderen;
-        bool containsMergedHierarchy;
-    };
-    UpdatePayload update(const LayerHierarchy* hierarchy,
-                         std::vector<HierarchyEntry>& topHierarchies,
-                         std::vector<HierarchyEntry>& dependentHierarchies);
-
-    std::vector<HierarchyEntry>::iterator findHierarchy(uint32_t id) {
+    std::vector<MergeableHierarchy>::iterator findOwnedHierarchy(uint32_t id) {
         return std::find_if(mMergeableHierarchies.begin(), mMergeableHierarchies.end(),
                             [id](const auto& hierarchy) {
-                                return hierarchy.hierarchy.getId() == id;
+                                return hierarchy.isValid() && hierarchy.getId() == id;
                             });
     }
 
-    std::vector<HierarchyEntry>::const_iterator findHierarchy(uint32_t id) const {
-        return std::find_if(mMergeableHierarchies.cbegin(), mMergeableHierarchies.cend(),
-                            [id](const auto& hierarchy) {
-                                return hierarchy.hierarchy.getId() == id;
-                            });
-    }
-
-    std::vector<HierarchyEntry>::iterator findTopHierarchy(uint32_t id) {
-        return std::find_if(mMergeableHierarchies.begin(), mMergeableHierarchies.end(),
-                            [id](const auto& hierarchy) {
-                                return hierarchy.hierarchy.getId() == id && hierarchy.isTop;
-                            });
-    }
-
-    std::vector<HierarchyEntry>::iterator findPreexistingHierarchy(
+    std::vector<MergeableHierarchy>::iterator findPreexistingHierarchy(
             const MergeableHierarchy& mergeableHierarchy) {
-        auto candidate = findHierarchy(mergeableHierarchy.getId());
+        auto candidate = findOwnedHierarchy(mergeableHierarchy.getId());
 
         if (candidate == mMergeableHierarchies.end()) {
             return mMergeableHierarchies.end();
         }
 
-        if (candidate->hierarchy != mergeableHierarchy) {
+        if (*candidate != mergeableHierarchy) {
             return mMergeableHierarchies.end();
         }
 
         return candidate;
     }
 
-    MergeableHierarchy createOrReuseHierarchy(MergeableHierarchy::HierarchyState newState) {
-        auto candidate = MergeableHierarchy(newState);
-
-        auto preexistingHierarchy = findPreexistingHierarchy(candidate);
+    void pushToIncomingHierarchy(MergeableHierarchy::Accumulator accumulator,
+                                 std::vector<MergeableHierarchy>& incomingHierarchies) {
+        auto newHierarchy = accumulator.build();
+        auto preexistingHierarchy = findPreexistingHierarchy(newHierarchy);
 
         if (preexistingHierarchy != mMergeableHierarchies.end()) {
-            return std::move(preexistingHierarchy->hierarchy);
+            incomingHierarchies.emplace_back(std::move(*preexistingHierarchy));
         } else {
-            return candidate;
+            incomingHierarchies.emplace_back(std::move(newHierarchy));
         }
     }
-
     // TODO: use a better data structure for this. Conceptually we want a set of sets
     // so that destroying a LayerHierarchy won't cause a linear time search.
-    struct HierarchyEntry {
-        MergeableHierarchy hierarchy;
-        bool isTop;
-
-        void dump(std::ostream& out) const {
-            out << "{Hierarchy=";
-            hierarchy.dump(out);
-            out << ", isTop=" << isTop << "}";
-        }
-    };
-    std::vector<HierarchyEntry> mMergeableHierarchies;
+    std::vector<MergeableHierarchy> mMergeableHierarchies;
 };
 
 } // namespace caching

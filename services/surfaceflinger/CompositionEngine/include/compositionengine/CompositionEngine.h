@@ -78,9 +78,6 @@ public:
 
     virtual FeatureFlags getFeatureFlags() const = 0;
 
-    virtual bool isPowerHintSessionEnabled() const = 0;
-    virtual void setPowerHintSessionEnabled(bool) = 0;
-
     // Debugging
     virtual void dump(std::string&) const = 0;
 };

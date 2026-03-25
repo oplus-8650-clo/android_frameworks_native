@@ -183,7 +183,7 @@ bool SkiaCapture::setupMultiFrameCapture() {
         mOpenMultiPicStream = std::move(stream);
         mSerialContext.reset(new SkSharingSerialContext());
         SkSerialProcs procs;
-        procs.fImageProc = SkSharingContext::serializeImage;
+        procs.fImageProc = SkSharingSerialContext::serializeImage;
         procs.fImageCtx = mSerialContext.get();
         procs.fTypefaceProc = [](SkTypeface* tf, void* ctx) -> SkSerialReturnType {
             return tf->serialize(SkTypeface::SerializeBehavior::kDoIncludeData);

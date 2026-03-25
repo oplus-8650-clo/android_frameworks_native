@@ -77,9 +77,6 @@ private:
     // Looks like this: "16e12b27-2a84-4355-84cd-948348d6c998"
     static constexpr const char* kBootIdPath = "/proc/sys/kernel/random/boot_id";
 
-    static constexpr const char* kFullBinderSpamDetectionConfigPath =
-            "/data/system/anomaly_service/anomaly_detection.full_binder_spam_detection";
-
     // The expected length of /proc/sys/kernel/random/boot_id
     static constexpr size_t kBootIdSize = 36;
 
@@ -87,11 +84,10 @@ private:
     class Environment {
     public:
         virtual ~Environment() = default;
-        virtual bool fileExists(const std::string& path);
         virtual std::string readFileLine(const std::string& path);
         virtual uid_t getUid();
         virtual std::string getProcessName();
-        virtual ShardingConfig getSystemServerSharding(bool monitorAll);
+        virtual ShardingConfig getSystemServerSharding();
         virtual ShardingConfig getOtherProcessesSharding();
         virtual int64_t getCpuTimeNanos();
 

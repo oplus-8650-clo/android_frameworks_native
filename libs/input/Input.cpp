@@ -1483,12 +1483,4 @@ void PooledInputEventFactory::recycle(InputEvent* event) {
     delete event;
 }
 
-// --- PointerCaptureRequest ---
-
-std::ostream& operator<<(std::ostream& out, const PointerCaptureRequest& request) {
-    out << "PointerCaptureRequest { mode=" << ftl::enum_string(request.mode)
-        << ", seq=" << request.seq << " }";
-    return out;
-}
-
 } // namespace android

@@ -1340,8 +1340,6 @@ public:
     uint32_t seq;
 };
 
-std::ostream& operator<<(std::ostream& out, const PointerCaptureRequest& request);
-
 /* Pointer icon styles.
  * Must match the definition in android.view.PointerIcon.
  *

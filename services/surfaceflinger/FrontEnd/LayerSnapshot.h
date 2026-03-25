@@ -26,9 +26,8 @@
 #include "LayerHierarchy.h"
 #include "RequestedLayerState.h"
 #include "Scheduler/LayerInfo.h"
+#include "android-base/stringprintf.h"
 #include "compositionengine/LayerFE.h"
-
-#include <optional>
 
 struct RenderCommandBuffer;
 
@@ -131,7 +130,6 @@ struct LayerSnapshot : public compositionengine::LayerFECompositionState {
     gui::Uid uid = gui::Uid::INVALID;
     gui::Pid pid = gui::Pid::INVALID;
     int32_t systemContentPriority = gui::ISystemContentPriorityConstants::Unset;
-    std::optional<FloatRect> mirrorCrop;
     enum class Reachability : uint32_t {
         // Can traverse the hierarchy from a root node and reach this snapshot
         Reachable,

@@ -140,7 +140,6 @@ public:
     void assertFocusedDisplayNotified(ui::LogicalDisplayId expectedDisplay);
     void assertKeyConsumedByPolicy(const ::testing::Matcher<KeyEvent>& matcher);
     void assertNoKeysConsumedByPolicy();
-    void assertInterceptKeyBeforeQueueingWasCalled(const ::testing::Matcher<KeyEvent>& matcher);
 
 private:
     std::mutex mLock;
@@ -174,9 +173,6 @@ private:
     std::queue<UserActivityPokeEvent> mUserActivityPokeEvents;
 
     std::chrono::nanoseconds mStaleEventTimeout = 1000ms;
-
-    std::queue<KeyEvent> mInterceptKeyBeforeQueueingEvent GUARDED_BY(mLock);
-    std::condition_variable mNotifyInterceptKeyBeforeQueueing;
 
     std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
             mInterceptKeyBeforeDispatchingResult;

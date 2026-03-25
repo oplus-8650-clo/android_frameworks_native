@@ -414,10 +414,8 @@ public:
     //      |
     //      B
     //
-    // If cropBy is specified, the mirrored layer will be cropped to cropBy layer's geometry.
     sp<SurfaceControl> mirrorSurface(SurfaceControl* mirrorFromSurface,
-                                     SurfaceControl* stopAt = nullptr,
-                                     SurfaceControl* cropBy = nullptr);
+                                     SurfaceControl* stopAt = nullptr);
 
     // Finds the layer stack associated with the provided `displayId`, and returns the
     // `SurfaceControl` associated with the root layer of the mirrored hierarchy. Otherwise, nullptr

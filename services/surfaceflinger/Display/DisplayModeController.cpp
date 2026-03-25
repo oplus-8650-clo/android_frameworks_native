@@ -46,13 +46,19 @@ DisplayModeController::Display::Display(DisplaySnapshotRef snapshot,
         renderRateFpsTrace(concatId("RenderRateFps")),
         hasDesiredModeTrace(concatId("HasDesiredMode"), false) {}
 
+DisplayModeController::DisplayModeController() {
+    using namespace std::string_literals;
+    mSupportsHdcp = base::GetBoolProperty("debug.sf.hdcp_support"s, false);
+}
+
 void DisplayModeController::registerDisplay(PhysicalDisplayId displayId,
                                             DisplaySnapshotRef snapshotRef,
                                             RefreshRateSelectorPtr selectorPtr) {
     DisplayPtr displayPtr = std::make_unique<Display>(snapshotRef, selectorPtr);
-
-    displayPtr->setSecure(snapshotRef.get().connectionType() ==
-                            ui::DisplayConnectionType::Internal);
+    // TODO: b/349703362 - Remove first condition when HDCP aidl APIs are enforced
+    displayPtr->setSecure(!supportsHdcp() ||
+                          snapshotRef.get().connectionType() ==
+                                  ui::DisplayConnectionType::Internal);
     std::lock_guard lock(mDisplayLock);
     mDisplays.emplace_or_replace(displayId, std::move(displayPtr));
 }
@@ -64,9 +70,10 @@ void DisplayModeController::registerDisplay(DisplaySnapshotRef snapshotRef,
     const auto displayId = snapshot.displayId();
     DisplayPtr displayPtr =
             std::make_unique<Display>(snapshotRef, snapshot.displayModes(), activeModeId, config);
-
-    displayPtr->setSecure(snapshotRef.get().connectionType() ==
-                            ui::DisplayConnectionType::Internal);
+    // TODO: b/349703362 - Remove first condition when HDCP aidl APIs are enforced
+    displayPtr->setSecure(!supportsHdcp() ||
+                          snapshotRef.get().connectionType() ==
+                                  ui::DisplayConnectionType::Internal);
     std::lock_guard lock(mDisplayLock);
     mDisplays.emplace_or_replace(displayId, std::move(displayPtr));
 }
@@ -455,6 +462,11 @@ auto DisplayModeController::getKernelIdleTimerState(PhysicalDisplayId displayId)
                     });
 
     return {desiredModeIdOpt, displayPtr->isKernelIdleTimerEnabled};
+}
+
+bool DisplayModeController::supportsHdcp() const {
+    return mSupportsHdcp && FlagManager::getInstance().hdcp_level_hal() &&
+            FlagManager::getInstance().hdcp_negotiation();
 }
 
 void DisplayModeController::startHdcpNegotiation(PhysicalDisplayId displayId) {

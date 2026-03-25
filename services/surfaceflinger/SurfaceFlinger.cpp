@@ -1008,7 +1008,6 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     mHWComposer = getFactory().createHWComposer(mHwcServiceName);
     mCompositionEngine->setHwComposer(mHWComposer.get());
     mOffloadedCompositionEngine->setHwComposer(mHWComposer.get());
-    mOffloadedCompositionEngine->setPowerHintSessionEnabled(false);
     auto& composer = mCompositionEngine->getHwComposer();
     composer.setCallback(*this);
     mDisplayModeController.setHwComposer(&composer);
@@ -2636,42 +2635,14 @@ void SurfaceFlinger::onRefreshRateChangedDebug(const RefreshRateChangedDebugData
 
 void SurfaceFlinger::onComposerHalHdcpLevelsChanged(hal::HWDisplayId hwcDisplayId,
                                                     const HdcpLevels& levels) {
-    const int32_t maxLevel = static_cast<int32_t>(levels.maxLevel);
-    const int32_t connectedLevel = static_cast<int32_t>(levels.connectedLevel);
-    ALOGD("%s: HDCP levels changed (connected=%d, max=%d) for hwcDisplayId %" PRIu64, __func__,
-          connectedLevel, maxLevel, hwcDisplayId);
-
-    Mutex::Autolock lock(mStateLock);
-
-    const auto idOpt = getHwComposer().toPhysicalDisplayId(hwcDisplayId);
-    if (!idOpt) {
-        ALOGE("No display found for HDCP level changed event: connected=%d, max=%d for "
-              "display=%" PRIu64,
+    if (FlagManager::getInstance().hdcp_level_hal()) {
+        // TODO(b/362270040): propagate enum constants
+        const int32_t maxLevel = static_cast<int32_t>(levels.maxLevel);
+        const int32_t connectedLevel = static_cast<int32_t>(levels.connectedLevel);
+        ALOGD("%s: HDCP levels changed (connected=%d, max=%d) for hwcDisplayId %" PRIu64, __func__,
               connectedLevel, maxLevel, hwcDisplayId);
-        return;
+        updateHdcpLevels(hwcDisplayId, connectedLevel, maxLevel);
     }
-
-    const bool isInternalDisplay =
-            mPhysicalDisplays.get(*idOpt).transform(&PhysicalDisplay::isInternal).value_or(false);
-    if (isInternalDisplay) {
-        ALOGW("Unexpected HDCP level changed for internal display: connected=%d, max=%d for "
-              "display=%" PRIu64,
-              connectedLevel, maxLevel, hwcDisplayId);
-        return;
-    }
-
-    REQUIRE_SCHEDULER;
-    static_cast<void>(mScheduler->schedule([this, displayId = *idOpt, connectedLevel, maxLevel]() {
-        const bool secure = connectedLevel >= 2 /* HDCP_V1 */;
-        if (const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayId))) {
-            Mutex::Autolock lock(mStateLock);
-            display->setSecure(secure);
-            setTransactionFlags(eDisplayTransactionNeeded);
-        }
-        FTL_FAKE_GUARD(kMainThreadContext, mDisplayModeController.setSecure(displayId, secure));
-        mScheduler->onHdcpLevelsChanged(displayId, connectedLevel,
-                                        maxLevel);
-    }));
 }
 
 void SurfaceFlinger::configure() {
@@ -2824,9 +2795,6 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
     frontend::LayerSnapshotBuilder::Args
             args{.root = mLayerHierarchyBuilder.getHierarchy(),
                  .layerLifecycleManager = mLayerLifecycleManager,
-                 .forceUpdate = FlagManager::getInstance().frontend_caching_v0()
-                         ? frontend::LayerSnapshotBuilder::ForceUpdateFlags::ALL
-                         : frontend::LayerSnapshotBuilder::ForceUpdateFlags::NONE,
                  .includeMetadata = mCompositionEngine->getFeatureFlags().test(
                          compositionengine::Feature::kSnapshotLayerMetadata),
                  .displays = mFrontEndDisplayInfos,
@@ -2856,9 +2824,8 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
                     mFactory.createCompositionEngine();
             compositionEngine->setRenderEngine(mRenderEngine.get());
             compositionEngine->setHwComposer(mHWComposer.get());
-
             mMergeableHierarchyManager.constructSnapshots(mLayerSnapshotBuilder, args,
-                                                          *compositionEngine, mLegacyLayers);
+                                                          *compositionEngine);
         }
     }
     {
@@ -2871,8 +2838,7 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         mUpdateInputInfo = true;
     }
     if (mLayerLifecycleManager.getGlobalChanges().any(Changes::VisibleRegion | Changes::Hierarchy |
-                                                      Changes::Visibility | Changes::Geometry) ||
-        FlagManager::getInstance().frontend_caching_v0()) {
+                                                      Changes::Visibility | Changes::Geometry)) {
         mVisibleRegionsDirty = true;
     }
     if (mLayerLifecycleManager.getGlobalChanges().any(Changes::Hierarchy | Changes::FrameRate)) {
@@ -3467,6 +3433,8 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     const auto layers = mLayerSnapshotBuilder.hasMergedSnapshots()
             ? copyMergedSnapshots(refreshArgs)
             : addLayerSnapshotsToCompositionArgs(refreshArgs, kCursorOnly);
+    // setVisibleRegionDirtyIfNeeded(refreshArgs);
+
     prepareLayersForComposition(refreshArgs, kCursorOnly, layers);
 
     for (auto& [layer, layerFE] : layers) {
@@ -3558,11 +3526,13 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
     SFTRACE_NAME_FOR_TRACK(WorkloadTracer::TRACK_NAME, "Post Composition");
     SFTRACE_NAME("postComposition");
 
-    for (const auto& [id, _] : frameTargeters) {
-        ftl::FakeGuard guard(mStateLock);
-        if (const auto display = getCompositionDisplayLocked(id)) {
-            if (!display->isSecure() && display->hasSecureLayers()) {
-                mDisplayModeController.startHdcpNegotiation(id);
+    if (mDisplayModeController.supportsHdcp()) {
+        for (const auto& [id, _] : frameTargeters) {
+            ftl::FakeGuard guard(mStateLock);
+            if (const auto display = getCompositionDisplayLocked(id)) {
+                if (!display->isSecure() && display->hasSecureLayers()) {
+                    mDisplayModeController.startHdcpNegotiation(id);
+                }
             }
         }
     }
@@ -4435,7 +4405,8 @@ std::optional<DisplayModeId> SurfaceFlinger::processHotplugConnect(
     DisplayDeviceState state = DisplayDeviceState::createPhysical(displayId, hwcDisplayId,
                                                                   info.port, std::move(activeMode));
     // TODO: b/349703362 - Remove first condition when HDCP aidl APIs are enforced
-    state.isSecure = connectionType == ui::DisplayConnectionType::Internal;
+    state.isSecure = !mDisplayModeController.supportsHdcp() ||
+            connectionType == ui::DisplayConnectionType::Internal;
     state.isProtected = true;
     state.displayName = std::move(info.name);
     mCurrentState.displays.emplace_or_replace(token, state);
@@ -6372,7 +6343,6 @@ uint32_t SurfaceFlinger::addInputWindowCommands(const InputWindowCommands& input
 status_t SurfaceFlinger::mirrorLayer(const LayerCreationArgs& args,
                                      const sp<IBinder>& mirrorFromHandle,
                                      const sp<IBinder>& stopAtHandle,
-                                     const sp<IBinder>& cropByHandle,
                                      gui::CreateSurfaceResult& outResult) {
     if (!mirrorFromHandle) {
         return NAME_NOT_FOUND;
@@ -6397,9 +6367,6 @@ status_t SurfaceFlinger::mirrorLayer(const LayerCreationArgs& args,
                 return NAME_NOT_FOUND;
             }
             mirrorArgs.stopLayerId = stopLayerId;
-        }
-        if (cropByHandle) {
-            mirrorArgs.croppedByLayerId = LayerHandle::getLayerId(cropByHandle);
         }
         status_t result = createLayer(mirrorArgs, &outResult.handle, &mirrorLayer);
         if (result != NO_ERROR) {
@@ -9805,6 +9772,40 @@ status_t SurfaceFlinger::getStalledTransactionInfo(
     ftl::FakeGuard guard(kMainThreadContext);
     result = mTransactionHandler.getStalledTransactionInfo(pid);
     return NO_ERROR;
+}
+
+void SurfaceFlinger::updateHdcpLevels(hal::HWDisplayId hwcDisplayId, int32_t connectedLevel,
+                                      int32_t maxLevel) {
+    Mutex::Autolock lock(mStateLock);
+
+    const auto idOpt = getHwComposer().toPhysicalDisplayId(hwcDisplayId);
+    if (!idOpt) {
+        ALOGE("No display found for HDCP level changed event: connected=%d, max=%d for "
+              "display=%" PRIu64,
+              connectedLevel, maxLevel, hwcDisplayId);
+        return;
+    }
+
+    const bool isInternalDisplay =
+            mPhysicalDisplays.get(*idOpt).transform(&PhysicalDisplay::isInternal).value_or(false);
+    if (isInternalDisplay) {
+        ALOGW("Unexpected HDCP level changed for internal display: connected=%d, max=%d for "
+              "display=%" PRIu64,
+              connectedLevel, maxLevel, hwcDisplayId);
+        return;
+    }
+
+    REQUIRE_SCHEDULER;
+    static_cast<void>(mScheduler->schedule([this, displayId = *idOpt, connectedLevel, maxLevel]() {
+        const bool secure = connectedLevel >= 2 /* HDCP_V1 */;
+        if (const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayId))) {
+            Mutex::Autolock lock(mStateLock);
+            display->setSecure(secure);
+            setTransactionFlags(eDisplayTransactionNeeded);
+        }
+        FTL_FAKE_GUARD(kMainThreadContext, mDisplayModeController.setSecure(displayId, secure));
+        mScheduler->onHdcpLevelsChanged(displayId, connectedLevel, maxLevel);
+    }));
 }
 
 void SurfaceFlinger::addActivePictureListener(const sp<gui::IActivePictureListener>& listener) {

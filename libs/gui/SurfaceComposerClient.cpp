@@ -36,7 +36,6 @@
 #include <android/gui/TrustedPresentationThresholds.h>
 #include <android/os/IInputConstants.h>
 #include <com_android_graphics_libgui_flags.h>
-#include <com_android_graphics_surfaceflinger_flags.h>
 #include <gui/DisplayLuts.h>
 #include <gui/FrameRateUtils.h>
 #include <gui/TraceUtils.h>
@@ -2749,14 +2748,8 @@ status_t SurfaceComposerClient::createSurfaceChecked(const String8& name, uint32
 }
 
 sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFromSurface,
-                                                        SurfaceControl* stopAt,
-                                                        SurfaceControl* cropBy) {
+                                                        SurfaceControl* stopAt) {
     if (mirrorFromSurface == nullptr) {
-        return nullptr;
-    }
-
-    if (!com_android_graphics_surfaceflinger_flags_mirror_with_crop() && cropBy) {
-        LOG(ERROR) << "Mirroring with cropBy is currently unsupported.";
         return nullptr;
     }
 
@@ -2764,12 +2757,8 @@ sp<SurfaceControl> SurfaceComposerClient::mirrorSurface(SurfaceControl* mirrorFr
 
     sp<IBinder> mirrorFromHandle = mirrorFromSurface->getHandle();
     sp<IBinder> stopAtHandle = stopAt ? stopAt->getHandle() : nullptr;
-    sp<IBinder> cropByHandle = cropBy ? cropBy->getHandle() : nullptr;
-
     gui::CreateSurfaceResult result;
-
-    const binder::Status status = mClient->mirrorSurface(mirrorFromHandle, stopAtHandle,
-        cropByHandle, &result);
+    const binder::Status status = mClient->mirrorSurface(mirrorFromHandle, stopAtHandle, &result);
     const status_t err = statusTFromBinderStatus(status);
     if (err == NO_ERROR) {
         return sp<SurfaceControl>::make(sp<SurfaceComposerClient>::fromExisting(this),

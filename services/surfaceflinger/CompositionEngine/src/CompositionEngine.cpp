@@ -237,14 +237,6 @@ FeatureFlags CompositionEngine::getFeatureFlags() const {
     return {};
 }
 
-bool CompositionEngine::isPowerHintSessionEnabled() const {
-    return mPowerHintSessionEnabled;
-}
-
-void CompositionEngine::setPowerHintSessionEnabled(bool enabled) {
-    mPowerHintSessionEnabled = enabled;
-}
-
 void CompositionEngine::dump(std::string&) const {
     // The base class has no state to dump, but derived classes might.
 }

@@ -17,7 +17,6 @@
 #pragma once
 
 #include <gui/LocklessStaticQueue.h>
-#include <gui/MagicRingBuffer.h>
 #include <log/log.h>
 #include <atomic>
 #include <string>
@@ -31,10 +30,6 @@ namespace android {
 
 struct IPCRenderBufferOp {
     RPointer<IPCRenderBufferOp> next;
-    uint32_t type;
-};
-
-struct IPCRenderBufferUploadOp : public MagicRingBufferEntry {
     uint32_t type;
 };
 
@@ -117,11 +112,28 @@ struct IpcRenderRegion {
     LocklessStaticQueue<RenderCommandBuffer, 4> mCommandBuffers;
     std::atomic<uint64_t> mFrameNumber;
 
-    MagicRingBuffer<16 * 1024 * 1024> mUploadBuf;
+    IpcArena<16 * 1024 * 1024> mArena;
 
     template <typename T>
     T* allocAligned(size_t count = 1) {
-        return mUploadBuf.append<T>(count);
+        return mArena.allocAligned<T>(count);
+    }
+
+    RPointer<IPCRenderBufferOp> mUploadsHead;
+    RPointer<IPCRenderBufferOp> mUploadsTail;
+
+    void pushUploadCmd(IPCRenderBufferOp* cmd) {
+        assert(reinterpret_cast<const uint8_t*>(cmd) > mArena.mBytes &&
+               reinterpret_cast<const uint8_t*>(cmd) < mArena.mBytes + sizeof(mArena.mBytes));
+
+        if (mUploadsTail) {
+            mUploadsTail->next = cmd;
+        }
+        if (!mUploadsHead) {
+            mUploadsHead = cmd;
+        }
+        mUploadsTail = cmd;
+        cmd->next = nullptr;
     }
 };
 

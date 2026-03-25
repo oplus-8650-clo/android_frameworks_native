@@ -345,20 +345,19 @@ private:
     // Object representing exclusive access to a connection.
     class ExclusiveConnection {
     public:
-        // `session` must be valid for the lifetime of `connection`.
-        [[nodiscard]] static status_t find(RpcSession* session, ConnectionUse use,
+        [[nodiscard]] static status_t find(const sp<RpcSession>& session, ConnectionUse use,
                                            ExclusiveConnection* connection);
 
         ~ExclusiveConnection();
         const sp<RpcConnection>& get() { return mConnection; }
 
     private:
-        static void findConnection(uint64_t tid, RpcConnection** exclusive,
-                                   RpcConnection** available,
+        static void findConnection(uint64_t tid, sp<RpcConnection>* exclusive,
+                                   sp<RpcConnection>* available,
                                    std::vector<sp<RpcConnection>>& sockets,
                                    size_t socketsIndexHint);
 
-        RpcSession* mSession = nullptr;
+        sp<RpcSession> mSession; // avoid deallocation
         sp<RpcConnection> mConnection;
 
         // whether this is being used for a nested transaction (being on the same
@@ -404,7 +403,6 @@ private:
     bool mStartedSetup = false;
     size_t mMaxIncomingThreads = 0;
     size_t mMaxOutgoingConnections = kDefaultMaxOutgoingConnections;
-    // If mStartedSetup=true, OK to access without a lock + always has a value.
     std::optional<uint32_t> mProtocolVersion;
     FileDescriptorTransportMode mFileDescriptorTransportMode = FileDescriptorTransportMode::NONE;
 

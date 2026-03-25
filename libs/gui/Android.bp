@@ -130,7 +130,6 @@ filegroup {
     srcs: [
         "android/gui/BorderSettings.aidl",
         "android/gui/BoxShadowSettings.aidl",
-        "android/gui/CompositionFilterFlag.aidl",
         "android/gui/CornerRadiiData.aidl",
         "android/gui/DropInputMode.aidl",
         "android/gui/EarlyWakeupInfo.aidl",

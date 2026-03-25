@@ -54,11 +54,6 @@ RenderCommandBufferProducer::RenderCommandBufferProducer() {
         LOG_ALWAYS_FATAL("Failed to create shared memory region for RenderCommandBufferProducer");
     }
     mRenderRegion = new ((void*)mRenderRegion) IpcRenderRegion();
-    if (!mRenderRegion->mUploadBuf.initMagicMapping(mAshmemFdRenderRegion,
-                                                    offsetof(IpcRenderRegion, mUploadBuf))) {
-        LOG_ALWAYS_FATAL(
-                "Failed to initialize MagicRingBuffer mapping for RenderCommandBufferProducer");
-    }
 }
 
 RenderCommandBufferProducer::~RenderCommandBufferProducer() {

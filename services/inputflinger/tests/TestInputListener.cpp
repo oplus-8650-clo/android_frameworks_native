@@ -29,9 +29,10 @@ TestInputListener::TestInputListener(std::chrono::milliseconds eventHappenedTime
 
 TestInputListener::~TestInputListener() {}
 
-void TestInputListener::assertNotifyInputDevicesChangedWasCalled() {
+void TestInputListener::assertNotifyInputDevicesChangedWasCalled(
+        NotifyInputDevicesChangedArgs* outEventArgs) {
     ASSERT_NO_FATAL_FAILURE(
-            assertCalled<NotifyInputDevicesChangedArgs>(nullptr,
+            assertCalled<NotifyInputDevicesChangedArgs>(outEventArgs,
                                                         "Expected notifyInputDevicesChanged() "
                                                         "to have been called."));
 }
@@ -95,34 +96,30 @@ void TestInputListener::assertNotifyMotionWasNotCalled(std::optional<TimePoint> 
             assertNotCalled<NotifyMotionArgs>("notifyMotion() should not be called.", waitUntil));
 }
 
-void TestInputListener::assertNotifySwitchWasCalled(
-        const ::testing::Matcher<NotifySwitchArgs>& matcher) {
-    NotifySwitchArgs args;
+void TestInputListener::assertNotifySwitchWasCalled(NotifySwitchArgs* outEventArgs) {
     ASSERT_NO_FATAL_FAILURE(
-            assertCalled<NotifySwitchArgs>(&args, "Expected notifySwitch() to have been called."));
-    ASSERT_THAT(args, matcher);
+            assertCalled<NotifySwitchArgs>(outEventArgs,
+                                           "Expected notifySwitch() to have been called."));
 }
 
-void TestInputListener::assertNotifySensorWasCalled() {
+void TestInputListener::assertNotifySensorWasCalled(NotifySensorArgs* outEventArgs) {
     ASSERT_NO_FATAL_FAILURE(
-            assertCalled<NotifySensorArgs>(nullptr,
+            assertCalled<NotifySensorArgs>(outEventArgs,
                                            "Expected notifySensor() to have been called."));
 }
 
-void TestInputListener::assertNotifyVibratorStateWasCalled() {
-    ASSERT_NO_FATAL_FAILURE(assertCalled<NotifyVibratorStateArgs>(nullptr,
+void TestInputListener::assertNotifyVibratorStateWasCalled(NotifyVibratorStateArgs* outEventArgs) {
+    ASSERT_NO_FATAL_FAILURE(assertCalled<NotifyVibratorStateArgs>(outEventArgs,
                                                                   "Expected notifyVibratorState() "
                                                                   "to have been called."));
 }
 
 void TestInputListener::assertNotifyCaptureWasCalled(
-        const ::testing::Matcher<NotifyPointerCaptureChangedArgs>& matcher) {
-    NotifyPointerCaptureChangedArgs args;
+        NotifyPointerCaptureChangedArgs* outEventArgs) {
     ASSERT_NO_FATAL_FAILURE(
-            assertCalled<NotifyPointerCaptureChangedArgs>(&args,
+            assertCalled<NotifyPointerCaptureChangedArgs>(outEventArgs,
                                                           "Expected notifyPointerCaptureChanged() "
                                                           "to have been called."));
-    ASSERT_THAT(args, matcher);
 }
 
 void TestInputListener::assertNotifyCaptureWasNotCalled() {

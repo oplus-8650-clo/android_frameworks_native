@@ -139,10 +139,6 @@ void LayerFECompositionState::dump(std::string& out) const {
     if (pictureProfileHandle) {
         dumpVal(out, "pictureProfile", toString(pictureProfileHandle));
     }
-    if (luts) {
-        out.append("\n      luts: ");
-        luts->dump(out);
-    }
 
     out.append("\n");
 }

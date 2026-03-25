@@ -100,12 +100,10 @@ binder::Status Client::getLayerFrameStats(const sp<IBinder>& handle, gui::FrameS
 
 binder::Status Client::mirrorSurface(const sp<IBinder>& mirrorFromHandle,
                                      const sp<IBinder>& stopAtHandle,
-                                     const sp<IBinder>& cropByHandle,
                                      gui::CreateSurfaceResult* outResult) {
     LayerCreationArgs args(mFlinger.get(), sp<Client>::fromExisting(this), "MirrorRoot",
                            0 /* flags */, gui::LayerMetadata());
-    status_t status = mFlinger->mirrorLayer(args, mirrorFromHandle, stopAtHandle, cropByHandle,
-                                            *outResult);
+    status_t status = mFlinger->mirrorLayer(args, mirrorFromHandle, stopAtHandle, *outResult);
     return binderStatusFromStatusT(status);
 }
 

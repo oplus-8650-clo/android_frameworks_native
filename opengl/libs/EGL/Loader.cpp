@@ -22,6 +22,7 @@
 #include <android-base/properties.h>
 #include <android/apexsupport.h>
 #include <android/dlext.h>
+#include <com_android_graphics_egl_flags.h>
 #include <cutils/properties.h>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -36,6 +37,8 @@
 #include "egl_platform_entries.h"
 #include "egl_trace.h"
 #include "egldefs.h"
+
+namespace egl_flags = com::android::graphics::egl::flags;
 
 namespace android {
 
@@ -264,17 +267,18 @@ void* Loader::open(egl_connection_t* cnx) {
 
     // If a driver has been loaded, return the driver directly.
     if (cnx->dso) {
-        // ANGLE feature overrides need to be configured for both system services and apps.
-        // However, updateAngleFeatureOverrides() issues Binder calls, which Zygote cannot do.
-        // Instead, take advantage of the fact that Zygote preloads the GLES driver so when
-        // cnx->dso is valid, then Zygote must have completed initialization and this is now
-        // executing as a fork of Zygote (and can issue Binder calls). This allows us to skip
-        // the expensive IsZygote() check on every app launch. Further, cnx->angleLoaded
-        // restricts this to only when ANGLE is the GLES driver for this process.
-        if (cnx->angleLoaded) {
-            android::GraphicsEnv::getInstance().updateAngleFeatureOverrides();
+        if (egl_flags::update_angle_feature_overrides_in_loader_open()) {
+            // ANGLE feature overrides need to be configured for both system services and apps.
+            // However, updateAngleFeatureOverrides() issues Binder calls, which Zygote cannot do.
+            // Instead, take advantage of the fact that Zygote preloads the GLES driver so when
+            // cnx->dso is valid, then Zygote must have completed initialization and this is now
+            // executing as a fork of Zygote (and can issue Binder calls). This allows us to skip
+            // the expensive IsZygote() check on every app launch. Further, cnx->angleLoaded
+            // restricts this to only when ANGLE is the GLES driver for this process.
+            if (cnx->angleLoaded) {
+                android::GraphicsEnv::getInstance().updateAngleFeatureOverrides();
+            }
         }
-
         return cnx->dso;
     }
 
@@ -672,15 +676,17 @@ void Loader::attempt_to_init_angle_backend(void* dso, egl_connection_t* cnx) {
         ALOGV("ANGLE GLES library loaded");
         cnx->angleLoaded = true;
         android::GraphicsEnv::getInstance().setDriverToLoad(android::GpuStatsInfo::Driver::ANGLE);
-        // ANGLE feature overrides need to be configured for both system services and apps. This
-        // is normally done in Loader::open() because the Zygote preloads the GL driver.
-        // However, when GL preloading is disabled, it needs to be done on every driver load.
-        // Also, it needs to be done when the system driver is unloaded to (for example) load
-        // ANGLE from an APK, which is safe because the Zygote can never unload the system
-        // driver.
-        if (android::GraphicsEnv::getInstance().isZygoteDisableGlPreload() ||
-            cnx->systemDriverUnloaded) {
-            android::GraphicsEnv::getInstance().updateAngleFeatureOverrides();
+        if (egl_flags::update_angle_feature_overrides_in_loader_open()) {
+            // ANGLE feature overrides need to be configured for both system services and apps. This
+            // is normally done in Loader::open() because the Zygote preloads the GL driver.
+            // However, when GL preloading is disabled, it needs to be done on every driver load.
+            // Also, it needs to be done when the system driver is unloaded to (for example) load
+            // ANGLE from an APK, which is safe because the Zygote can never unload the system
+            // driver.
+            if (android::GraphicsEnv::getInstance().isZygoteDisableGlPreload() ||
+                cnx->systemDriverUnloaded) {
+                android::GraphicsEnv::getInstance().updateAngleFeatureOverrides();
+            }
         }
     } else {
         ALOGV("Native GLES library loaded");

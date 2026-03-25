@@ -75,13 +75,8 @@ void IPCRecordingCanvas::willSave() {
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
-SkCanvas::SaveLayerStrategy IPCRecordingCanvas::getSaveLayerStrategy(const SaveLayerRec& rec) {
-    IPC_CANVAS_TRACE_CALL;
-    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = SaveLayerOp::Create(mCurrentRenderCommandBuffer, rec.fBounds, rec.fPaint);
-    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
-    mCurrentRenderCommandBuffer->pushOp(op);
-
+SkCanvas::SaveLayerStrategy IPCRecordingCanvas::getSaveLayerStrategy(const SaveLayerRec&) {
+    ALOGE("getSaveLayerStrategy Not implemented");
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 void IPCRecordingCanvas::willRestore() {
@@ -198,28 +193,28 @@ void IPCRecordingCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
 
-    auto op = DrawPathOp::Create(mCurrentRenderCommandBuffer, path, paint, &mResourceCache);
+    auto op = DrawPathOp::Create(mCurrentRenderCommandBuffer, path, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
 void IPCRecordingCanvas::onDrawRect(const SkRect& rect, const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawRectOp::Create(mCurrentRenderCommandBuffer, rect, paint, &mResourceCache);
+    auto op = DrawRectOp::Create(mCurrentRenderCommandBuffer, rect, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
 void IPCRecordingCanvas::onDrawRegion(const SkRegion& region, const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawRegionOp::Create(mCurrentRenderCommandBuffer, region, paint, &mResourceCache);
+    auto op = DrawRegionOp::Create(mCurrentRenderCommandBuffer, region, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
 void IPCRecordingCanvas::onDrawOval(const SkRect& oval, const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawOvalOp::Create(mCurrentRenderCommandBuffer, oval, paint, &mResourceCache);
+    auto op = DrawOvalOp::Create(mCurrentRenderCommandBuffer, oval, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -229,7 +224,7 @@ void IPCRecordingCanvas::onDrawArc(const SkRect& oval, SkScalar startAngle, SkSc
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
     auto op = DrawArcOp::Create(mCurrentRenderCommandBuffer, oval, startAngle, sweepAngle,
-                                useCenter, paint, &mResourceCache);
+                                useCenter, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -272,7 +267,7 @@ void IPCRecordingCanvas::onDrawRRect(const SkRRect& rect, const SkPaint& paint) 
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
 
-    auto op = DrawRRectOp::Create(mCurrentRenderCommandBuffer, rect, paint, &mResourceCache);
+    auto op = DrawRRectOp::Create(mCurrentRenderCommandBuffer, rect, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -318,8 +313,7 @@ void IPCRecordingCanvas::onDrawImage2(const SkImage* image, SkScalar x, SkScalar
         ALOGE("Bitmap not found in cache uniqueID = %u", image->uniqueID());
         return;
     }
-    auto op = DrawImageOp::Create(mCurrentRenderCommandBuffer, it->second.id, x, y, sampling, paint,
-                                  &mResourceCache);
+    auto op = DrawImageOp::Create(mCurrentRenderCommandBuffer, it->second.id, x, y, sampling, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -357,7 +351,7 @@ void IPCRecordingCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor col
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
     auto op = DrawPatchOp::Create(mCurrentRenderCommandBuffer, cubics, colors, texCoords, mode,
-                                  paint, &mResourceCache);
+                                  paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -365,8 +359,7 @@ void IPCRecordingCanvas::onDrawPoints(PointMode mode, size_t count, const SkPoin
                                       const SkPaint& paint) {
     IPC_CANVAS_TRACE_CALL;
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawPointsOp::Create(mCurrentRenderCommandBuffer, mode, count, pts, paint,
-                                   &mResourceCache);
+    auto op = DrawPointsOp::Create(mCurrentRenderCommandBuffer, mode, count, pts, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
 }
@@ -377,7 +370,7 @@ void IPCRecordingCanvas::onDrawVerticesObject(const SkVertices* vertices, SkBlen
     
     #if 0
     LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawVerticesOp::Create(mCurrentRenderCommandBuffer, vertices, mode, paint, &mResourceCache);
+    auto op = DrawVerticesOp::Create(mCurrentRenderCommandBuffer, vertices, mode, paint);
     LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
     mCurrentRenderCommandBuffer->pushOp(op);
     #endif
@@ -392,12 +385,9 @@ void IPCRecordingCanvas::onDrawAtlas2(const SkImage*, const SkRSXform[], const S
     IPC_CANVAS_TRACE_CALL;
     ALOGE("onDrawAtlas Not implemented");
 }
-void IPCRecordingCanvas::onDrawShadowRec(const SkPath& path, const SkDrawShadowRec& rec) {
+void IPCRecordingCanvas::onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) {
     IPC_CANVAS_TRACE_CALL;
-    LOG_ALWAYS_FATAL_IF(mCurrentRenderCommandBuffer == nullptr, "Not recording");
-    auto op = DrawShadowRecOp::Create(mCurrentRenderCommandBuffer, path, rec);
-    LOG_ALWAYS_FATAL_IF(op == nullptr, "%s : Failed to alloc op", __func__);
-    mCurrentRenderCommandBuffer->pushOp(op);
+    ALOGE("onDrawShadowRec Not implemented");
 }
 
 void IPCRecordingCanvas::beginRenderTarget(uint64_t bufferId) {

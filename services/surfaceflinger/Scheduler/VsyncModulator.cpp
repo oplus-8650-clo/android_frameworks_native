@@ -163,15 +163,14 @@ auto VsyncModulator::getNextVsyncConfigType() const -> VsyncConfigType {
     }
 }
 
-auto VsyncModulator::getNextVsyncConfig() const -> std::pair<const VsyncConfig&, VsyncConfigType> {
-    const VsyncConfigType type = getNextVsyncConfigType();
-    switch (type) {
+const VsyncConfig& VsyncModulator::getNextVsyncConfig() const {
+    switch (getNextVsyncConfigType()) {
         case VsyncConfigType::Early:
-            return {mVsyncConfigSet.early, type};
+            return mVsyncConfigSet.early;
         case VsyncConfigType::EarlyGpu:
-            return {mVsyncConfigSet.earlyGpu, type};
+            return mVsyncConfigSet.earlyGpu;
         case VsyncConfigType::Late:
-            return {mVsyncConfigSet.late, type};
+            return mVsyncConfigSet.late;
     }
 }
 
@@ -181,13 +180,12 @@ VsyncConfig VsyncModulator::updateVsyncConfig() {
 }
 
 VsyncConfig VsyncModulator::updateVsyncConfigLocked() {
-    auto [config, currentType] = getNextVsyncConfig();
-    mVsyncConfig = config;
+    mVsyncConfig = getNextVsyncConfig();
 
     // Trace config type
-    SFTRACE_INT("Vsync-Early", currentType == VsyncConfigType::Early);
-    SFTRACE_INT("Vsync-EarlyGpu", currentType == VsyncConfigType::EarlyGpu);
-    SFTRACE_INT("Vsync-Late", currentType == VsyncConfigType::Late);
+    SFTRACE_INT("Vsync-Early", mVsyncConfig == mVsyncConfigSet.early);
+    SFTRACE_INT("Vsync-EarlyGpu", mVsyncConfig == mVsyncConfigSet.earlyGpu);
+    SFTRACE_INT("Vsync-Late", mVsyncConfig == mVsyncConfigSet.late);
 
     // Trace early vsync conditions
     SFTRACE_INT("EarlyTransactionFrames", mEarlyTransactionFrames);

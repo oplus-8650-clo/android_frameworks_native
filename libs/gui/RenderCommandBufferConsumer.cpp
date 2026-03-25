@@ -39,16 +39,6 @@ void RenderCommandBufferConsumer::adoptFdCommandBuffer(int fd) {
     mAshmemFdRenderRegion = fd;
     mRenderRegion = (IpcRenderRegion*)mmap(nullptr, sizeof(IpcRenderRegion), PROT_READ | PROT_WRITE,
                                            MAP_SHARED, mAshmemFdRenderRegion, 0);
-
-    if (mRenderRegion == MAP_FAILED) {
-        LOG_ALWAYS_FATAL("Failed to map shared memory region for RenderCommandBufferConsumer");
-    }
-
-    if (!mRenderRegion->mUploadBuf.initMagicMapping(mAshmemFdRenderRegion,
-                                                    offsetof(IpcRenderRegion, mUploadBuf))) {
-        LOG_ALWAYS_FATAL(
-                "Failed to initialize MagicRingBuffer mapping for RenderCommandBufferConsumer");
-    }
 }
 
 void RenderCommandBufferConsumer::consumerAcquire(uint64_t frameNumber) {

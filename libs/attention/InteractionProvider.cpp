@@ -20,23 +20,12 @@ namespace android::attention {
 
 void InteractionProvider::reportInteraction(InteractionType interactionType,
                                             std::chrono::milliseconds interactionTime) {
-    std::function<void()> callback;
-    {
-        std::scoped_lock lock(mMutex);
-        mInteractions[static_cast<int32_t>(interactionType)] = interactionTime;
-        if (mCallback) {
-            callback = std::move(mCallback);
-            mCallback = nullptr;
-        }
-    }
-    if (callback) {
-        callback();
-    }
+    std::scoped_lock lock(mMutex);
+    mInteractions[static_cast<int32_t>(interactionType)] = interactionTime;
 }
 
 std::vector<InteractionState> InteractionProvider::getSourceInteractions() {
     std::scoped_lock lock(mMutex);
-    mCallback = nullptr;
     std::vector<InteractionState> interactions;
     for (const auto& [type, time] : mInteractions) {
         InteractionState interactionState;
@@ -45,11 +34,6 @@ std::vector<InteractionState> InteractionProvider::getSourceInteractions() {
         interactions.push_back(interactionState);
     }
     return interactions;
-}
-
-void InteractionProvider::requestWakeupCallback(std::function<void()> callback) {
-    std::scoped_lock lock(mMutex);
-    mCallback = std::move(callback);
 }
 
 } // namespace android::attention

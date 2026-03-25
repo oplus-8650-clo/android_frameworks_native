@@ -56,8 +56,6 @@ public:
     status_t writeToParcel(android::Parcel* parcel) const override;
     status_t readFromParcel(const android::Parcel* parcel) override;
 
-    void dump(std::string& out) const;
-
     const base::unique_fd& getLutFileDescriptor() const { return fd; }
 
     std::vector<Entry> lutProperties;

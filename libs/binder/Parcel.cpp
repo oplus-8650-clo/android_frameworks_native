@@ -217,7 +217,7 @@ static int toRawFd(const std::variant<unique_fd, borrowed_fd>& v) {
     return std::visit([](const auto& fd) { return fd.get(); }, v);
 }
 
-Parcel::RpcFields::RpcFields(sp<RpcSession>&& session) : mSession(std::move(session)) {
+Parcel::RpcFields::RpcFields(const sp<RpcSession>& session) : mSession(session) {
     LOG_ALWAYS_FATAL_IF(mSession == nullptr);
 }
 
@@ -260,7 +260,7 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
             status_t status = writeInt32(RpcFields::TYPE_BINDER); // non-null
             if (status != OK) return status;
             uint64_t address;
-            status = rpcFields->mSession->state()->onBinderLeaving(*rpcFields->mSession, binder,
+            status = rpcFields->mSession->state()->onBinderLeaving(rpcFields->mSession, binder,
                                                                    &address);
             if (status != OK) return status;
             status = writeUint64(address);
@@ -430,7 +430,7 @@ status_t Parcel::unflattenBinder(sp<IBinder>* out) const
             if (binder == nullptr) {
                 if (rpcFields->mSendState == RpcFields::RpcSendState::RECEIVED) {
                     if (status_t status =
-                                rpcFields->mSession->state()->onBinderEntering(*rpcFields->mSession,
+                                rpcFields->mSession->state()->onBinderEntering(rpcFields->mSession,
                                                                                addr, &binder);
                         status != OK)
                         return status;
@@ -439,7 +439,7 @@ status_t Parcel::unflattenBinder(sp<IBinder>* out) const
 
                     if (status_t status =
                                 rpcFields->mSession->state()
-                                        ->flushExcessBinderRefs(*rpcFields->mSession, addr, binder);
+                                        ->flushExcessBinderRefs(rpcFields->mSession, addr, binder);
                         status != OK) {
                         return status;
                     }
@@ -797,7 +797,7 @@ status_t Parcel::appendFrom(const Parcel* parcel, size_t offset, size_t len) {
 
                     uint64_t leavingAddress;
                     if (status_t status =
-                                rpcFields->mSession->state()->onBinderLeaving(*rpcFields->mSession,
+                                rpcFields->mSession->state()->onBinderLeaving(rpcFields->mSession,
                                                                               binder,
                                                                               &leavingAddress);
                         status != OK) {
@@ -1078,11 +1078,11 @@ void Parcel::markForBinder(const sp<IBinder>& binder) {
     }
 }
 
-void Parcel::markForRpc(sp<RpcSession> session) {
+void Parcel::markForRpc(const sp<RpcSession>& session) {
     LOG_ALWAYS_FATAL_IF(mData != nullptr && mOwner == nullptr,
                         "format must be set before data is written OR on IPC data");
 
-    mVariantFields.emplace<RpcFields>(std::move(session));
+    mVariantFields.emplace<RpcFields>(session);
 }
 
 bool Parcel::isForRpc() const {
@@ -2991,7 +2991,7 @@ void Parcel::makeDangerousViewOf(Parcel* p) {
             }
         }
         status_t result =
-                rpcSetDataReference(*rf->mSession, p->mData, p->mDataSize,
+                rpcSetDataReference(rf->mSession, p->mData, p->mDataSize,
                                     rf->mObjectPositions.data(), rf->mObjectPositions.size(),
                                     std::move(fds), do_nothing_release_func);
         LOG_ALWAYS_FATAL_IF(result != OK, "Failed: %s", statusToString(result).c_str());
@@ -3092,11 +3092,13 @@ void Parcel::rpcSend() const {
 }
 
 status_t Parcel::rpcSetDataReference(
-        RpcSession& session, const uint8_t* data, size_t dataSize, const uint32_t* objectTable,
-        size_t objectTableSize, std::vector<std::variant<unique_fd, borrowed_fd>>&& ancillaryFds,
-        release_func relFunc) {
+        const sp<RpcSession>& session, const uint8_t* data, size_t dataSize,
+        const uint32_t* objectTable, size_t objectTableSize,
+        std::vector<std::variant<unique_fd, borrowed_fd>>&& ancillaryFds, release_func relFunc) {
     // this code uses 'mOwner == nullptr' to understand whether it owns memory
     LOG_ALWAYS_FATAL_IF(relFunc == nullptr, "must provide cleanup function");
+
+    LOG_ALWAYS_FATAL_IF(session == nullptr);
 
     for (size_t i = 0; i < objectTableSize; i++) {
         uint32_t minObjectEnd;
@@ -3109,13 +3111,13 @@ status_t Parcel::rpcSetDataReference(
                   " (parcel size is %zu). Terminating.",
                   objectTable[i], dataSize);
             relFunc(data, dataSize, nullptr, 0);
-            (void)session.shutdownAndWait(false);
+            (void)session->shutdownAndWait(false);
             return BAD_VALUE;
         }
     }
 
     freeData();
-    markForRpc(sp<RpcSession>::fromExisting(&session));
+    markForRpc(session);
 
     auto* rpcFields = maybeRpcFields();
     LOG_ALWAYS_FATAL_IF(rpcFields == nullptr); // guaranteed by markForRpc.
@@ -3139,7 +3141,7 @@ status_t Parcel::rpcSetDataReference(
     }
 
     // acquire and validate all objects
-    bool bindersInObjectPositions = session.getProtocolVersion() >=
+    bool bindersInObjectPositions = session->getProtocolVersion() >=
             RPC_WIRE_PROTOCOL_VERSION_RPC_HEADER_INCLUDES_BINDER_POSITIONS;
     size_t numFds = 0;
     for (uint32_t pos : rpcFields->mObjectPositions) {
@@ -3148,7 +3150,7 @@ status_t Parcel::rpcSetDataReference(
         if (status_t status = readRpcObjectType(&objectType); status != OK) {
             ALOGE("Failed to read object type: %s, pos: %" PRIu32 ". Terminating.",
                   statusToString(status).c_str(), pos);
-            (void)session.shutdownAndWait(false);
+            (void)session->shutdownAndWait(false);
             return status;
         }
 
@@ -3157,19 +3159,19 @@ status_t Parcel::rpcSetDataReference(
         } else if (objectType == RpcFields::TYPE_BINDER) {
             if (!bindersInObjectPositions) {
                 ALOGE("Binder objects should only be in object positions starting at protocol V2");
-                (void)session.shutdownAndWait(false);
+                (void)session->shutdownAndWait(false);
                 return BAD_VALUE;
             }
             mDataPos = pos;
             sp<IBinder> binder; // also held by mAcquiredEnteringBinders
             if (status_t status = readStrongBinder(&binder); status != OK) {
                 ALOGE("Failed to acquire binder: %s. Terminating.", statusToString(status).c_str());
-                (void)session.shutdownAndWait(false);
+                (void)session->shutdownAndWait(false);
                 return status;
             }
         } else {
             ALOGE("Unrecognized object type: %" PRId32 ". Terminating.", objectType);
-            (void)session.shutdownAndWait(false);
+            (void)session->shutdownAndWait(false);
             return BAD_VALUE;
         }
     }
@@ -3400,9 +3402,7 @@ status_t Parcel::restartWrite(size_t desired)
         kernelFields->mHasFds = false;
         kernelFields->mFdsKnown = true;
     } else if (auto* rpcFields = maybeRpcFields()) {
-        rpcFields->mObjectPositions.clear();
-        rpcFields->mImpl.reset();
-        rpcFields->mSendState = RpcFields::RpcSendState::NOT_SENT;
+        *rpcFields = RpcFields(rpcFields->mSession);
     }
     mAllowFds = true;
 
@@ -3644,7 +3644,7 @@ status_t Parcel::truncateRpcObjects(size_t newObjectsSize) {
                 LOG_ALWAYS_FATAL_IF(readRpcBinderAddress(&addr) != OK,
                                     "Inconsistent acquisition state.");
                 if (status_t status =
-                            rpcFields->mSession->state()->cancelBinderLeaving(*rpcFields->mSession,
+                            rpcFields->mSession->state()->cancelBinderLeaving(rpcFields->mSession,
                                                                               addr);
                     status != OK) {
                     ALOGE("Unexpected failure releasing resources: %s",

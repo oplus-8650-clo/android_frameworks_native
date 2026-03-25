@@ -195,8 +195,8 @@ impl UsbDeviceAuthManager {
     }
 
     /// Creates a new `UsbDeviceAuthManager` and performs initial setup.
-    pub fn new(use_interactive_policy: bool, debuggable: bool) -> Result<Self, Error> {
-        Self::with_paths("/sys", "/etc", "/proc", use_interactive_policy, debuggable)
+    pub fn new(use_interactive_policy: bool) -> Result<Self, Error> {
+        Self::with_paths("/sys", "/etc", "/proc", use_interactive_policy)
     }
 
     /// Creates a new `UsbDeviceAuthManager` with specified root directories and performs initial setup.
@@ -206,7 +206,6 @@ impl UsbDeviceAuthManager {
         root_etc_dir_path: P,
         root_proc_dir_path: P,
         use_interactive_policy: bool,
-        debuggable: bool,
     ) -> Result<Self, Error> {
         let mut manager = Self {
             authorizer: Authorizer::new(),
@@ -225,17 +224,15 @@ impl UsbDeviceAuthManager {
         };
         debug!("Setting initial USB authorization state to deny all devices.");
         manager.set_default_to_deny_for_new_devices()?;
-
-        let mut parser = Parser::new(debuggable);
         if use_interactive_policy {
             debug!("Attempting to use interactive policy");
-            if manager.load_interactive_policy(&mut parser).is_err() {
+            if manager.load_interactive_policy().is_err() {
                 debug!("Interactive policy failed. Falling back to static policy.");
-                manager.load_static_policy(&mut parser)?;
+                manager.load_static_policy()?;
             }
         } else {
             debug!("Loading static policy");
-            manager.load_static_policy(&mut parser)?;
+            manager.load_static_policy()?;
         }
         debug!("Loading internal devices list");
         manager.load_internal_devices()?;
@@ -396,24 +393,22 @@ impl UsbDeviceAuthManager {
     }
 
     /// Loads the interactive USB policy from a file or falls back to the static policy.
-    fn load_interactive_policy(&mut self, parser: &mut Parser) -> Result<(), Error> {
+    fn load_interactive_policy(&mut self) -> Result<(), Error> {
         debug!("Loading interactive USB policy");
         let policy_file_path =
             self.root_etc_dir.join(USB_AUTH_INTERACTIVE_POLICY_CONF_RELATIVE_PATH);
-        parser.parse_from_file(&policy_file_path)?;
-        self.policy = parser.policy().clone();
+        self.policy = Parser::parse_rules_from_file(&policy_file_path)?.policy().clone();
 
         Ok(())
     }
 
     /// Loads the static USB policy from a file or creates a default one if the file does not exist.
-    fn load_static_policy(&mut self, parser: &mut Parser) -> Result<(), Error> {
+    fn load_static_policy(&mut self) -> Result<(), Error> {
         debug!("Loading static USB policy");
         let policy_file_path = self.root_etc_dir.join(USB_AUTH_POLICY_CONF_RELATIVE_PATH);
         if policy_file_path.exists() {
             debug!("Policy file found at {:?}. Loading static policy.", policy_file_path);
-            parser.parse_from_file(&policy_file_path)?;
-            self.policy = parser.policy().clone();
+            self.policy = Parser::parse_rules_from_file(&policy_file_path)?.policy().clone();
         } else {
             debug!("Policy file not found. Creating default policy to allow HID, HUB and ethernet devices.");
             self.policy = create_default_policy();
@@ -987,7 +982,6 @@ tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
             mock_etc.path(),
             mock_proc.path(),
             false,
-            false,
         )
         .unwrap();
 
@@ -1019,7 +1013,6 @@ tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
             mock_etc.path(),
             mock_proc.path(),
             false,
-            false,
         )
         .unwrap();
 
@@ -1037,7 +1030,6 @@ tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
             mock_sys.path(),
             mock_etc.path(),
             mock_proc.path(),
-            false,
             false,
         )
         .unwrap();
@@ -1077,7 +1069,6 @@ tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
             mock_etc.path(),
             mock_proc.path(),
             false,
-            false,
         )
         .unwrap();
         assert_eq!(manager.policy.all_rules.len(), 1);
@@ -1108,7 +1099,6 @@ tracefs /sys/kernel/tracing tracefs rw,seclabel,relatime 0 0
             mock_sys.path(),
             mock_etc.path(),
             mock_proc.path(),
-            false,
             false,
         )
         .unwrap();
