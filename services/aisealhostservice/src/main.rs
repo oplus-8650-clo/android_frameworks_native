@@ -422,6 +422,11 @@ impl IAiSealInternalService for AiSealInternalService {
         info!("onUserRemoved {user_id}");
         self.get_guest_agent()?.userRemoved(user_id)
     }
+
+    fn trimMemory(&self) -> binder::Result<()> {
+        info!("Internal request to trim memory of AiSeal VM");
+        self.get_guest_agent()?.trimAsync()
+    }
 }
 
 struct CEStoreKEK {
