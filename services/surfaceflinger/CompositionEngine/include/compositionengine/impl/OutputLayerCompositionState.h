@@ -181,7 +181,9 @@ struct OutputLayerCompositionState {
     float dimmingRatio = kDefaultDimmingRatio;
 
     // lut information
+    std::shared_ptr<gui::DisplayLuts> appLuts;
     std::shared_ptr<gui::DisplayLuts> generatedLuts;
+    std::optional<std::vector<uint8_t>> smpte2094_50;
 };
 
 } // namespace compositionengine::impl

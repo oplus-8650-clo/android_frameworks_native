@@ -40,10 +40,6 @@ cc_library_shared {
         "-Werror",
     ],
 
-    static_libs: [
-        "libegl_flags",
-    ],
-
     shared_libs: [
         "libbase",
         "libbinder",

@@ -497,4 +497,58 @@ TEST_F(IPCRecordingCanvasTest, SkSLShader) {
     ASSERT_TRUE(compareRendering(drawSkSL, "SkSLShader"));
 }
 
+TEST_F(IPCRecordingCanvasTest, ImageShader) {
+    const uint32_t width = 100;
+    const uint32_t height = 100;
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(width, height));
+    surface->getCanvas()->clear(SK_ColorGREEN);
+    sk_sp<SkImage> image = surface->makeImageSnapshot();
+
+    // Register in Server Cache
+    uint64_t bufferId = 999;
+    mServerCache.bitmaps[bufferId] = IPCServerBitmap{nullptr, image, nullptr};
+
+    // Register in Client Cache
+    uint32_t imageId = image->uniqueID();
+    mClientCache.bitmaps[imageId] = IPCClientBitmap{bufferId};
+
+    auto drawImageShader = [&](SkCanvas* c) {
+        SkPaint paint;
+        paint.setShader(
+                image->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions()));
+        c->drawRect(SkRect::MakeWH(200, 200), paint);
+    };
+    ASSERT_TRUE(compareRendering(drawImageShader, "ImageShader"));
+}
+
+TEST_F(IPCRecordingCanvasTest, ShadowLayer) {
+    auto drawShadowLayer = [&](SkCanvas* c) {
+        SkPath path = SkPathBuilder().addRect(SkRect::MakeXYWH(50, 50, 100, 100)).detach();
+        SkDrawShadowRec rec;
+        rec.fZPlaneParams = SkPoint3::Make(0, 0, 10);
+        rec.fLightPos = SkPoint3::Make(100, 100, 100);
+        rec.fLightRadius = 50;
+        rec.fAmbientColor = SK_ColorRED;
+        rec.fSpotColor = SK_ColorBLUE;
+        rec.fFlags = 0;
+        c->private_draw_shadow_rec(path, rec);
+    };
+    ASSERT_TRUE(compareRendering(drawShadowLayer, "ShadowLayer"));
+}
+
+TEST_F(IPCRecordingCanvasTest, SaveLayer) {
+    auto drawSaveLayer = [&](SkCanvas* c) {
+        SkRect bounds = SkRect::MakeXYWH(50, 50, 200, 200);
+        SkPaint paint;
+        paint.setAlpha(128);
+        c->saveLayer(bounds, &paint);
+        c->drawColor(SK_ColorRED);
+        SkPaint bluePaint;
+        bluePaint.setColor(SK_ColorBLUE);
+        c->drawRect(SkRect::MakeXYWH(100, 100, 100, 100), bluePaint);
+        c->restore();
+    };
+    ASSERT_TRUE(compareRendering(drawSaveLayer, "SaveLayer"));
+}
+
 } // namespace android

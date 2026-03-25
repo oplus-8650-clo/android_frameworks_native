@@ -1252,6 +1252,7 @@ TEST_F(VSyncPredictorTest, reportsCorrectAccuracyForPastTimePointAfterVSync) {
 }
 
 TEST_F(VSyncPredictorTest, synchronizesWithSingleSample) {
+    SET_FLAG_FOR_TEST(flags::use_last_vsync_predict, true);
     auto constexpr kPeriod = 10'000'000;
     auto constexpr kRefreshRate = Fps::fromPeriodNsecs(kPeriod);
     hal::VrrConfig vrrConfig{.minFrameIntervalNs = kPeriod};

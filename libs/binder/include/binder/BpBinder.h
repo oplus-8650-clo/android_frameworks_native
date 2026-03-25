@@ -148,8 +148,8 @@ public:
         static sp<BpBinder> create(int32_t handle, std::function<void()>* postTask) {
             return BpBinder::create(handle, postTask);
         }
-        static sp<BpBinder> create(const sp<RpcSession>& session, uint64_t address) {
-            return BpBinder::create(session, address);
+        static sp<BpBinder> create(sp<RpcSession>&& session, uint64_t address) {
+            return BpBinder::create(std::move(session), address);
         }
 
         // valid if !isRpcBinder
@@ -178,7 +178,7 @@ private:
     friend class sp<BpBinder>;
 
     static sp<BpBinder> create(int32_t handle, std::function<void()>* postTask);
-    static sp<BpBinder> create(const sp<RpcSession>& session, uint64_t address);
+    static sp<BpBinder> create(sp<RpcSession>&& session, uint64_t address);
 
     struct BinderHandle {
         int32_t handle;

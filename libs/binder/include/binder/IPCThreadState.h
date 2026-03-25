@@ -213,6 +213,11 @@ public:
     // side.
     LIBBINDER_EXPORTED static const int32_t kUnsetWorkSource = -1;
 
+    // Logs a PCC transaction to the audit log. Returns true if the transaction was logged
+    // successfully, false otherwise.
+    LIBBINDER_EXPORTED static bool logPccTransaction(BBinder* binder, uint32_t code,
+                                                     uid_t callingUid);
+
 private:
     IPCThreadState();
     ~IPCThreadState();

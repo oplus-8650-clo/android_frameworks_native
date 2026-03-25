@@ -269,16 +269,6 @@ flag {
 } # graphite_renderengine_desktop_rollout
 
 flag {
-  name: "hdcp_negotiation"
-  namespace: "core_graphics"
-  description: "detect secure layers to start HDCP negotiation"
-  bug: "375340594"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-} # hdcp_negotiation
-
-flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"
@@ -312,6 +302,13 @@ flag {
   description: "Enables UID filtering when building layer snapshots of mirrors. Layers that have different UID from the mirror root's will be dropped "
   bug: "437391557"
 } # mirror_uid_filtering
+
+flag {
+  name: "mirror_with_crop"
+  namespace: "window_surfaces"
+  description: "Enables mirroring a layer with cropping"
+  bug: "474153029"
+} # mirror_with_crop
 
 flag {
   name: "modeset_multi_display"

@@ -101,6 +101,12 @@ enum class LibvulkanTimeDomain {
     kStageLocal = 1,  // VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT
 };
 
+enum class LibvulkanTimeDomainCounter {
+    // We don't ever update the timingPropertiesCounter or timeDomainsCounter
+    // counts as these domains or properties don't change in our implementation
+    kDefault = 1,
+};
+
 static uint64_t convertGralloc1ToBufferUsage(uint64_t producerUsage,
                                              uint64_t consumerUsage) {
     static_assert(uint64_t(GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN) ==
@@ -560,8 +566,9 @@ uint32_t get_num_ready_timings(Swapchain& swapchain,
             &actual_present_time,
             nullptr,  //&dequeue_ready_time,
             nullptr /*&reads_done_time*/);
-
-        if (err != android::OK) {
+        bool is_swapchain_out_of_date = swapchain.surface.swapchain_handle !=
+                                        HandleFromSwapchain(&swapchain);
+        if (err != android::OK || is_swapchain_out_of_date) {
             // For VK_EXT_present_timing Returning all 0's signals that no data
             // will be given for this frame
             if (!isGoogleDisplayTimings) {
@@ -3115,9 +3122,6 @@ VkResult GetSwapchainTimingPropertiesEXT(
         return result;
     }
 
-    pSwapchainTimingProperties->sType =
-        VK_STRUCTURE_TYPE_SWAPCHAIN_TIMING_PROPERTIES_EXT;
-    pSwapchainTimingProperties->pNext = nullptr;
     pSwapchainTimingProperties->refreshDuration = refresh_duration;
     pSwapchainTimingProperties->refreshInterval = refresh_duration;
 
@@ -3156,9 +3160,6 @@ VkResult GetSwapchainTimeDomainPropertiesEXT(
     pSwapchainTimeDomainProperties->pTimeDomainIds[0] =
         (uint64_t)LibvulkanTimeDomain::kStageLocal;
     pSwapchainTimeDomainProperties->timeDomainCount = 1;
-    pSwapchainTimeDomainProperties->sType =
-        VK_STRUCTURE_TYPE_SWAPCHAIN_TIME_DOMAIN_PROPERTIES_EXT;
-    pSwapchainTimeDomainProperties->pNext = nullptr;
 
     return VK_SUCCESS;
 }
@@ -3196,6 +3197,12 @@ VkResult GetPastPresentationTimingEXT(
     std::lock_guard<std::mutex> lock(swapchain.timing_mutex);
     ANativeWindow* window = swapchain.surface.window.get();
     VkResult result = VK_SUCCESS;
+
+    // We always set these counters to 1 as the domain/properties don't change
+    pPastPresentationTimingProperties->timingPropertiesCounter =
+        (uint64_t)LibvulkanTimeDomainCounter::kDefault;
+    pPastPresentationTimingProperties->timeDomainsCounter =
+        (uint64_t)LibvulkanTimeDomainCounter::kDefault;
 
     if (!swapchain.frame_timestamps_enabled) {
         ALOGV("Calling native_window_enable_frame_timestamps(true)");
@@ -3238,8 +3245,6 @@ VkResult GetPastPresentationTimingEXT(
         VkPastPresentationTimingEXT* current_result =
             &pPastPresentationTimingProperties
                  ->pPresentationTimings[timings_copied];
-        current_result->sType = VK_STRUCTURE_TYPE_PAST_PRESENTATION_TIMING_EXT;
-        current_result->pNext = nullptr;
         current_result->reportComplete = VK_TRUE;
         current_result->presentId = ti.present_id_;
         current_result->timeDomain = VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT;
@@ -3294,9 +3299,8 @@ VkResult GetPastPresentationTimingEXT(
     }
 
     if (timings_copied > 0) {
-        swapchain.timing.erase(
-            swapchain.timing.begin(),
-            swapchain.timing.begin() + timings_to_report_count);
+        swapchain.timing.erase(swapchain.timing.begin(),
+                               swapchain.timing.begin() + timings_copied);
     }
 
     pPastPresentationTimingProperties->presentationTimingCount = timings_copied;

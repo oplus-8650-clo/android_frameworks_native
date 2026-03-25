@@ -684,8 +684,6 @@ private:
     status_t getStalledTransactionInfo(
             int pid, std::optional<TransactionHandler::StalledTransactionInfo>& result);
 
-    void updateHdcpLevels(hal::HWDisplayId hwcDisplayId, int32_t connectedLevel, int32_t maxLevel);
-
     void addActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
     void removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
@@ -921,7 +919,8 @@ private:
     status_t checkLayerLeaks();
 
     status_t mirrorLayer(const LayerCreationArgs& args, const sp<IBinder>& mirrorFromHandle,
-                         const sp<IBinder>& stopAtHandle, gui::CreateSurfaceResult& outResult);
+                         const sp<IBinder>& stopAtHandle, const sp<IBinder>& cropByHandle,
+                         gui::CreateSurfaceResult& outResult);
 
     // Finds the layer stack associated with the provided `displayId`, and returns the surface
     // control via `gui::CreateSurfaceResult`. Otherwise, PERMISSION_DENIED if the client lacks the

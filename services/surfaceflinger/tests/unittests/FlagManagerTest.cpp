@@ -136,20 +136,4 @@ TEST_F(FlagManagerTest, returnsValue) {
     }
 }
 
-TEST_F(FlagManagerTest, readonlyReturnsValue) {
-    mFlagManager.setUnitTestMode();
-
-    EXPECT_CALL(mFlagManager, getBoolProperty).WillRepeatedly(Return(std::nullopt));
-
-    {
-        SET_FLAG_FOR_TEST(flags::hdcp_level_hal, true);
-        EXPECT_EQ(true, mFlagManager.hdcp_level_hal());
-    }
-
-    {
-        SET_FLAG_FOR_TEST(flags::hdcp_level_hal, false);
-        EXPECT_EQ(false, mFlagManager.hdcp_level_hal());
-    }
-}
-
 } // namespace android
