@@ -470,9 +470,13 @@ uint32_t OutputLayer::calculateOutputRelativeBufferTransform(
 void OutputLayer::updateLuts(
         const LayerFECompositionState& layerFEState,
         const std::optional<std::vector<std::optional<LutProperties>>>& properties) {
+    editState().appLuts = layerFEState.luts;
     editState().generatedLuts = nullptr;
+    editState().smpte2094_50 = std::nullopt;
+
     if (layerFEState.buffer && properties && !layerFEState.luts &&
         !FlagManager::getInstance().force_agtm_without_luts()) {
+        layerFEState.buffer->getSmpte2094_50(&editState().smpte2094_50);
         editState().generatedLuts = createLutsFromAgtm(getOutput().getState(), layerFEState.buffer,
                                                        *properties, getState().dataspace);
         if (editState().generatedLuts != nullptr) {
@@ -1297,6 +1301,9 @@ void OutputLayer::dump(std::string& out) const {
 
     StringAppendF(&out, "  - Output Layer %p(%s)\n", this, getLayerFE().getDebugName());
     dumpState(out);
+    if (const auto* layerFEState = getLayerFE().getCompositionState()) {
+        layerFEState->dump(out);
+    }
 }
 
 // QTI_BEGIN

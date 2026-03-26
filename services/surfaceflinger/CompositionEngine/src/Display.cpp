@@ -109,7 +109,7 @@ bool Display::hasSecureLayers() const {
     const auto layers = getOutputLayersOrderedByZ();
     return std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
         const auto* state = layer->getLayerFE().getCompositionState();
-        return state && state->isSecure;
+        return state && (state->isSecure || state->hasProtectedContent);
     });
 }
 
@@ -541,7 +541,8 @@ void Display::setExpensiveRenderingExpected(bool enabled) {
 }
 
 bool Display::isPowerHintSessionEnabled() {
-    return mPowerAdvisor != nullptr && mPowerAdvisor->usePowerHintSession();
+    return getCompositionEngine().isPowerHintSessionEnabled() && mPowerAdvisor != nullptr &&
+            mPowerAdvisor->usePowerHintSession();
 }
 
 bool Display::isPowerHintSessionGpuReportingEnabled() {

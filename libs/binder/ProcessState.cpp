@@ -511,6 +511,14 @@ bool ProcessState::isThreadPoolStarted() const {
     return mThreadPoolStarted;
 }
 
+bool ProcessState::isOutgoingTransactionsAuditable() const {
+    return mIsOutgoingTransactionsAuditable;
+}
+
+void ProcessState::setIsOutgoingTransactionsAuditable(bool enabled) {
+    mIsOutgoingTransactionsAuditable = enabled;
+}
+
 void ProcessState::checkExpectingThreadPoolStart() const {
     if (mThreadPoolStarted) return;
 
@@ -607,6 +615,7 @@ ProcessState::ProcessState(const char* driver)
         mForked(false),
         mThreadPoolStarted(false),
         mThreadPoolSeq(1),
+        mIsOutgoingTransactionsAuditable(false),
         mCallRestriction(CallRestriction::NONE) {
     String8 error;
     unique_fd opened = open_driver(driver, &error);

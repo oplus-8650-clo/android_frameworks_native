@@ -47,7 +47,7 @@ class DisplayModeController {
 public:
     using ActiveModeListener = ftl::Function<void(PhysicalDisplayId, Fps vsyncRate, Fps renderFps)>;
 
-    DisplayModeController();
+    DisplayModeController() = default;
 
     void setHwComposer(HWComposer* composerPtr) { mComposerPtr = composerPtr; }
     void setActiveModeListener(const ActiveModeListener& listener) {
@@ -153,8 +153,6 @@ public:
     void setSecure(PhysicalDisplayId displayId, bool secure) REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock);
 
-    bool supportsHdcp() const;
-
     void startHdcpNegotiation(PhysicalDisplayId displayId) REQUIRES(kMainThreadContext);
 
 private:
@@ -216,8 +214,6 @@ private:
 
     mutable std::mutex mDisplayLock;
     ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayPtr> mDisplays GUARDED_BY(mDisplayLock);
-
-    bool mSupportsHdcp = false;
 };
 
 } // namespace android::display

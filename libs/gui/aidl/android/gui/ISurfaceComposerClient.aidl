@@ -59,7 +59,7 @@ interface ISurfaceComposerClient {
      */
     FrameStats getLayerFrameStats(IBinder handle);
 
-    CreateSurfaceResult mirrorSurface(IBinder mirrorFromHandle, @nullable IBinder stopAtHandle);
+    CreateSurfaceResult mirrorSurface(IBinder mirrorFromHandle, @nullable IBinder stopAtHandle, @nullable IBinder cropByHandle);
 
     CreateSurfaceResult mirrorLayerStack(long displayId);
 

@@ -6090,6 +6090,32 @@ TEST_F(InputDispatcherTest, InterceptKeyBeforeDispatchingPolicy_getsCorrectDispl
             AllOf(WithKeyCode(AKEYCODE_A), WithDisplayId(ui::LogicalDisplayId(2))));
 }
 
+TEST_F(InputDispatcherTest, InterceptKeyBeforeQueueingPolicy_getsCorrectDisplayId) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    mDispatcher->setFocusedDisplay(ui::LogicalDisplayId(2));
+
+    mDispatcher->notifyKey(KeyArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_KEYBOARD)
+                                   .keyCode(AKEYCODE_A)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+
+    mFakePolicy->assertInterceptKeyBeforeQueueingWasCalled(
+            AllOf(WithKeyCode(AKEYCODE_A), WithDisplayId(ui::LogicalDisplayId(2))));
+}
+
+TEST_F(InputDispatcherTest, InterceptKeyBeforeQueueingPolicy_getsCorrectDisplayIdForPowerKey) {
+    std::shared_ptr<FakeApplicationHandle> application = std::make_shared<FakeApplicationHandle>();
+    mDispatcher->setFocusedDisplay(ui::LogicalDisplayId(2));
+
+    mDispatcher->notifyKey(KeyArgsBuilder(ACTION_DOWN, AINPUT_SOURCE_KEYBOARD)
+                                   .keyCode(AKEYCODE_POWER)
+                                   .displayId(ui::LogicalDisplayId::INVALID)
+                                   .build());
+
+    mFakePolicy->assertInterceptKeyBeforeQueueingWasCalled(
+            AllOf(WithKeyCode(AKEYCODE_POWER), WithDisplayId(ui::LogicalDisplayId::INVALID)));
+}
+
 /**
  * Two windows. First is a regular window. Second does not overlap with the first, and has
  * WATCH_OUTSIDE_TOUCH.

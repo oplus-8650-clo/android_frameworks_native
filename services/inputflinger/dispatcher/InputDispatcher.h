@@ -184,6 +184,9 @@ private:
     InputDispatcherPolicyInterface& mPolicy;
     android::InputDispatcherConfiguration mConfig GUARDED_BY(mLock);
 
+    ui::LogicalDisplayId calculateIntendedDisplayIdLocked(const NotifyKeyArgs& args) const
+            REQUIRES(mLock);
+
     mutable std::mutex mLock;
 
     std::condition_variable mDispatcherIsAlive;
@@ -611,6 +614,11 @@ private:
     } mKeyRepeatState GUARDED_BY(mLock);
 
     void resetKeyRepeatLocked() REQUIRES(mLock);
+    /**
+     * If a key is being repeated, synthesize the repeat and place it into the inbound queue
+     * for processing. Return the time at which the dispatcher should wake up next.
+     */
+    nsecs_t processKeyRepeatLocked(nsecs_t currentTime) REQUIRES(mLock);
     std::shared_ptr<KeyEntry> synthesizeKeyRepeatLocked(nsecs_t currentTime) REQUIRES(mLock);
 
     // Deferred command processing.

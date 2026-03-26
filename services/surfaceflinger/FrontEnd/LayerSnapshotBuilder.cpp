@@ -429,6 +429,7 @@ bool LayerSnapshotBuilder::tryFastUpdate(const Args& args) {
 
 void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
     SFTRACE_NAME("UpdateSnapshots");
+    mHasMirrorRequests = false;
     LayerSnapshot rootSnapshot = args.rootSnapshot;
     if (args.parentCrop) {
         rootSnapshot.geomLayerBounds = *args.parentCrop;
@@ -457,6 +458,7 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         auto mergedSnapshot =
                 args.mergeableHierarchyManager->findLayerSnapshotCopy(UNASSIGNED_LAYER_ID);
         if (mergedSnapshot) {
+            updateVisibility(*mergedSnapshot, mergedSnapshot->getIsVisible());
             mMergedSnapshots.emplace_back(std::move(mergedSnapshot));
         }
     }
@@ -468,19 +470,53 @@ void LayerSnapshotBuilder::updateSnapshots(const Args& args) {
         LayerHierarchy::TraversalPath childPath =
                 root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
         updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
-        applyStopLayers(args.root, childPath);
     } else {
         for (auto& [childHierarchy, variant] : args.root.mChildren) {
             LayerHierarchy::TraversalPath childPath =
                     root.makeChild(childHierarchy->getLayer()->id, variant);
             updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot, /*depth=*/0);
-            applyStopLayers(*childHierarchy, childPath);
         }
     }
 
     // Update touchable region crops outside the main update pass. This is because a layer could be
     // cropped by any other layer and it requires both snapshots to be updated.
     updateTouchableRegionCrop(args);
+
+    // The crop for a mirror layer is determined by another layer in the hierarchy.
+    // updateMirrorLayerCrops needs to be called after updateSnapshotsInHierarchy because it relies
+    // on the global geometry (transforms) of the crop layer and the mirrored layer, which are
+    // computed during the hierarchy traversal.
+    // If the crop for a mirror layer has changed, we need to perform a second traversal to update
+    // the geometry of the mirror layer and its children.
+    if (FlagManager::getInstance().mirror_with_crop() && updateMirrorLayerCrops(args)) {
+        if (args.root.getLayer()) {
+            LayerHierarchy::TraversalPath childPath =
+                    root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
+            updateSnapshotsInHierarchy(args, args.root, childPath, rootSnapshot, /*depth=*/0);
+        } else {
+            for (auto& [childHierarchy, variant] : args.root.mChildren) {
+                LayerHierarchy::TraversalPath childPath =
+                        root.makeChild(childHierarchy->getLayer()->id, variant);
+                updateSnapshotsInHierarchy(args, *childHierarchy, childPath, rootSnapshot,
+                                           /*depth=*/0);
+            }
+        }
+    }
+
+    // applyStopLayers modifies the snapshot's visibility (isHiddenByPolicyFromParent) based on
+    // stop layer configuration. This must run after updateSnapshotsInHierarchy so that all
+    // snapshots are created and their initial state is established.
+    if (args.root.getLayer()) {
+        LayerHierarchy::TraversalPath childPath =
+                root.makeChild(args.root.getLayer()->id, LayerHierarchy::Variant::Attached);
+        applyStopLayers(args.root, childPath);
+    } else {
+        for (auto& [childHierarchy, variant] : args.root.mChildren) {
+            LayerHierarchy::TraversalPath childPath =
+                    root.makeChild(childHierarchy->getLayer()->id, variant);
+            applyStopLayers(*childHierarchy, childPath);
+        }
+    }
 
     const bool hasUnreachableSnapshots = sortSnapshotsByZ(args);
 
@@ -531,7 +567,7 @@ void LayerSnapshotBuilder::update(const Args& args) {
         clearChanges(*snapshot);
     }
 
-    if (tryFastUpdate(args)) {
+    if (tryFastUpdate(args) && args.mergeableHierarchyManager == nullptr) {
         return;
     }
     updateSnapshots(args);
@@ -569,11 +605,11 @@ const LayerSnapshot& LayerSnapshotBuilder::updateSnapshotsInHierarchy(
     if (args.mergeableHierarchyManager) {
         auto mergedSnapshot = args.mergeableHierarchyManager->findLayerSnapshotCopy(layer->id);
         if (mergedSnapshot) {
-            updateSnapshot(*mergedSnapshot, args, *layer, parentSnapshot, traversalPath);
+            updateSnapshot(*mergedSnapshot, args, *layer, parentSnapshot, traversalPath, true);
+            updateVisibility(*mergedSnapshot, mergedSnapshot->getIsVisible());
             mMergedSnapshots.emplace_back(std::move(mergedSnapshot));
-        }
-
-        if (!args.mergeableHierarchyManager->isMemberOfAnyHierarchy(layer->id)) {
+        } else if (!args.mergeableHierarchyManager->isMemberOfAnyHierarchy(layer->id)) {
+            updateVisibility(*snapshot, snapshot->getIsVisible());
             mMergedSnapshots.emplace_back(std::make_unique<LayerSnapshot>(*snapshot));
         }
     }
@@ -753,7 +789,8 @@ int multiplyAlpha(int color, float alpha) {
 void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& args,
                                           const RequestedLayerState& requested,
                                           const LayerSnapshot& parentSnapshot,
-                                          const LayerHierarchy::TraversalPath& path) {
+                                          const LayerHierarchy::TraversalPath& path,
+                                          bool forMergedSnapshot) {
     // Always update flags and visibility
     ftl::Flags<RequestedLayerState::Changes> parentChanges = parentSnapshot.changes &
             (RequestedLayerState::Changes::Hierarchy | RequestedLayerState::Changes::Geometry |
@@ -804,7 +841,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
             snapshot.changes.any(RequestedLayerState::Changes::Geometry |
                                  RequestedLayerState::Changes::BufferSize |
                                  RequestedLayerState::Changes::Input)) {
-            updateInput(snapshot, requested, parentSnapshot, path, args);
+            updateInput(snapshot, requested, parentSnapshot, path, args, forMergedSnapshot);
         }
         if (forceUpdate ||
             (args.includeMetadata &&
@@ -1016,7 +1053,7 @@ void LayerSnapshotBuilder::updateSnapshot(LayerSnapshot& snapshot, const Args& a
     if (forceUpdate ||
         snapshot.changes.any(RequestedLayerState::Changes::Geometry |
                              RequestedLayerState::Changes::Input)) {
-        updateInput(snapshot, requested, parentSnapshot, path, args);
+        updateInput(snapshot, requested, parentSnapshot, path, args, forMergedSnapshot);
     }
 
     if (forceUpdate || snapshot.clientChanges & layer_state_t::eSystemContentPriorityChanged) {
@@ -1291,6 +1328,23 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
                                              const RequestedLayerState& requested,
                                              const LayerSnapshot& parentSnapshot,
                                              uint32_t primaryDisplayRotationFlags) {
+    if (FlagManager::getInstance().mirror_with_crop()) {
+        // Fetch the requested transform to update to.
+        ui::Transform t = snapshot.ignoreLocalTransform ? ui::Transform()
+            : requested.getTransform(primaryDisplayRotationFlags);
+
+        snapshot.localTransform = t;
+        snapshot.localTransformInverse = snapshot.localTransform.inverse();
+
+        if (snapshot.mirrorCrop.has_value() &&
+            (snapshot.mirrorCrop->left != 0 || snapshot.mirrorCrop->top != 0)) {
+                ui::Transform translation;
+                translation.set(-snapshot.mirrorCrop->left, -snapshot.mirrorCrop->top);
+                snapshot.localTransform = snapshot.localTransform * translation;
+                snapshot.localTransformInverse = snapshot.localTransform.inverse();
+        }
+    }
+
     snapshot.geomLayerTransform = parentSnapshot.geomLayerTransform * snapshot.localTransform;
     const bool transformWasInvalid = snapshot.invalidTransform;
     snapshot.invalidTransform = !LayerSnapshot::isTransformValid(snapshot.geomLayerTransform);
@@ -1334,7 +1388,16 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
     if (!requested.crop.isEmpty()) {
         snapshot.geomLayerCrop = snapshot.geomLayerCrop.intersect(requested.crop);
     }
-    snapshot.geomLayerBounds = snapshot.geomLayerBounds.intersect(snapshot.geomLayerCrop);
+
+    if (snapshot.mirrorCrop.has_value()) {
+        snapshot.geomLayerCrop = snapshot.geomLayerCrop.intersect(*snapshot.mirrorCrop);
+    }
+
+
+    if (!snapshot.geomLayerCrop.isEmpty()) {
+        snapshot.geomLayerBounds = snapshot.geomLayerBounds.intersect(snapshot.geomLayerCrop);
+    }
+
     snapshot.transformedBounds = snapshot.geomLayerTransform.transform(snapshot.geomLayerBounds);
     const Rect geomLayerBoundsWithoutTransparentRegion =
             RequestedLayerState::reduce(Rect(snapshot.geomLayerBounds),
@@ -1351,6 +1414,11 @@ void LayerSnapshotBuilder::updateLayerBounds(LayerSnapshot& snapshot,
 
     snapshot.parentGeomLayerCrop =
             snapshot.localTransform.inverse().transform(parentSnapshot.geomLayerCrop);
+
+    if (requested.croppedByLayerId != UNASSIGNED_LAYER_ID &&
+        requested.layerIdToMirror != UNASSIGNED_LAYER_ID) {
+        mHasMirrorRequests = true;
+    }
 }
 
 void LayerSnapshotBuilder::updateShadows(LayerSnapshot& snapshot, const RequestedLayerState&,
@@ -1378,8 +1446,8 @@ void LayerSnapshotBuilder::updateShadows(LayerSnapshot& snapshot, const Requeste
 void LayerSnapshotBuilder::updateInput(LayerSnapshot& snapshot,
                                        const RequestedLayerState& requested,
                                        const LayerSnapshot& parentSnapshot,
-                                       const LayerHierarchy::TraversalPath& path,
-                                       const Args& args) {
+                                       const LayerHierarchy::TraversalPath& path, const Args& args,
+                                       bool forMergedSnapshot) {
     using InputConfig = gui::WindowInfo::InputConfig;
 
     snapshot.inputInfo = requested.getWindowInfo();
@@ -1441,7 +1509,9 @@ void LayerSnapshotBuilder::updateInput(LayerSnapshot& snapshot,
     }
 
     if (requested.touchCropId != UNASSIGNED_LAYER_ID || path.isClone()) {
-        mNeedsTouchableRegionCrop.insert(path);
+        if (!forMergedSnapshot) {
+            mNeedsTouchableRegionCrop.insert(path);
+        }
     }
     auto cropLayerSnapshot = getSnapshot(requested.touchCropId);
     if (!cropLayerSnapshot && snapshot.inputInfo.replaceTouchableRegionWithCrop) {
@@ -1729,6 +1799,101 @@ void LayerSnapshotBuilder::applyStopLayersInternal(
             }
         }
     }
+}
+
+/*
+ * Updates the crop for each mirror layer that is cropped by another layer.
+ *
+ * The crop is calculated in the mirrored layer's coordinate space by transforming the crop
+ * layer's bounds. If any crop changes, this function returns true, signaling that a second
+ * traversal of the hierarchy is needed to update the geometry of the mirror layer and its
+ * children.
+ *
+ * @param args The arguments for updating snapshots, containing layer states and other context.
+ * @return True if any mirror crop has changed, false otherwise.
+ */
+bool LayerSnapshotBuilder::updateMirrorLayerCrops(const Args& args) {
+    static constexpr ftl::Flags<RequestedLayerState::Changes> AFFECTS_CROP =
+            RequestedLayerState::Changes::Geometry | RequestedLayerState::Changes::Hierarchy |
+            RequestedLayerState::Changes::Created | RequestedLayerState::Changes::Visibility;
+
+    if (args.forceUpdate != ForceUpdateFlags::ALL &&
+        !args.layerLifecycleManager.getGlobalChanges().any(AFFECTS_CROP) && !args.displayChanges) {
+        return false;
+    }
+
+    if (!mHasMirrorRequests && !mSnapshotsHaveMirrorCrop) {
+        return false;
+    }
+
+    bool changed = false;
+    bool newSnapshotsHaveMirrorCrop = false;
+    for (auto& mirrorTargetSnapshot : mSnapshots) {
+        const RequestedLayerState* requested =
+                args.layerLifecycleManager.getLayerFromId(mirrorTargetSnapshot->path.id);
+        if (!requested) {
+            continue;
+        }
+
+        // If a layer serves as a mirror target for a mirror with crop operation, it would have its
+        // layerIdToMirror and croppedByLayerId set.
+        if (requested->croppedByLayerId == UNASSIGNED_LAYER_ID ||
+            requested->layerIdToMirror == UNASSIGNED_LAYER_ID) {
+            if (mirrorTargetSnapshot->mirrorCrop.has_value()) {
+                mirrorTargetSnapshot->mirrorCrop.reset();
+                mirrorTargetSnapshot->changes |= RequestedLayerState::Changes::Geometry;
+                changed = true;
+            }
+            continue;
+        }
+
+        LayerSnapshot* cropBySnapshot = getSnapshot(requested->croppedByLayerId);
+        LayerSnapshot* mirrorFromSnapshot = getSnapshot(requested->layerIdToMirror);
+
+        const bool isValidMirror = cropBySnapshot &&
+                cropBySnapshot->reachability != LayerSnapshot::Reachability::Unreachable &&
+                mirrorFromSnapshot &&
+                mirrorFromSnapshot->reachability != LayerSnapshot::Reachability::Unreachable &&
+                !mirrorFromSnapshot->invalidTransform;
+
+        if (isValidMirror) {
+            newSnapshotsHaveMirrorCrop = true;
+            // To calculate the crop in the mirrored layer's (source) coordinate space, we need to
+            // transform the crop layer's bounds. This is done by creating a transform that maps
+            // from the crop layer's space to the mirrored layer's space.
+            //   1. cropBySnapshot->geomLayerTransform: crop layer space -> screen space
+            //   2. mirrorFromSnapshot->geomLayerTransform.inverse(): screen space ->
+            //      mirrored layer (source) space
+            //
+            // We use mirrorFromSnapshot because the crop defines which part of the source content
+            // to display. mirrorTargetSnapshot->geomLayerTransform would map to the mirror
+            // destination layer's local space, which would be incorrect as the crop is not relative
+            // to the mirror's on-screen position.
+            ui::Transform transform = mirrorFromSnapshot->geomLayerTransform.inverse() *
+                    cropBySnapshot->geomLayerTransform;
+
+            // Get the bounds of the crop layer.
+            FloatRect bounds = cropBySnapshot->geomLayerBounds;
+
+            // Transform the crop layer's bounds into the mirrored layer's coordinate space.
+            FloatRect crop = transform.transform(bounds);
+
+            if (!mirrorTargetSnapshot->mirrorCrop.has_value() ||
+                !(*mirrorTargetSnapshot->mirrorCrop == crop)) {
+                mirrorTargetSnapshot->mirrorCrop = crop;
+                mirrorTargetSnapshot->changes |= RequestedLayerState::Changes::Geometry;
+                changed = true;
+            }
+        } else {
+            if (mirrorTargetSnapshot->mirrorCrop.has_value()) {
+                mirrorTargetSnapshot->mirrorCrop.reset();
+                mirrorTargetSnapshot->changes |= RequestedLayerState::Changes::Geometry;
+                changed = true;
+            }
+        }
+    }
+    mSnapshotsHaveMirrorCrop = newSnapshotsHaveMirrorCrop;
+    return changed;
 }
 
 } // namespace android::surfaceflinger::frontend

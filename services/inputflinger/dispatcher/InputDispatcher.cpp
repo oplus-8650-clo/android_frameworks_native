@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "android/keycodes.h"
 #define LOG_TAG "InputDispatcher"
 #define ATRACE_TAG ATRACE_TAG_INPUT
 
@@ -882,6 +883,19 @@ std::string dumpWindowForTouchOcclusion(const WindowInfo& info, bool isTouchedWi
 
 } // namespace
 
+ui::LogicalDisplayId InputDispatcher::calculateIntendedDisplayIdLocked(
+        const NotifyKeyArgs& args) const {
+    const bool isPowerKeyCode = args.keyCode == AKEYCODE_SLEEP || args.keyCode == AKEYCODE_POWER ||
+            args.keyCode == AKEYCODE_WAKEUP;
+    if (isPowerKeyCode) {
+        return args.displayId;
+    }
+    else if (args.displayId == ui::LogicalDisplayId::INVALID) {
+        return mFocusedDisplayId;
+    }
+    return args.displayId;
+}
+
 // --- InputDispatcher ---
 
 InputDispatcher::InputDispatcher(InputDispatcherPolicyInterface& policy, JavaVM* vm)
@@ -1210,25 +1224,20 @@ void InputDispatcher::dispatchOnceInnerLocked(nsecs_t& nextWakeupTime) {
     // If we don't already have a pending event, go grab one.
     if (!mPendingEvent) {
         if (mInboundQueue.empty()) {
-            // Synthesize a key repeat if appropriate.
-            if (mKeyRepeatState.lastKeyEntry) {
-                if (currentTime >= mKeyRepeatState.nextRepeatTime) {
-                    mPendingEvent = synthesizeKeyRepeatLocked(currentTime);
-                } else {
-                    nextWakeupTime = std::min(nextWakeupTime, mKeyRepeatState.nextRepeatTime);
-                }
-            }
-
-            // Nothing to do if there is no pending event.
-            if (!mPendingEvent) {
-                return;
-            }
-        } else {
-            // Inbound queue has at least one entry.
-            mPendingEvent = mInboundQueue.front();
-            mInboundQueue.pop_front();
-            traceInboundQueueLengthLocked();
+            // Legacy behaviour: only synthesize repeats if the queue is completely empty.
+            // It's not clear whether that's intentional.
+            // TODO(b/493759313): add a unit test for this and figure out why it is so.
+            nextWakeupTime = std::min(nextWakeupTime, processKeyRepeatLocked(currentTime));
         }
+        if (mInboundQueue.empty()) {
+            // No pending event, and nothing in the inbound queue. Therefore, nothing to do here.
+            return;
+        }
+
+        // Inbound queue has at least one entry.
+        mPendingEvent = mInboundQueue.front();
+        mInboundQueue.pop_front();
+        traceInboundQueueLengthLocked();
 
         // Poke user activity for this event.
         if (mPendingEvent->policyFlags & POLICY_FLAG_PASS_TO_USER) {
@@ -1711,6 +1720,24 @@ void InputDispatcher::resetKeyRepeatLocked() {
     }
 }
 
+nsecs_t InputDispatcher::processKeyRepeatLocked(nsecs_t currentTime) {
+    if (!mKeyRepeatState.lastKeyEntry) {
+        // There is no key currently being repeated.
+        return LLONG_MAX;
+    }
+
+    if (currentTime >= mKeyRepeatState.nextRepeatTime) {
+        // The repeat timeout has expired. Synthesize a new key repeat event and push it to the
+        // inbound queue. Request an immediate wake up to process the newly queued event.
+        mInboundQueue.push_back(synthesizeKeyRepeatLocked(currentTime));
+        return LLONG_MIN;
+    }
+
+    // The key is being repeated, but the timeout has not yet expired.
+    // Return the time at which the next repeat should occur.
+    return mKeyRepeatState.nextRepeatTime;
+}
+
 std::shared_ptr<KeyEntry> InputDispatcher::synthesizeKeyRepeatLocked(nsecs_t currentTime) {
     std::shared_ptr<const KeyEntry> entry = mKeyRepeatState.lastKeyEntry;
 
@@ -1991,8 +2018,7 @@ bool InputDispatcher::dispatchKeyLocked(nsecs_t currentTime, std::shared_ptr<con
         mReporter->reportDroppedKey(entry->id);
         // Poke user activity for consumed keys, as it may have not been reported due to
         // the focused window requesting user activity to be disabled
-        if (*dropReason == DropReason::POLICY &&
-            mPendingEvent->policyFlags & POLICY_FLAG_PASS_TO_USER) {
+        if (*dropReason == DropReason::POLICY && (entry->policyFlags & POLICY_FLAG_PASS_TO_USER)) {
             pokeUserActivityLocked(*entry);
         }
         return true;
@@ -4579,9 +4605,18 @@ void InputDispatcher::notifyKey(const NotifyKeyArgs& args) {
 
     int32_t keyCode = args.keyCode;
     KeyEvent event;
-    event.initialize(args.id, args.deviceId, args.source, args.displayId, INVALID_HMAC, args.action,
-                     flags, keyCode, args.scanCode, metaState, repeatCount, args.downTime,
-                     args.eventTime);
+
+    // Figure out the intended display to send the event to.
+    // If the event is not targeted to a specific display, send it to the focused display.
+    ui::LogicalDisplayId intendedDisplayId = ui::LogicalDisplayId::INVALID;
+    {
+        std::scoped_lock _l(mLock);
+        intendedDisplayId = calculateIntendedDisplayIdLocked(args);
+    }
+
+    event.initialize(args.id, args.deviceId, args.source, intendedDisplayId, INVALID_HMAC,
+                     args.action, flags, keyCode, args.scanCode, metaState, repeatCount,
+                     args.downTime, args.eventTime);
 
     android::base::Timer t;
     mPolicy.interceptKeyBeforeQueueing(event, /*byref*/ policyFlags);

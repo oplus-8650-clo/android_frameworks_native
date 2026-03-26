@@ -140,6 +140,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(luts_api);
     DUMP_ACONFIG_FLAG(md_degrade_hdr);
     DUMP_ACONFIG_FLAG(mirror_uid_filtering);
+    DUMP_ACONFIG_FLAG(mirror_with_crop);
     DUMP_ACONFIG_FLAG(monitor_buffer_fences);
     DUMP_ACONFIG_FLAG(mrr_full_frame_rate_list);
     DUMP_ACONFIG_FLAG(offload_gpu_composition);
@@ -171,8 +172,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(force_slower_follower_gpu_composition_platform);
     DUMP_ACONFIG_FLAG(frame_rate_category_mrr);
     DUMP_ACONFIG_FLAG(graphite_renderengine);
-    DUMP_ACONFIG_FLAG(hdcp_level_hal);
-    DUMP_ACONFIG_FLAG(hdcp_negotiation);
     DUMP_ACONFIG_FLAG(local_tonemap_screenshots);
     DUMP_ACONFIG_FLAG(modeset_multi_display);
     DUMP_ACONFIG_FLAG(modeset_state_machine);
@@ -287,8 +286,6 @@ FLAG_MANAGER_ACONFIG_FLAG(force_slower_follower_gpu_composition_platform,
 FLAG_MANAGER_ACONFIG_FLAG(frame_rate_category_mrr, "debug.sf.frame_rate_category_mrr")
 FLAG_MANAGER_ACONFIG_FLAG(frametimeline_boottime_in_lambda, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine, "debug.renderengine.graphite")
-FLAG_MANAGER_ACONFIG_FLAG(hdcp_level_hal, "")
-FLAG_MANAGER_ACONFIG_FLAG(hdcp_negotiation, "debug.sf.hdcp_negotiation");
 FLAG_MANAGER_ACONFIG_FLAG(local_tonemap_screenshots, "debug.sf.local_tonemap_screenshots");
 FLAG_MANAGER_ACONFIG_FLAG(modeset_multi_display, "");
 FLAG_MANAGER_ACONFIG_FLAG(modeset_state_machine, "");
@@ -332,6 +329,7 @@ FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview2_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_uid_filtering, "");
+FLAG_MANAGER_ACONFIG_FLAG(mirror_with_crop, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
 FLAG_MANAGER_ACONFIG_FLAG(mrr_full_frame_rate_list, "");
 FLAG_MANAGER_ACONFIG_FLAG(offload_gpu_composition, "");

@@ -18,7 +18,10 @@
 
 #include <android-base/thread_annotations.h>
 #include <chrono>
+#include <functional>
 #include <map>
+#include <mutex>
+#include <vector>
 
 #include "AttentionTypes.h"
 
@@ -37,9 +40,12 @@ public:
 
     std::vector<InteractionState> getSourceInteractions();
 
+    void requestWakeupCallback(std::function<void()> callback);
+
 private:
     std::mutex mMutex;
     std::map<int32_t, std::chrono::milliseconds> mInteractions GUARDED_BY(mMutex);
+    std::function<void()> mCallback GUARDED_BY(mMutex);
 };
 
 } // namespace attention

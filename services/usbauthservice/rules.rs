@@ -545,20 +545,6 @@ pub struct SystemCondition {
     pub states: Vec<UsbAuthorizationSystemState>,
 }
 
-/// Represents a single USB authorization rule.
-///
-/// A rule consists of an `Action` to perform, `DeviceAttributes` to match against
-/// a `UsbDevice`, and an optional `SystemCondition` based on the system's state.
-#[derive(Debug, PartialEq, Clone)]
-pub struct Rule {
-    /// The action to take if this rule matches.
-    pub action: Action,
-    /// The attributes a `UsbDevice` must have to match this rule.
-    pub attributes: Option<DeviceAttributes>,
-    /// An optional condition based on the system's current authorization state.
-    pub condition: Option<SystemCondition>,
-}
-
 impl SystemCondition {
     /// Creates a new `SystemCondition`.
     /// If `operator` is `None`, it defaults to `Operator::Equals`.
@@ -621,9 +607,161 @@ impl SystemCondition {
     }
 }
 
+/// Describes the allowlist type, which determines where the allowlist is loaded from.
+#[derive(Debug, Clone)]
+pub enum AllowListType {
+    /// Load from system partition.
+    System,
+    /// Load from vendor partition.
+    Vendor,
+}
+
+impl AllowListType {
+    /// Parses an allowlist type from the given iterator of whitespace-separated parts.
+    pub fn parse(
+        parts: &mut std::iter::Peekable<std::str::SplitWhitespace>,
+    ) -> Result<AllowListType, ParseError> {
+        if let Some(&type_str) = parts.peek() {
+            let allowlist_type = match type_str {
+                "system" => Ok(AllowListType::System),
+                "vendor" => Ok(AllowListType::Vendor),
+                _ => Err(ParseError::InvalidImportAllowListType(type_str.to_string())),
+            };
+            parts.next(); // Consume type
+
+            allowlist_type
+        } else {
+            Err(ParseError::UnexpectedToken(String::new()))
+        }
+    }
+}
+
+/// Represents additional constraints on the `import-allowlist` rule.
+#[derive(Debug, Clone)]
+pub enum AllowListCondition {
+    /// Checks whether the system is debuggable (i.e. `ro.debuggable` is set).
+    Debuggable,
+}
+
+impl AllowListCondition {
+    /// Parses an allowlist condition from the given iterator of whitespace-separated parts.
+    pub fn parse(
+        parts: &mut std::iter::Peekable<std::str::SplitWhitespace>,
+    ) -> Result<Option<AllowListCondition>, ParseError> {
+        if parts.peek() != Some(&"when") {
+            return Ok(None);
+        }
+        parts.next(); // Consume "when"
+
+        if let Some(&condition_str) = parts.peek() {
+            let condition = match condition_str {
+                "debuggable" => Ok(Some(AllowListCondition::Debuggable)),
+                _ => Err(ParseError::InvalidImportAllowListCondition(condition_str.to_string())),
+            };
+            parts.next(); // Consume the condition string
+
+            condition
+        } else {
+            Err(ParseError::UnexpectedToken(String::new()))
+        }
+    }
+}
+
+/// Represents an import Rule.
+///
+/// This rule will read the imported allowlist rules and insert them in place.
+/// Since this is an allowlist, a few constraints are enforced on the rules (or they are dropped):
+///   - Only `Allow` actions are allowed.
+///   - All actions MUST have device attributes.
+///   - Actions may not provide system conditions or interface actions.
+///   - Default actions are not allowed.
+///
+/// If there are any parsing errors in the imported file, this entire rule is dropped and an error
+/// will be logged (but parsing of the remaining rules file can continue).
+#[derive(Debug, Clone)]
+pub struct ImportAllowListRule {
+    /// Used to determine where to load the allowlist from.
+    pub allowlist_type: AllowListType,
+
+    /// What condition to apply for this allowlist.
+    pub allowlist_condition: Option<AllowListCondition>,
+}
+
+impl ImportAllowListRule {
+    /// Parses an ImportAllowListRule from the given iterator of whitespace-separated parts.
+    ///
+    /// An import rule follows the format: `import-allowlist [allowlist-type]
+    ///     [when allowlist-condition]`.
+    /// For example: `import-allowlist vendor when debuggable`.
+    pub fn parse(
+        parts: &mut std::iter::Peekable<std::str::SplitWhitespace>,
+    ) -> Result<Self, ParseError> {
+        if let Some(&import_sym) = parts.peek() {
+            if import_sym != "import-allowlist" {
+                return Err(ParseError::InvalidImportAllowList(import_sym.to_string()));
+            }
+            parts.next(); // Consume the action string after successful parsing.
+
+            let allowlist_type = AllowListType::parse(parts)?;
+            let allowlist_condition = AllowListCondition::parse(parts)?;
+
+            if parts.peek().is_some() {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Unexpected token at end of rule: '{}'",
+                    parts.next().unwrap()
+                )));
+            }
+
+            Ok(ImportAllowListRule { allowlist_type, allowlist_condition })
+        } else {
+            Err(ParseError::UnexpectedToken(String::new()))
+        }
+    }
+
+    /// Validate that the provided rules match the requirements for imported allowlist rules.
+    pub fn validate_rules(rules: &[Rule]) -> Result<(), ParseError> {
+        for rule in rules {
+            if rule.action != Action::Allow {
+                return Err(ParseError::InvalidRuleInAllowList(format!(
+                    "Rule in allowlist had invalid action: {:?}",
+                    rule.action
+                )));
+            }
+
+            if rule.attributes.is_none() {
+                return Err(ParseError::InvalidRuleInAllowList(
+                    "Rule in allowlist had empty device attributes".to_string(),
+                ));
+            }
+
+            if rule.condition.is_some() {
+                return Err(ParseError::InvalidRuleInAllowList(
+                    "Rule in allowlist had non-empty system condition".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Represents a single USB authorization rule.
+///
+/// A rule consists of an `Action` to perform, `DeviceAttributes` to match against
+/// a `UsbDevice`, and an optional `SystemCondition` based on the system's state.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Rule {
+    /// The action to take if this rule matches.
+    pub action: Action,
+    /// The attributes a `UsbDevice` must have to match this rule.
+    pub attributes: Option<DeviceAttributes>,
+    /// An optional condition based on the system's current authorization state.
+    pub condition: Option<SystemCondition>,
+}
+
 /// Implementation of the `Rule` struct.
 impl Rule {
-    /// Parses a rule from the given iterator of whitespace-separated parts.
+    /// Parses a Rule from the given iterator of whitespace-separated parts.
     ///
     /// A rule string follows the format: `action [device-attributes] [when system-conditions]`
     /// For example: `allow name "MyDevice" when OneOf { Booted, LoggedIn }`
@@ -704,6 +842,42 @@ impl Rule {
         }
 
         true
+    }
+}
+
+/// Parsed rules from policy file.
+#[derive(Debug, Clone)]
+pub enum ParsedRule {
+    /// Rule mapping to an action taken on a device.
+    Action(Rule),
+
+    /// Import rules from a separate files.
+    ImportAllowList(ImportAllowListRule),
+}
+
+impl ParsedRule {
+    /// Parses a rule from the given iterator of whitespace-separated parts.
+    pub fn parse(
+        parts: &mut std::iter::Peekable<std::str::SplitWhitespace>,
+    ) -> Result<Self, ParseError> {
+        match Rule::parse(parts) {
+            Ok(rule) => Ok(ParsedRule::Action(rule)),
+
+            // Only if the Action token didn't parse do we accept other Rule types.
+            Err(ParseError::InvalidAction(action_msg)) => match ImportAllowListRule::parse(parts) {
+                Ok(import) => Ok(ParsedRule::ImportAllowList(import)),
+
+                // If we failed to also parse the import-allowlist, report this as an invalid
+                // action as that's the higher priority parse request.
+                Err(ParseError::InvalidImportAllowList(_)) => {
+                    Err(ParseError::InvalidAction(action_msg))
+                }
+
+                Err(e) => Err(e),
+            },
+
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -1050,6 +1224,18 @@ pub enum ParseError {
     /// Indicates an unexpected token in the input stream.
     #[error("Unexpected token: '{0}'")]
     UnexpectedToken(String),
+    /// Invalid keyword for parsing `import-allowlist`.
+    #[error("Invalid import keyword: '{0}'")]
+    InvalidImportAllowList(String),
+    /// Invalid allowlist type.
+    #[error("Invalid import type: '{0}'")]
+    InvalidImportAllowListType(String),
+    /// Invalid allowlist condition.
+    #[error("Invalid import condition: '{0}'")]
+    InvalidImportAllowListCondition(String),
+    /// Invalid rule in an imported allowlist rule set.
+    #[error("Invalid rule inside allowlist: '{0}'")]
+    InvalidRuleInAllowList(String),
     /// Generic parsing error for unexpected situations.
     #[error("Parsing error: '{0}'")]
     Generic(String),

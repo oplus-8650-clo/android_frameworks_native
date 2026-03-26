@@ -151,7 +151,7 @@ public:
 
     // --- The following methods may run on threads besides SF main ---
     // Send a hint about an upcoming increase in the CPU workload
-    virtual void notifyCpuLoadUp(std::string_view reason = {}) = 0;
+    virtual void notifyCpuLoadUp() = 0;
     // Send a hint about the imminent start of a new CPU workload
     virtual void notifyDisplayUpdateImminentAndCpuReset() = 0;
 
@@ -205,7 +205,7 @@ public:
     void setCompositedWorkload(ftl::Flags<Workload> workload) override;
 
     // --- The following methods may run on threads besides SF main ---
-    void notifyCpuLoadUp(std::string_view reason = {}) override;
+    void notifyCpuLoadUp() override;
     void notifyDisplayUpdateImminentAndCpuReset() override;
 
     // --- The following methods specifically run on binder threads ---
@@ -366,10 +366,8 @@ private:
     // updated on both binder and the main thread.
     std::atomic<uint32_t> mQueuedWorkload;
     ftl::Flags<Workload> mCommittedWorkload;
-    ftl::Flags<Workload> mCompositedWorkload;
 
-    void sendHintSessionHint(aidl::android::hardware::power::SessionHint hint,
-                             std::string_view reason = {});
+    void sendHintSessionHint(aidl::android::hardware::power::SessionHint hint);
 
     template <aidl::android::hardware::power::ChannelMessage::ChannelMessageContents::Tag T,
               class In>
