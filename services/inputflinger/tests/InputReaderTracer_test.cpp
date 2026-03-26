@@ -31,53 +31,29 @@ using ::testing::Field;
 
 namespace android {
 
-class TestInputReaderTracer : public InputReaderTracer {
-public:
-    TestInputReaderTracer(std::shared_ptr<input_trace::InputTracingBackendInterface> backend,
-                          sp<gui::WindowInfosListener>& windowInfoListener,
-                          const std::vector<gui::WindowInfo>& initialWindowInfos)
-          : InputReaderTracer(
-                    backend,
-                    [&windowInfoListener,
-                     &initialWindowInfos](const sp<android::gui::WindowInfosListener>& listener) {
-                        windowInfoListener = listener;
-                        return initialWindowInfos;
-                    },
-                    [&windowInfoListener](const sp<android::gui::WindowInfosListener>& listener) {
-                        windowInfoListener = nullptr;
-                    }) {}
-};
-
 class InputReaderTracerTest : public testing::Test {
 protected:
     std::shared_ptr<input_trace::VerifyingTrace> mTrace;
     std::shared_ptr<input_trace::FakeInputTracingBackend> mBackend;
-    sp<gui::WindowInfosListener> mRegisteredWindowInfoListener;
+    // A non-secure window, to be added at the start of all tests. This checks that the code under
+    // test isn't just looking for the presence of any windows at all, without checking for them
+    // being secure.
     gui::WindowInfo mInitialWindow;
-    std::vector<gui::WindowInfo> mInjectedInitialWindowInfos;
-    std::unique_ptr<TestInputReaderTracer> mTracer;
+    std::unique_ptr<InputReaderTracer> mTracer;
 
     void SetUp() override {
         mTrace = std::make_shared<input_trace::VerifyingTrace>();
         mBackend = std::make_shared<input_trace::FakeInputTracingBackend>(mTrace);
-        // Add a window initially, to check that the code under test isn't just looking for the
-        // presence of any windows at all, without checking for them being secure.
+        mTracer = std::make_unique<InputReaderTracer>(mBackend);
         mInitialWindow.name = "Initial window";
-        mInjectedInitialWindowInfos.push_back(mInitialWindow);
-    }
-
-    void createTracer() {
-        mTracer = std::make_unique<TestInputReaderTracer>(mBackend, mRegisteredWindowInfoListener,
-                                                          mInjectedInitialWindowInfos);
     }
 };
 
 TEST_F(InputReaderTracerTest, InitialSecureWindowVisible) {
     gui::WindowInfo secureWindow;
     secureWindow.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
-    mInjectedInitialWindowInfos.push_back(secureWindow);
 
-    createTracer();
+    mTracer->onWindowInfosChanged({{mInitialWindow, secureWindow}, {}, 0, 0});
 
     mTracer->traceRawEvent({.when = 123});
 
@@ -89,7 +65,7 @@ TEST_F(InputReaderTracerTest, InitialSecureWindowVisible) {
 }
 
 TEST_F(InputReaderTracerTest, SecureWindowAppearsAfterInitialization) {
-    createTracer();
+    mTracer->onWindowInfosChanged({{mInitialWindow}, {}, 0, 0});
     mTracer->traceRawEvent({.when = 123});
 
     mTrace->expectAllRawEventsAtTimestampToMatchMetadata(123,
@@ -99,7 +75,7 @@ TEST_F(InputReaderTracerTest, SecureWindowAppearsAfterInitialization) {
 
     gui::WindowInfo secureWindow;
     secureWindow.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
-    mRegisteredWindowInfoListener->onWindowInfosChanged({{mInitialWindow, secureWindow}, {}, 0, 0});
+    mTracer->onWindowInfosChanged({{mInitialWindow, secureWindow}, {}, 0, 0});
 
     mTracer->traceRawEvent({.when = 456});
 
@@ -111,7 +87,7 @@ TEST_F(InputReaderTracerTest, SecureWindowAppearsAfterInitialization) {
 }
 
 TEST_F(InputReaderTracerTest, IgnoresInvisibleOrNoInputChannelSecureWindows) {
-    createTracer();
+    mTracer->onWindowInfosChanged({{mInitialWindow}, {}, 0, 0});
 
     gui::WindowInfo secureInvisibleWindow;
     secureInvisibleWindow.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
@@ -121,7 +97,7 @@ TEST_F(InputReaderTracerTest, IgnoresInvisibleOrNoInputChannelSecureWindows) {
     secureNoInputChannelWindow.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
     secureNoInputChannelWindow.inputConfig |= gui::WindowInfo::InputConfig::NO_INPUT_CHANNEL;
 
-    mRegisteredWindowInfoListener->onWindowInfosChanged(
+    mTracer->onWindowInfosChanged(
             {{mInitialWindow, secureInvisibleWindow, secureNoInputChannelWindow}, {}, 0, 0});
 
     mTracer->traceRawEvent({.when = 123});

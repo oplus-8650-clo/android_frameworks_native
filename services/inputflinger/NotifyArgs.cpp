@@ -38,6 +38,11 @@ NotifyInputDevicesChangedArgs::NotifyInputDevicesChangedArgs(int32_t id,
                                                              std::vector<InputDeviceInfo> infos)
       : id(id), inputDeviceInfos(std::move(infos)) {}
 
+// --- NotifyWindowInfosArgs ---
+
+NotifyWindowInfosArgs::NotifyWindowInfosArgs(int32_t id, gui::WindowInfosUpdate update)
+      : id(id), update(std::move(update)) {}
+
 // --- NotifyKeyArgs ---
 
 NotifyKeyArgs::NotifyKeyArgs(int32_t id, nsecs_t eventTime, nsecs_t readTime, DeviceId deviceId,
@@ -196,6 +201,10 @@ const std::string toString(const NotifyArgs& args) {
     Visitor toStringVisitor{
             [&](const NotifyInputDevicesChangedArgs&) -> std::string {
                 return "NotifyInputDevicesChangedArgs";
+            },
+            [&](const NotifyWindowInfosArgs& windowInfosArgs) -> std::string {
+                return StringPrintf("NotifyWindowInfosArgs(id=0x%" PRIx32 ", vsyncId=%" PRId64 ")",
+                                    windowInfosArgs.id, windowInfosArgs.update.vsyncId);
             },
             [&](const NotifyKeyArgs&) -> std::string { return "NotifyKeyArgs"; },
             [&](const NotifyMotionArgs& motionArgs) { return motionArgs.dump(); },

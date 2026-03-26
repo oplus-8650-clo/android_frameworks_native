@@ -430,6 +430,11 @@ void UnwantedInteractionBlocker::notifyInputDevicesChanged(
     mQueuedListener.flush();
 }
 
+void UnwantedInteractionBlocker::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
+    mQueuedListener.notify(args);
+    mQueuedListener.flush();
+}
+
 void UnwantedInteractionBlocker::onInputDevicesChanged(
         const std::vector<InputDeviceInfo>& inputDevices) {
     std::scoped_lock lock(mLock);

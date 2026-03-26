@@ -25,7 +25,6 @@
 #include "NotifyArgsBuilders.h"
 #include "TestEventMatchers.h"
 #include "TestInputListener.h"
-#include "input/ScopedFlagOverride.h"
 
 namespace android {
 
@@ -96,29 +95,6 @@ static std::vector<DisplayViewport> createViewports(std::vector<ui::LogicalDispl
 
 // --- PointerChoreographerTest ---
 
-class TestPointerChoreographer : public PointerChoreographer {
-public:
-    TestPointerChoreographer(InputListenerInterface& inputListener,
-                             PointerChoreographerPolicyInterface& policy,
-                             sp<gui::WindowInfosListener>& windowInfoListener,
-                             const std::vector<gui::WindowInfo>& mInitialWindowInfos);
-};
-
-TestPointerChoreographer::TestPointerChoreographer(
-        InputListenerInterface& inputListener, PointerChoreographerPolicyInterface& policy,
-        sp<gui::WindowInfosListener>& windowInfoListener,
-        const std::vector<gui::WindowInfo>& mInitialWindowInfos)
-      : PointerChoreographer(
-                inputListener, policy,
-                [&windowInfoListener,
-                 &mInitialWindowInfos](const sp<android::gui::WindowInfosListener>& listener) {
-                    windowInfoListener = listener;
-                    return mInitialWindowInfos;
-                },
-                [&windowInfoListener](const sp<android::gui::WindowInfosListener>& listener) {
-                    windowInfoListener = nullptr;
-                }) {}
-
 class PointerChoreographerTest : public testing::Test {
 public:
     static constexpr int DENSITY_MEDIUM = 160;
@@ -126,12 +102,8 @@ public:
 
 protected:
     TestInputListener mTestListener;
-    sp<gui::WindowInfosListener> mRegisteredWindowInfoListener;
-    std::vector<gui::WindowInfo> mInjectedInitialWindowInfos;
     testing::NiceMock<MockPointerChoreographerPolicyInterface> mMockPolicy;
-    TestPointerChoreographer mChoreographer{mTestListener, mMockPolicy,
-                                            mRegisteredWindowInfoListener,
-                                            mInjectedInitialWindowInfos};
+    PointerChoreographer mChoreographer{mTestListener, mMockPolicy};
 
     void SetUp() override {
         ON_CALL(mMockPolicy, createPointerController).WillByDefault([this](ControllerType type) {
@@ -195,16 +167,6 @@ protected:
 
     void assertPointerDisplayIdNotNotified() { ASSERT_EQ(std::nullopt, mPointerDisplayIdNotified); }
 
-    void assertWindowInfosListenerRegistered() {
-        ASSERT_NE(nullptr, mRegisteredWindowInfoListener)
-                << "WindowInfosListener was not registered";
-    }
-
-    void assertWindowInfosListenerNotRegistered() {
-        ASSERT_EQ(nullptr, mRegisteredWindowInfoListener)
-                << "WindowInfosListener was not unregistered";
-    }
-
     void assertSpotsOnMotion() {
         // Emit first pointer down.
         mChoreographer.notifyMotion(
@@ -259,6 +221,7 @@ private:
 TEST_F(PointerChoreographerTest, ForwardsArgsToInnerListener) {
     const std::vector<NotifyArgs>
             allArgs{NotifyInputDevicesChangedArgs{},
+                    NotifyWindowInfosArgs{},
                     KeyArgsBuilder(AKEY_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD).build(),
                     MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
                             .pointer(FIRST_TOUCH_POINTER)
@@ -275,6 +238,9 @@ TEST_F(PointerChoreographerTest, ForwardsArgsToInnerListener) {
                 std::visit(Visitor{
                                    [&](const NotifyInputDevicesChangedArgs& args) {
                                        mTestListener.assertNotifyInputDevicesChangedWasCalled();
+                                   },
+                                   [&](const NotifyWindowInfosArgs& args) {
+                                       mTestListener.assertNotifyWindowInfosWasCalled();
                                    },
                                    [&](const NotifyKeyArgs& args) {
                                        mTestListener.assertNotifyKeyWasCalled();
@@ -2160,46 +2126,32 @@ INSTANTIATE_TEST_SUITE_P(
         });
 
 TEST_P(SkipPointerScreenshotForPrivacySensitiveDisplaysTestFixture,
-       WindowInfosListenerIsOnlyRegisteredWhenRequired) {
+       UpdatesStateOnWindowInfosChange) {
     const auto& [name, source, controllerType, pointerBuilder, onControllerInit, action] =
             GetParam();
-    assertWindowInfosListenerNotRegistered();
-
-    // Listener should registered when a pointer device is added
-    initializePointerDevice(pointerBuilder, source, onControllerInit, action);
-    assertWindowInfosListenerRegistered();
-
-    mChoreographer.notifyInputDevicesChanged({});
-    assertWindowInfosListenerNotRegistered();
-}
-
-TEST_P(SkipPointerScreenshotForPrivacySensitiveDisplaysTestFixture,
-       InitialDisplayInfoIsPopulatedForListener) {
-    const auto& [name, source, controllerType, pointerBuilder, onControllerInit, action] =
-            GetParam();
-    // listener should not be registered if there is no pointer device
-    assertWindowInfosListenerNotRegistered();
 
     gui::WindowInfo windowInfo;
     windowInfo.displayId = DISPLAY_ID;
     windowInfo.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
-    mInjectedInitialWindowInfos = {windowInfo};
 
     initializePointerDevice(pointerBuilder, source, onControllerInit, action);
-    assertWindowInfosListenerRegistered();
 
-    // Pointer indicators should be hidden based on the initial display info
+    // Adding a privacy-sensitive window to a display should set flag to hide pointer indicators
+    // from screenshots on that display.
+    gui::DisplayInfo displayInfo;
+    displayInfo.displayId = DISPLAY_ID;
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
+
+    // Pointer indicators should be hidden based on the initial display info.
     auto pc = assertPointerControllerCreated(controllerType);
     pc->assertIsSkipScreenshotFlagSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
 
-    // un-marking the privacy sensitive display should reset the state
+    // Removing the privacy sensitive window from the display should reset the state.
     windowInfo.inputConfig.clear();
-    gui::DisplayInfo displayInfo;
-    displayInfo.displayId = DISPLAY_ID;
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     pc->assertIsSkipScreenshotFlagNotSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
@@ -2223,19 +2175,16 @@ TEST_P(SkipPointerScreenshotForPrivacySensitiveDisplaysTestFixture,
     windowInfo.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
     gui::DisplayInfo displayInfo;
     displayInfo.displayId = DISPLAY_ID;
-    assertWindowInfosListenerRegistered();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     pc->assertIsSkipScreenshotFlagSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
 
     // un-marking the privacy sensitive display should reset the state
     windowInfo.inputConfig.clear();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     pc->assertIsSkipScreenshotFlagNotSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
@@ -2258,10 +2207,8 @@ TEST_P(SkipPointerScreenshotForPrivacySensitiveDisplaysTestFixture,
     windowInfo.inputConfig |= gui::WindowInfo::InputConfig::NOT_VISIBLE;
     gui::DisplayInfo displayInfo;
     displayInfo.displayId = DISPLAY_ID;
-    assertWindowInfosListenerRegistered();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     pc->assertIsSkipScreenshotFlagNotSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
@@ -2279,21 +2226,16 @@ TEST_P(SkipPointerScreenshotForPrivacySensitiveDisplaysTestFixture,
     windowInfo.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
     gui::DisplayInfo displayInfo;
     displayInfo.displayId = DISPLAY_ID;
-    assertWindowInfosListenerRegistered();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     gui::WindowInfo windowInfo2 = windowInfo;
     windowInfo2.inputConfig.clear();
     pc->assertSkipScreenshotFlagChanged();
 
     // controller should not be updated if there are no changes in privacy sensitive windows
-    mRegisteredWindowInfoListener->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                                        {{windowInfo, windowInfo2},
-                                                         {displayInfo},
-                                                         /*vsyncId=*/0,
-                                                         /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo, windowInfo2}, {displayInfo}, 0, /*timestamp=*/0}});
     pc->assertSkipScreenshotFlagNotChanged();
 }
 
@@ -2315,10 +2257,8 @@ TEST_F(PointerChoreographerTest, HidesPointerScreenshotForExistingPrivacySensiti
     windowInfo.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
     gui::DisplayInfo displayInfo;
     displayInfo.displayId = DISPLAY_ID;
-    assertWindowInfosListenerRegistered();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     auto pc = assertPointerControllerCreated(ControllerType::MOUSE);
     pc->assertIsSkipScreenshotFlagSet(DISPLAY_ID);
@@ -2342,9 +2282,8 @@ TEST_F(PointerChoreographerTest, HidesPointerScreenshotForExistingPrivacySensiti
 
     // un-marking the privacy sensitive display should reset the state
     windowInfo.inputConfig.clear();
-    mRegisteredWindowInfoListener
-            ->onWindowInfosChanged(/*windowInfosUpdate=*/
-                                   {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
+    mChoreographer.notifyWindowInfos(
+            {0, {{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0}});
 
     pc->assertIsSkipScreenshotFlagNotSet(DISPLAY_ID);
     pc->assertIsSkipScreenshotFlagNotSet(ANOTHER_DISPLAY_ID);
@@ -3440,40 +3379,6 @@ TEST_F(PointerChoreographerDisplayTopologyDefaultMouseDisplayTests,
     // Valid
     secondDisplayCursor = mChoreographer.getMouseCursorPosition(SECOND_DISPLAY_ID);
     ASSERT_TRUE(secondDisplayCursor.has_value());
-}
-
-class PointerChoreographerWindowInfoListenerTest : public testing::Test {};
-
-TEST_F(PointerChoreographerWindowInfoListenerTest,
-       doesNotCrashIfListenerCalledAfterPointerChoreographerDestroyed) {
-    sp<android::gui::WindowInfosListener> registeredListener;
-    sp<android::gui::WindowInfosListener> localListenerCopy;
-    {
-        testing::NiceMock<MockPointerChoreographerPolicyInterface> mockPolicy;
-        EXPECT_CALL(mockPolicy, createPointerController(ControllerType::MOUSE))
-                .WillOnce(testing::Return(std::make_shared<FakePointerController>()));
-        TestInputListener testListener;
-        std::vector<gui::WindowInfo> injectedInitialWindowInfos;
-        TestPointerChoreographer testChoreographer{testListener, mockPolicy, registeredListener,
-                                                   injectedInitialWindowInfos};
-        testChoreographer.setDisplayViewports(createViewports({DISPLAY_ID}));
-
-        // Add mouse to create controller and listener
-        testChoreographer.notifyInputDevicesChanged(
-                {/*id=*/0, {generateTestDeviceInfo(DEVICE_ID, AINPUT_SOURCE_MOUSE, DISPLAY_ID)}});
-
-        ASSERT_NE(nullptr, registeredListener) << "WindowInfosListener was not registered";
-        localListenerCopy = registeredListener;
-    }
-    ASSERT_EQ(nullptr, registeredListener) << "WindowInfosListener was not unregistered";
-
-    gui::WindowInfo windowInfo;
-    windowInfo.displayId = DISPLAY_ID;
-    windowInfo.inputConfig |= gui::WindowInfo::InputConfig::SENSITIVE_FOR_PRIVACY;
-    gui::DisplayInfo displayInfo;
-    displayInfo.displayId = DISPLAY_ID;
-    localListenerCopy->onWindowInfosChanged(
-            /*windowInfosUpdate=*/{{windowInfo}, {displayInfo}, /*vsyncId=*/0, /*timestamp=*/0});
 }
 
 } // namespace android

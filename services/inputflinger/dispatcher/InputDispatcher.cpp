@@ -27,14 +27,11 @@
 #include <binder/Binder.h>
 #include <com_android_input_flags.h>
 #include <ftl/enum.h>
-#include <log/log_event_list.h>
-#if defined(__ANDROID__)
-#include <gui/SurfaceComposerClient.h>
-#endif
 #include <input/InputDevice.h>
 #include <input/PrintTools.h>
 #include <input/TraceTools.h>
 #include <jni.h>
+#include <log/log_event_list.h>
 #include <openssl/mem.h>
 #include <private/android_filesystem_config.h>
 #include <unistd.h>
@@ -932,13 +929,6 @@ InputDispatcher::InputDispatcher(
         mLatencyTracker(*mInputEventTimelineProcessor, mInputDevices) {
     mReporter = createInputReporter();
 
-    mWindowInfoListener = sp<DispatcherWindowListener>::make(*this);
-#if defined(__ANDROID__)
-    android::base::Result<gui::WindowInfosUpdate> result =
-            SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowInfoListener);
-    LOG_IF(FATAL, !result.ok()) << "Can't listen for window info. Input will not work";
-    onWindowInfosChanged(*result);
-#endif
     mKeyRepeatState.lastKeyEntry = nullptr;
 
     if (traceBackend) {
@@ -954,9 +944,6 @@ InputDispatcher::~InputDispatcher() {
     resetKeyRepeatLocked();
     releasePendingEventLocked();
     drainInboundQueueLocked();
-#if defined(__ANDROID__)
-    SurfaceComposerClient::getDefault()->removeWindowInfosListener(mWindowInfoListener);
-#endif
     mCommandQueue.clear();
 }
 
@@ -4571,6 +4558,10 @@ void InputDispatcher::notifyInputDevicesChanged(const NotifyInputDevicesChangedA
     mInputDevices = args.inputDeviceInfos;
 }
 
+void InputDispatcher::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
+    onWindowInfosChanged(args.update);
+}
+
 void InputDispatcher::notifyKey(const NotifyKeyArgs& args) {
     LOG_IF(INFO, debugInboundEventDetails())
             << "notifyKey - id=" << args.id << ", eventTime=" << args.eventTime
@@ -7420,11 +7411,6 @@ bool InputDispatcher::shouldDropInput(const EventEntry& entry,
         return true;
     }
     return false;
-}
-
-void InputDispatcher::DispatcherWindowListener::onWindowInfosChanged(
-        const gui::WindowInfosUpdate& update) {
-    mDispatcher.onWindowInfosChanged(update);
 }
 
 void InputDispatcher::cancelCurrentTouch() {

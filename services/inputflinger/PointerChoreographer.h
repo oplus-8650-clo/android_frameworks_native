@@ -126,7 +126,6 @@ class PointerChoreographer : public PointerChoreographerInterface {
 public:
     explicit PointerChoreographer(InputListenerInterface& listener,
                                   PointerChoreographerPolicyInterface&);
-    ~PointerChoreographer() override;
 
     void setDisplayViewports(const std::vector<DisplayViewport>& viewports) override;
     std::optional<DisplayViewport> getViewportForPointerDevice(
@@ -145,6 +144,7 @@ public:
     void setAccessibilityPointerMotionFilterEnabled(bool enabled) override;
 
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override;
+    void notifyWindowInfos(const NotifyWindowInfosArgs& args) override;
     void notifyKey(const NotifyKeyArgs& args) override;
     void notifyMotion(const NotifyMotionArgs& args) override;
     void notifySwitch(const NotifySwitchArgs& args) override;
@@ -159,13 +159,7 @@ private:
     using PointerDisplayChange =
             std::optional<std::tuple<ui::LogicalDisplayId /*displayId*/, vec2 /*cursorPosition*/>>;
 
-    // PointerChoreographer's DisplayInfoListener can outlive the PointerChoreographer because when
-    // the listener is registered and called from display thread, a strong pointer to the listener
-    // (which can extend its lifecycle) is given away.
-    // If we use two locks it can also cause deadlocks due to race in acquiring them between the
-    // display and reader thread.
-    // To avoid these problems we use DisplayInfoListener's lock in PointerChoreographer.
-    std::mutex& getLock() const;
+    std::mutex& getLock() const { return mLock; }
 
     [[nodiscard]] PointerDisplayChange updatePointerControllersLocked() REQUIRES(getLock());
     [[nodiscard]] PointerDisplayChange calculatePointerDisplayChangeToNotify() REQUIRES(getLock());
@@ -190,6 +184,7 @@ private:
                                                PointerControllerInterface& pc) REQUIRES(getLock());
     void processDeviceReset(const NotifyDeviceResetArgs& args);
     void onControllerAddedOrRemovedLocked() REQUIRES(getLock());
+    void onWindowInfosChanged(const gui::WindowInfosUpdate& update);
     void onPrivacySensitiveDisplaysChangedLocked(
             const std::unordered_set<ui::LogicalDisplayId>& privacySensitiveDisplays)
             REQUIRES(getLock());
@@ -211,32 +206,9 @@ private:
      */
     DisplayTopologyGraph mTopology GUARDED_BY(getLock());
 
-    /* This listener keeps tracks of visible privacy sensitive displays and updates the
-     * choreographer if there are any changes.
-     *
-     * Listener uses mListenerLock to guard all private data as choreographer and SurfaceComposer
-     * both can call into the listener. To prevent deadlocks Choreographer can call listener with
-     * its lock held, but listener must not call choreographer with its lock.
-     */
-    class PointerChoreographerDisplayInfoListener : public gui::WindowInfosListener {
-    public:
-        explicit PointerChoreographerDisplayInfoListener(PointerChoreographer* pc)
-              : mPointerChoreographer(pc){};
-        void onWindowInfosChanged(const gui::WindowInfosUpdate&) override;
-        void setInitialDisplayInfosLocked(const std::vector<gui::WindowInfo>& windowInfos)
-                REQUIRES(mLock);
-        std::unordered_set<ui::LogicalDisplayId> getPrivacySensitiveDisplaysLocked()
-                REQUIRES(mLock);
-        void onPointerChoreographerDestroyed();
-
-        // This lock is also used by PointerChoreographer. See PointerChoreographer::getLock().
-        std::mutex mLock;
-
-    private:
-        PointerChoreographer* mPointerChoreographer GUARDED_BY(mLock);
-        std::unordered_set<ui::LogicalDisplayId /*displayId*/> mPrivacySensitiveDisplays
-                GUARDED_BY(mLock);
-    };
+    mutable std::mutex mLock;
+    std::unordered_set<ui::LogicalDisplayId /*displayId*/> mPrivacySensitiveDisplays
+            GUARDED_BY(getLock());
 
     using ControllerConstructor =
             ConstructorDelegate<std::function<std::shared_ptr<PointerControllerInterface>()>>;
@@ -274,24 +246,6 @@ private:
     bool mPointerMotionFilterEnabled GUARDED_BY(getLock());
     std::set<ui::LogicalDisplayId /*displayId*/> mDisplaysWithPointersHidden;
     ui::LogicalDisplayId mCurrentFocusedDisplay GUARDED_BY(getLock());
-
-protected:
-    using WindowListenerRegisterConsumer = std::function<std::vector<gui::WindowInfo>(
-            const sp<android::gui::WindowInfosListener>&)>;
-    using WindowListenerUnregisterConsumer =
-            std::function<void(const sp<android::gui::WindowInfosListener>&)>;
-    explicit PointerChoreographer(InputListenerInterface& listener,
-                                  PointerChoreographerPolicyInterface&,
-                                  const WindowListenerRegisterConsumer& registerListener,
-                                  const WindowListenerUnregisterConsumer& unregisterListener);
-
-private:
-    // WindowInfoListener object should always exist while PointerChoreographer exists, because we
-    // need to use the lock from it. But we don't always need to register the listener.
-    bool mIsWindowInfoListenerRegistered GUARDED_BY(getLock());
-    const sp<PointerChoreographerDisplayInfoListener> mWindowInfoListener;
-    const WindowListenerRegisterConsumer mRegisterListener;
-    const WindowListenerUnregisterConsumer mUnregisterListener;
 };
 
 } // namespace android
