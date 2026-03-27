@@ -418,6 +418,12 @@ void InputProcessor::notifyInputDevicesChanged(const NotifyInputDevicesChangedAr
     mQueuedListener.flush();
 }
 
+void InputProcessor::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
+    // pass through
+    mQueuedListener.notify(args);
+    mQueuedListener.flush();
+}
+
 void InputProcessor::notifyKey(const NotifyKeyArgs& args) {
     // pass through
     mQueuedListener.notifyKey(args);

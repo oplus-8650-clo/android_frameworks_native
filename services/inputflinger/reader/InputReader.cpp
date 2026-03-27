@@ -18,9 +18,14 @@
 
 #include "InputReader.h"
 
+#include <android-base/logging.h>
+#include <android-base/result.h>
 #include <android-base/stringprintf.h>
 #include <com_android_input_flags.h>
-#include <errno.h>
+#if defined(__ANDROID__)
+#include <gui/SurfaceComposerClient.h>
+#endif
+#include <gui/WindowInfosUpdate.h>
 #include <input/Input.h>
 #include <input/Keyboard.h>
 #include <input/VirtualKeyMap.h>
@@ -33,11 +38,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <utils/Errors.h>
+#include <utils/StrongPointer.h>
+
+#include <mutex>
 #include <string>
 
 #include "InputDevice.h"
 #include "InputTracingPerfettoBackend.h"
 #include "InputTracingThreadedBackend.h"
+#include "NotifyArgs.h"
 #include "include/gestures.h"
 
 using android::base::StringPrintf;
@@ -139,7 +148,8 @@ InputReader::InputReader(std::shared_ptr<EventHubInterface> eventHub,
         mNextInputDeviceId(END_RESERVED_ID),
         mDisableVirtualKeysTimeout(LLONG_MIN),
         mNextTimeout(LLONG_MAX),
-        mConfigurationChangesToRefresh(0) {
+        mConfigurationChangesToRefresh(0),
+        mWindowListener(sp<ReaderWindowListener>::make(*this)) {
     if (com::android::input::flags::low_level_tracing() && tracingBackend != nullptr) {
         mTracer = std::make_shared<InputReaderTracer>(tracingBackend);
         mEventHub->setTracer(mTracer);
@@ -157,6 +167,14 @@ status_t InputReader::start() {
     mThread = std::make_unique<InputThread>(
             "InputReader", [this]() { loopOnce(); }, [this]() { mEventHub->wake(); },
             /*isInCriticalPath=*/true, mVm);
+
+    mWindowListener->mStopped = false;
+#if defined(__ANDROID__)
+    android::base::Result<gui::WindowInfosUpdate> result =
+            SurfaceComposerClient::getDefault()->addWindowInfosListener(mWindowListener);
+    LOG_IF(FATAL, !result.ok()) << "Can't listen for window info. Input will not work";
+    onWindowInfosChanged(*result);
+#endif
     return OK;
 }
 
@@ -165,6 +183,10 @@ status_t InputReader::stop() {
         ALOGE("InputReader cannot be stopped from its own thread!");
         return INVALID_OPERATION;
     }
+    mWindowListener->mStopped = true;
+#if defined(__ANDROID__)
+    SurfaceComposerClient::getDefault()->removeWindowInfosListener(mWindowListener);
+#endif
     mThread.reset();
     return OK;
 }
@@ -969,6 +991,16 @@ bool InputReader::setKernelWakeEnabled(DeviceId deviceId, bool enabled) {
         return device->setKernelWakeEnabled(enabled);
     }
     return false;
+}
+
+void InputReader::onWindowInfosChanged(const gui::WindowInfosUpdate& update) {
+    if (mTracer) {
+        mTracer->onWindowInfosChanged(update);
+    }
+
+    std::scoped_lock _l(mLock);
+    mPendingArgs.emplace_back(NotifyWindowInfosArgs{mContext.getNextId(), update});
+    mEventHub->wake();
 }
 
 void InputReader::dump(std::string& dump) {

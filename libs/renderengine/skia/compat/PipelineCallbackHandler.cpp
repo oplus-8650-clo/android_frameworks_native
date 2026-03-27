@@ -22,7 +22,6 @@
 #include <common/trace.h>
 #include <log/log_main.h>
 #include <cstring>
-#include <vector>
 #include "Base64.h"
 
 #define SK_BEGIN_REQUIRE_DENSE \
@@ -52,8 +51,12 @@ PipelineCallbackHandler::PipelineCallbackHandler(bool isProtected, bool storeSer
       : mStartTime(std::chrono::steady_clock::now()),
         mIsProtected(isProtected),
         mStoreSerializedKeys(storeSerializedKeys) {
+    mCurrentEpoch = 0;
     mLastEpochUpdateTime = mStartTime;
+    mEpochOfLastSave = 0;
     // TODO(482036727): initialize 'mCurrentEpoch' and 'mEpochOfLastSave' from the cache file
+
+    static_assert(kNumEpochsBetweenUsesSaves > kNumEpochsBetweenNewPipelineSaves);
 }
 
 void PipelineCallbackHandler::beginWarmup() {
@@ -70,10 +73,16 @@ void PipelineCallbackHandler::updateEpoch() {
 
     std::chrono::seconds deltaSeconds =
             std::chrono::duration_cast<std::chrono::seconds>(curTime - mLastEpochUpdateTime);
-    uint32_t tensOfSeconds = static_cast<uint32_t>(deltaSeconds.count() / 10);
 
-    mCurrentEpoch += tensOfSeconds;
-    mLastEpochUpdateTime = curTime;
+    uint32_t deltaEpochs = static_cast<uint32_t>(deltaSeconds.count() / kSecondsPerEpoch);
+
+    constexpr std::chrono::seconds kActualSecondsPerEpoch(kSecondsPerEpoch);
+
+    // Here we only count whole epochs. The partial epochs will be counted the next
+    // time around. This means that 'mLastEpochUpdateTime' will always lag behind
+    // now() a bit.
+    mCurrentEpoch += deltaEpochs;
+    mLastEpochUpdateTime += deltaEpochs * kActualSecondsPerEpoch;
 }
 
 void PipelineCallbackHandler::add(skgpu::graphite::ContextOptions::PipelineCacheOp op,
@@ -258,10 +267,17 @@ SkSpan<const uint8_t> read_key_data(SkSpan<const uint8_t> src, SkData* data) {
 //         the-actual-bytes
 //     }
 sk_sp<SkData> PipelineCallbackHandler::CreateBlob(const std::vector<const PipelineData*>& keys,
-                                                  uint32_t epochOfSave) {
+                                                  uint32_t epochOfSave, uint32_t rebaseEpoch) {
     if (keys.size() > kMaxNumSerializedPipelineKeys) {
         ALOGW("Failed max number of serialized keys limit");
     }
+
+    if (epochOfSave < rebaseEpoch) {
+        ALOGW("Invalid rebaseEpoch");
+        return nullptr;
+    }
+
+    epochOfSave -= rebaseEpoch;
 
     uint32_t requiredBytes = kHeaderSizeInBytes + keys.size() * kKeyPrefixSizeInBytes;
     for (const PipelineData* key : keys) {
@@ -286,7 +302,11 @@ sk_sp<SkData> PipelineCallbackHandler::CreateBlob(const std::vector<const Pipeli
     for (const PipelineData* key : keys) {
         uint32_t keySizeInBytes =
                 key->mSerializedKey ? static_cast<uint32_t>(key->mSerializedKey->size()) : 0;
-        bytes = write_key_prefix(bytes, {key->mLastUsageEpoch, keySizeInBytes});
+        if (key->mLastUsageEpoch < rebaseEpoch) {
+            ALOGW("Invalid rebaseEpoch");
+            return nullptr;
+        }
+        bytes = write_key_prefix(bytes, {key->mLastUsageEpoch - rebaseEpoch, keySizeInBytes});
         if (!bytes.begin()) {
             ALOGE("Failed to write serialized key blob key prefix");
             return nullptr;
@@ -342,12 +362,69 @@ bool PipelineCallbackHandler::UnpackBlob(SkData* src, std::vector<SerializedKeyI
     return true;
 }
 
-// This is a stub implementation - just enough to demonstrate its interaction with epochs and
-// saving.
+// Gather reduces the current set of tracked Pipelines down to a set to be
+// serialized and returns that set. As part of this it enforces the following
+// constraints:
+//    Each individual serialized key is <= kMaxSerializedKeySizeInBytes
+//    The total number of keys to be saved is <= kMaxNumSerializedPipelineKeys
+//    The total memory required to store the set of keys is <= kMaxBlobSizeInBytes
+//    All of the keys being serialized were used in the last seven days of uptime.
+//
+// Additionally, Gather returns an epoch that can be used to rebase all the other epochs.
+// This value may be less than the actual minimum 'mLastUsageEpoch' of the returned
+// PipelinesData's.
+std::vector<const PipelineCallbackHandler::PipelineData*> PipelineCallbackHandler::Gather(
+        const PipelineMap& map, uint32_t currentEpoch, uint32_t* rebaseEpoch) {
+    std::vector<const PipelineData*> result;
+
+    size_t totalMemInBlob = kHeaderSizeInBytes;
+    *rebaseEpoch = UINT32_MAX;
+
+    result.reserve(map.size());
+    for (const auto& [_, value] : map) {
+        if (value->mSerializedKey) {
+            if (value->mSerializedKey->size() > kMaxSerializedKeySizeInBytes) {
+                continue;
+            }
+            uint32_t epochDelta = currentEpoch - value->mLastUsageEpoch;
+            if (epochDelta > kTooOldInEpochs) {
+                continue;
+            }
+            totalMemInBlob += kKeyPrefixSizeInBytes;
+            totalMemInBlob += value->mSerializedKey->size();
+            *rebaseEpoch = std::min(*rebaseEpoch, value->mLastUsageEpoch);
+            result.push_back(value.get());
+        }
+    }
+
+    std::sort(result.begin(), result.end(), [](const PipelineData* a, const PipelineData* b) {
+        // Sort into MRU -> LRU order
+        return a->mLastUsageEpoch > b->mLastUsageEpoch;
+    });
+
+    while (totalMemInBlob > kMaxBlobSizeInBytes) {
+        totalMemInBlob -= kKeyPrefixSizeInBytes;
+        totalMemInBlob -= result.back()->mSerializedKey->size();
+        result.pop_back();
+    }
+
+    if (result.size() > kMaxNumSerializedPipelineKeys) {
+        // If necessary, drop the less recently used Pipelines. This should be very very rare.
+        ALOGW("Hit max serialized key limit - dropping less recently used Pipelines");
+        result.resize(kMaxNumSerializedPipelineKeys);
+    }
+
+    return result;
+}
+
 bool PipelineCallbackHandler::maybeSaveCache() {
+    if (!mStoreSerializedKeys) {
+        return false;
+    }
+
     uint32_t epochDelta = mCurrentEpoch - mEpochOfLastSave;
 
-    // TODO: we also need to ensure that no save occur during warmup and or precompile.
+    // TODO: we also need to ensure that no saves occur during warmup and or precompile.
     bool saveForNew = mPipelineAddedSinceLastSave && epochDelta > kNumEpochsBetweenNewPipelineSaves;
     bool saveForUses = epochDelta > kNumEpochsBetweenUsesSaves;
 
@@ -356,10 +433,18 @@ bool PipelineCallbackHandler::maybeSaveCache() {
         return false;
     }
 
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineData*> pipelinesToSave = Gather(mMap, mCurrentEpoch, &rebaseEpoch);
+
+    sk_sp<SkData> blob = CreateBlob(pipelinesToSave, mCurrentEpoch, rebaseEpoch);
+    if (!blob) {
+        return false;
+    }
+
     mPipelineAddedSinceLastSave = false;
     mEpochOfLastSave = mCurrentEpoch;
 
-    // TODO(482036727): add actual creation of the data blob
+    // TODO(b/482036727): save the blob to the cache here
     return true;
 }
 

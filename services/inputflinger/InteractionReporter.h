@@ -33,6 +33,8 @@ public:
 
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override;
 
+    void notifyWindowInfos(const NotifyWindowInfosArgs& args) override;
+
     void notifyKey(const NotifyKeyArgs& args) override;
 
     void notifyMotion(const NotifyMotionArgs& args) override;

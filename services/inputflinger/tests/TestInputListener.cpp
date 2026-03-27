@@ -36,6 +36,13 @@ void TestInputListener::assertNotifyInputDevicesChangedWasCalled() {
                                                         "to have been called."));
 }
 
+void TestInputListener::assertNotifyWindowInfosWasCalled() {
+    ASSERT_NO_FATAL_FAILURE(
+            assertCalled<
+                    NotifyWindowInfosArgs>(nullptr,
+                                           "Expected notifyWindowInfos() to have been called."));
+}
+
 void TestInputListener::assertNotifyDeviceResetWasCalled(NotifyDeviceResetArgs* outEventArgs) {
     ASSERT_NO_FATAL_FAILURE(
             assertCalled<
@@ -180,6 +187,10 @@ void TestInputListener::addToQueue(const NotifyArgsType& args) {
 
 void TestInputListener::notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) {
     addToQueue<NotifyInputDevicesChangedArgs>(args);
+}
+
+void TestInputListener::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
+    addToQueue<NotifyWindowInfosArgs>(args);
 }
 
 void TestInputListener::notifyDeviceReset(const NotifyDeviceResetArgs& args) {

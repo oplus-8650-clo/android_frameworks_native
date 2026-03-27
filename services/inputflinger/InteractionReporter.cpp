@@ -35,6 +35,10 @@ void InteractionReporter::notifyInputDevicesChanged(const NotifyInputDevicesChan
     mNextListener.notify(args);
 }
 
+void InteractionReporter::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
+    mNextListener.notify(args);
+}
+
 void InteractionReporter::notifyKey(const NotifyKeyArgs& args) {
     std::chrono::milliseconds interactionTime =
             std::chrono::duration_cast<std::chrono::milliseconds>(

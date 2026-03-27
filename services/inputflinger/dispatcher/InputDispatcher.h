@@ -103,6 +103,7 @@ public:
     status_t stop() override;
 
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override;
+    void notifyWindowInfos(const NotifyWindowInfosArgs& args) override;
     void notifyKey(const NotifyKeyArgs& args) override;
     void notifyMotion(const NotifyMotionArgs& args) override;
     void notifySwitch(const NotifySwitchArgs& args) override;
@@ -656,16 +657,6 @@ private:
     // making harder to snapshot and retrieve them.
     std::map<ui::LogicalDisplayId /*displayId*/, bool /*inTouchMode*/> mTouchModePerDisplay
             GUARDED_BY(mLock);
-
-    class DispatcherWindowListener : public gui::WindowInfosListener {
-    public:
-        explicit DispatcherWindowListener(InputDispatcher& dispatcher) : mDispatcher(dispatcher){};
-        void onWindowInfosChanged(const gui::WindowInfosUpdate&) override;
-
-    private:
-        InputDispatcher& mDispatcher;
-    };
-    sp<gui::WindowInfosListener> mWindowInfoListener;
 
     void setInputWindowsLocked(
             const std::vector<sp<android::gui::WindowInfoHandle>>& inputWindowHandles,

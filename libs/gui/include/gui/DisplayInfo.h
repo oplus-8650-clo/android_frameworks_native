@@ -43,6 +43,12 @@ struct DisplayInfo : public Parcelable {
     status_t readFromParcel(const android::Parcel*) override;
 
     void dump(std::string& result, const char* prefix = "") const;
+
+    bool operator==(const DisplayInfo& other) const {
+        return displayId == other.displayId && logicalWidth == other.logicalWidth &&
+                logicalHeight == other.logicalHeight && transform == other.transform;
+    }
+    bool operator!=(const DisplayInfo& other) const { return !(*this == other); }
 };
 
 } // namespace android::gui

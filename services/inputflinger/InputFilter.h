@@ -38,6 +38,7 @@ public:
     virtual void setAccessibilityBounceKeysThreshold(nsecs_t threshold) = 0;
     virtual void setAccessibilitySlowKeysThreshold(nsecs_t threshold) = 0;
     virtual void setAccessibilityStickyKeysEnabled(bool enabled) = 0;
+    virtual void notifyWindowInfos(const NotifyWindowInfosArgs& args) = 0;
 };
 
 class InputFilter : public InputFilterInterface {
@@ -54,6 +55,7 @@ public:
                          InputFilterPolicyInterface& policy, JavaVM* vm);
     ~InputFilter() override = default;
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override;
+    void notifyWindowInfos(const NotifyWindowInfosArgs& args) override;
     void notifyKey(const NotifyKeyArgs& args) override;
     void notifyMotion(const NotifyMotionArgs& args) override;
     void notifySwitch(const NotifySwitchArgs& args) override;

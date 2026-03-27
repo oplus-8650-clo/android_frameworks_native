@@ -137,6 +137,7 @@ struct IncrementalState {
 public:
     bool clearReported = false;
 
+    InternResult internGroup(std::string_view group);
     InternResult internMessage(ProtoLogLevel level, std::string_view group,
                                std::string_view format);
     InternResult internString(std::string_view str);
@@ -145,9 +146,10 @@ private:
     static constexpr size_t kMaxInternedStrings = 1024;
     static constexpr size_t kMaxInternedMessages = 512;
 
-    uint64_t next_message_id = 1;
     uint64_t next_string_id = 1;
 
+    LruCache<std::string, uint64_t, StringHash, std::equal_to<>> group_intern_table{
+            kMaxInternedStrings};
     LruCache<std::string, uint64_t, StringHash, std::equal_to<>> string_intern_table{
             kMaxInternedStrings};
     LruCache<MessageKey, uint64_t, MessageKeyHash, std::equal_to<>> message_intern_table{

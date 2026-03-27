@@ -106,7 +106,7 @@ static inline uint64_t internProtoLogMessage(struct PerfettoDsTracerIterator* ct
                                              datasource::IncrementalState* incr_state,
                                              ProtoLogLevel level, const std::string_view group,
                                              const char* format, uint64_t ts) {
-    auto group_res = incr_state->internString(group);
+    auto group_res = incr_state->internGroup(group);
     auto msg_res = incr_state->internMessage(level, group, format);
     bool needs_viewer_config_packet = group_res.is_new || msg_res.is_new;
 

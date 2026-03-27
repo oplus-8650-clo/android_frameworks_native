@@ -22,6 +22,7 @@
 #include <android/os/binder/BinderCallsStats.h>
 #include <android/os/binder/BinderSpamStats.h>
 #include <android/os/binder/IBinderStatsConsumerService.h>
+#include <android_os_binder_flags.h>
 #include <binder/Functional.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -31,6 +32,9 @@
 #include "../BuildFlags.h"
 #include "../JvmUtils.h"
 #include "BinderStatsUtils.h"
+#include "HistogramScale.h"
+
+constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
 
 namespace android {
 [[clang::no_destroy]] static const StaticString16 kBinderStatsServiceName(u"binder_stats_consumer");
@@ -96,6 +100,9 @@ void aggregateSingleCallDataLocked(const BinderCallData& datum,
                 ALOGW("Duration Micros Squared Sum calculation overflow");
                 stat.durationMicrosSquaredSum = std::numeric_limits<int64_t>::max();
             }
+        }
+        if (kBinderStatsLatencyHistogram) {
+            stat.durationBinIndices.push_back(HistogramScale::getBinIndex(durationNanos));
         }
     }
     if (datum.cpuTimeNanos > 0) {
