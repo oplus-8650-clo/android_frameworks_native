@@ -74,6 +74,7 @@ public:
     bool graphite_renderengine_preview2_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
     bool hwc_buffer_override_skip() const;
+    bool layer_caching_desktop_rollout() const;
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
     bool mirror_with_crop() const;
