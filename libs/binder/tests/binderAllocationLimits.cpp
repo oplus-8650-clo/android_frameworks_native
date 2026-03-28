@@ -43,7 +43,9 @@
 using namespace android::binder::impl;
 
 static android::String8 gEmpty(""); // make sure first allocation from optimization runs
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
 constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
+#endif
 
 struct State {
     State(std::vector<size_t>&& expectedMallocs) : expectedMallocs(std::move(expectedMallocs)) {}

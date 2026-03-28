@@ -34,8 +34,6 @@
 #include "BinderStatsUtils.h"
 #include "HistogramScale.h"
 
-constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
-
 namespace android {
 [[clang::no_destroy]] static const StaticString16 kBinderStatsServiceName(u"binder_stats_consumer");
 
@@ -64,6 +62,7 @@ sp<os::binder::IBinderStatsConsumerService> BinderStatsPusher::getBinderStatsSer
 
 #if defined(LIBBINDER_BINDER_OBSERVER_V2)
 constexpr int64_t kNanosPerSecond = 1000'000'000;
+constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
 
 struct BinderCallDataByEndTimeLess {
     bool operator()(const BinderCallData& a, const BinderCallData& b) const {

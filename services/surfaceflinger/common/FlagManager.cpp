@@ -128,6 +128,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
+    DUMP_ACONFIG_FLAG(debug_gpu_present_times);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
     DUMP_ACONFIG_FLAG(force_sdr_invalid_hdr_type);
@@ -344,6 +345,8 @@ FLAG_MANAGER_ACONFIG_FLAG(vd_aware_scheduler, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 
+FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(debug_gpu_present_times, "",
+                                   com::android::graphics::libgui::flags);
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(luts_api, "", android::hardware::flags);
 FLAG_MANAGER_ACONFIG_FLAG_IMPORTED(enable_user_preferred_hdr_mode, "", com::android::window::flags);
 

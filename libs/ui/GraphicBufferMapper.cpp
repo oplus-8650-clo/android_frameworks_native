@@ -392,6 +392,10 @@ status_t GraphicBufferMapper::setSmpte2094_10(buffer_handle_t bufferHandle,
     return mMapper->setSmpte2094_10(bufferHandle, smpte2094_10);
 }
 
+status_t GraphicBufferMapper::getStride(buffer_handle_t bufferHandle, uint32_t* outStride) {
+    return mMapper->getStride(bufferHandle, outStride);
+}
+
 status_t GraphicBufferMapper::getSmpte2094_50(
         buffer_handle_t bufferHandle, std::optional<std::vector<uint8_t>>* outSmpte2094_50) {
     return mMapper->getSmpte2094_50(bufferHandle, outSmpte2094_50);

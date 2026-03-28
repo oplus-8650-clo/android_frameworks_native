@@ -44,6 +44,7 @@ namespace android {
 using namespace ftl::flag_operators;
 using testing::AllOf;
 using testing::ElementsAre;
+using testing::HasSubstr;
 using testing::IsEmpty;
 using testing::Return;
 using testing::VariantWith;
@@ -764,6 +765,34 @@ TEST_F(JoystickInputMapperTest,
                                      InputReaderConfiguration::Change::AXIS_REMAPPING));
 
     EXPECT_EQ(mDevice->getGeneration(), initialGeneration + 2);
+}
+
+TEST_F(JoystickInputMapperTest, Dump) {
+    setupAxis(ABS_GAS, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/0);
+    setupAxis(ABS_THROTTLE, /*valid=*/true, /*min=*/0, /*max=*/255, /*resolution=*/0);
+    setAxisMapping(EvdevAbsCode::GAS, MotionEventAxis::GAS);
+    setAxisMapping(EvdevAbsCode::THROTTLE, MotionEventAxis::THROTTLE);
+    setKeyMapping(EvdevKeyCode::SOUTH, KeyCode::BUTTON_A);
+    setKeyMapping(EvdevKeyCode::EAST, KeyCode::BUTTON_B);
+    mMapper = createInputMapper<JoystickInputMapper>(*mDeviceContext, mReaderConfiguration);
+    mReaderConfiguration.keyToAxisRemappingPerDevice[DEVICE_ID] = {
+            {KeyCode::BUTTON_A, MotionEventAxis::GAS},
+            {KeyCode::BUTTON_B, MotionEventAxis::THROTTLE},
+    };
+    processArgs(mMapper->reconfigure(ARBITRARY_TIME, mReaderConfiguration,
+                                     InputReaderConfiguration::Change::AXIS_REMAPPING));
+
+    std::string dump;
+    mMapper->dump(dump);
+
+    ASSERT_THAT(dump, HasSubstr("Joystick Input Mapper"));
+    ASSERT_THAT(dump, HasSubstr("Axes:"));
+    ASSERT_THAT(dump, HasSubstr("GAS:"));
+    ASSERT_THAT(dump, HasSubstr("THROTTLE:"));
+
+    ASSERT_THAT(dump, HasSubstr("Key to Axis Remappings:"));
+    ASSERT_THAT(dump, HasSubstr("BTN_GAMEPAD -> ABS_GAS"));
+    ASSERT_THAT(dump, HasSubstr("BTN_EAST -> ABS_THROTTLE"));
 }
 
 } // namespace android
