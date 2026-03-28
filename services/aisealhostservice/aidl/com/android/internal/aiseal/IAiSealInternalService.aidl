@@ -31,4 +31,10 @@ interface IAiSealInternalService {
      * At this point the CE storage of this user in the aiseal VM should be locked.
      */
     void onUserStopped(int userId);
+
+    /**
+     * Called when given {@code userId} is removed
+     * At this point the CE storage of this user in the aiseal VM should be removed.
+     */
+    void onUserRemoved(int userId);
 }

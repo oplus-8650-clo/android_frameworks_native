@@ -1437,6 +1437,10 @@ VkResult GetPhysicalDeviceSurfaceFormats2KHR(
                         } else {
                             // For any of the *_NOT_SUPPORTED errors we continue
                             // onto the next format
+                            surfaceCompressionProps->imageCompressionFlags =
+                                VK_IMAGE_COMPRESSION_DEFAULT_EXT;
+                            surfaceCompressionProps->imageCompressionFixedRateFlags =
+                                VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
                             continue;
                         }
                     }

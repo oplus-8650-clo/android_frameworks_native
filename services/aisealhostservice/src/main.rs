@@ -34,6 +34,7 @@ use aisealhostservice_aidl::aidl::android::aiseal::IAiSealHostService::{
 use android_os_permissions_aidl::aidl::android::os::IPermissionController::IPermissionController;
 use android_system_virtualizationcommon::aidl::android::system::virtualizationcommon::{
     ICEStoreKEK::{BnCEStoreKEK, ICEStoreKEK},
+    IGuestAgent::IGuestAgent,
 };
 use android_system_virtualizationservice::aidl::android::system::virtualizationservice::{
     CpuOptions::CpuOptions,
@@ -372,22 +373,31 @@ impl AiSealInternalService {
             BinderFeatures::default(),
         )
     }
+
+    fn get_guest_agent(&self) -> binder::Result<Strong<dyn IGuestAgent>> {
+        let Some(guest_agent) = self.instance.vm.getGuestAgent()? else {
+            return Err(anyhow!("No guest agent"))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        };
+        Ok(guest_agent)
+    }
 }
 
 impl IAiSealInternalService for AiSealInternalService {
     fn onUserUnlocking(&self, user_id: i32, kek_file: &str) -> binder::Result<()> {
         info!("onUserUnlocking {user_id}");
-        let Some(guest_agent) = self.instance.vm.getGuestAgent()? else {
-            return Err(anyhow!("No guest agent"))
-                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
-        };
         let kek = CEStoreKEK::new_binder(kek_file);
-        guest_agent.userUnlocked(user_id, &kek)
+        self.get_guest_agent()?.userUnlocked(user_id, &kek)
     }
 
     fn onUserStopped(&self, user_id: i32) -> binder::Result<()> {
         info!("onUserStopped {user_id}");
-        Ok(())
+        self.get_guest_agent()?.userLocked(user_id)
+    }
+
+    fn onUserRemoved(&self, user_id: i32) -> binder::Result<()> {
+        info!("onUserRemoved {user_id}");
+        self.get_guest_agent()?.userRemoved(user_id)
     }
 }
 

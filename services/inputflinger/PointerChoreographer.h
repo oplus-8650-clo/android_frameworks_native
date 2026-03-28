@@ -159,93 +159,91 @@ private:
     using PointerDisplayChange =
             std::optional<std::tuple<ui::LogicalDisplayId /*displayId*/, vec2 /*cursorPosition*/>>;
 
-    std::mutex& getLock() const { return mLock; }
-
-    [[nodiscard]] PointerDisplayChange updatePointerControllersLocked() REQUIRES(getLock());
-    [[nodiscard]] PointerDisplayChange calculatePointerDisplayChangeToNotify() REQUIRES(getLock());
+    [[nodiscard]] PointerDisplayChange updatePointerControllersLocked() REQUIRES(mLock);
+    [[nodiscard]] PointerDisplayChange calculatePointerDisplayChangeToNotify() REQUIRES(mLock);
     const DisplayViewport* findViewportByIdLocked(ui::LogicalDisplayId displayId) const
-            REQUIRES(getLock());
+            REQUIRES(mLock);
     ui::LogicalDisplayId getTargetMouseDisplayLocked(ui::LogicalDisplayId associatedDisplayId) const
-            REQUIRES(getLock());
+            REQUIRES(mLock);
     std::pair<ui::LogicalDisplayId /*displayId*/, PointerControllerInterface&>
-    ensureMouseControllerLocked(ui::LogicalDisplayId associatedDisplayId) REQUIRES(getLock());
-    InputDeviceInfo* findInputDeviceLocked(DeviceId deviceId) REQUIRES(getLock());
-    bool canUnfadeOnDisplay(ui::LogicalDisplayId displayId) REQUIRES(getLock());
-    bool shouldShowTouchesOnDisplay(ui::LogicalDisplayId displayId) REQUIRES(getLock());
+    ensureMouseControllerLocked(ui::LogicalDisplayId associatedDisplayId) REQUIRES(mLock);
+    InputDeviceInfo* findInputDeviceLocked(DeviceId deviceId) REQUIRES(mLock);
+    bool canUnfadeOnDisplay(ui::LogicalDisplayId displayId) REQUIRES(mLock);
+    bool shouldShowTouchesOnDisplay(ui::LogicalDisplayId displayId) REQUIRES(mLock);
 
     void fadeMouseCursorOnKeyPress(const NotifyKeyArgs& args);
     NotifyMotionArgs processMotion(const NotifyMotionArgs& args);
-    NotifyMotionArgs processMouseEventLocked(const NotifyMotionArgs& args) REQUIRES(getLock());
-    NotifyMotionArgs processTouchpadEventLocked(const NotifyMotionArgs& args) REQUIRES(getLock());
-    void processDrawingTabletEventLocked(const NotifyMotionArgs& args) REQUIRES(getLock());
-    void processTouchscreenAndStylusEventLocked(const NotifyMotionArgs& args) REQUIRES(getLock());
-    void processStylusHoverEventLocked(const NotifyMotionArgs& args) REQUIRES(getLock());
+    NotifyMotionArgs processMouseEventLocked(const NotifyMotionArgs& args) REQUIRES(mLock);
+    NotifyMotionArgs processTouchpadEventLocked(const NotifyMotionArgs& args) REQUIRES(mLock);
+    void processDrawingTabletEventLocked(const NotifyMotionArgs& args) REQUIRES(mLock);
+    void processTouchscreenAndStylusEventLocked(const NotifyMotionArgs& args) REQUIRES(mLock);
+    void processStylusHoverEventLocked(const NotifyMotionArgs& args) REQUIRES(mLock);
     void processPointerDeviceMotionEventLocked(NotifyMotionArgs& newArgs,
-                                               PointerControllerInterface& pc) REQUIRES(getLock());
+                                               PointerControllerInterface& pc) REQUIRES(mLock);
     void processDeviceReset(const NotifyDeviceResetArgs& args);
-    void onControllerAddedOrRemovedLocked() REQUIRES(getLock());
+    void onControllerAddedOrRemovedLocked() REQUIRES(mLock);
     void onWindowInfosChanged(const gui::WindowInfosUpdate& update);
     void onPrivacySensitiveDisplaysChangedLocked(
             const std::unordered_set<ui::LogicalDisplayId>& privacySensitiveDisplays)
-            REQUIRES(getLock());
+            REQUIRES(mLock);
 
     void handleUnconsumedDeltaLocked(PointerControllerInterface& pc, const vec2& unconsumedDelta)
-            REQUIRES(getLock());
+            REQUIRES(mLock);
 
     std::optional<std::pair<const DisplayViewport*, float /*offsetPx*/>>
     findDestinationDisplayLocked(const ui::LogicalDisplayId sourceDisplayId,
                                  const DisplayTopologyPosition sourceBoundary,
-                                 int32_t sourceCursorOffsetPx) const REQUIRES(getLock());
+                                 int32_t sourceCursorOffsetPx) const REQUIRES(mLock);
 
     vec2 filterPointerMotionForAccessibilityLocked(const PointerControllerInterface& pc,
-                                                   const vec2& delta) REQUIRES(getLock());
+                                                   const vec2& delta) REQUIRES(mLock);
 
     /* Topology is initialized with default-constructed value, which is an empty topology. Till we
      * receive setDisplayTopology call.
      * Meanwhile Choreographer will treat every display as independent disconnected display.
      */
-    DisplayTopologyGraph mTopology GUARDED_BY(getLock());
+    DisplayTopologyGraph mTopology GUARDED_BY(mLock);
 
     mutable std::mutex mLock;
     std::unordered_set<ui::LogicalDisplayId /*displayId*/> mPrivacySensitiveDisplays
-            GUARDED_BY(getLock());
+            GUARDED_BY(mLock);
 
     using ControllerConstructor =
             ConstructorDelegate<std::function<std::shared_ptr<PointerControllerInterface>()>>;
-    ControllerConstructor mTouchControllerConstructor GUARDED_BY(getLock());
+    ControllerConstructor mTouchControllerConstructor GUARDED_BY(mLock);
     ControllerConstructor getMouseControllerConstructor(ui::LogicalDisplayId displayId)
-            REQUIRES(getLock());
+            REQUIRES(mLock);
     ControllerConstructor getStylusControllerConstructor(ui::LogicalDisplayId displayId)
-            REQUIRES(getLock());
+            REQUIRES(mLock);
 
     InputListenerInterface& mNextListener;
     PointerChoreographerPolicyInterface& mPolicy;
 
     std::map<ui::LogicalDisplayId, std::shared_ptr<PointerControllerInterface>>
-            mMousePointersByDisplay GUARDED_BY(getLock());
+            mMousePointersByDisplay GUARDED_BY(mLock);
     std::map<DeviceId, std::shared_ptr<PointerControllerInterface>> mTouchPointersByDevice
-            GUARDED_BY(getLock());
+            GUARDED_BY(mLock);
     std::map<DeviceId, std::shared_ptr<PointerControllerInterface>> mStylusPointersByDevice
-            GUARDED_BY(getLock());
+            GUARDED_BY(mLock);
     std::map<DeviceId, std::shared_ptr<PointerControllerInterface>> mDrawingTabletPointersByDevice
-            GUARDED_BY(getLock());
+            GUARDED_BY(mLock);
 
     // In connected displays scenario, this tracks the latest display the cursor is at, within the
     // DisplayTopology. By default, this will be set to topology primary display, and updated when
     // mouse crossed to another display.
     // In non-connected displays scenario, this will be treated as the default display cursor
     // will be on, when mouse doesn't have associated display.
-    ui::LogicalDisplayId mCurrentMouseDisplayId GUARDED_BY(getLock());
-    ui::LogicalDisplayId mNotifiedPointerDisplayId GUARDED_BY(getLock());
-    std::vector<InputDeviceInfo> mInputDeviceInfos GUARDED_BY(getLock());
-    std::set<DeviceId> mMouseDevices GUARDED_BY(getLock());
-    std::vector<DisplayViewport> mViewports GUARDED_BY(getLock());
-    bool mShowTouchesEnabled GUARDED_BY(getLock());
-    std::set<ui::LogicalDisplayId> mDisplaysWithShowTouchesForceEnabled GUARDED_BY(getLock());
-    bool mStylusPointerIconEnabled GUARDED_BY(getLock());
-    bool mPointerMotionFilterEnabled GUARDED_BY(getLock());
+    ui::LogicalDisplayId mCurrentMouseDisplayId GUARDED_BY(mLock);
+    ui::LogicalDisplayId mNotifiedPointerDisplayId GUARDED_BY(mLock);
+    std::vector<InputDeviceInfo> mInputDeviceInfos GUARDED_BY(mLock);
+    std::set<DeviceId> mMouseDevices GUARDED_BY(mLock);
+    std::vector<DisplayViewport> mViewports GUARDED_BY(mLock);
+    bool mShowTouchesEnabled GUARDED_BY(mLock);
+    std::set<ui::LogicalDisplayId> mDisplaysWithShowTouchesForceEnabled GUARDED_BY(mLock);
+    bool mStylusPointerIconEnabled GUARDED_BY(mLock);
+    bool mPointerMotionFilterEnabled GUARDED_BY(mLock);
     std::set<ui::LogicalDisplayId /*displayId*/> mDisplaysWithPointersHidden;
-    ui::LogicalDisplayId mCurrentFocusedDisplay GUARDED_BY(getLock());
+    ui::LogicalDisplayId mCurrentFocusedDisplay GUARDED_BY(mLock);
 };
 
 } // namespace android

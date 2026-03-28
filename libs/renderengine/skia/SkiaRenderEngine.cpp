@@ -642,6 +642,7 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
         }
     }
 
+    bool usedAgtm = false;
     if (graphicBuffer) {
         if (parameters.layer.luts) {
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
@@ -669,6 +670,7 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
                     metadata.setAdaptiveGlobalToneMap(agtm);
                     shader = shader->makeWithColorFilter(metadata.makeToneMapColorFilter(
                             std::log2(parameters.display.targetHdrSdrRatio)));
+                    usedAgtm = true;
                 }
             }
         }
@@ -697,7 +699,9 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
 
         // disable tonemapping if we already locally tonemapped
         // skip tonemapping if the luts is in use
-        auto inputDataspace = usingLocalTonemap || (graphicBuffer && parameters.layer.luts)
+        // or if we used AGTM
+        auto inputDataspace =
+                usingLocalTonemap || (graphicBuffer && parameters.layer.luts) || usedAgtm
                 ? parameters.outputDataSpace
                 : parameters.layer.sourceDataspace;
         auto effect =
@@ -715,6 +719,13 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
             colorTransform *=
                     mat4::scale(vec4(parameters.layerDimmingRatio, parameters.layerDimmingRatio,
                                      parameters.layerDimmingRatio, 1.f));
+        }
+
+        if (usedAgtm) {
+            // Output range of the agtm shader is expected to be between 0 and targetHdrSdrRatio
+            // ...but we need to normalize to a range of [0, 1]
+            const float scale = 1.f / parameters.display.targetHdrSdrRatio;
+            colorTransform *= mat4::scale(vec4(scale, scale, scale, 1.f));
         }
 
         const auto hardwareBuffer = graphicBuffer ? graphicBuffer->toAHardwareBuffer() : nullptr;
