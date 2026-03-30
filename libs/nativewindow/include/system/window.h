@@ -1269,6 +1269,10 @@ struct ANativeWindowFrameTimelineInfo {
 
     // The amount of time spent in dequeueBuffer waiting for an available buffer.
     int64_t dequeueBufferDurationNanos;
+
+    // Time used by animations to compute progress and render frames.
+    // 0 is first frame of animation / non-animated frame.
+    int64_t animationTime;
 };
 
 static inline int native_window_set_frame_timeline_info(

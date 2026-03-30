@@ -66,6 +66,7 @@ struct LayerCreationArgs {
     uint32_t layerIdToMirror = UNASSIGNED_LAYER_ID;
     uint32_t stopLayerId = UNASSIGNED_LAYER_ID;
     std::atomic<int32_t>* pendingBuffers = 0;
+    uintptr_t debugCookie = 0;
 };
 
 } // namespace android::surfaceflinger

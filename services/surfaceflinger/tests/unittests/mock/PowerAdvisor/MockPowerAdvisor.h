@@ -32,7 +32,7 @@ public:
     MOCK_METHOD(void, setExpensiveRenderingExpected, (DisplayId displayId, bool expected),
                 (override));
     MOCK_METHOD(bool, isUsingExpensiveRendering, (), (override));
-    MOCK_METHOD(void, notifyCpuLoadUp, (), (override));
+    MOCK_METHOD(void, notifyCpuLoadUp, (std::string_view), (override));
     MOCK_METHOD(void, notifyDisplayUpdateImminentAndCpuReset, (), (override));
     MOCK_METHOD(bool, usePowerHintSession, (), (override));
     MOCK_METHOD(bool, supportsPowerHintSession, (), (override));

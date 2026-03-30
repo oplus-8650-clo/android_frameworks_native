@@ -156,13 +156,15 @@ public:
     virtual void traceWindowDispatch(const WindowDispatchArgs&, const TracedEventMetadata&) = 0;
 
     /** Trace a raw event being received. */
-    virtual void traceRawEvent(const RawEvent&) = 0;
+    virtual void traceRawEvent(const RawEvent& event, const TracedEventMetadata& metadata) = 0;
 
     /** Trace an evdev device being registered with the system. */
-    virtual void traceEvdevDeviceAddition(nsecs_t timestamp, const TracedEvdevDevice& device) = 0;
+    virtual void traceEvdevDeviceAddition(const TracedEvdevDevice& device,
+                                          const TracedEventMetadata& metadata) = 0;
 
     /** Trace an evdev device being removed from the system. */
-    virtual void traceEvdevDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId) = 0;
+    virtual void traceEvdevDeviceRemoval(RawDeviceId deviceId,
+                                         const TracedEventMetadata& metadata) = 0;
 };
 
 } // namespace android::input_trace

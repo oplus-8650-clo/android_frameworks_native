@@ -19,15 +19,19 @@
 AsyncWorker::AsyncWorker() {}
 
 AsyncWorker::~AsyncWorker() {
-    mDone = true;
-    mCv.notify_all();
+    {
+        std::scoped_lock<std::mutex> lock(mMutex);
+        mDone = true;
+        mCv.notify_all();
+    }
+
     if (mThread.joinable()) {
         mThread.join();
     }
 }
 
 void AsyncWorker::post(std::function<void()> runnable) {
-    std::unique_lock<std::mutex> lock(mMutex);
+    std::scoped_lock<std::mutex> lock(mMutex);
     // Not joinable means mThread is still default constructed
     // and needs initialization now.
     if (!mThread.joinable()) {
@@ -37,8 +41,13 @@ void AsyncWorker::post(std::function<void()> runnable) {
     mCv.notify_one();
 }
 
+bool AsyncWorker::waitingDone() {
+    return mDone || !mRunnables.empty();
+}
+
 void AsyncWorker::run() {
     std::unique_lock<std::mutex> lock(mMutex);
+    android::base::ScopedLockAssertion lock_assertion(mMutex);
     while (!mDone) {
         while (!mRunnables.empty()) {
             std::deque<std::function<void()>> runnables = std::move(mRunnables);
@@ -49,7 +58,10 @@ void AsyncWorker::run() {
             execute(runnables);
             lock.lock();
         }
-        mCv.wait(lock);
+        mCv.wait(lock, [this] {
+            android::base::ScopedLockAssertion lock_assertion(mMutex);
+            return waitingDone();
+        });
     }
 }
 

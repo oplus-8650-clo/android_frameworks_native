@@ -55,8 +55,6 @@ private:
 
     std::function<void(void*)> mContextFreeCallback;
     void* mContext = nullptr;
-
-    void copyUploadCommands(RenderCommandBuffer& curr, RenderCommandBuffer& next);
 };
 
 } // namespace android

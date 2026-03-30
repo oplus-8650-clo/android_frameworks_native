@@ -34,26 +34,10 @@ void RenderCommandBuffer::pushOp(IPCRenderBufferOp* op) {
     op->next = nullptr;
 }
 
-void RenderCommandBuffer::pushUploadCmd(IPCRenderBufferOp* cmd) {
-    assert(reinterpret_cast<const uint8_t*>(cmd) > mBytes &&
-           reinterpret_cast<const uint8_t*>(cmd) < mBytes + sizeof(mBytes));
-
-    if (mUploadsTail) {
-        mUploadsTail->next = cmd;
-    }
-    if (!mUploadsHead) {
-        mUploadsHead = cmd;
-    }
-    mUploadsTail = cmd;
-    cmd->next = nullptr;
-}
-
 void RenderCommandBuffer::reset() {
     mTail = nullptr;
     mHead = nullptr;
-    mUploadsHead = nullptr;
-    mUploadsTail = nullptr;
-    mUsed = 0;
+    this->resetArena();
 }
 
 bool RenderCommandBuffer::dumpToFile(const char* filename) const {

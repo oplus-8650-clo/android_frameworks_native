@@ -48,6 +48,7 @@ void RenderResourceCache::queueRegisterGraphicBuffers(const gui::GraphicBuffersR
         std::shared_ptr<IPCServerResourceCache> cache = getCache(info.renderResourceToken);
 
         for (const auto& buffer : info.buffers) {
+            SFTRACE_FORMAT("Registering buffer %" PRIu64, buffer->getId());
             cache->bitmaps[buffer->getId()] = IPCServerBitmap{.buffer = buffer};
         }
     });
@@ -79,6 +80,8 @@ void RenderResourceCache::processPendingOperations() {
 }
 
 std::shared_ptr<IPCServerResourceCache> RenderResourceCache::getCache(const sp<IBinder>& token) {
+    SFTRACE_CALL();
+
     auto it = mCaches.find(token);
     if (it != mCaches.end()) {
         return it->second;

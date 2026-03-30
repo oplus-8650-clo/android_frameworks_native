@@ -153,8 +153,7 @@ auto SFController::startAndConnect() -> base::expected<void, std::string> {
 
     // We need an internal display event receiver so we can listen for hotplug events.
     auto displayEventReceiverResult = DisplayEventReceiver::make(
-            shared_from_this(), surfaceComposerAidl, *mPollFdThread,
-            gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp, nullptr, {});
+            shared_from_this(), surfaceComposerAidl, *mPollFdThread, nullptr, {});
     if (!displayEventReceiverResult) {
         return base::unexpected(std::move(displayEventReceiverResult).error());
     }
@@ -217,7 +216,7 @@ auto SFController::makeDisplayEventReceiver()
         -> base::expected<std::shared_ptr<DisplayEventReceiver>, std::string> {
     CHECK(mSurfaceComposerAidl != nullptr);
     return DisplayEventReceiver::make(shared_from_this(), mSurfaceComposerAidl, *mPollFdThread,
-                                      gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp, nullptr,
+                                      nullptr,
                                       {gui::ISurfaceComposer::EventRegistration::frameRateOverride,
                                        gui::ISurfaceComposer::EventRegistration::modeChanged});
 }

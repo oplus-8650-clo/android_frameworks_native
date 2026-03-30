@@ -31,6 +31,7 @@
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <cutils/properties.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
@@ -2529,7 +2530,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Fail_Symlink) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2560,7 +2562,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Fail_InvalidPath) {
 
     // The call itself returns ok() (oneway), but callback receives failure.
     ASSERT_TRUE(service->copyAppDataPath(testUuid, fromPath, get_full_path(toPath), kTestUserId,
-                                         kTestAppId, "default", 0, callback)
+                                         kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2574,7 +2577,8 @@ TEST_F(ServiceTest, CopyAppDataPath_AcceptNonLegacyPathForUser0_Internal) {
     std::string toPath = "/data/user/0/to_copy_internal";
 
     ASSERT_TRUE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
-                                         "default", 0, callback)
+                                         "default", 0, multiuser_get_uid(kTestUserId, kTestAppId),
+                                         callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2600,7 +2604,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Success) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2629,7 +2634,8 @@ TEST_F(ServiceTest, CopyAppDataPath_TargetExists) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2647,7 +2653,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Fail_NonNormalizedPath) {
 
     // '..' is rejected immediately by Binder interface validation (shady path)
     ASSERT_FALSE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
-                                          "default", 0, callback)
+                                          "default", 0, multiuser_get_uid(kTestUserId, kTestAppId),
+                                          callback)
                          .isOk());
 }
 
@@ -2658,7 +2665,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Fail_RedundantPath) {
 
     // '//' passes Binder validation but should be rejected by internal normalization check
     ASSERT_TRUE(service->copyAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
-                                         "default", 0, callback)
+                                         "default", 0, multiuser_get_uid(kTestUserId, kTestAppId),
+                                         callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2672,7 +2680,8 @@ TEST_F(ServiceTest, MoveAppDataPath_Fail_NonNormalizedPath) {
 
     // '/./' passes Binder validation but should be rejected by internal normalization check
     ASSERT_TRUE(service->moveAppDataPath(std::nullopt, fromPath, toPath, kTestUserId, kTestAppId,
-                                         "default", 0, callback)
+                                         "default", 0, multiuser_get_uid(kTestUserId, kTestAppId),
+                                         callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2715,7 +2724,8 @@ TEST_F(ServiceTest, MoveAppDataPath_Success) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2742,7 +2752,8 @@ TEST_F(ServiceTest, MoveAppDataPath_TargetExists_EmptyDir) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2770,13 +2781,43 @@ TEST_F(ServiceTest, MoveAppDataPath_TargetExists_NotEmptyDir) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
     // renameat() fails with ENOTEMPTY if target is a non-empty directory
     EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
     EXPECT_TRUE(exists(fromPath)); // Source should still exist
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Fail_PermissionDenied) {
+    const std::string fromPath = "user/0/from_permission_denied";
+    const std::string toPath = "user/0/to_permission_denied";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source file owned by different app
+    mkdir(fromPath, kTestAppUid + 1, kTestAppUid + 1, 0700);
+    const std::string srcFile = fromPath + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid + 1, kTestAppUid + 1, 0600, "content");
+
+    // Create dest dir owned by target app
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move file, but callerUid is kTestAppUid, while source is kTestAppUid + 1
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, kTestAppUid,
+                                         callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_THAT(callback->mMessage, testing::HasSubstr("PERMISSION_DENIED"));
+    EXPECT_TRUE(exists(srcFile));
 }
 
 TEST_F(ServiceTest, CopyAppDataPath_FileToDir) {
@@ -2799,7 +2840,8 @@ TEST_F(ServiceTest, CopyAppDataPath_FileToDir) {
 
     // Copy file to directory
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2818,18 +2860,19 @@ TEST_F(ServiceTest, MoveAppDataPath_FileToDir) {
     delete_dir_contents_and_dir(get_full_path(toPath), true);
 
     // Create source file
-    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
     const std::string srcFile = fromPath + "/file.txt";
-    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
 
     // Create dest dir
-    mkdir(toPath, kSystemUid, kSystemUid, 0700);
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
 
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     // Move file to directory
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2859,7 +2902,8 @@ TEST_F(ServiceTest, CopyAppDataPath_SubdirCreated) {
 
     // Copy file to non-existent subdir within existing root
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2888,7 +2932,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Fail_NoTargetRoot) {
 
     // Copy file to non-existent root
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2906,9 +2951,9 @@ TEST_F(ServiceTest, MoveAppDataPath_SubdirCreated) {
     delete_dir_contents_and_dir(get_full_path(toRoot), true);
 
     // Create source file
-    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
     const std::string srcFile = fromPath + "/file.txt";
-    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
 
     // Create target root but NOT the subdir
     mkdir(toRoot, kTestAppUid, kTestAppUid, 0700);
@@ -2917,7 +2962,8 @@ TEST_F(ServiceTest, MoveAppDataPath_SubdirCreated) {
 
     // Move file to non-existent subdir within existing root
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2937,9 +2983,9 @@ TEST_F(ServiceTest, MoveAppDataPath_Fail_NoTargetRoot) {
     delete_dir_contents_and_dir(get_full_path(toPath), true);
 
     // Create source file
-    mkdir(fromPath, kSystemUid, kSystemUid, 0700);
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
     const std::string srcFile = fromPath + "/file.txt";
-    create_with_content(get_full_path(srcFile), kSystemUid, kSystemUid, 0600, "content");
+    create_with_content(get_full_path(srcFile), kTestAppUid, kTestAppUid, 0600, "content");
 
     // Note: we do NOT create toPath here.
 
@@ -2947,7 +2993,8 @@ TEST_F(ServiceTest, MoveAppDataPath_Fail_NoTargetRoot) {
 
     // Move file to non-existent root
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(srcFile), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -2976,7 +3023,8 @@ TEST_F(ServiceTest, MoveAppDataPath_DirToDir) {
 
     // Move directory into directory
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kTestUserId, kTestAppId, "default", 0, callback)
+                                         kTestUserId, kTestAppId, "default", 0,
+                                         multiuser_get_uid(kTestUserId, kTestAppId), callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -3005,7 +3053,8 @@ TEST_F(ServiceTest, CopyAppDataPath_Success_SecondaryUser) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kSecondaryUserId, kTestAppId, "default", 0, callback)
+                                         kSecondaryUserId, kTestAppId, "default", 0,
+                                         kSecondaryAppUid, callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -3034,7 +3083,8 @@ TEST_F(ServiceTest, MoveAppDataPath_Success_SecondaryUser) {
     auto callback = sp<MockAppDataOperationCallback>::make();
 
     ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
-                                         kSecondaryUserId, kTestAppId, "default", 0, callback)
+                                         kSecondaryUserId, kTestAppId, "default", 0,
+                                         kSecondaryAppUid, callback)
                         .isOk());
 
     callback->waitForCompletion();
@@ -3043,6 +3093,114 @@ TEST_F(ServiceTest, MoveAppDataPath_Success_SecondaryUser) {
     EXPECT_TRUE(exists(toPath + "/from_move/file.txt"));
     EXPECT_EQ(kSecondaryAppUid, stat_uid((toPath + "/from_move/file.txt").c_str()));
     EXPECT_FALSE(exists(fromPath));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Fail_PermissionDenied_Recursive) {
+    const std::string fromPath = "user/0/from_permission_denied_rec";
+    const std::string toPath = "user/0/to_permission_denied_rec";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source dir owned by target app
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    // Create source SUBDIR owned by target app
+    const std::string subDir = fromPath + "/subdir";
+    mkdir(subDir, kTestAppUid, kTestAppUid, 0700);
+    // Create source file INSIDE subdir owned by DIFFERENT app
+    const std::string srcFile = subDir + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid + 1, kTestAppUid + 1, 0600, "content");
+
+    // Create dest dir owned by target app
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move dir, but one nested file belongs to kTestAppUid + 1
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, kTestAppUid,
+                                         callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_THAT(callback->mMessage, testing::HasSubstr("PERMISSION_DENIED"));
+    EXPECT_TRUE(exists(srcFile));
+}
+
+TEST_F(ServiceTest, CopyAppDataPath_Fail_PermissionDenied_Recursive) {
+    const std::string fromPath = "user/0/from_copy_permission_denied_rec";
+    const std::string toPath = "user/0/to_copy_permission_denied_rec";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+
+    // Create source dir owned by target app
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+    // Create source SUBDIR owned by target app
+    const std::string subDir = fromPath + "/subdir";
+    mkdir(subDir, kTestAppUid, kTestAppUid, 0700);
+    // Create source file INSIDE subdir owned by DIFFERENT app
+    const std::string srcFile = subDir + "/file.txt";
+    create_with_content(get_full_path(srcFile), kTestAppUid + 1, kTestAppUid + 1, 0600, "content");
+
+    // Create dest dir owned by target app
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Copy dir, but one nested file belongs to kTestAppUid + 1
+    ASSERT_TRUE(service->copyAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, kTestAppUid,
+                                         callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_THAT(callback->mMessage, testing::HasSubstr("PERMISSION_DENIED"));
+    EXPECT_TRUE(exists(srcFile));
+}
+
+TEST_F(ServiceTest, MoveAppDataPath_Fail_PermissionDenied_SymlinkOwner) {
+    const std::string fromPath = "user/0/from_permission_denied_symlink";
+    const std::string toPath = "user/0/to_permission_denied_symlink";
+    const std::string targetPath = "/data/local/tmp/symlink_target.txt";
+
+    delete_dir_contents_and_dir(get_full_path(fromPath), true);
+    delete_dir_contents_and_dir(get_full_path(toPath), true);
+    unlink(targetPath.c_str());
+
+    // Create a target file
+    create_with_content(targetPath, kTestAppUid, kTestAppUid, 0600, "target");
+
+    // Create source dir owned by target app
+    mkdir(fromPath, kTestAppUid, kTestAppUid, 0700);
+
+    // Create a symlink owned by DIFFERENT app
+    std::string symlinkPath = get_full_path(fromPath) + "/mysymlink";
+    ASSERT_EQ(0, symlink(targetPath.c_str(), symlinkPath.c_str()));
+    ASSERT_EQ(0, lchown(symlinkPath.c_str(), kTestAppUid + 1, kTestAppUid + 1));
+
+    // Create dest dir owned by target app
+    mkdir(toPath, kTestAppUid, kTestAppUid, 0700);
+
+    auto callback = sp<MockAppDataOperationCallback>::make();
+
+    // Move dir, but nested symlink belongs to kTestAppUid + 1
+    ASSERT_TRUE(service->moveAppDataPath(testUuid, get_full_path(fromPath), get_full_path(toPath),
+                                         kTestUserId, kTestAppId, "default", 0, kTestAppUid,
+                                         callback)
+                        .isOk());
+
+    callback->waitForCompletion();
+    EXPECT_EQ(callback->mStatus, IAppDataOperationCallback::STATUS_FAILURE);
+    EXPECT_THAT(callback->mMessage, testing::HasSubstr("PERMISSION_DENIED"));
+
+    struct stat st;
+    EXPECT_EQ(0, lstat(symlinkPath.c_str(), &st));
+    EXPECT_TRUE(S_ISLNK(st.st_mode));
+
+    unlink(targetPath.c_str());
 }
 
 }  // namespace installd

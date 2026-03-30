@@ -338,7 +338,7 @@ private:
 class InputPublisher {
 public:
     /* Creates a publisher associated with an input channel. */
-    explicit InputPublisher(const std::shared_ptr<InputChannel>& channel);
+    explicit InputPublisher(std::unique_ptr<InputChannel> channel);
 
     /* Destroys the publisher and releases its input channel. */
     ~InputPublisher();
@@ -451,7 +451,7 @@ public:
     android::base::Result<ConsumerResponse> receiveConsumerResponse();
 
 private:
-    std::shared_ptr<InputChannel> mChannel;
+    std::unique_ptr<InputChannel> mChannel;
     InputVerifier mInputVerifier;
 };
 

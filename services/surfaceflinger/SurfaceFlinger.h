@@ -580,8 +580,6 @@ private:
     void bootFinished();
     status_t getSupportedFrameTimestamps(std::vector<FrameEvent>* outSupported) const;
     sp<IDisplayEventConnection> createDisplayEventConnection(
-            gui::ISurfaceComposer::VsyncSource vsyncSource =
-                    gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp,
             EventRegistrationFlags eventRegistration = {},
             const sp<IBinder>& layerHandle = nullptr);
 
@@ -692,7 +690,7 @@ private:
 
     void removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
-    bool registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+    bool registerShader(const sp<IBinder>& shaderToken, const std::string& uniqueShaderName,
                         const std::string& shaderString);
     void unregisterShader(const sp<IBinder>& shaderToken);
 
@@ -1834,8 +1832,7 @@ public:
 
     binder::Status bootFinished() override;
     binder::Status createDisplayEventConnection(
-            VsyncSource vsyncSource, EventRegistration eventRegistration,
-            const sp<IBinder>& layerHandle,
+            EventRegistration eventRegistration, const sp<IBinder>& layerHandle,
             sp<gui::IDisplayEventConnection>* outConnection) override;
     binder::Status createConnection(sp<gui::ISurfaceComposerClient>* outClient) override;
     binder::Status createVirtualDisplay(
@@ -1971,7 +1968,8 @@ public:
     binder::Status removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
     binder::Status forcePacesetter(int64_t displayId) override;
     binder::Status resetForcedPacesetter() override;
-    binder::Status registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+    binder::Status registerShader(const sp<IBinder>& shaderToken,
+                                  const std::string& uniqueShaderName,
                                   const std::string& shaderString) override;
     binder::Status unregisterShader(const sp<IBinder>& shader) override;
 

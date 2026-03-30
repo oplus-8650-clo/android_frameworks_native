@@ -33,16 +33,14 @@ namespace android {
 
 // ---------------------------------------------------------------------------
 
-DisplayEventReceiver::DisplayEventReceiver(gui::ISurfaceComposer::VsyncSource vsyncSource,
-                                           EventRegistrationFlags eventRegistration,
+DisplayEventReceiver::DisplayEventReceiver(EventRegistrationFlags eventRegistration,
                                            const sp<IBinder>& layerHandle) {
     sp<gui::ISurfaceComposer> sf(ComposerServiceAIDL::getComposerService());
     if (sf != nullptr) {
         mEventConnection = nullptr;
         mSurfaceflingerAlive = IInterface::asBinder(sf)->isBinderAlive();
         binder::Status status =
-                sf->createDisplayEventConnection(vsyncSource,
-                                                 static_cast<
+                sf->createDisplayEventConnection(static_cast<
                                                          gui::ISurfaceComposer::EventRegistration>(
                                                          eventRegistration.get()),
                                                  layerHandle, &mEventConnection);

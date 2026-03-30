@@ -98,9 +98,7 @@ public:
 
         // Explicit indication that this transaction and others to follow will likely result in a
         // lot of layers being composed, and thus, SurfaceFlinger should wake-up earlier to avoid
-        // missing frame deadlines. In this case SurfaceFlinger will wake up at
-        // (sf vsync offset - debug.sf.early_phase_offset_ns). SurfaceFlinger will continue to be
-        // in the early configuration until it receives eEarlyWakeupEnd. These flags are
+        // missing frame deadlines. These flags are
         // expected to be used by WindowManager only and are guarded by
         // android.permission.WAKEUP_SURFACE_FLINGER
         eEarlyWakeupStart = 0x08,

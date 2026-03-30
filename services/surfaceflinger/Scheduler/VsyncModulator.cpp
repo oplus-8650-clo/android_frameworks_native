@@ -180,13 +180,12 @@ VsyncConfig VsyncModulator::updateVsyncConfig() {
 }
 
 VsyncConfig VsyncModulator::updateVsyncConfigLocked() {
-    const VsyncConfig& offsets = getNextVsyncConfig();
-    mVsyncConfig = offsets;
+    mVsyncConfig = getNextVsyncConfig();
 
     // Trace config type
-    SFTRACE_INT("Vsync-Early",  &mVsyncConfig == &mVsyncConfigSet.early);
-    SFTRACE_INT("Vsync-EarlyGpu", &mVsyncConfig == &mVsyncConfigSet.earlyGpu);
-    SFTRACE_INT("Vsync-Late", &mVsyncConfig == &mVsyncConfigSet.late);
+    SFTRACE_INT("Vsync-Early", mVsyncConfig == mVsyncConfigSet.early);
+    SFTRACE_INT("Vsync-EarlyGpu", mVsyncConfig == mVsyncConfigSet.earlyGpu);
+    SFTRACE_INT("Vsync-Late", mVsyncConfig == mVsyncConfigSet.late);
 
     // Trace early vsync conditions
     SFTRACE_INT("EarlyTransactionFrames", mEarlyTransactionFrames);
@@ -195,7 +194,7 @@ VsyncConfig VsyncModulator::updateVsyncConfigLocked() {
     // Trace early gpu conditions
     SFTRACE_INT("EarlyGpuFrames", mEarlyGpuFrames);
 
-    return offsets;
+    return mVsyncConfig;
 }
 
 void VsyncModulator::binderDied(const wp<IBinder>& who) {

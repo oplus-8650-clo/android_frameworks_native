@@ -57,10 +57,16 @@ public:
      */
     Slot getSlot(const sp<GraphicBuffer>& buffer);
 
+    /**
+     * Removes a buffer from the tracker.
+     */
+    void remove(const sp<GraphicBuffer>& buffer);
+
 private:
     virtual void operator()(uint64_t& key, uint32_t& value) override;
 
-    std::set<uint32_t> mOpenSlots;
+    // This is used as a stack of available slots.
+    std::vector<uint32_t> mOpenSlots;
     LruCache</*bufferId*/ uint64_t, /*slotId*/ uint32_t> mCache;
 };
 
