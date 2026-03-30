@@ -524,7 +524,9 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
         mLayerCachingEnabled =
                 base::GetBoolProperty("debug.sf.enable_layer_caching"s,
                                       sysprop::SurfaceFlingerProperties::enable_layer_caching()
-                                              .value_or(false));
+                                              .value_or(false)) ||
+                (base::GetBoolProperty("debug.sf.layer_caching_desktop_rollout_optin"s, false) &&
+                 FlagManager::getInstance().layer_caching_desktop_rollout());
     }
     useContextPriority = use_context_priority(true);
 
