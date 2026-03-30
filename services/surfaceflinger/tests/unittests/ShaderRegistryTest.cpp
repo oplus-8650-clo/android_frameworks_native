@@ -40,14 +40,16 @@ TEST_F(ShaderRegistryTest, RegisterAndGetShader) {
         }
     )";
 
-    mShaderRegistry->registerShader(mToken, "TestShader", shaderString);
+    // Verifies that a valid shader is successfully registered and can be retrieved.
+    EXPECT_TRUE(mShaderRegistry->registerShader(mToken, "TestShader", shaderString));
     auto effect = mShaderRegistry->getShader(mToken);
     EXPECT_NE(effect, nullptr);
 }
 
 TEST_F(ShaderRegistryTest, RegisterInvalidShader) {
     std::string invalidShader = "invalid syntax";
-    mShaderRegistry->registerShader(mToken, "InvalidShader", invalidShader);
+    // Verifies that registering an invalid shader fails and returns false.
+    EXPECT_FALSE(mShaderRegistry->registerShader(mToken, "InvalidShader", invalidShader));
     auto effect = mShaderRegistry->getShader(mToken);
     EXPECT_EQ(effect, nullptr);
 }
@@ -103,6 +105,31 @@ TEST_F(ShaderRegistryTest, MultipleShaders) {
 
     EXPECT_EQ(mShaderRegistry->getShader(token1), nullptr);
     EXPECT_NE(mShaderRegistry->getShader(token2), nullptr);
+}
+
+TEST_F(ShaderRegistryTest, RegisterWithEmptyName) {
+    std::string shaderString = R"(
+        vec4 main(vec2 canvas_coords) {
+            return vec4(1.0);
+        }
+    )";
+
+    // Verifies that registering a shader with an empty unique name succeeds
+    // and is handled gracefully by SkRuntimeEffect::Options.
+    EXPECT_TRUE(mShaderRegistry->registerShader(mToken, "", shaderString));
+    EXPECT_NE(mShaderRegistry->getShader(mToken), nullptr);
+}
+
+TEST_F(ShaderRegistryTest, RegisterWithNullToken) {
+    std::string shaderString = R"(
+        vec4 main(vec2 canvas_coords) {
+            return vec4(1.0);
+        }
+    )";
+
+    // Verifies that attempting to register a shader with a null token fails.
+    EXPECT_FALSE(mShaderRegistry->registerShader(nullptr, "TestShader", shaderString));
+    EXPECT_EQ(mShaderRegistry->getShader(nullptr), nullptr);
 }
 
 } // namespace android::surfaceflinger
