@@ -9716,12 +9716,14 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args)
         layers = snapshotLambda(args);
 
         // Reset LayerSnapshotBuilder args after snapshots are obtained
+        // TODO(b/497031946): manually reverting individual fields is error-prone.
         if (args.rootLayerId) {
             builderArgs.root = mLayerHierarchyBuilder.getHierarchy();
             builderArgs.parentCrop.reset();
         }
         builderArgs.rootSnapshot.isSecure = false;
         builderArgs.excludeLayerIds.clear();
+        builderArgs.exclusionMask = 0;
         mLayerSnapshotBuilder.update(builderArgs);
 
     } else {

@@ -395,6 +395,11 @@ TEST_F(ScreenCaptureTest, CaptureLayerExcludeWithExclusionMask) {
     ScreenCapture::captureLayers(&mCapture, captureArgs);
     mCapture->checkPixel(10, 10, 0, 0, 0);
     mCapture->checkPixel(0, 0, 200, 200, 200);
+
+    // Take another screenshot without the exclusion mask to verify it doesn't leak.
+    captureArgs.captureArgs.exclusionMask = 0;
+    ScreenCapture::captureLayers(&mCapture, captureArgs);
+    mCapture->checkPixel(0, 0, 200, 0, 200);
 }
 
 TEST_F(ScreenCaptureTest, CaptureLayerExcludeWithExclusionMaskInheritance) {
