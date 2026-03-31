@@ -19,7 +19,6 @@
 #include <string>
 #include <vector>
 
-#include <gui/WindowInfosUpdate.h>
 #include <input/Input.h>
 #include <input/InputDevice.h>
 #include <input/TouchVideoFrame.h>
@@ -39,21 +38,6 @@ struct NotifyInputDevicesChangedArgs {
 
     NotifyInputDevicesChangedArgs(const NotifyInputDevicesChangedArgs& other) = default;
     NotifyInputDevicesChangedArgs& operator=(const NotifyInputDevicesChangedArgs&) = default;
-};
-
-/* Describes a window infos change. */
-struct NotifyWindowInfosArgs {
-    int32_t id;
-    gui::WindowInfosUpdate update;
-
-    inline NotifyWindowInfosArgs() {}
-
-    NotifyWindowInfosArgs(int32_t id, gui::WindowInfosUpdate update);
-
-    bool operator==(const NotifyWindowInfosArgs& rhs) const = default;
-
-    NotifyWindowInfosArgs(const NotifyWindowInfosArgs& other) = default;
-    NotifyWindowInfosArgs& operator=(const NotifyWindowInfosArgs&) = default;
 };
 
 /* Describes a key event. */
@@ -235,8 +219,8 @@ struct NotifyVibratorStateArgs {
 };
 
 using NotifyArgs =
-        std::variant<NotifyInputDevicesChangedArgs, NotifyWindowInfosArgs, NotifyKeyArgs,
-                     NotifyMotionArgs, NotifySensorArgs, NotifySwitchArgs, NotifyDeviceResetArgs,
+        std::variant<NotifyInputDevicesChangedArgs, NotifyKeyArgs, NotifyMotionArgs,
+                     NotifySensorArgs, NotifySwitchArgs, NotifyDeviceResetArgs,
                      NotifyPointerCaptureChangedArgs, NotifyVibratorStateArgs>;
 
 const std::string toString(const NotifyArgs& args);

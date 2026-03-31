@@ -22,6 +22,7 @@
 #include <utils/RefBase.h>
 #include <utils/StrongPointer.h>
 
+#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -36,6 +37,7 @@ namespace android {
 class InputReaderTracer {
 public:
     explicit InputReaderTracer(std::shared_ptr<input_trace::InputTracingBackendInterface> backend);
+    ~InputReaderTracer();
     InputReaderTracer(const InputReaderTracer&) = delete;
     InputReaderTracer& operator=(const InputReaderTracer&) = delete;
 
@@ -43,13 +45,35 @@ public:
     void traceDeviceAddition(nsecs_t timestamp, const input_trace::TracedEvdevDevice& device);
     void traceDeviceRemoval(nsecs_t timestamp, RawDeviceId deviceId);
 
-    void onWindowInfosChanged(const gui::WindowInfosUpdate& update);
+protected:
+    using WindowListenerRegisterConsumer = std::function<std::vector<gui::WindowInfo>(
+            const sp<android::gui::WindowInfosListener>&)>;
+    using WindowListenerUnregisterConsumer =
+            std::function<void(const sp<android::gui::WindowInfosListener>&)>;
+    InputReaderTracer(std::shared_ptr<input_trace::InputTracingBackendInterface> backend,
+                      const WindowListenerRegisterConsumer& registerListener,
+                      const WindowListenerUnregisterConsumer& unregisterListener);
 
 private:
     std::shared_ptr<input_trace::InputTracingBackendInterface> mBackend;
 
+    class WindowListener : public gui::WindowInfosListener {
+    public:
+        explicit WindowListener(InputReaderTracer& tracer) : mTracer(tracer) {};
+        void onWindowInfosChanged(const gui::WindowInfosUpdate&) override;
+
+        bool mTracerDestroyed = false;
+
+    private:
+        InputReaderTracer& mTracer;
+    };
+    sp<WindowListener> mWindowListener;
+
     std::mutex mLock;
     bool mSecureWindowVisible GUARDED_BY(mLock) = false;
+
+    const WindowListenerRegisterConsumer mRegisterListener;
+    const WindowListenerUnregisterConsumer mUnregisterListener;
 
     void setSecureWindowVisible(bool visible);
 };

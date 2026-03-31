@@ -69,6 +69,16 @@ flag {
 } # bugfix_virtual_display_refresh_rate
 
 flag {
+  name: "color_transform_box_shadows_and_border"
+  namespace: "core_graphics"
+  description: "Passes colorTransform filter to BoxShadows and Borders to match image colorTranform and to fix flickering issues with layer caching"
+  bug: "491171525"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # color_transform_box_shadows_and_border
+
+flag {
   name: "color_transform_translation"
   namespace: "core_graphics"
   description: "Fixes a bug that incorrectly applies a the translation component of global color transforms to source alpha"
@@ -267,6 +277,16 @@ flag {
   description: "R/W flag to enable Skia's Graphite Vulkan backend in RenderEngine for Desktop devices, IF the debug.renderengine.graphite_desktop_optin sysprop is set to true."
   bug: "436872839"
 } # graphite_renderengine_desktop_rollout
+
+flag {
+  name: "hwc_buffer_override_skip"
+  namespace: "core_graphics"
+  description: "Include non-client HWC layers when checking for overriden buffers to skip."
+  bug: "491180382"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+} # hwc_buffer_override_skip
 
 flag {
   name: "local_tonemap_screenshots"

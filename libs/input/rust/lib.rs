@@ -133,7 +133,6 @@ fn create_input_verifier(name: String) -> Box<InputVerifier> {
         &name,
         ffi::shouldLog("InputVerifierLogEvents"),
         input_flags::enable_button_state_verification(),
-        input_flags::enable_down_time_verification(),
         input_flags::enable_captured_verification(),
     ))
 }
@@ -289,7 +288,7 @@ mod tests {
     fn verify_nonbutton_action_with_action_button() {
         let mut verifier = Box::new(InputVerifier::new(
             "Test", /*should_log=*/ false, /*verify_buttons=*/ true,
-            /*verify_down_time=*/ true, /*verify_captured_events=*/ true,
+            /*verify_captured_events=*/ true,
         ));
         assert!(process_movement(
             &mut verifier,
@@ -311,7 +310,7 @@ mod tests {
     fn verify_nonbutton_action_with_action_button_and_button_state() {
         let mut verifier = Box::new(InputVerifier::new(
             "Test", /*should_log=*/ false, /*verify_buttons=*/ true,
-            /*verify_down_time=*/ true, /*verify_captured_events=*/ true,
+            /*verify_captured_events=*/ true,
         ));
         assert!(process_movement(
             &mut verifier,

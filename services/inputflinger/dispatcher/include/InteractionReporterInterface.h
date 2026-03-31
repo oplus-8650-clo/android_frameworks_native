@@ -32,8 +32,6 @@ public:
 
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override = 0;
 
-    void notifyWindowInfos(const NotifyWindowInfosArgs& args) override = 0;
-
     void notifyKey(const NotifyKeyArgs& args) override = 0;
 
     void notifyMotion(const NotifyMotionArgs& args) override = 0;

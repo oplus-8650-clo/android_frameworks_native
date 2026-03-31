@@ -26,16 +26,6 @@ flag {
 }
 
 flag {
-  name: "enable_down_time_verification"
-  namespace: "input"
-  description: "Set to true to enable crashing whenever inbound events with bad down times are going into InputDispatcher"
-  bug: "452569734"
-  metadata {
-    purpose: PURPOSE_BUGFIX
-  }
-}
-
-flag {
   name: "enable_captured_verification"
   namespace: "input"
   description: "Enable input event verification on event streams from captured touchpads and mice"

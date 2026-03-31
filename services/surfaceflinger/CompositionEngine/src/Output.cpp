@@ -1658,17 +1658,28 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
         const bool realContentIsVisible = clientComposition &&
                 !layerState.visibleRegion.subtract(layerState.shadowRegion).isEmpty();
 
-        if (clientComposition || clearClientComposition) {
-            if (auto overrideSettings = layer->getOverrideCompositionSettings()) {
+        auto overrideSettings = layer->getOverrideCompositionSettings();
+        // Only check non-client layers when the bugfix flag is enabled.
+        if (FlagManager::getInstance().hwc_buffer_override_skip() ||
+            (clientComposition || clearClientComposition)) {
+            // Track and skip consecutive layers with the same override buffer.
+            if (overrideSettings) {
                 if (overrideSettings->bufferId != previousOverrideBufferId) {
                     previousOverrideBufferId = overrideSettings->bufferId;
-                    clientCompositionLayers.push_back(std::move(*overrideSettings));
-                    ALOGV("Replacing [%s] with override in RE", layer->getLayerFE().getDebugName());
+                    if (clientComposition || clearClientComposition) {
+                        // For client composition, set the override settings for RE.
+                        clientCompositionLayers.push_back(std::move(*overrideSettings));
+                    }
+                    ALOGV("Replacing [%s] with override", layer->getLayerFE().getDebugName());
                 } else {
-                    ALOGV("Skipping redundant override buffer for [%s] in RE",
-                          layer->getLayerFE().getDebugName());
+                    ALOGV("Skipping redundant override buffer for [%s]",
+                           layer->getLayerFE().getDebugName());
                 }
-            } else {
+            }
+        }
+
+        if (clientComposition || clearClientComposition) {
+            if (!overrideSettings) {
                 LayerFE::ClientCompositionTargetSettings::BlurSetting blurSetting =
                         disableBlurForLayer
                         ? LayerFE::ClientCompositionTargetSettings::BlurSetting::Disabled

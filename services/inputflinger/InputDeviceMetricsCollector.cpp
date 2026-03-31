@@ -138,10 +138,6 @@ void InputDeviceMetricsCollector::notifyInputDevicesChanged(
     mNextListener.notify(args);
 }
 
-void InputDeviceMetricsCollector::notifyWindowInfos(const NotifyWindowInfosArgs& args) {
-    mNextListener.notify(args);
-}
-
 void InputDeviceMetricsCollector::notifyKey(const NotifyKeyArgs& args) {
     {
         std::scoped_lock lock(mLock);
