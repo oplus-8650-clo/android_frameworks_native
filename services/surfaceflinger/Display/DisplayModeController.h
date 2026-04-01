@@ -86,6 +86,10 @@ public:
 
     DisplayModeRequestOpt getDesiredMode(PhysicalDisplayId) const EXCLUDES(mDisplayLock);
 
+    // Returns an array with all the displays that have a pending desired mode request that matches
+    // a given synchronization token.
+    std::vector<PhysicalDisplayId> getDisplayIdForRequest(sp<IBinder>) const EXCLUDES(mDisplayLock);
+
     // Consumes the display's desired mode if one exists. If it does not match the active resolution
     // (i.e. the DisplayModeRequest is a resolution switch), then it must match `expectedResolution`
     // for it to be consumed.

@@ -37,13 +37,17 @@ public:
     size_t getMaxRenderTargetSize() const override;
     size_t getMaxTextureSize() const override;
     bool isAbandonedOrDeviceLost() override;
-    void setResourceCacheLimit(size_t maxResourceBytes) override;
+    bool supportsProtectedContent() const override;
 
+    void setResourceCacheLimit(size_t maxResourceBytes) override;
     void purgeUnlockedScratchResources() override;
     void purgeResourcesNotUsedIn(std::chrono::milliseconds) override;
     void resetContextIfApplicable() override;
 
-    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
+    void reportStatsForEachCache(const std::vector<ResourcePair>& resourceMap,
+                                 std::function<void(SkiaMemoryReporter& reporter, const char* label,
+                                                    const size_t cacheLimit)>
+                                         dumpCache) const override;
 
 private:
     DISALLOW_COPY_AND_ASSIGN(GaneshGpuContext);

@@ -154,6 +154,22 @@ auto DisplayModeController::getDesiredMode(PhysicalDisplayId displayId) const
     }
 }
 
+auto DisplayModeController::getDisplayIdForRequest(sp<IBinder> displaySynchronizationToken) const
+        -> std::vector<PhysicalDisplayId> {
+    std::lock_guard lock(mDisplayLock);
+    std::vector<PhysicalDisplayId> result;
+    for (const auto& [displayId, displayPtr] : mDisplays) {
+        std::scoped_lock lock(displayPtr->desiredModeLock);
+        if (displayPtr->desiredModeOpt &&
+            displayPtr->desiredModeOpt->displaySynchronizationToken ==
+                    displaySynchronizationToken) {
+            result.push_back(displayId);
+        }
+    }
+
+    return result;
+}
+
 auto DisplayModeController::getPendingMode(PhysicalDisplayId displayId) const
         -> DisplayModeRequestOpt {
     std::lock_guard lock(mDisplayLock);

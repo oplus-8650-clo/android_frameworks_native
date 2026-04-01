@@ -127,6 +127,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(align_adpf_with_sf_opt_policy);
     DUMP_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate);
     DUMP_ACONFIG_FLAG(color_transform_translation);
+    DUMP_ACONFIG_FLAG(color_transform_box_shadows_and_border);
     DUMP_ACONFIG_FLAG(configure_work_duration);
     DUMP_ACONFIG_FLAG(debug_gpu_present_times);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
@@ -138,6 +139,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview2_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_desktop_rollout);
+    DUMP_ACONFIG_FLAG(hwc_buffer_override_skip);
     DUMP_ACONFIG_FLAG(luts_api);
     DUMP_ACONFIG_FLAG(md_degrade_hdr);
     DUMP_ACONFIG_FLAG(mirror_uid_filtering);
@@ -316,6 +318,7 @@ FLAG_MANAGER_ACONFIG_FLAG(bugfix_layer_caching_color_inversion_flickering,
                           "debug.sf.layer_caching_color_inversion_flickering_fix");
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces, "");
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate, "");
+FLAG_MANAGER_ACONFIG_FLAG(color_transform_box_shadows_and_border, "");
 FLAG_MANAGER_ACONFIG_FLAG(color_transform_translation, "");
 FLAG_MANAGER_ACONFIG_FLAG(configure_work_duration, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
@@ -328,6 +331,7 @@ FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview2_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
+FLAG_MANAGER_ACONFIG_FLAG(hwc_buffer_override_skip, "");
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_uid_filtering, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_with_crop, "");

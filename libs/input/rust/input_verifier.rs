@@ -202,7 +202,6 @@ pub struct InputVerifier {
     name: String,
     should_log: bool,
     verify_buttons: bool,
-    verify_down_time: bool,
     verify_captured_events: bool,
     touching_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
     hovering_pointer_ids_by_device: HashMap<DeviceId, HashSet<i32>>,
@@ -216,7 +215,6 @@ impl InputVerifier {
         name: &str,
         should_log: bool,
         verify_buttons: bool,
-        verify_down_time: bool,
         verify_captured_events: bool,
     ) -> Self {
         logger::init(
@@ -228,7 +226,6 @@ impl InputVerifier {
             name: name.to_owned(),
             should_log,
             verify_buttons,
-            verify_down_time,
             verify_captured_events,
             touching_pointer_ids_by_device: HashMap::new(),
             hovering_pointer_ids_by_device: HashMap::new(),
@@ -274,9 +271,8 @@ impl InputVerifier {
         // hover.
         // TODO(b/479982869): once accessibility migrates to injecting events through a separate
         //   event stream, always verify down times.
-        let verify_down_time = self.verify_down_time
-            && (event.action == MotionAction::Down
-                || self.touching_pointer_ids_by_device.contains_key(&event.device_id));
+        let verify_down_time = event.action == MotionAction::Down
+            || self.touching_pointer_ids_by_device.contains_key(&event.device_id);
         if verify_down_time {
             let old_down_time_nanos =
                 *(self.down_time_by_device.get(&event.device_id).unwrap_or(&0));
@@ -528,7 +524,7 @@ mod tests {
     fn make_test_verifier() -> InputVerifier {
         InputVerifier::new(
             "Test", /*should_log*/ false, /*verify_buttons*/ true,
-            /*verify_down_times*/ true, /*verify_captured_events*/ true,
+            /*verify_captured_events*/ true,
         )
     }
 

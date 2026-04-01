@@ -1689,113 +1689,207 @@ void SurfaceFlinger::applyActiveMode(display::DisplayModeRequest&& activeMode) {
 void SurfaceFlinger::initiateDisplayModeChanges() {
     SFTRACE_CALL();
 
-    for (const auto& [displayId, physical] : mPhysicalDisplays) {
-        const auto display = getDisplayDeviceLocked(displayId);
-
-        auto desiredModeOpt = FlagManager::getInstance().modeset_state_machine()
-                ? mDisplayModeController.takeDesiredModeIfMatches(displayId, display->getSize(),
-                                                                  shouldSyncResolutionSwitch())
-                : mDisplayModeController.getDesiredMode(displayId);
-
-        if (!desiredModeOpt) {
+    std::vector<PhysicalDisplayId> processedDisplayIds;
+    const bool supportsMultiDisplay = FlagManager::getInstance().modeset_multi_display() &&
+            FlagManager::getInstance().modeset_state_machine() &&
+            getHwComposer().getComposer()->isDisplayCommandModesetSupported();
+    for (const auto& [initialDisplayId, _] : mPhysicalDisplays) {
+        // For multi-display the request for initialDisplay may be tied to other display modesets.
+        // So the logic here regroups those display while tracking which have already been
+        // processed.
+        if (supportsMultiDisplay && ftl::contains(processedDisplayIds, initialDisplayId)) {
+            // Already processed as part of a different modeset.
             continue;
         }
 
-        auto desiredMode = std::move(*desiredModeOpt);
+        auto initialDesiredModeOpt = mDisplayModeController.getDesiredMode(initialDisplayId);
 
-        const auto desiredModeId = desiredMode.mode.modePtr->getId();
-        const auto displayModePtrOpt = physical.snapshot().displayModes().get(desiredModeId);
+        if (!initialDesiredModeOpt) {
+            continue;
+        }
 
-        if (!displayModePtrOpt) {
-            ALOGW("%s: Unknown mode %d for display %s", __func__, ftl::to_underlying(desiredModeId),
-                  to_string(displayId).c_str());
+        auto initialDesiredMode = std::move(*initialDesiredModeOpt);
 
-            if (FlagManager::getInstance().modeset_state_machine()) {
-                dropModeRequest(std::move(desiredMode));
+        auto bundledModesetDisplaysIds = supportsMultiDisplay
+                ? mDisplayModeController.getDisplayIdForRequest(
+                          initialDesiredMode.displaySynchronizationToken)
+                : std::vector<PhysicalDisplayId>({initialDisplayId});
+        processedDisplayIds.insert(processedDisplayIds.end(), bundledModesetDisplaysIds.begin(),
+                                   bundledModesetDisplaysIds.end());
+
+        ui::PhysicalDisplayMap<PhysicalDisplayId, display::DisplayModeRequest>
+                displayModeRequestMap;
+        ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayModeId> displayIdToModeIdMap;
+
+        bool canApplyAllModes = true;
+        bool shouldDropModeRequests = false;
+        bool refreshRequired = false;
+        for (const auto& displayId : bundledModesetDisplaysIds) {
+            const auto display = getDisplayDeviceLocked(displayId);
+            if (!display) {
+                ALOGE("%s: Failed to find display device for bundled id %s", __func__,
+                      to_string(displayId).c_str());
+                canApplyAllModes = false;
+                shouldDropModeRequests = true;
+                // Consuming the desired mode when a display device is not available is irrelevant,
+                // so we skip. We still need to consume all other pending mode request for the
+                // sync token.
+                continue;
+            }
+
+            auto desiredModeOpt = FlagManager::getInstance().modeset_state_machine()
+                    ? mDisplayModeController.takeDesiredModeIfMatches(displayId, display->getSize(),
+                                                                      shouldSyncResolutionSwitch())
+                    : mDisplayModeController.getDesiredMode(displayId);
+
+            if (!desiredModeOpt) {
+                canApplyAllModes = false;
+                // Need to consume all modes for clean up.
+                continue;
+            }
+
+            auto [_, idToModeIdSuccess] =
+                    displayIdToModeIdMap.try_emplace(displayId,
+                                                     desiredModeOpt->mode.modePtr->getId());
+            auto [desiredModeIt, idToModeRequestSuccess] =
+                    displayModeRequestMap.try_emplace(displayId, std::move(*desiredModeOpt));
+            if (!idToModeIdSuccess || !idToModeRequestSuccess) {
+                ALOGE("%s: Display id %s is already associated with a desired mode.", __func__,
+                      to_string(displayId).c_str());
+                canApplyAllModes = false;
+                continue;
+            }
+            auto& desiredMode = desiredModeIt->second;
+
+            const auto desiredModeId = desiredMode.mode.modePtr->getId();
+            const auto displayModePtrOpt =
+                    mPhysicalDisplays.get(displayId)
+                            .transform([&desiredModeId](const PhysicalDisplay& display) {
+                                return display.snapshot().displayModes().get(desiredModeId);
+                            })
+                            .value_or(absl::nullopt);
+
+            if (!displayModePtrOpt) {
+                ALOGW("%s: Unknown mode %d for display %s", __func__,
+                      ftl::to_underlying(desiredModeId), to_string(displayId).c_str());
+
+                if (FlagManager::getInstance().modeset_state_machine()) {
+                    shouldDropModeRequests = true;
+                }
+                canApplyAllModes = false;
+                continue;
+            }
+
+            const auto activeMode = mDisplayModeController.getActiveMode(displayId);
+
+            if (!desiredMode.force && desiredMode.mode == activeMode &&
+                bundledModesetDisplaysIds.size() == 1) {
+                // if we have more than one display we still proceed with this request.
+                if (FlagManager::getInstance().modeset_state_machine()) {
+                    shouldDropModeRequests = true;
+                } else {
+                    applyActiveMode(displayId);
+                }
+                canApplyAllModes = false;
+                continue;
+            }
+
+            const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId);
+
+            // The desired mode is different from the active mode. However, the allowed modes might
+            // have changed since setDesiredMode scheduled a mode transition.
+            if (!selectorPtr->isModeAllowed(desiredMode.mode)) {
+                shouldDropModeRequests = true;
+                canApplyAllModes = false;
+                continue;
+            }
+
+            // When initiating a resolution change, wait until the commit that resizes the display.
+            if (shouldSyncResolutionSwitch() &&
+                !FlagManager::getInstance().modeset_state_machine() &&
+                !activeMode.matchesResolution(desiredMode.mode)) {
+                if (display->getSize() != desiredMode.mode.modePtr->getResolution()) {
+                    canApplyAllModes = false;
+                    continue;
+                }
+            }
+            ALOGV("Appending modeset for display %s to %d (%s)", to_string(displayId).c_str(),
+                  ftl::to_underlying(desiredModeId),
+                  to_string(displayModePtrOpt.value().get()->getVsyncRate()).c_str());
+        }
+
+        if (!canApplyAllModes) {
+            if (shouldDropModeRequests) {
+                for (auto [displayId, desiredMode] : displayModeRequestMap) {
+                    if (FlagManager::getInstance().modeset_state_machine()) {
+                        dropModeRequest(std::move(desiredMode));
+                    } else {
+                        dropModeRequest(displayId);
+                    }
+                }
             }
             continue;
         }
 
-        const auto activeMode = mDisplayModeController.getActiveMode(displayId);
-
-        if (!desiredMode.force && desiredMode.mode == activeMode) {
-            if (FlagManager::getInstance().modeset_state_machine()) {
-                dropModeRequest(std::move(desiredMode));
-            } else {
-                applyActiveMode(displayId);
-            }
-            continue;
-        }
-
-        const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId);
-
-        // The desired mode is different from the active mode. However, the allowed modes might have
-        // changed since setDesiredMode scheduled a mode transition.
-        if (!selectorPtr->isModeAllowed(desiredMode.mode)) {
-            if (FlagManager::getInstance().modeset_state_machine()) {
-                dropModeRequest(std::move(desiredMode));
-            } else {
-                dropModeRequest(displayId);
-            }
-            continue;
-        }
-
-        ALOGV("Mode setting display %s to %d (%s)", to_string(displayId).c_str(),
-              ftl::to_underlying(desiredModeId),
-              to_string(displayModePtrOpt.value().get()->getVsyncRate()).c_str());
-
-        // TODO: b/142753666 - Use constraints.
         hal::VsyncPeriodChangeConstraints constraints;
         constraints.desiredTimeNanos = systemTime();
         if (!getHwComposer().getComposer()->isDisplayCommandModesetSupported()) {
             // setActiveConfig doesn't properly support seamless requirement.
             constraints.seamlessRequired = false;
         } else {
-            constraints.seamlessRequired = desiredMode.seamless;
+            constraints.seamlessRequired = initialDesiredMode.seamless;
         }
-        hal::VsyncPeriodChangeTimeline outTimeline;
 
-        // When initiating a resolution change, wait until the commit that resizes the display.
-        if (shouldSyncResolutionSwitch() && !FlagManager::getInstance().modeset_state_machine() &&
-            !activeMode.matchesResolution(desiredMode.mode)) {
-            const auto display = getDisplayDeviceLocked(displayId);
-            if (display->getSize() != desiredMode.mode.modePtr->getResolution()) {
+        hal::VsyncPeriodChangeTimeline outTimeline;
+        display::DisplayModeController::ModeChangeResult error;
+        if (!supportsMultiDisplay) {
+            ALOGE_IF(displayModeRequestMap.size() != 1,
+                     "multi-display disabled, yet multiple displays passed");
+            error = mDisplayModeController.initiateModeChange(initialDisplayId,
+                                                              std::move(initialDesiredMode),
+                                                              constraints, outTimeline);
+        } else {
+            error = mDisplayModeController.initiateModeChange(std::move(displayModeRequestMap));
+            outTimeline.refreshRequired = false;
+            outTimeline.newVsyncAppliedTimeNanos = systemTime();
+        }
+
+        for (const auto& [displayId, desiredModeId] : displayIdToModeIdMap) {
+            if (error != display::DisplayModeController::ModeChangeResult::Changed) {
+                if (FlagManager::getInstance().modeset_state_machine()) {
+                    mScheduler->setModeChangePending(displayId, false);
+                } else {
+                    dropModeRequest(displayId);
+                }
+
+                if (error == display::DisplayModeController::ModeChangeResult::Rejected) {
+                    mScheduler->onDisplayModeRejected(displayId, desiredModeId);
+                }
                 continue;
             }
-        }
 
-        const auto error =
-                mDisplayModeController.initiateModeChange(displayId, std::move(desiredMode),
-                                                          constraints, outTimeline);
-        if (error != display::DisplayModeController::ModeChangeResult::Changed) {
-            if (FlagManager::getInstance().modeset_state_machine()) {
-                mScheduler->setModeChangePending(displayId, false);
-            } else {
-                dropModeRequest(displayId);
-            }
+            const auto selectorPtr = mDisplayModeController.selectorPtrFor(displayId);
+            selectorPtr->onModeChangeInitiated();
+            mScheduler->onNewVsyncPeriodChangeTimeline(outTimeline);
 
-            if (error == display::DisplayModeController::ModeChangeResult::Rejected) {
-                mScheduler->onDisplayModeRejected(displayId, desiredModeId);
-            }
-            continue;
-        }
+            if (!outTimeline.refreshRequired) {
+                // HWC has requested to apply the mode change immediately rather than on the next
+                // frame.
+                finalizeDisplayModeChange(displayId);
 
-        selectorPtr->onModeChangeInitiated();
-        mScheduler->onNewVsyncPeriodChangeTimeline(outTimeline);
-
-        if (outTimeline.refreshRequired) {
-            scheduleComposite(FrameHint::kNone);
-        } else {
-            // HWC has requested to apply the mode change immediately rather than on the next frame.
-            finalizeDisplayModeChange(displayId);
-
-            if (!FlagManager::getInstance().modeset_state_machine()) {
-                const auto desiredModeOpt = mDisplayModeController.getDesiredMode(displayId);
-                if (desiredModeOpt &&
-                    mDisplayModeController.getActiveMode(displayId) == desiredModeOpt->mode) {
-                    applyActiveMode(displayId);
+                if (!FlagManager::getInstance().modeset_state_machine()) {
+                    const auto desiredModeOpt = mDisplayModeController.getDesiredMode(displayId);
+                    if (desiredModeOpt &&
+                        mDisplayModeController.getActiveMode(displayId) == desiredModeOpt->mode) {
+                        applyActiveMode(displayId);
+                    }
                 }
+            } else {
+                refreshRequired = true;
             }
+        }
+        if (refreshRequired) {
+            scheduleComposite(FrameHint::kNone);
         }
     }
 }
@@ -3092,16 +3186,18 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
 
     // SF::processHotplugDisconnect() does not immediately propagate the display removal to the
     // Scheduler and CompositionEngine, but instead requires a call to processDisplayChangesLocked()
-    // to process the rest in the next commit. We should retry the commit with the new pacesetter
-    // after display transactions have been propagated.
+    // to process the rest in the next commit. We should retry the commit with the new set of
+    // displays after display transactions have been propagated.
     {
-        const bool hasPacesetterDisplay =
-                FTL_FAKE_GUARD(mStateLock, mPhysicalDisplays.contains(pacesetterId));
-        if (!hasPacesetterDisplay) {
-            MODE_TRANSITION_LOCK();
-            processDisplayChangesLocked();
-            mScheduler->scheduleFrame();
-            return false;
+        for (const auto [displayId, _] : frameTargets) {
+            const bool hasDisplay =
+                    FTL_FAKE_GUARD(mStateLock, mPhysicalDisplays.contains(displayId));
+            if (!hasDisplay) {
+                MODE_TRANSITION_LOCK();
+                processDisplayChangesLocked();
+                mScheduler->scheduleFrame();
+                return false;
+            }
         }
     }
 
@@ -9383,7 +9479,7 @@ ftl::Optional<scheduler::FrameRateMode> SurfaceFlinger::getPreferredDisplayMode(
 
 status_t SurfaceFlinger::setDesiredDisplayModeSpecsInternal(
         const sp<DisplayDevice>& display,
-        const scheduler::RefreshRateSelector::PolicyVariant& policy) {
+        const scheduler::RefreshRateSelector::PolicyVariant& policy, sp<IBinder> displayToken) {
     const auto displayId = display->getPhysicalId();
     SFTRACE_NAME(ftl::Concat(__func__, ' ', displayId.value).c_str());
 
@@ -9406,11 +9502,12 @@ status_t SurfaceFlinger::setDesiredDisplayModeSpecsInternal(
             break;
     }
 
-    return applyRefreshRateSelectorPolicy(displayId, selector);
+    return applyRefreshRateSelectorPolicy(displayId, selector, displayToken);
 }
 
 status_t SurfaceFlinger::applyRefreshRateSelectorPolicy(
-        PhysicalDisplayId displayId, const scheduler::RefreshRateSelector& selector) {
+        PhysicalDisplayId displayId, const scheduler::RefreshRateSelector& selector,
+        sp<IBinder> displayToken) {
     const scheduler::RefreshRateSelector::Policy currentPolicy = selector.getCurrentPolicy();
     ALOGV("Setting desired display mode specs: %s", currentPolicy.toString().c_str());
 
@@ -9456,7 +9553,7 @@ status_t SurfaceFlinger::applyRefreshRateSelectorPolicy(
         return NO_ERROR;
     }
 
-    setDesiredMode({preferredMode, .emitEvent = true});
+    setDesiredMode({preferredMode, .emitEvent = true, .displaySynchronizationToken = displayToken});
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     mQtiSFExtnIntf->qtiSetRefreshRates(displayId);
 
@@ -9515,30 +9612,47 @@ status_t SurfaceFlinger::setDesiredDisplayModeSpecs(
         return BAD_VALUE;
     }
 
-    // TODO: b/373900661 - Use `perDisplaySpecs`.
-    const auto specs = perDisplaySpecs[0];
-
     auto future = mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) -> status_t {
-        const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(specs.displayToken));
-        if (!display) {
-            ALOGE("Attempt to set desired display modes for invalid display token %p",
-                  specs.displayToken.get());
-            return NAME_NOT_FOUND;
-        } else if (display->isVirtual()) {
-            ALOGW("Attempt to set desired display modes for virtual display");
-            return INVALID_OPERATION;
-        } else {
+        status_t status = NO_ERROR;
+        for (const auto& specs : perDisplaySpecs) {
+            const auto display =
+                    FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(specs.displayToken));
+            if (!display) {
+                ALOGE("Attempt to set desired display modes for invalid display token %p",
+                      specs.displayToken.get());
+                status = NAME_NOT_FOUND;
+                break;
+            } else if (display->isVirtual()) {
+                ALOGW("Attempt to set desired display modes for virtual display");
+                status = INVALID_OPERATION;
+                break;
+            }
+
             using Policy = scheduler::RefreshRateSelector::DisplayManagerPolicy;
             const Policy policy{DisplayModeId(specs.defaultMode), translate(specs.primaryRanges),
                                 translate(specs.appRequestRanges), specs.allowGroupSwitching,
                                 specs.idleScreenRefreshRateConfig};
 
-            status_t status = setDesiredDisplayModeSpecsInternal(display, policy);
-            if (status == NO_ERROR && FlagManager::getInstance().configure_work_duration()) {
+            status = setDesiredDisplayModeSpecsInternal(display, policy, applyToken);
+            if (status != NO_ERROR) {
+                ALOGW("Attempt to set desired display modes failed for display: %s",
+                      to_string(display->getId()).c_str());
+                break;
+            } else if (FlagManager::getInstance().configure_work_duration()) {
                 updateWorkDuration(display, specs);
             }
-            return status;
         }
+
+        if (status != NO_ERROR) {
+            // Clean up any request that was successfully queued.
+            for (const auto& specs : perDisplaySpecs) {
+                const auto display =
+                        FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(specs.displayToken));
+                mDisplayModeController.clearDesiredMode(display->getPhysicalId());
+            }
+        }
+
+        return status;
     });
 
     return future.get();

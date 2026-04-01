@@ -77,7 +77,8 @@ static float getInvSigma(float blurRadius) {
 
 void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
                                     const android::gui::BoxShadowSettings& settings,
-                                    bool supportsFpk, bool isInteriorOccluded) {
+                                    bool supportsFpk, bool isInteriorOccluded,
+                                    const sk_sp<SkColorFilter>& colorTransform) {
     SFTRACE_CALL();
 
     if (settings.boxShadows.size() == 0) {
@@ -129,6 +130,7 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
 
     SkPaint shadowPaint;
     shadowPaint.setAntiAlias(false);
+    shadowPaint.setColorFilter(colorTransform);
     shadowPaint.setShader(builder.makeShader());
 
     if (isInteriorOccluded) {
@@ -164,7 +166,8 @@ void BoxShadowUtils::drawBoxShadows(SkCanvas* canvas, const SkRect& rect, float 
 }
 
 void BoxShadowUtils::drawBorder(SkCanvas* canvas, const SkRect& rect, float cornerRadius,
-                                const SkColor4f& color, float borderWidth) {
+                                const SkColor4f& color, float borderWidth,
+                                const sk_sp<SkColorFilter>& colorTransform) {
     SFTRACE_CALL();
     if (borderWidth <= 0) return;
 
@@ -292,6 +295,7 @@ void BoxShadowUtils::drawBorder(SkCanvas* canvas, const SkRect& rect, float corn
     paint.setColor(SK_ColorWHITE);
     paint.setBlendMode(SkBlendMode::kSrcOver);
     paint.setAntiAlias(false);
+    paint.setColorFilter(colorTransform);
     canvas->drawVertices(vertices, SkBlendMode::kModulate, paint);
 }
 

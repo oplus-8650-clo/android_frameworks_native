@@ -154,7 +154,8 @@ std::shared_ptr<gui::DisplayLuts> createLutsFromAgtm(
     auto metadata = skhdr::Metadata::MakeEmpty();
     metadata.setAdaptiveGlobalToneMap(agtm);
 
-    auto targetCS = renderengine::toSkColorSpace(dataspace);
+    auto targetCS =
+            renderengine::toSkColorSpace(dataspace, renderengine::ColorSpaceOptions::USE_HLG_OOTF);
     auto linearCS = targetCS->makeLinearGamma();
 
     auto colorFilter =
@@ -206,7 +207,26 @@ std::shared_ptr<gui::DisplayLuts> createLutsFromAgtm(
         SkCanvas finalCanvas(finalBitmap);
         SkPaint paint;
         paint.setColorFilter(colorFilter);
-        finalCanvas.drawImage(linearBitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
+
+        if (transfer == HAL_DATASPACE_TRANSFER_HLG) {
+            // Bake HLG OOTF with gamma=1.2 by reinterpreting scaled HLG as standard HLG.
+            auto csV1 =
+                    renderengine::toSkColorSpace(dataspace, renderengine::ColorSpaceOptions::None);
+            SkBitmap intermediateBitmap;
+            intermediateBitmap.allocPixels(SkImageInfo::Make(numPixels, 1, kRGBA_F32_SkColorType,
+                                                             kPremul_SkAlphaType, csV1));
+            SkCanvas intermediateCanvas(intermediateBitmap);
+            intermediateCanvas.drawImage(linearBitmap.asImage(), 0, 0, SkSamplingOptions());
+
+            // Reinterpret the result to V2 HLG (standard kHLG)
+            auto csV2 = renderengine::toSkColorSpace(dataspace,
+                                                     renderengine::ColorSpaceOptions::USE_HLG_OOTF);
+            intermediateBitmap.setColorSpace(csV2);
+
+            finalCanvas.drawImage(intermediateBitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
+        } else {
+            finalCanvas.drawImage(linearBitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
+        }
     }
 
     {

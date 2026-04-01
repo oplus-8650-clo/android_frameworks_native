@@ -52,7 +52,8 @@ use binder::{
     ProcessState, Strong, ThreadState,
 };
 use log::{error, info, warn};
-use rustutils::android::{users::AID_ROOT, users::AID_SYSTEM};
+use rustutils::android::system_properties::PropertyWatcher;
+use rustutils::android::{system_properties, users::AID_ROOT, users::AID_SYSTEM};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -89,12 +90,36 @@ fn handle_vm_death(
     }
 }
 
+fn is_shutting_down() -> Result<bool> {
+    let shutdown_sysprop_opt = system_properties::read("sys.shutdown.requested")?;
+    if let Some(shutdown_sysprop) = shutdown_sysprop_opt {
+        return Ok(!shutdown_sysprop.is_empty());
+    }
+    Ok(false)
+}
+
+fn wait_for_boot_completed() -> Result<()> {
+    let mut watcher = PropertyWatcher::new("sys.boot_completed")?;
+    info!("Waiting for boot completed...");
+    watcher.wait_for_value("1", None).context("Failed to wait for sys.boot_completed")?;
+    info!("Boot completed, proceeding with startup");
+    Ok(())
+}
+
 fn try_main() -> Result<()> {
     android_logger::init_once(
         android_logger::Config::default().with_tag(LOG_TAG).with_max_level(log::LevelFilter::Info),
     );
 
     info!("Starting AiSealHostService");
+
+    let is_enabled = system_properties::read_bool("service.aiseal.enable", false)?;
+    if !is_enabled {
+        error!("service.aiseal.enable is not set to 1, aiseal disabled. exiting");
+        std::process::exit(1);
+    }
+
+    wait_for_boot_completed()?;
 
     ProcessState::start_thread_pool();
 
@@ -195,9 +220,24 @@ fn try_main() -> Result<()> {
     let host_service = AiSealHostService::new_binder(pm, instance.clone(), aiseal_config);
     add_service("aiseal_host", host_service.as_binder()).context("Registering host service")?;
 
-    let internal_service = AiSealInternalService::new_binder(instance);
+    let internal_service = AiSealInternalService::new_binder(instance.clone());
     add_service("aiseal_internal", internal_service.as_binder())
         .context("Registering internal service")?;
+
+    std::thread::spawn(move || {
+        let reason = instance.wait_for_death();
+        if is_shutting_down().unwrap_or(false) {
+            info!("VM died during shutdown, ignoring");
+            return;
+        }
+        error!("VM has unexpectedly died: {:?}", reason);
+        if let Err(e) =
+            handle_vm_death(reason, virtualization_service.as_ref(), &instance_id, &vm_dir)
+        {
+            error!("Failed to handle VM death: {:?}", e);
+        }
+        std::process::exit(1);
+    });
 
     info!("Registered services, joining threadpool");
     ProcessState::join_thread_pool();

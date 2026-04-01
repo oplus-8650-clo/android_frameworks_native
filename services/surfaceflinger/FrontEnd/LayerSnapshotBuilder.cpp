@@ -1219,9 +1219,14 @@ RoundedCornerState LayerSnapshotBuilder::calculateParentRoundedCornerSettings(
     RoundedCornerState parentSettings;
 
     const auto& parentRoundedCorner = parentSnapshot.roundedCorner;
+    // Always inherit the disableClientDrawnRadii flag. During transitions, WindowManager
+    // may disable the optimization on a parent (like a Task) that does not have rounded
+    // corners itself. This flag must propagate down to children (like Activities) that
+    // actually draw the corners to ensure consistent composition state.
+    parentSettings.disableClientDrawnRadii = parentRoundedCorner.disableClientDrawnRadii;
+
     if (parentRoundedCorner.hasEffectiveRadii()) {
         ui::Transform t = snapshot.localTransform.inverse();
-        parentSettings.disableClientDrawnRadii = parentRoundedCorner.disableClientDrawnRadii;
         parentSettings.cropRect = t.transform(parentRoundedCorner.cropRect);
         parentSettings.effectiveRadii = parentRoundedCorner.effectiveRadii;
         parentSettings.effectiveRadii.transform(t);

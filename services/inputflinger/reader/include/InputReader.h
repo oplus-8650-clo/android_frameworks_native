@@ -17,12 +17,9 @@
 #pragma once
 
 #include <android-base/thread_annotations.h>
-#include <gui/WindowInfosListener.h>
-#include <gui/WindowInfosUpdate.h>
 #include <input/Input.h>
 #include <jni.h>
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
@@ -42,7 +39,6 @@
 #include "InputReaderTracer.h"
 #include "InputThread.h"
 #include "InputTracingBackendInterface.h"
-#include "NotifyArgs.h"
 
 namespace android {
 
@@ -143,8 +139,6 @@ public:
     void notifyMouseCursorFadedOnTyping() override;
 
     bool setKernelWakeEnabled(DeviceId deviceId, bool enabled) override;
-
-    void onWindowInfosChanged(const gui::WindowInfosUpdate& update);
 
 protected:
     // These members are protected so they can be instrumented by test cases.
@@ -295,22 +289,6 @@ private:
 
     // find an InputDevice from an InputDevice id
     InputDevice* findInputDeviceLocked(DeviceId deviceId) const REQUIRES(mLock);
-
-    class ReaderWindowListener : public gui::WindowInfosListener {
-    public:
-        explicit ReaderWindowListener(InputReader& reader) : mStopped(false), mReader(reader) {}
-        void onWindowInfosChanged(const gui::WindowInfosUpdate& update) override {
-            if (!mStopped) {
-                mReader.onWindowInfosChanged(update);
-            }
-        }
-
-        std::atomic_bool mStopped;
-
-    private:
-        InputReader& mReader;
-    };
-    sp<ReaderWindowListener> mWindowListener;
 
     std::shared_ptr<InputReaderTracer> mTracer;
 };

@@ -39,12 +39,6 @@ struct WindowInfosUpdate : public Parcelable {
 
     status_t writeToParcel(android::Parcel*) const override;
     status_t readFromParcel(const android::Parcel*) override;
-
-    bool operator==(const WindowInfosUpdate& other) const {
-        return windowInfos == other.windowInfos && displayInfos == other.displayInfos &&
-                vsyncId == other.vsyncId && timestamp == other.timestamp;
-    }
-    bool operator!=(const WindowInfosUpdate& other) const { return !(*this == other); }
 };
 
 } // namespace android::gui

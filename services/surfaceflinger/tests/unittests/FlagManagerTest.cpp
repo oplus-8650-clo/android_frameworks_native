@@ -136,4 +136,19 @@ TEST_F(FlagManagerTest, returnsValue) {
     }
 }
 
+TEST_F(FlagManagerTest, dump_containsFlags) {
+    // Setup mock returns to avoid unexpected call warnings during dump
+    EXPECT_CALL(mFlagManager, getBoolProperty).WillRepeatedly(Return(std::nullopt));
+    EXPECT_CALL(mFlagManager, getServerConfigurableFlag).WillRepeatedly(Return(false));
+
+    std::string result;
+
+    // Call dump to get the string representation of all flags
+    mFlagManager.dump(result);
+
+    // Verifies that the dump output contains the header and some flags
+    EXPECT_THAT(result, testing::HasSubstr("FlagManager values:"));
+    EXPECT_THAT(result, testing::HasSubstr("test_flag: false"));
+}
+
 } // namespace android

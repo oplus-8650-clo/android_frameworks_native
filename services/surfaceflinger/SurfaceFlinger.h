@@ -810,12 +810,14 @@ private:
             PhysicalDisplayId, DisplayModeId defaultModeId) const REQUIRES(mStateLock);
 
     status_t setDesiredDisplayModeSpecsInternal(
-            const sp<DisplayDevice>&, const scheduler::RefreshRateSelector::PolicyVariant&)
-            EXCLUDES(mStateLock, mModeTransitionMutex) REQUIRES(kMainThreadContext);
+            const sp<DisplayDevice>&, const scheduler::RefreshRateSelector::PolicyVariant&,
+            sp<IBinder> displaySyncToken = nullptr) EXCLUDES(mStateLock, mModeTransitionMutex)
+            REQUIRES(kMainThreadContext);
 
     // TODO(b/241285191): Look up RefreshRateSelector on Scheduler to remove redundant parameter.
     status_t applyRefreshRateSelectorPolicy(PhysicalDisplayId,
-                                            const scheduler::RefreshRateSelector&)
+                                            const scheduler::RefreshRateSelector&,
+                                            sp<IBinder> displaySyncToken = nullptr)
             REQUIRES(mStateLock, mModeTransitionMutex, kMainThreadContext);
 
     void updateWorkDuration(const sp<DisplayDevice>&, const gui::DisplayModeSpecs&);
