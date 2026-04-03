@@ -92,6 +92,7 @@ filegroup {
         "skia/BoxShadowUtils.cpp",
         "skia/SkiaGLRenderEngine.cpp",
         "skia/SkiaVkRenderEngine.cpp",
+        "skia/SharedSkiaDiskCache.cpp",
         "skia/VulkanInterface.cpp",
         "skia/compat/Base64.cpp",
         "skia/compat/GaneshBackendTexture.cpp",

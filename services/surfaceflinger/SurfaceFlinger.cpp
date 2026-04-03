@@ -545,7 +545,9 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
         mLayerCachingEnabled =
                 base::GetBoolProperty("debug.sf.enable_layer_caching"s,
                                       sysprop::SurfaceFlingerProperties::enable_layer_caching()
-                                              .value_or(false));
+                                              .value_or(false)) ||
+                (base::GetBoolProperty("debug.sf.layer_caching_desktop_rollout_optin"s, false) &&
+                 FlagManager::getInstance().layer_caching_desktop_rollout());
     }
     useContextPriority = use_context_priority(true);
 
@@ -2482,8 +2484,7 @@ status_t SurfaceFlinger::setDisplayBrightness(const sp<IBinder>& displayToken,
                                                              .applyImmediately = true});
                    }
                } else {
-                   SFTRACE_FORMAT("%s (invalid display token) %s", whence,
-                                  to_string(display->getId()).c_str(),
+                   SFTRACE_FORMAT("%s (invalid display token %p) %s", whence, displayToken.get(),
                                   brightness.toString().c_str());
                    ALOGE("%s: Invalid display token %p", whence, displayToken.get());
                    return ftl::yield<status_t>(NAME_NOT_FOUND);
@@ -10219,12 +10220,14 @@ SurfaceFlinger::getLayerSnapshotsForScreenshots(const SnapshotRequestArgs& args)
         layers = snapshotLambda(args);
 
         // Reset LayerSnapshotBuilder args after snapshots are obtained
+        // TODO(b/497031946): manually reverting individual fields is error-prone.
         if (args.rootLayerId) {
             builderArgs.root = mLayerHierarchyBuilder.getHierarchy();
             builderArgs.parentCrop.reset();
         }
         builderArgs.rootSnapshot.isSecure = false;
         builderArgs.excludeLayerIds.clear();
+        builderArgs.exclusionMask = 0;
         mLayerSnapshotBuilder.update(builderArgs);
 
     } else {

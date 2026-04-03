@@ -37,4 +37,7 @@ interface IAiSealInternalService {
      * At this point the CE storage of this user in the aiseal VM should be removed.
      */
     void onUserRemoved(int userId);
+
+    /** Trims the memory used by the AiSeal VM. */
+    void trimMemory();
 }
