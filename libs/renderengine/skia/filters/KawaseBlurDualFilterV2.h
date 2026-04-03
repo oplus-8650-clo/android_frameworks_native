@@ -50,23 +50,31 @@ public:
     virtual ~KawaseBlurDualFilterV2() {}
 
     // Execute blur, saving it to a texture
-    sk_sp<SkImage> generate(SkiaGpuContext* context, const DisplaySettings& display,
-                            const uint32_t radius, const sk_sp<SkImage> blurInput,
-                            const SkRect& blurRect) const override;
+    sk_sp<SkImage> generateTemporaryImage(SkiaGpuContext* context, const DisplaySettings& display,
+                                          const uint32_t radius, const sk_sp<SkImage> blurInput,
+                                          const SkRect& blurRect) const override;
 
-    void preallocateBuffer(SkiaGpuContext* protectedContext, ui::Size size) override;
-    bool isBufferPreallocated(ui::Size displaySize) const override {
-        if (mProtectedTextures[0] == nullptr) {
+    void preallocateBuffers(SkiaGpuContext* context, ui::Size size) override;
+    bool areBuffersPreallocated(const SkiaGpuContext* context,
+                                ui::Size displaySize) const override {
+        const auto& preallocatedTextures =
+                context->supportsProtectedContent() ? mProtectedTextures : mUnprotectedTextures;
+        if (preallocatedTextures[0] == nullptr) {
             return false;
         }
 
-        return displaySize.width <= mPreallocatedDisplaySize.width &&
-                displaySize.height <= mPreallocatedDisplaySize.height;
+        const ui::Size preallocatedDisplaySize = context->supportsProtectedContent()
+                ? mProtectedDisplaySize
+                : mUnprotectedDisplaySize;
+        return displaySize.width <= preallocatedDisplaySize.width &&
+                displaySize.height <= preallocatedDisplaySize.height;
     }
 
 private:
+    static constexpr uint64_t kUnprotectedUsageFlags =
+            BufferUsage::GPU_RENDER_TARGET | BufferUsage::GPU_TEXTURE;
     static constexpr uint64_t kProtectedUsageFlags =
-            BufferUsage::PROTECTED | BufferUsage::GPU_RENDER_TARGET | BufferUsage::GPU_TEXTURE;
+            kUnprotectedUsageFlags | BufferUsage::PROTECTED;
 
     sk_sp<SkRuntimeEffect> mQuarterResDownSampleBlurEffect;
     sk_sp<SkRuntimeEffect> mHalfResDownSampleBlurEffect;
@@ -76,15 +84,20 @@ private:
     // Mutex guarding rendering operations, so that internal state related to
     // rendering that is potentially modified by multiple threads is guaranteed thread-safe.
     mutable std::mutex mRenderingMutex;
+    std::shared_ptr<AutoBackendTexture::LocalRef> mUnprotectedTextures[kMaxSurfaces];
     std::shared_ptr<AutoBackendTexture::LocalRef> mProtectedTextures[kMaxSurfaces];
-    ui::Size mPreallocatedDisplaySize;
+    ui::Size mUnprotectedDisplaySize;
+    ui::Size mProtectedDisplaySize;
 
     void blurInto(const sk_sp<SkSurface>& drawSurface, const int destWidth,
-                  const sk_sp<SkImage>& readImage, const float radius, const float alpha,
+                  const sk_sp<SkImage>& readImage, const SkIRect& srcRect,
+                  const bool inputEdgesNeedClamp, const float radius, const float alpha,
                   const sk_sp<SkRuntimeEffect>&) const;
 
     void blurInto(const sk_sp<SkSurface>& drawSurface, const sk_sp<SkShader> input,
-                  const float radius, const float alpha, const sk_sp<SkRuntimeEffect>&) const;
+                  const SkIRect& srcRect, const SkMatrix& srcRectToInputMatrix,
+                  const bool inputEdgesNeedClamp, const float radius, const float alpha,
+                  const sk_sp<SkRuntimeEffect>&) const;
 };
 
 } // namespace skia

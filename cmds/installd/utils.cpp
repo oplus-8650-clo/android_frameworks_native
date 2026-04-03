@@ -46,6 +46,7 @@
 #include "dexopt_return_codes.h"
 #include "globals.h"  // extern variables.
 #include "QuotaUtils.h"
+#include "SysTrace.h"
 
 #ifndef LOG_TAG
 #define LOG_TAG "installd"
@@ -158,6 +159,9 @@ std::string create_data_user_de_package_path(const char* volume_uuid,
 }
 
 std::string create_data_path(const char* volume_uuid) {
+    auto trace_name = StringPrintf("create_data_path volume_uuid=%s",
+                                   volume_uuid ? volume_uuid : "null");
+    ScopedTrace tracer(trace_name.c_str());
     if (volume_uuid == nullptr) {
         return "/data";
     } else if (!strcmp(volume_uuid, "TEST")) {
@@ -684,6 +688,10 @@ int delete_dir_contents(const char *pathname,
                         int (*exclusion_predicate)(const char*, const int),
                         bool ignore_if_missing)
 {
+    auto trace_name = StringPrintf("delete_dir_contents path=%s",
+                                   pathname ? pathname : "null");
+    ScopedTrace tracer(trace_name.c_str());
+
     int res = 0;
     DIR *d;
 
@@ -1188,12 +1196,16 @@ int validate_apk_path_subdirs(const char* path) {
 }
 
 int ensure_config_user_dirs(userid_t userid) {
+    ScopedTrace tracer(StringPrintf("ensure_config_user_dirs userId=%d", userid).c_str());
+
     // writable by system, readable by any app within the same user
     const int uid = multiuser_get_uid(userid, AID_SYSTEM);
     const int gid = multiuser_get_uid(userid, AID_EVERYBODY);
 
     // Ensure /data/misc/user/<userid> exists
     auto path = create_data_misc_legacy_path(userid);
+
+    ScopedTrace tracer_dir("fs_prepare_dir");
     return fs_prepare_dir(path.c_str(), 0750, uid, gid);
 }
 

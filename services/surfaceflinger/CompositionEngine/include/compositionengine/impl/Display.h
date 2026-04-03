@@ -33,6 +33,7 @@
 namespace android::compositionengine {
 
 class CompositionEngine;
+class DisplayTestAccessor;
 
 namespace impl {
 
@@ -100,6 +101,8 @@ public:
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 private:
+    friend class ::android::compositionengine::DisplayTestAccessor;
+
     bool isPowerHintSessionEnabled() override;
     bool isPowerHintSessionGpuReportingEnabled() override;
     void setHintSessionGpuStart(TimePoint startTime) override;

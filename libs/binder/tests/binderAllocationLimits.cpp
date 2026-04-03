@@ -17,8 +17,11 @@
 #include <../BuildFlags.h>
 #include <../observer/BinderStatsPusher.h>
 #include <../observer/BinderStatsUtils.h>
+#include <../observer/HistogramScale.h>
+
 #include <android-base/logging.h>
 #include <android/os/IServiceManager.h>
+#include <android_os_binder_flags.h>
 #include <binder/Binder.h>
 #include <binder/Functional.h>
 #include <binder/IServiceManager.h>
@@ -40,6 +43,9 @@
 using namespace android::binder::impl;
 
 static android::String8 gEmpty(""); // make sure first allocation from optimization runs
+#if defined(LIBBINDER_BINDER_OBSERVER_V2)
+constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
+#endif
 
 struct State {
     State(std::vector<size_t>&& expectedMallocs) : expectedMallocs(std::move(expectedMallocs)) {}
@@ -463,14 +469,22 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     runAggregateWithOnMalloc();
     data.clear();
 #if defined(LIBBINDER_BINDER_OBSERVER_V2)
-    EXPECT_EQ(mallocs, 9u);
-    EXPECT_EQ(totalBytes, 1090u);
+    if (kBinderStatsLatencyHistogram) {
+        EXPECT_EQ(mallocs, 29u);
+        EXPECT_EQ(totalBytes, 3654u);
+    } else {
+        EXPECT_EQ(mallocs, 9u);
+        EXPECT_EQ(totalBytes, 1162u);
+    }
 #else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
     EXPECT_EQ(mallocs, 22u);
     EXPECT_EQ(totalBytes, 2854u);
 #endif
     currentTimeNanos = 18'100'000'000;
 
+    // The following section is stress testing the code with
+    // an unrealistic count of data.
+    // The previous section is more indicative of 99.99 percentile usage.
     for (int i = 0; i < 150; ++i) {     // More than kMinSpamCount (125)
         for (int j = 0; j < 100; ++j) { // multiple txnCodes
             String16 myAidlMethod(u"myAidlMethod");
@@ -490,12 +504,39 @@ TEST(BinderAllocation, BinderStatsPusher_aggregateStatsLocked) {
     totalBytes = 0;
     runAggregateWithOnMalloc();
 #if defined(LIBBINDER_BINDER_OBSERVER_V2)
-    EXPECT_EQ(mallocs, 63u);
-    EXPECT_EQ(totalBytes, 125488u);
+    if (kBinderStatsLatencyHistogram) {
+        EXPECT_EQ(mallocs, 2769u);
+        EXPECT_EQ(totalBytes, 411856u);
+    } else {
+        EXPECT_EQ(mallocs, 63u);
+        EXPECT_EQ(totalBytes, 126952u);
+    }
 #else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
     EXPECT_EQ(mallocs, 1024u);
     EXPECT_EQ(totalBytes, 281642u);
 #endif
+}
+
+TEST(HistogramAllocation, Basic) {
+    std::vector<uint8_t> result;
+    // Pre-reserve to avoid allocations during measurement if possible,
+    // or just acknowledge that it might allocate once.
+    result.reserve(6);
+    size_t mallocs = 0, totalBytes = 0;
+    {
+        const auto on_malloc = OnMalloc([&](size_t bytes) {
+            mallocs++;
+            totalBytes += bytes;
+        });
+        result.push_back(android::HistogramScale::getBinIndex(15000LL));
+        result.push_back(android::HistogramScale::getBinIndex(18000LL));
+        result.push_back(android::HistogramScale::getBinIndex(45000LL));
+        result.push_back(android::HistogramScale::getBinIndex(75000LL));
+        result.push_back(android::HistogramScale::getBinIndex(78000LL));
+        result.push_back(android::HistogramScale::getBinIndex(85000LL));
+    }
+    // With reserve(6), it should be 0 mallocs.
+    EXPECT_EQ(mallocs, 0u);
 }
 
 int main(int argc, char** argv) {

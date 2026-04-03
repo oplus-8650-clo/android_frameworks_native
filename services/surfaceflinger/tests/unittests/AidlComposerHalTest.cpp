@@ -244,5 +244,75 @@ TEST_F(AidlComposerHalTest, destroyLayer_BatchSupport) {
     EXPECT_EQ(error, Error::NONE);
 }
 
+TEST_F(AidlComposerHalTest, getHdrCapabilities_ReturnsUnsupported) {
+    init(false);
+    const Display display = static_cast<Display>(1);
+    const int64_t displayId = 1;
+
+    EXPECT_CALL(*mMockComposerClient, getHdrCapabilities(displayId, _))
+            .WillOnce(Return(ndk::ScopedAStatus::fromServiceSpecificError(
+                    static_cast<int32_t>(Error::UNSUPPORTED))));
+
+    std::vector<Hdr> types;
+    float maxLuminance = 0.0f;
+    float maxAverageLuminance = 0.0f;
+    float minLuminance = 0.0f;
+
+    // Verifies that getHdrCapabilities correctly handles the UNSUPPORTED error
+    // returned by the HAL via handleStatus.
+    auto error = mAidlComposer->getHdrCapabilities(display, &types, &maxLuminance,
+                                                   &maxAverageLuminance, &minLuminance);
+    EXPECT_EQ(error, Error::UNSUPPORTED);
+}
+
+TEST_F(AidlComposerHalTest, getPreferredBootDisplayConfig_ReturnsUnsupported) {
+    init(false);
+    const Display display = static_cast<Display>(1);
+    const int64_t displayId = 1;
+
+    EXPECT_CALL(*mMockComposerClient, getPreferredBootDisplayConfig(displayId, _))
+            .WillOnce(Return(ndk::ScopedAStatus::fromServiceSpecificError(
+                    static_cast<int32_t>(Error::UNSUPPORTED))));
+
+    Config config;
+
+    // Verifies that getPreferredBootDisplayConfig correctly handles the UNSUPPORTED error
+    // returned by the HAL via handleStatus.
+    auto error = mAidlComposer->getPreferredBootDisplayConfig(display, &config);
+    EXPECT_EQ(error, Error::UNSUPPORTED);
+}
+
+TEST_F(AidlComposerHalTest, getHdrConversionCapabilities_ReturnsUnsupported) {
+    init(false);
+
+    EXPECT_CALL(*mMockComposerClient, getHdrConversionCapabilities(_))
+            .WillOnce(Return(ndk::ScopedAStatus::fromServiceSpecificError(
+                    static_cast<int32_t>(Error::UNSUPPORTED))));
+
+    std::vector<common::HdrConversionCapability> capabilities;
+
+    // Verifies that getHdrConversionCapabilities correctly handles the UNSUPPORTED error
+    // returned by the HAL via handleStatus.
+    auto error = mAidlComposer->getHdrConversionCapabilities(&capabilities);
+    EXPECT_EQ(error, Error::UNSUPPORTED);
+}
+
+TEST_F(AidlComposerHalTest, getMaxLayerPictureProfiles_ReturnsUnsupported) {
+    init(false);
+    const Display display = static_cast<Display>(1);
+    const int64_t displayId = 1;
+
+    EXPECT_CALL(*mMockComposerClient, getMaxLayerPictureProfiles(displayId, _))
+            .WillOnce(Return(ndk::ScopedAStatus::fromServiceSpecificError(
+                    static_cast<int32_t>(Error::UNSUPPORTED))));
+
+    int32_t maxProfiles = 0;
+
+    // Verifies that getMaxLayerPictureProfiles correctly handles the UNSUPPORTED error
+    // returned by the HAL via handleStatus.
+    auto error = mAidlComposer->getMaxLayerPictureProfiles(display, &maxProfiles);
+    EXPECT_EQ(error, Error::UNSUPPORTED);
+}
+
 } // namespace Hwc2
 } // namespace android

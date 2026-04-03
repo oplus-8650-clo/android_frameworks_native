@@ -30,7 +30,6 @@
 #include <android/dlext.h>
 #include <binder/IServiceManager.h>
 #include <bionic/dlext_namespaces.h>
-#include <com_android_graphics_egl_flags.h>
 #include <graphicsenv/IGpuService.h>
 #include <log/log.h>
 #include <sys/prctl.h>
@@ -69,8 +68,6 @@ static bool isVndkEnabled() {
     return false;
 }
 } // namespace
-
-namespace egl_flags = com::android::graphics::egl::flags;
 
 namespace android {
 
@@ -627,12 +624,6 @@ void GraphicsEnv::setAngleInfo(const std::string& path, const bool shouldUseNati
         mShouldUseAngle = true;
     }
     mShouldUseNativeDriver = shouldUseNativeDriver;
-
-    if (!egl_flags::update_angle_feature_overrides_in_loader_open()) {
-        if (mShouldUseAngle) {
-            updateAngleFeatureOverrides();
-        }
-    }
 }
 
 std::string& GraphicsEnv::getPackageName() {

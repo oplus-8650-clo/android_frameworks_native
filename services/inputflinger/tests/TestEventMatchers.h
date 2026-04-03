@@ -1058,4 +1058,19 @@ MATCHER_P(WithSwitchMask, switchMask, "NotifySwitchArgs with specified switchMas
     return arg.switchMask == switchMask;
 }
 
+// --- NotifyPointerCaptureChangedArgs ---
+
+MATCHER_P(WithCaptureRequest, request,
+          "NotifyPointerCaptureChangedArgs with specified capture request") {
+    *result_listener << "expected request " << request << ", but got " << arg.request;
+    return arg.request == request;
+}
+
+MATCHER_P(WithCaptureEnable, isEnable,
+          "NotifyPointerCaptureChangedArgs with specified enable state") {
+    *result_listener << "expected request enable state " << isEnable << ", but got "
+                     << arg.request.isEnable();
+    return arg.request.isEnable() == isEnable;
+}
+
 } // namespace android

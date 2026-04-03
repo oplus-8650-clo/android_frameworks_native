@@ -19,6 +19,7 @@
 #include <include/android/AHardwareBufferUtils.h>
 #include <include/core/SkColorSpace.h>
 #include <include/gpu/ganesh/GrDirectContext.h>
+#include <renderengine/ColorSpaces.h>
 
 #include <android/hardware_buffer.h>
 #include <ui/GraphicTypes.h>
@@ -51,20 +52,29 @@ public:
 
     // Guaranteed to be non-null (crashes otherwise). An opaque alphaType may coerce the internal
     // color type to RBGX.
-    virtual sk_sp<SkImage> makeImage(SkAlphaType alphaType, ui::Dataspace dataspace,
-                                     TextureReleaseProc releaseImageProc,
-                                     ReleaseContext releaseContext) = 0;
+    virtual sk_sp<SkImage> makeImage(
+            SkAlphaType alphaType, ui::Dataspace dataspace, TextureReleaseProc releaseImageProc,
+            ReleaseContext releaseContext,
+            ftl::Flags<ColorSpaceOptions> options = ColorSpaceOptions::None) = 0;
 
     // Guaranteed to be non-null (crashes otherwise).
-    virtual sk_sp<SkSurface> makeSurface(ui::Dataspace dataspace,
-                                         TextureReleaseProc releaseSurfaceProc,
-                                         ReleaseContext releaseContext) = 0;
+    virtual sk_sp<SkSurface> makeSurface(
+            ui::Dataspace dataspace, TextureReleaseProc releaseSurfaceProc,
+            ReleaseContext releaseContext,
+            ftl::Flags<ColorSpaceOptions> options = ColorSpaceOptions::None) = 0;
 
     bool isOutputBuffer() const { return mIsOutputBuffer; }
 
     SkColorType internalColorType() const { return mColorType; }
 
+    std::string toString() const {
+        return std::format("isOutputBuffer={}, internalColorType={}, {}", mIsOutputBuffer,
+                           static_cast<int>(internalColorType()), backendDebugInfo().c_str());
+    }
+
 protected:
+    virtual std::string backendDebugInfo() const = 0;
+
     // Strip alpha channel from rawColorType if alphaType is opaque (note: only works for RGBA_8888)
     SkColorType colorTypeForImage(SkAlphaType alphaType) const {
         if (alphaType == kOpaque_SkAlphaType) {

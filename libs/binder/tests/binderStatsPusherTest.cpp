@@ -25,6 +25,7 @@
 #include <../JvmUtils.h>
 #include <../observer/BinderStatsPusher.h>
 #include <../observer/BinderStatsUtils.h>
+#include <android_os_binder_flags.h>
 #include <jni.h>
 #include "fakeservicemanager/FakeServiceManager.h"
 
@@ -33,6 +34,8 @@ using namespace android;
 using namespace testing;
 using os::binder::BinderCallsStats;
 using os::binder::BinderSpamStats;
+
+constexpr bool kBinderStatsLatencyHistogram = android::os::binder::flags::binder_stats_v3();
 
 #ifdef LIBBINDER_BINDER_OBSERVER_V2
 constexpr int64_t kSpamAggregationWindowSec = 1;
@@ -78,80 +81,113 @@ void initServiceManagerOnce() {
     });
 }
 /**
+ * Struct for expected BinderSpamStats to support designated initializers.
+ */
+struct ExpectedSpamStats {
+    uint32_t clientUid = 0;
+    String16 interfaceDescriptor;
+    String16 aidlMethod;
+    int32_t secondsWithAtLeast125Calls = 0;
+    int32_t secondsWithAtLeast250Calls = 0;
+    int32_t peakCallCountPerSecond = 0;
+};
+
+/**
  * Helper function to create a BinderSpamStats for spam comparison.
  */
-BinderSpamStats createExpectedSpamStats(const BinderCallData& datum, int count125, int count250,
-                                        int peakCount) {
+BinderSpamStats createExpectedSpamStats(const ExpectedSpamStats& p) {
     auto stats = BinderSpamStats();
-    stats.clientUid = datum.senderUid;
-    stats.interfaceDescriptor = datum.interfaceDescriptor;
-    stats.aidlMethod = datum.aidlMethodName;
-    stats.secondsWithAtLeast125Calls = count125;
-    stats.secondsWithAtLeast250Calls = count250;
-    stats.peakCallCountPerSecond = peakCount;
+    stats.clientUid = static_cast<int32_t>(p.clientUid);
+    stats.interfaceDescriptor = p.interfaceDescriptor;
+    stats.aidlMethod = p.aidlMethod;
+    stats.secondsWithAtLeast125Calls = p.secondsWithAtLeast125Calls;
+    stats.secondsWithAtLeast250Calls = p.secondsWithAtLeast250Calls;
+    stats.peakCallCountPerSecond = p.peakCallCountPerSecond;
     return stats;
 }
+
+/**
+ * Struct for expected BinderCallsStats to support designated initializers.
+ */
+struct ExpectedCallStats {
+    uint32_t clientUid = 0;
+    String16 interfaceDescriptor;
+    String16 aidlMethod;
+    int64_t callCount = 0;
+    int64_t durationSumMicros = 0;
+    int64_t callDurationSumSquaredMicros = 0;
+    int32_t secondsWithAtLeast10Calls = 0;
+    int32_t secondsWithAtLeast50Calls = 0;
+    int64_t cpuTimeCount = 0;
+    int64_t cpuTimeSumMicros = 0;
+    int64_t cpuTimeSumSquaredMicros = 0;
+};
 
 /**
  * Helper function to create a BinderCallsStats for latency comparison.
  */
-BinderCallsStats createExpectedLatencyStats(const BinderCallData& datum, int64_t callCount,
-                                            int64_t durationSumMicros,
-                                            int64_t callDurationSumSquaredMicros,
-                                            int32_t secondsWithAtLeast10Calls,
-                                            int32_t secondsWithAtLeast50Calls) {
+BinderCallsStats createExpectedCallStats(const ExpectedCallStats& p) {
     auto stats = BinderCallsStats();
-    stats.clientUid = datum.senderUid;
-    stats.interfaceDescriptor = datum.interfaceDescriptor;
-    stats.aidlMethod = datum.aidlMethodName;
-    stats.callCount = callCount;
-    stats.durationSumMicros = durationSumMicros;
-    stats.callDurationSumSquaredMicros = callDurationSumSquaredMicros;
-    stats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
-    stats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
+    stats.clientUid = static_cast<int32_t>(p.clientUid);
+    stats.interfaceDescriptor = p.interfaceDescriptor;
+    stats.aidlMethod = p.aidlMethod;
+    stats.callCount = p.callCount;
+    stats.durationSumMicros = p.durationSumMicros;
+    stats.callDurationSumSquaredMicros = p.callDurationSumSquaredMicros;
+    stats.secondsWithAtLeast10Calls = p.secondsWithAtLeast10Calls;
+    stats.secondsWithAtLeast50Calls = p.secondsWithAtLeast50Calls;
+    stats.cpuTimeCount = p.cpuTimeCount;
+    stats.cpuTimeSumMicros = p.cpuTimeSumMicros;
+    stats.cpuTimeSumSquaredMicros = p.cpuTimeSumSquaredMicros;
     return stats;
 }
 
-/**
- * Helper function to create a BinderCallsStats for latency comparison, including CPU data.
- */
-BinderCallsStats createExpectedLatencyStatsWithCpu(const BinderCallData& datum, int64_t callCount,
-                                                   int64_t durationSumMicros,
-                                                   int64_t callDurationSumSquaredMicros,
-                                                   int32_t secondsWithAtLeast10Calls,
-                                                   int32_t secondsWithAtLeast50Calls,
-                                                   int64_t cpuTimeCount, int64_t cpuTimeSumMicros,
-                                                   int64_t cpuTimeSumSquaredMicros) {
-    auto stats = BinderCallsStats();
-    stats.clientUid = datum.senderUid;
-    stats.interfaceDescriptor = datum.interfaceDescriptor;
-    stats.aidlMethod = datum.aidlMethodName;
-    stats.callCount = callCount;
-    stats.durationSumMicros = durationSumMicros;
-    stats.callDurationSumSquaredMicros = callDurationSumSquaredMicros;
-    stats.secondsWithAtLeast10Calls = secondsWithAtLeast10Calls;
-    stats.secondsWithAtLeast50Calls = secondsWithAtLeast50Calls;
-    stats.cpuTimeCount = cpuTimeCount;
-    stats.cpuTimeSumMicros = cpuTimeSumMicros;
-    stats.cpuTimeSumSquaredMicros = cpuTimeSumSquaredMicros;
-    return stats;
-}
+struct ExpectedSingleSecondStats {
+    uint32_t clientUid;
+    String16 interfaceDescriptor;
+    String16 aidlMethod;
+    int64_t callCount = 0;
+    int64_t durationSumMicros = 0;
+    int64_t callDurationSumSquaredMicros = 0;
+    int64_t cpuTimeCount = 0;
+    int64_t cpuTimeSumMicros = 0;
+    int64_t cpuTimeSumSquaredMicros = 0;
+    std::vector<int64_t> rawLatencies = {};
+};
 
 os::binder::SingleSecondBinderStats createExpectedSingleSecondBinderStats(
-        int32_t clientUid, const String16& interfaceDescriptor, const String16& aidlMethod,
-        int64_t callCount, int64_t durationSumMicros, int64_t callDurationSumSquaredMicros,
-        int64_t cpuTimeCount, int64_t cpuTimeSumMicros, int64_t cpuTimeSumSquaredMicros) {
+        const ExpectedSingleSecondStats& p) {
     auto stats = os::binder::SingleSecondBinderStats();
-    stats.clientUid = clientUid;
-    stats.interfaceDescriptor = interfaceDescriptor;
-    stats.aidlMethod = aidlMethod.empty() ? String16(u"") : aidlMethod;
-    stats.durationCount = callCount;
-    stats.callCount = callCount;
-    stats.durationMicrosSum = durationSumMicros;
-    stats.durationMicrosSquaredSum = callDurationSumSquaredMicros;
-    stats.cpuTimeCount = cpuTimeCount;
-    stats.cpuTimeMicrosSum = cpuTimeSumMicros;
-    stats.cpuTimeMicrosSquaredSum = cpuTimeSumSquaredMicros;
+    stats.clientUid = static_cast<int32_t>(p.clientUid);
+    stats.interfaceDescriptor = p.interfaceDescriptor;
+    stats.aidlMethod = p.aidlMethod.empty() ? String16(u"") : p.aidlMethod;
+    stats.durationCount = p.callCount;
+    stats.callCount = p.callCount;
+    stats.durationMicrosSum = p.durationSumMicros;
+    stats.durationMicrosSquaredSum = p.callDurationSumSquaredMicros;
+    stats.cpuTimeCount = p.cpuTimeCount;
+    stats.cpuTimeMicrosSum = p.cpuTimeSumMicros;
+    stats.cpuTimeMicrosSquaredSum = p.cpuTimeSumSquaredMicros;
+    return stats;
+}
+
+// Helper to calculate the compact histogram data from raw latency values for testing
+std::vector<uint8_t> calculateCompactHistogramData(const std::vector<int64_t>& latencyValues) {
+    std::vector<uint8_t> result;
+    if (!kBinderStatsLatencyHistogram) {
+        return result;
+    }
+    for (int64_t value : latencyValues) {
+        result.push_back(android::HistogramScale::getBinIndex(value));
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+os::binder::SingleSecondBinderStats createExpectedSingleSecondStatsWithHistogram(
+        const ExpectedSingleSecondStats& p) {
+    auto stats = createExpectedSingleSecondBinderStats(p);
+    stats.durationBinIndices = calculateCompactHistogramData(p.rawLatencies);
     return stats;
 }
 
@@ -185,6 +221,25 @@ MATCHER_P(CallStatsWithCpuEq, expectedStats, "") {
             arg.cpuTimeCount == expectedStats.cpuTimeCount &&
             arg.cpuTimeSumMicros == expectedStats.cpuTimeSumMicros &&
             arg.cpuTimeSumSquaredMicros == expectedStats.cpuTimeSumSquaredMicros;
+}
+
+MATCHER_P(SingleSecondBinderStatsEq, expectedStats, "") {
+    auto actualHistogram = arg.durationBinIndices;
+    auto expectedHistogram = expectedStats.durationBinIndices;
+    std::sort(actualHistogram.begin(), actualHistogram.end());
+    std::sort(expectedHistogram.begin(), expectedHistogram.end());
+
+    return arg.clientUid == expectedStats.clientUid &&
+            arg.interfaceDescriptor == expectedStats.interfaceDescriptor &&
+            arg.aidlMethod == expectedStats.aidlMethod &&
+            arg.durationCount == expectedStats.durationCount &&
+            arg.callCount == expectedStats.callCount &&
+            arg.durationMicrosSum == expectedStats.durationMicrosSum &&
+            arg.durationMicrosSquaredSum == expectedStats.durationMicrosSquaredSum &&
+            arg.cpuTimeCount == expectedStats.cpuTimeCount &&
+            arg.cpuTimeMicrosSum == expectedStats.cpuTimeMicrosSum &&
+            arg.cpuTimeMicrosSquaredSum == expectedStats.cpuTimeMicrosSquaredSum &&
+            actualHistogram == expectedHistogram;
 }
 
 class BinderStatsPusherHelper {
@@ -299,7 +354,12 @@ TEST_F(BinderStatsPusherTest, AggregateSpamOneSecondSpam) {
                 .senderUid = 1001,
         });
     }
-    auto expectedStats = createExpectedSpamStats(data[0], 1, 0, totalCalls);
+    auto expectedStats =
+            createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                     .interfaceDescriptor = data[0].interfaceDescriptor,
+                                     .aidlMethod = data[0].aidlMethodName,
+                                     .secondsWithAtLeast125Calls = 1,
+                                     .peakCallCountPerSecond = totalCalls});
     EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -363,7 +423,12 @@ TEST_F(BinderStatsPusherTest, AggregateSpamMixedOlderAndDelayed) {
         });
     }
     // Expect immediate spam to be reported now
-    auto expectedImmediateStats = createExpectedSpamStats(data[0], 1, 0, totalCalls);
+    auto expectedImmediateStats =
+            createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                     .interfaceDescriptor = data[0].interfaceDescriptor,
+                                     .aidlMethod = data[0].aidlMethodName,
+                                     .secondsWithAtLeast125Calls = 1,
+                                     .peakCallCountPerSecond = totalCalls});
     EXPECT_CALL(*mockStatsService,
                 reportSpamStats(ElementsAre(SpamStatsEq(expectedImmediateStats))))
             .Times(1);
@@ -379,6 +444,7 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
     int64_t currentTimeSec = (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1;
     int32_t totalCalls = 300;
     // Create data exceeding the second watermark (250 calls/sec)
+    std::vector<int64_t> rawLatencies;
     for (int i = 0; i < totalCalls; ++i) {
         data.push_back(BinderCallData{
                 .startTimeNanos = spamTimeNanos,
@@ -388,18 +454,29 @@ TEST_F(BinderStatsPusherTest, AggregateSpamSecondWatermark) {
                 .transactionCode = 5,
                 .senderUid = 1005,
         });
+        rawLatencies.push_back(1);
     }
     if (kBinderObserverV2Enabled) {
-        auto expectedStats = createExpectedSingleSecondBinderStats(data[0].senderUid,
-                                                                   data[0].interfaceDescriptor,
-                                                                   data[0].aidlMethodName,
-                                                                   totalCalls, 0, 0, 0, 0, 0);
-        EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedStats)))
+        auto expectedStats = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = totalCalls,
+                 .rawLatencies = rawLatencies});
+        EXPECT_CALL(*mockStatsService,
+                    reportSecondGranularityStats(
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats))))
                 .Times(1);
         EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
         EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
     } else {
-        auto expectedStats = createExpectedSpamStats(data[0], 1, 1, totalCalls);
+        auto expectedStats =
+                createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .secondsWithAtLeast125Calls = 1,
+                                         .secondsWithAtLeast250Calls = 1,
+                                         .peakCallCountPerSecond = totalCalls});
         EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
                 .Times(1);
         EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
@@ -444,16 +521,30 @@ TEST_F(BinderStatsPusherTest, AggregateSpamAcrossMultipleSeconds) {
     }
 
     if (kBinderObserverV2Enabled) {
-        auto expectedStats1 = createExpectedSpamStats(data[0], 1, 0, totalCalls1);
-        auto expectedStats2 = createExpectedSpamStats(data[0], 1, 0, totalCalls2);
+        auto expectedStats1 =
+                createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .secondsWithAtLeast125Calls = 1,
+                                         .peakCallCountPerSecond = totalCalls1});
+        auto expectedStats2 =
+                createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .secondsWithAtLeast125Calls = 1,
+                                         .peakCallCountPerSecond = totalCalls2});
         EXPECT_CALL(*mockStatsService,
                     reportSpamStats(UnorderedElementsAre(SpamStatsEq(expectedStats1),
                                                          SpamStatsEq(expectedStats2))))
                 .Times(1);
     } else {
         // Expect one atom representing spam across 2 seconds
-        auto expectedStats =
-                createExpectedSpamStats(data[0], 2, 0, std::max(totalCalls1, totalCalls2));
+        auto expectedStats = createExpectedSpamStats(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .secondsWithAtLeast125Calls = 2,
+                 .peakCallCountPerSecond = std::max(totalCalls1, totalCalls2)});
         EXPECT_CALL(*mockStatsService, reportSpamStats(ElementsAre(SpamStatsEq(expectedStats))))
                 .Times(1);
     }
@@ -482,7 +573,12 @@ TEST_F(BinderStatsPusherTest, AggregateSpamProcessesDelayedDataOnSubsequentCall)
                 .senderUid = 1007,
         });
     }
-    auto expectedStats = createExpectedSpamStats(callData1[0], 1, 0, totalCalls);
+    auto expectedStats =
+            createExpectedSpamStats({.clientUid = callData1[0].senderUid,
+                                     .interfaceDescriptor = callData1[0].interfaceDescriptor,
+                                     .aidlMethod = callData1[0].aidlMethodName,
+                                     .secondsWithAtLeast125Calls = 1,
+                                     .peakCallCountPerSecond = totalCalls});
     // First push: data should be buffered as it's too recent
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
@@ -508,41 +604,80 @@ TEST_F(BinderStatsPusherTest, AggregateSpamForDifferentMethodsSimultaneously) {
             (spamTimeNanos / 1000'000'000LL) + kSpamAggregationWindowSec + 1; // 4 + 5 + 1 = 10s
     // Spam for method 1
     int32_t totalCalls1 = 200;
+    std::vector<int64_t> rawLatencies1;
+    int64_t totalDurationMicros1 = 0;
+    int64_t durationSumSquaredMicros1 = 0;
+
     for (int i = 0; i < totalCalls1; ++i) {
+        int64_t durNanos = i * 1000;
+        int64_t durMicros = durNanos / 1000;
         data.push_back({.startTimeNanos = spamTimeNanos,
-                        .endTimeNanos = spamTimeNanos + 1,
+                        .endTimeNanos = spamTimeNanos + durNanos,
                         .interfaceDescriptor = String16("IMultiMethod"),
                         .aidlMethodName = String16("MethodName9"),
                         .transactionCode = 9,
                         .senderUid = 1008});
+        rawLatencies1.push_back(durNanos);
+        totalDurationMicros1 += durMicros;
+        durationSumSquaredMicros1 += durMicros * durMicros;
     }
 
     // Spam for method 2
     int32_t totalCalls2 = 220;
+    std::vector<int64_t> rawLatencies2;
+    int64_t totalDurationMicros2 = 0;
+    int64_t durationSumSquaredMicros2 = 0;
+
     for (int i = 0; i < totalCalls2; ++i) {
+        int64_t durNanos = i * 1000 + 3 * i;
+        int64_t durMicros = durNanos / 1000;
+
         data.push_back({.startTimeNanos = spamTimeNanos,
-                        .endTimeNanos = spamTimeNanos + 1,
+                        .endTimeNanos = spamTimeNanos + durNanos,
                         .interfaceDescriptor = String16("IMultiMethod"),
                         .aidlMethodName = String16("MethodName8"),
                         .transactionCode = 8,
                         .senderUid = 1008});
+        rawLatencies2.push_back(durNanos);
+        totalDurationMicros2 += durMicros;
+        durationSumSquaredMicros2 += durMicros * durMicros;
     }
 
     if (kBinderObserverV2Enabled) {
-        auto expectedStats1 = createExpectedSingleSecondBinderStats(1008, String16("IMultiMethod"),
-                                                                    String16("MethodName9"),
-                                                                    totalCalls1, 0, 0, 0, 0, 0);
-        auto expectedStats2 = createExpectedSingleSecondBinderStats(1008, String16("IMultiMethod"),
-                                                                    String16("MethodName8"),
-                                                                    totalCalls2, 0, 0, 0, 0, 0);
+        auto expectedStats1 = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = 1008,
+                 .interfaceDescriptor = String16("IMultiMethod"),
+                 .aidlMethod = String16("MethodName9"),
+                 .callCount = totalCalls1,
+                 .durationSumMicros = totalDurationMicros1,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros1,
+                 .rawLatencies = rawLatencies1});
+        auto expectedStats2 = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = 1008,
+                 .interfaceDescriptor = String16("IMultiMethod"),
+                 .aidlMethod = String16("MethodName8"),
+                 .callCount = totalCalls2,
+                 .durationSumMicros = totalDurationMicros2,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros2,
+                 .rawLatencies = rawLatencies2});
         EXPECT_CALL(*mockStatsService,
                     reportSecondGranularityStats(
-                            UnorderedElementsAre(expectedStats1, expectedStats2)))
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats1),
+                                                 SingleSecondBinderStatsEq(expectedStats2))))
                 .Times(1);
     } else {
-        auto expectedStats1 = createExpectedSpamStats(data[0], 1, 0, totalCalls1); // MethodName9
-        auto expectedStats2 =
-                createExpectedSpamStats(data[totalCalls1], 1, 0, totalCalls2); // MethodName8
+        auto expectedStats1 =
+                createExpectedSpamStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .secondsWithAtLeast125Calls = 1,
+                                         .peakCallCountPerSecond = totalCalls1});
+        auto expectedStats2 = createExpectedSpamStats(
+                {.clientUid = data[totalCalls1].senderUid,
+                 .interfaceDescriptor = data[totalCalls1].interfaceDescriptor,
+                 .aidlMethod = data[totalCalls1].aidlMethodName,
+                 .secondsWithAtLeast125Calls = 1,
+                 .peakCallCountPerSecond = totalCalls2});
         EXPECT_CALL(*mockStatsService,
                     reportSpamStats(UnorderedElementsAre(SpamStatsEq(expectedStats1),
                                                          SpamStatsEq(expectedStats2))))
@@ -604,8 +739,13 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
         durationSumSquaredMicros += durationMicros * durationMicros;
     }
     auto expectedStats =
-            createExpectedLatencyStats(latencyCallData1[0], totalCalls, totalDurationMicros,
-                                       durationSumSquaredMicros, 1, 0);
+            createExpectedCallStats({.clientUid = latencyCallData1[0].senderUid,
+                                     .interfaceDescriptor = latencyCallData1[0].interfaceDescriptor,
+                                     .aidlMethod = latencyCallData1[0].aidlMethodName,
+                                     .callCount = totalCalls,
+                                     .durationSumMicros = totalDurationMicros,
+                                     .callDurationSumSquaredMicros = durationSumSquaredMicros,
+                                     .secondsWithAtLeast10Calls = 1});
     // First push: Service is unavailable
     EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
             .WillOnce(Return(nullptr));
@@ -623,15 +763,19 @@ TEST_F(BinderStatsPusherTest, DataNotDroppedWhenPushIsSkippedThenSucceeds) {
     // Second push: Service becomes available. Advance time beyond service check timeout.
     if (kBinderObserverV2Enabled) {
         int64_t timeSec2 = timeSec1 + 1;
-        auto expectedV2Stats =
-                createExpectedSingleSecondBinderStats(latencyCallData1[0].senderUid,
-                                                      latencyCallData1[0].interfaceDescriptor,
-                                                      String16(""), 15, totalDurationMicros,
-                                                      durationSumSquaredMicros, 0, 0, 0);
+        auto expectedV2Stats = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = latencyCallData1[0].senderUid,
+                 .interfaceDescriptor = latencyCallData1[0].interfaceDescriptor,
+                 .aidlMethod = String16(""),
+                 .callCount = 15,
+                 .durationSumMicros = totalDurationMicros,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros});
         EXPECT_CALL(*mockServiceManager, checkService(String16("binder_stats_consumer")))
                 .WillOnce(Return(IInterface::asBinder(mockStatsService)));
         EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
-        EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedV2Stats)))
+        EXPECT_CALL(*mockStatsService,
+                    reportSecondGranularityStats(
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedV2Stats))))
                 .Times(1);
         BinderStatsPusherHelper::doPush(pusher, {}, timeSec2);
     } else {
@@ -703,18 +847,31 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyOneSecondLatency) {
     }
 
     if (kBinderObserverV2Enabled) {
-        auto expectedStats =
-                createExpectedSingleSecondBinderStats(data[0].senderUid,
-                                                      data[0].interfaceDescriptor,
-                                                      data[0].aidlMethodName, 15,
-                                                      totalDurationMicros, durationSumSquaredMicros,
-                                                      0, 0, 0);
-        EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedStats)))
+        std::vector<int64_t> rawLatencies;
+        for (int i = 0; i < 15; ++i) {
+            rawLatencies.push_back((i + 1) * 100 * 1000); // Nanos
+        }
+        auto expectedStats = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = 15,
+                 .durationSumMicros = totalDurationMicros,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros,
+                 .rawLatencies = rawLatencies});
+        EXPECT_CALL(*mockStatsService,
+                    reportSecondGranularityStats(
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats))))
                 .Times(1);
     } else {
         auto expectedStats =
-                createExpectedLatencyStatsWithCpu(data[0], 15, totalDurationMicros,
-                                                  durationSumSquaredMicros, 1, 0, 0, 0, 0);
+                createExpectedCallStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .callCount = 15,
+                                         .durationSumMicros = totalDurationMicros,
+                                         .callDurationSumSquaredMicros = durationSumSquaredMicros,
+                                         .secondsWithAtLeast10Calls = 1});
         EXPECT_CALL(*mockStatsService,
                     reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
                 .Times(1);
@@ -782,8 +939,13 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyProcessesDelayedDataOnSubsequentCa
     int64_t call2_time_sec = callTimeSec1 + kLatencyAggregationWindowSec + 1; // 10 + 5 + 1 = 16s
 
     auto expectedStats =
-            createExpectedLatencyStatsWithCpu(callData1[0], 15, totalDurationMicros1,
-                                              durationSumSquaredMicros1, 1, 0, 0, 0, 0);
+            createExpectedCallStats({.clientUid = callData1[0].senderUid,
+                                     .interfaceDescriptor = callData1[0].interfaceDescriptor,
+                                     .aidlMethod = callData1[0].aidlMethodName,
+                                     .callCount = 15,
+                                     .durationSumMicros = totalDurationMicros1,
+                                     .callDurationSumSquaredMicros = durationSumSquaredMicros1,
+                                     .secondsWithAtLeast10Calls = 1});
     EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
             .Times(1);
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
@@ -820,20 +982,37 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyWithCpu) {
         totalcpuTimeSumSquaredMicros += cpuTimeMicros * cpuTimeMicros;
     }
     if (kBinderObserverV2Enabled) {
-        auto expectedStats =
-                createExpectedSingleSecondBinderStats(data[0].senderUid,
-                                                      data[0].interfaceDescriptor,
-                                                      data[0].aidlMethodName, 15,
-                                                      totalDurationMicros, durationSumSquaredMicros,
-                                                      15, totalCpuTimeMicros,
-                                                      totalcpuTimeSumSquaredMicros);
-        EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedStats)))
+        std::vector<int64_t> rawLatencies;
+        for (int i = 0; i < 15; ++i) {
+            rawLatencies.push_back((i + 1) * 100 * 1000); // Nanos
+        }
+        auto expectedStats = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = 15,
+                 .durationSumMicros = totalDurationMicros,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros,
+                 .cpuTimeCount = 15,
+                 .cpuTimeSumMicros = totalCpuTimeMicros,
+                 .cpuTimeSumSquaredMicros = totalcpuTimeSumSquaredMicros,
+                 .rawLatencies = rawLatencies});
+        EXPECT_CALL(*mockStatsService,
+                    reportSecondGranularityStats(
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats))))
                 .Times(1);
     } else {
         auto expectedStats =
-                createExpectedLatencyStatsWithCpu(data[0], 15, totalDurationMicros,
-                                                  durationSumSquaredMicros, 1, 0, 15,
-                                                  totalCpuTimeMicros, totalcpuTimeSumSquaredMicros);
+                createExpectedCallStats({.clientUid = data[0].senderUid,
+                                         .interfaceDescriptor = data[0].interfaceDescriptor,
+                                         .aidlMethod = data[0].aidlMethodName,
+                                         .callCount = 15,
+                                         .durationSumMicros = totalDurationMicros,
+                                         .callDurationSumSquaredMicros = durationSumSquaredMicros,
+                                         .secondsWithAtLeast10Calls = 1,
+                                         .cpuTimeCount = 15,
+                                         .cpuTimeSumMicros = totalCpuTimeMicros,
+                                         .cpuTimeSumSquaredMicros = totalcpuTimeSumSquaredMicros});
         EXPECT_CALL(*mockStatsService,
                     reportCallStats(ElementsAre(CallStatsWithCpuEq(expectedStats))))
                 .Times(1);
@@ -889,21 +1068,24 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
         durationSumSquaredMicros2 += durationMicros * durationMicros;
     }
     if (kBinderObserverV2Enabled) {
-        auto expectedStats1 =
-                createExpectedSingleSecondBinderStats(data[0].senderUid,
-                                                      data[0].interfaceDescriptor,
-                                                      data[0].aidlMethodName, totalCalls1,
-                                                      totalDurationMicros1,
-                                                      durationSumSquaredMicros1, 0, 0, 0);
-        auto expectedStats2 =
-                createExpectedSingleSecondBinderStats(data[0].senderUid,
-                                                      data[0].interfaceDescriptor,
-                                                      data[0].aidlMethodName, totalCalls2,
-                                                      totalDurationMicros2,
-                                                      durationSumSquaredMicros2, 0, 0, 0);
+        auto expectedStats1 = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = totalCalls1,
+                 .durationSumMicros = totalDurationMicros1,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros1});
+        auto expectedStats2 = createExpectedSingleSecondStatsWithHistogram(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = totalCalls2,
+                 .durationSumMicros = totalDurationMicros2,
+                 .callDurationSumSquaredMicros = durationSumSquaredMicros2});
         EXPECT_CALL(*mockStatsService,
                     reportSecondGranularityStats(
-                            UnorderedElementsAre(expectedStats1, expectedStats2)))
+                            UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats1),
+                                                 SingleSecondBinderStatsEq(expectedStats2))))
                 .Times(1);
         EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
         EXPECT_CALL(*mockStatsService, localBinder()).Times(2);
@@ -912,11 +1094,15 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSeconds) {
         // Total calls = 12 + 8 = 20
         // secondsWithAtLeast10Calls = 1 (only the first second has >= 10 calls)
         // secondsWithAtLeast50Calls = 0
-        auto expectedStats =
-                createExpectedLatencyStats(data[0], totalCalls1 + totalCalls2,
-                                           totalDurationMicros1 + totalDurationMicros2,
-                                           durationSumSquaredMicros1 + durationSumSquaredMicros2, 1,
-                                           0);
+        auto expectedStats = createExpectedCallStats(
+                {.clientUid = data[0].senderUid,
+                 .interfaceDescriptor = data[0].interfaceDescriptor,
+                 .aidlMethod = data[0].aidlMethodName,
+                 .callCount = totalCalls1 + totalCalls2,
+                 .durationSumMicros = totalDurationMicros1 + totalDurationMicros2,
+                 .callDurationSumSquaredMicros =
+                         durationSumSquaredMicros1 + durationSumSquaredMicros2,
+                 .secondsWithAtLeast10Calls = 1});
         EXPECT_CALL(*mockStatsService, reportCallStats(ElementsAre(CallStatsEq(expectedStats))))
                 .Times(1);
         EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
@@ -940,56 +1126,133 @@ TEST_F(BinderStatsPusherTest, AggregateLatencyMultipleSecondsV2) {
 
     const int totalCalls1 = 12;
     // Data for the first second
+    std::vector<int64_t> rawLatencies1;
     for (int i = 0; i < totalCalls1; ++i) { // 12 calls
-        int64_t durationMicros = (i + 1) * 100;
+        int64_t durationNanos = (i + 1) * 100'000;
         data.push_back(BinderCallData{
                 .startTimeNanos = firstCallSecondNanos,
-                .endTimeNanos = firstCallSecondNanos + durationMicros * 1000,
+                .endTimeNanos = firstCallSecondNanos + durationNanos,
                 .interfaceDescriptor = String16("ILatencyMultiSec"),
                 .aidlMethodName = String16("MethodName5"),
                 .transactionCode = 5,
                 .senderUid = 2005,
         });
+        int64_t durationMicros = durationNanos / 1000;
         totalDurationMicros1 += durationMicros;
         durationSumSquaredMicros1 += durationMicros * durationMicros;
+        rawLatencies1.push_back(durationNanos);
     }
 
     int64_t totalDurationMicros2 = 0;
     int64_t durationSumSquaredMicros2 = 0;
     const int totalCalls2 = 8;
     // Data for the second second
+    std::vector<int64_t> rawLatencies2;
     for (int i = 0; i < totalCalls2; ++i) { // 8 calls
-        int64_t durationMicros = (i + 1) * 120;
+        int64_t durationNanos = (i + 1) * 120'000;
         data.push_back(BinderCallData{
                 .startTimeNanos = secondCallSecondNanos,
-                .endTimeNanos = secondCallSecondNanos + durationMicros * 1000,
+                .endTimeNanos = secondCallSecondNanos + durationNanos,
                 .interfaceDescriptor = String16("ILatencyMultiSec"),
                 .aidlMethodName = String16("MethodName5"),
                 .transactionCode = 5,
                 .senderUid = 2005,
         });
+        int64_t durationMicros = durationNanos / 1000;
+        rawLatencies2.push_back(durationNanos);
         totalDurationMicros2 += durationMicros;
         durationSumSquaredMicros2 += durationMicros * durationMicros;
     }
 
     // Expect two separate reports for each second.
-    auto expectedStats1 =
-            createExpectedSingleSecondBinderStats(data[0].senderUid, data[0].interfaceDescriptor,
-                                                  data[0].aidlMethodName, totalCalls1,
-                                                  totalDurationMicros1, durationSumSquaredMicros1,
-                                                  0, 0, 0);
-    auto expectedStats2 =
-            createExpectedSingleSecondBinderStats(data[0].senderUid, data[0].interfaceDescriptor,
-                                                  data[0].aidlMethodName, totalCalls2,
-                                                  totalDurationMicros2, durationSumSquaredMicros2,
-                                                  0, 0, 0);
+    auto expectedStats1 = createExpectedSingleSecondStatsWithHistogram(
+            {.clientUid = data[0].senderUid,
+             .interfaceDescriptor = data[0].interfaceDescriptor,
+             .aidlMethod = data[0].aidlMethodName,
+             .callCount = totalCalls1,
+             .durationSumMicros = totalDurationMicros1,
+             .callDurationSumSquaredMicros = durationSumSquaredMicros1,
+             .rawLatencies = rawLatencies1});
+    auto expectedStats2 = createExpectedSingleSecondStatsWithHistogram(
+            {.clientUid = data[0].senderUid,
+             .interfaceDescriptor = data[0].interfaceDescriptor,
+             .aidlMethod = data[0].aidlMethodName,
+             .callCount = totalCalls2,
+             .durationSumMicros = totalDurationMicros2,
+             .callDurationSumSquaredMicros = durationSumSquaredMicros2,
+             .rawLatencies = rawLatencies2});
 
-    EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedStats1)));
-    EXPECT_CALL(*mockStatsService, reportSecondGranularityStats(ElementsAre(expectedStats2)));
+    EXPECT_CALL(*mockStatsService,
+                reportSecondGranularityStats(
+                        UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats1))));
+    EXPECT_CALL(*mockStatsService,
+                reportSecondGranularityStats(
+                        UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats2))));
 
     EXPECT_CALL(*mockStatsService, reportCallStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
     EXPECT_CALL(*mockStatsService, localBinder()).Times(2);
 
     BinderStatsPusherHelper::doPush(pusher, data, 0 /* nowSec not used */);
+}
+
+TEST_F(BinderStatsPusherTest, AggregateLatencyWithHistogramV2) {
+    std::vector<BinderCallData> data;
+    int64_t callTimeNanos = 2'000'000'000LL; // 2s
+    // Current time far enough in the future to trigger aggregation
+    int64_t currentTimeSec = (callTimeNanos / 1000'000'000LL) + kLatencyAggregationWindowSec + 1;
+
+    std::vector<int64_t> rawLatencies = {10'000,   20'000,   100'000, 1500'000,
+                                         2000'000, 2500'000, 5000'000}; // Latencies in nanos
+    int64_t totalDurationMicros = 0;
+    int64_t callDurationSumSquaredMicros = 0;
+
+    for (int64_t durationNanos : rawLatencies) {
+        int64_t durationMicros = durationNanos / 1000;
+        data.push_back(BinderCallData{
+                .startTimeNanos = callTimeNanos,
+                .endTimeNanos = callTimeNanos + durationMicros * 1000,
+                .interfaceDescriptor = String16("ILatencyHistogram"),
+                .aidlMethodName = String16("MethodNameHistogram"),
+                .transactionCode = 100,
+                .senderUid = 3000,
+        });
+        totalDurationMicros += durationMicros;
+        callDurationSumSquaredMicros += durationMicros * durationMicros;
+    }
+
+    // Add enough calls to trigger secondsWithAtLeast10Calls, but not 50
+    for (int i = 0; i < 5; ++i) { // Total 7 (from rawLatencies) + 5 = 12 calls
+        int64_t durationNanos = 500'000 + i * 1000;
+        data.push_back(BinderCallData{
+                .startTimeNanos = callTimeNanos,
+                .endTimeNanos = callTimeNanos + durationNanos,
+                .interfaceDescriptor = String16("ILatencyHistogram"),
+                .aidlMethodName = String16("MethodNameHistogram"),
+                .transactionCode = 100,
+                .senderUid = 3000,
+        });
+        int64_t durationMicros = durationNanos / 1000;
+        totalDurationMicros += durationMicros;
+        callDurationSumSquaredMicros += durationMicros * durationMicros;
+        rawLatencies.push_back(durationNanos);
+    }
+
+    auto expectedStats = createExpectedSingleSecondStatsWithHistogram(
+            {.clientUid = data[0].senderUid,
+             .interfaceDescriptor = data[0].interfaceDescriptor,
+             .aidlMethod = data[0].aidlMethodName,
+             .callCount = static_cast<int64_t>(data.size()),
+             .durationSumMicros = totalDurationMicros,
+             .callDurationSumSquaredMicros = callDurationSumSquaredMicros,
+             .rawLatencies = rawLatencies});
+
+    EXPECT_CALL(*mockStatsService,
+                reportSecondGranularityStats(
+                        UnorderedElementsAre(SingleSecondBinderStatsEq(expectedStats))))
+            .Times(1);
+    EXPECT_CALL(*mockStatsService, reportSpamStats(_)).Times(0);
+    EXPECT_CALL(*mockStatsService, localBinder()).Times(1);
+
+    BinderStatsPusherHelper::doPush(pusher, data, currentTimeSec);
 }

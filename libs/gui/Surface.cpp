@@ -508,6 +508,11 @@ status_t Surface::getFrameTimestamps(uint64_t frameNumber,
     // Verify the requested timestamps are supported.
     querySupportedTimestampsLocked();
     if (outDisplayPresentTime != nullptr && !mFrameTimestampsSupportsPresent) {
+        if (com::android::graphics::libgui::flags::debug_gpu_present_times()) {
+            ATRACE_FORMAT_INSTANT("450351988: Surface::getFrameTimestamps: frameNumber=%" PRId64
+                                  " !mFrameTimestampsSupportsPresent",
+                                  frameNumber);
+        }
         return BAD_VALUE;
     }
 
@@ -570,6 +575,12 @@ status_t Surface::getFrameTimestamps(uint64_t frameNumber,
             && *outGpuCompositionDoneTime > 0 && (acquireTime > 0 || firstRefreshStartTime > 0)
             && *outGpuCompositionDoneTime <= std::max(acquireTime, firstRefreshStartTime)) {
         *outGpuCompositionDoneTime = 0;
+    }
+
+    if (com::android::graphics::libgui::flags::debug_gpu_present_times() && outDisplayPresentTime) {
+        ATRACE_FORMAT_INSTANT("450351988: SkiaIpcPipeline::getFrameTimestamps: frameNumber=%" PRId64
+                              " presentTime=%" PRId64 " acquireTime=%" PRId64,
+                              frameNumber, *outDisplayPresentTime, acquireTime);
     }
 
     return NO_ERROR;

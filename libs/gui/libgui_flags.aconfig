@@ -169,3 +169,10 @@ flag {
   bug: "340933948"
   is_fixed_read_only: true
 } # wb_biometrics
+
+flag {
+  name: "debug_gpu_present_times"
+  namespace: "core_graphics"
+  description: "Add traces for debugging GPU present times"
+  bug: "450351988"
+} # debug_gpu_present_times

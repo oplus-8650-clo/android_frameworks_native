@@ -58,6 +58,7 @@ RequestedLayerState::RequestedLayerState(const LayerCreationArgs& args)
         parentId(args.parentId),
         layerIdToMirror(args.layerIdToMirror),
         stopLayerId(args.stopLayerId),
+        croppedByLayerId(args.croppedByLayerId),
         pendingBuffers(args.pendingBuffers),
         debugCookie(args.debugCookie) {
     layerId = static_cast<int32_t>(args.sequence);
