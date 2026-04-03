@@ -18,6 +18,7 @@
 #include <iterator>
 #include <optional>
 #include "FrontEnd/LayerSnapshot.h"
+#include "Layer.h"
 #include "LayerFE.h"
 #include "ScreenCaptureOutput.h"
 #include "renderengine/impl/ExternalTexture.h"
@@ -26,167 +27,172 @@
 
 namespace android::surfaceflinger::frontend::caching {
 
-static const constexpr nsecs_t kDefaultActiveLayerTimeout = 150 * 1000 * 1000;
-
-bool MergeableHierarchy::Accumulator::add(const LayerHierarchy* hierarchy) {
-    // TODO: Add a check for whether we actually want to add the hierarchy
-    // For now, unconditionally add the hierarchy
-    if (!hierarchy->getLayer()) {
-        return false;
-    }
-    if (mTime - hierarchy->getLayer()->lastUpdateTime > kDefaultActiveLayerTimeout) {
-        mHierarchies.push_back(
-                {.layerId = hierarchy->getLayer() ? hierarchy->getLayer()->id : UNASSIGNED_LAYER_ID,
-                 .hierarchy = hierarchy});
-        return true;
-    }
-    return false;
-}
-
-void MergeableHierarchy::constructSnapshot(
-        LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
-        compositionengine::CompositionEngine& compositionEngine) {
+void MergeableHierarchy::constructSnapshot(LayerSnapshotBuilder& builder,
+                                           const LayerSnapshotBuilder::Args& args,
+                                           compositionengine::CompositionEngine& compositionEngine,
+                                           std::unordered_map<uint32_t, sp<Layer>>& legacyLayers) {
     SFTRACE_CALL();
+
     if (mSnapshot) {
         return;
     }
 
-    if (mHierarchies.empty()) {
+    if (!mRoot.hierarchy || !mRoot.hierarchy->getLayer()) {
         return;
     }
 
+    auto layer = mRoot.hierarchy->getLayer();
+
     auto localArgs = args;
     localArgs.forceUpdate = LayerSnapshotBuilder::ForceUpdateFlags::ALL;
+    localArgs.root = *mRoot.hierarchy;
+    auto cropRect = Rect(layer->getCroppedBufferSize(layer->getBufferSize(0)));
 
-    std::vector<std::unique_ptr<LayerSnapshot>> snapshots;
-    constructSnapshotForHierarchy(builder, localArgs, mHierarchies.front().hierarchy,
-                                  localArgs.rootSnapshot, snapshots);
+    auto bounds = Rect(cropRect).offsetToOrigin();
 
-    materializeSnapshot(std::move(snapshots), compositionEngine);
-}
-
-void MergeableHierarchy::constructSnapshotForHierarchy(
-        LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
-        const LayerHierarchy* hierarchy, const LayerSnapshot& parent,
-        std::vector<std::unique_ptr<LayerSnapshot>>& outSnapshots) {
-    auto snapshot = std::make_unique<LayerSnapshot>();
-
-    if (hierarchy->getLayer()) {
-        *snapshot = LayerSnapshot(*hierarchy->getLayer(), LayerHierarchy::TraversalPath::ROOT);
+    if (!bounds.isEmpty()) {
+        localArgs.parentCrop = bounds.toFloatRect();
     } else {
-        *snapshot = args.rootSnapshot;
-        snapshot->geomLayerBounds = FloatRect(0, 0, 3000, 3000);
+        localArgs.parentCrop = std::nullopt;
     }
 
-    if (hierarchy->getLayer()) {
-        snapshot->merge(*hierarchy->getLayer(), /*forceUpdate=*/true, /*displayChanges=*/true,
-                        args.forceFullDamage, 0u);
-        builder.updateSnapshot(*snapshot, args, *hierarchy->getLayer(), parent,
-                               LayerHierarchy::TraversalPath::ROOT);
-    }
+    builder.update(localArgs);
 
-    std::vector<std::unique_ptr<LayerSnapshot>> children;
-    for (const auto& [child, _] : hierarchy->mChildren) {
-        constructSnapshotForHierarchy(builder, args, child, *snapshot, children);
-    }
+    frontend::LayerSnapshot* rootSnapshot = builder.getSnapshot(layer->id);
 
-    outSnapshots.emplace_back(std::move(snapshot));
-    std::move(children.begin(), children.end(), std::back_inserter(outSnapshots));
-}
+    auto transform = rootSnapshot->localTransform.inverse();
+    std::vector<std::pair<Layer*, sp<LayerFE>>> layers;
 
-void MergeableHierarchy::materializeSnapshot(
-        std::vector<std::unique_ptr<LayerSnapshot>> snapshots,
-        compositionengine::CompositionEngine& compositionEngine) {
-    auto& firstSnapshot = *snapshots.begin();
-    auto bounds = Rect(firstSnapshot->sourceBounds());
-    if (bounds.isEmpty()) {
+    auto debugName = std::format("flattenedHierarchy{}", getId());
+    Rect snapshotBounds;
+    builder.forEachVisibleSnapshot([&](std::unique_ptr<frontend::LayerSnapshot>& snapshot) {
+        if (!snapshot->hasSomethingToDraw()) {
+            return;
+        }
+
+        if (bounds.isEmpty() && !snapshot->croppedBufferSize.isEmpty()) {
+            if (!snapshotBounds.isValid()) {
+                snapshotBounds = Rect(snapshot->transformedBounds);
+            } else {
+                snapshotBounds.left =
+                        std::min(snapshotBounds.left,
+                                 static_cast<int32_t>(snapshot->transformedBounds.left));
+                snapshotBounds.top =
+                        std::min(snapshotBounds.top,
+                                 static_cast<int32_t>(snapshot->transformedBounds.top));
+                snapshotBounds.right =
+                        std::max(snapshotBounds.right,
+                                 static_cast<int32_t>(snapshot->transformedBounds.right));
+                snapshotBounds.bottom =
+                        std::max(snapshotBounds.bottom,
+                                 static_cast<int32_t>(snapshot->transformedBounds.bottom));
+            }
+        }
+
+        auto it = legacyLayers.find(static_cast<uint32_t>(snapshot->sequence));
+        Layer* legacyLayer = (it == legacyLayers.end()) ? nullptr : it->second.get();
+        sp<LayerFE> layerFE = sp<LayerFE>::make(snapshot->name);
+        layerFE->mSnapshot = std::make_unique<frontend::LayerSnapshot>(*snapshot);
+        layerFE->mSnapshot->geomLayerTransform = transform * layerFE->mSnapshot->geomLayerTransform;
+        layerFE->mSnapshot->geomInverseLayerTransform =
+                layerFE->mSnapshot->geomLayerTransform.inverse();
+        layers.emplace_back(legacyLayer, std::move(layerFE));
+    });
+
+    if (layers.empty()) {
         mSnapshot = nullptr;
         return;
     }
 
-    auto layerStack = firstSnapshot->outputFilter.layerStack;
+    for (auto& [layer, layerFE] : layers) {
+        ftl::Future<FenceResult> futureFence = layerFE->createReleaseFenceFuture();
+        if (layer) {
+            layer->prepareReleaseCallbacks(std::move(futureFence), ui::UNASSIGNED_LAYER_STACK);
+        }
+    }
 
-    auto width = std::min(3000u, static_cast<uint32_t>(bounds.getWidth()));
-    auto height = std::min(3000u, static_cast<uint32_t>(bounds.getHeight()));
+    if (!bounds.isEmpty()) {
+        snapshotBounds = bounds;
+    }
+
+    if (snapshotBounds.getWidth() <= 0 || snapshotBounds.getHeight() <= 0) {
+        mSnapshot = nullptr;
+        return;
+    }
+
+    auto width = static_cast<uint32_t>(snapshotBounds.getWidth());
+    auto height = static_cast<uint32_t>(snapshotBounds.getHeight());
 
     auto buffer = sp<GraphicBuffer>::make(width, height, PIXEL_FORMAT_RGBA_8888, 1u,
 
                                           static_cast<uint64_t>(GRALLOC_USAGE_HW_COMPOSER |
                                                                 GRALLOC_USAGE_HW_RENDER |
                                                                 GRALLOC_USAGE_HW_TEXTURE),
-                                          std::format("flattenedHierarchy{}", getId()));
+                                          debugName);
+    auto status = buffer->initCheck();
 
-    ALOGE_IF(buffer->initCheck() != OK, "Failed to init buffer for EH: %d %" PRIu32 " %" PRIu32,
-             buffer->initCheck(), width, height);
-
-    auto texture = std::make_shared<
-            renderengine::impl::ExternalTexture>(buffer, compositionEngine.getRenderEngine(),
-                                                 renderengine::impl::ExternalTexture::Usage::
-                                                         WRITEABLE);
-
-    std::vector<sp<compositionengine::LayerFE>> ceLayerFEs;
-    std::vector<sp<LayerFE>> layerFEs;
-    for (auto& snapshot : snapshots) {
-        if (!snapshot->hasSomethingToDraw()) {
-            continue;
-        }
-        auto layerFE = sp<LayerFE>::make("Hierarchy");
-        layerFE->mSnapshot = std::move(snapshot);
-        layerFEs.emplace_back(layerFE);
-        ceLayerFEs.emplace_back(layerFE);
-    }
-
-    if (layerFEs.empty()) {
+    if (status != OK) {
         mSnapshot = nullptr;
         return;
     }
+
+    auto texture = std::make_shared<
+            renderengine::impl::
+                    ExternalTexture>(buffer, compositionEngine.getRenderEngine(),
+                                     renderengine::impl::ExternalTexture::Usage::WRITEABLE |
+                                             renderengine::impl::ExternalTexture::Usage::READABLE);
+
+    auto layerStack = layers.front().second->mSnapshot->outputFilter.layerStack;
 
     std::shared_ptr<ScreenCaptureOutput> output = createScreenCaptureOutput(
             ScreenCaptureOutputArgs{.compositionEngine = compositionEngine,
                                     .colorProfile = {},
                                     .layerStack = layerStack,
-                                    .sourceCrop = bounds,
+                                    .sourceCrop = snapshotBounds,
                                     .buffer = texture,
                                     .displayIdVariant = std::nullopt,
                                     .reqBufferSize = ui::Size(width, height),
                                     .sdrWhitePointNits = -1,
                                     .displayBrightnessNits = -1,
                                     .targetBrightness = -1,
-                                    .layerAlpha = 1.0f,
+                                    .layerAlpha = 0.0f,
                                     .disableBlur = false,
                                     .treat170mAsSrgb = false,
                                     .dimInGammaSpaceForEnhancedScreenshots = false,
                                     .isSecure = true,
                                     .enableLocalTonemapping = false,
-                                    .debugName = "HierarchyFlattener"});
+                                    .debugName = debugName});
 
-    sp<LayerFE> firstLayer = layerFEs.back();
-
-    for (auto& layer : layerFEs) {
-        // drop this on the floor for now
-        ftl::Future<FenceResult> futureFence = layer->createReleaseFenceFuture();
+    std::vector<sp<compositionengine::LayerFE>> layerFes;
+    layerFes.reserve(layers.size());
+    for (auto& [layer, layerFE] : layers) {
+        layerFes.emplace_back(layerFE);
     }
+
+    sp<LayerFE> firstLayer = layers.front().second;
 
     compositionengine::CompositionRefreshArgs refreshArgs{
             .outputs = {output},
-            .layers = std::move(ceLayerFEs),
+            .layers = std::move(layerFes),
             .updatingOutputGeometryThisFrame = true,
             .updatingGeometryThisFrame = true,
     };
     compositionEngine.present(refreshArgs);
 
-    mSnapshot = std::move(firstLayer->mSnapshot);
+    mSnapshot = std::make_unique<LayerSnapshot>(*rootSnapshot);
     mSnapshot->externalTexture = texture;
     mSnapshot->acquireFence = output->getRenderSurface()->getClientTargetAcquireFence();
     mSnapshot->buffer = texture->getBuffer();
+    mSnapshot->name.append(" (flattened)");
+    mSnapshot->debugName.append(" (flattened)");
 }
 
 void MergeableHierarchy::dump(std::ostream& out) const {
-    out << "id = " << getId() << ", hierarchies = {";
-    for (const auto& hierarchy : mHierarchies) {
-        out << hierarchy.layerId << ",";
-    }
-    out << "}";
+    out << "{id = " << getId() << ", hasSnapshot=" << (mSnapshot != nullptr) << ", Last updated: "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::nanoseconds(systemTime() - mRoot.lastUpdateTime))
+                    .count()
+        << " ms Ago}";
 }
 
 } // namespace android::surfaceflinger::frontend::caching

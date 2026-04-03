@@ -1035,6 +1035,15 @@ status_t Gralloc5Mapper::setSmpte2094_10(buffer_handle_t bufferHandle,
                                                                    smpte2094_10);
 }
 
+status_t Gralloc5Mapper::getStride(buffer_handle_t bufferHandle, uint32_t *outStride) const {
+    auto value = getStandardMetadata<StandardMetadataType::STRIDE>(mMapper, bufferHandle);
+    if (value.has_value()) {
+        *outStride = *value;
+        return OK;
+    }
+    return UNKNOWN_TRANSACTION;
+}
+
 status_t Gralloc5Mapper::getSmpte2094_50(
         buffer_handle_t bufferHandle, std::optional<std::vector<uint8_t>>* outSmpte2094_50) const {
     auto value = getStandardMetadata<StandardMetadataType::SMPTE2094_50>(mMapper, bufferHandle);

@@ -28,8 +28,11 @@ fn main() {
     let args = Args::parse();
 
     println!("Validating policy file: {}", args.policy_file_path);
-    let policy = Parser::parse_rules_from_file(Path::new(&args.policy_file_path));
-    println!("{:#?}", policy);
+    let mut parser = Parser::new(/*debuggable=*/ true);
+    match parser.parse_from_file(Path::new(&args.policy_file_path)) {
+        Err(e) => println!("{:#?}", e),
+        Ok(_) => println!("{:#?}", parser.policy()),
+    };
 }
 
 #[cfg(test)]
@@ -52,7 +55,8 @@ mod tests {
         let policy_file_path = current_dir.join("config").join("desktop_auth_policy.conf");
 
         debug!("Validating policy file: {:?}", policy_file_path);
-        let policy = Parser::parse_rules_from_file(&policy_file_path);
-        assert!(policy.is_ok(), "Failed to parse policy file: {:#?}", policy.err());
+        let mut parser = Parser::new(/*debuggable=*/ true);
+        let result = parser.parse_from_file(&policy_file_path);
+        assert!(result.is_ok(), "Failed to parse policy file: {:#?}", result.err());
     }
 }

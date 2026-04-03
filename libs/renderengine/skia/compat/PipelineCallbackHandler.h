@@ -85,6 +85,7 @@ protected:
 
     static constexpr uint32_t kMaxNumSerializedPipelineKeys = 512;
     static constexpr uint32_t kMaxSerializedKeySizeInBytes = 1024;
+    static constexpr uint32_t kMaxBlobSizeInBytes = 32768;
 
     struct SerializedKeyInfo {
         uint32_t mLastUsageEpoch;
@@ -92,7 +93,7 @@ protected:
     };
 
     static sk_sp<SkData> CreateBlob(const std::vector<const PipelineData*>& keys,
-                                    uint32_t epochOfSave);
+                                    uint32_t epochOfSave, uint32_t rebaseEpoch);
     static bool UnpackBlob(SkData* src, std::vector<SerializedKeyInfo>* keysOut,
                            uint32_t* epochOfSave);
 
@@ -113,9 +114,13 @@ protected:
         uint32_t mUniqueKeyHash = 0;
     };
 
+    using PipelineMap = std::unordered_map<PipelineKey, std::unique_ptr<PipelineData>, PipelineKey>;
+
+    static std::vector<const PipelineData*> Gather(const PipelineMap&, uint32_t currentEpoch,
+                                                   uint32_t* rebaseEpoch);
+
     const std::chrono::time_point<std::chrono::steady_clock> mStartTime;
-    std::unordered_map<PipelineKey, std::unique_ptr<PipelineData>, PipelineKey> mMap
-            GUARDED_BY(mMutex);
+    PipelineMap mMap GUARDED_BY(mMutex);
     bool mInWarmup GUARDED_BY(mMutex) = false;
     const bool mIsProtected;
     // Although the SerializedPipelineKeyCache's behavior is separately enabled there is
@@ -124,8 +129,12 @@ protected:
     const bool mStoreSerializedKeys;
 
     bool mPipelineAddedSinceLastSave GUARDED_BY(mMutex) = false;
-    // Each epoch is a roughly 10s block of accumulated uptime since the cache file was created.
+
+    static constexpr uint32_t kSecondsPerEpoch = 10;
+    // Each epoch is a roughly 10s block of accumulated uptime.
     // Storing it in a uint32_t yields ~1362 years until it would overflow.
+    // The epoch starting time is reset on every file load, however, so it is
+    // extremely unlikely to ever overflow.
     uint32_t mCurrentEpoch GUARDED_BY(mMutex) = 0;
     uint32_t mEpochOfLastSave GUARDED_BY(mMutex) = 0;
     std::chrono::time_point<std::chrono::steady_clock> mLastEpochUpdateTime GUARDED_BY(mMutex);
@@ -136,6 +145,11 @@ protected:
     // Regardless of whether a new pipeline has been added, the file will be saved after the
     // following number of epochs. This serves to update the usage counts.
     static constexpr uint32_t kNumEpochsBetweenUsesSaves = 42; // 7 minutes
+
+    static constexpr uint32_t kSecondsPerDay = 86400;
+    // Pipelines older than this won't be serialized so, eventually, they will be removed from
+    // the cache.
+    static constexpr uint32_t kTooOldInEpochs = (7 * kSecondsPerDay) / kSecondsPerEpoch;
 };
 
 } // namespace android::renderengine::skia

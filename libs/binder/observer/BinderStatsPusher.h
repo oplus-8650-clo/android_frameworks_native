@@ -22,6 +22,7 @@
 
 #if defined(LIBBINDER_BINDER_OBSERVER_V2)
 #include "BinderCallsVectorAggregation.h"
+#include "HistogramScale.h"
 #else // !defined(LIBBINDER_BINDER_OBSERVER_V2)
 #include "BinderCallsMapAggregation.h"
 #endif

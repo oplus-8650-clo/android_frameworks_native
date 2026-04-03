@@ -33,6 +33,7 @@
 #include <SkColor.h>
 #include <SkDrawable.h>
 #include <SkSurface.h>
+#include "src/core/SkDrawShadowInfo.h"
 // #include <SkGainmapInfo.h>
 #include <SkBitmap.h>
 #include <SkImage.h>
@@ -110,7 +111,7 @@ struct SaveOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_SAVE;
 
     static SaveOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -118,7 +119,7 @@ struct RestoreOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESTORE;
 
     static RestoreOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -130,8 +131,8 @@ struct SaveLayerOp final : IPCRenderBufferOp {
     bool hasPaint;
 
     static SaveLayerOp* Create(RenderCommandBuffer* commandBuffer, const SkRect* bounds,
-                               const SkPaint* paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                               const SkPaint* paint, IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -140,7 +141,7 @@ struct SaveBehindOp final : IPCRenderBufferOp {
     SkRect subset;
 
     static SaveBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& subset);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -149,7 +150,7 @@ struct ConcatOp final : IPCRenderBufferOp {
     SkM44 matrix;
 
     static ConcatOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -158,7 +159,7 @@ struct SetMatrixOp final : IPCRenderBufferOp {
     SkM44 matrix;
 
     static SetMatrixOp* Create(RenderCommandBuffer* commandBuffer, const SkM44& matrix);
-    void draw(SkCanvas* c, const SkMatrix& original);
+    void draw(SkCanvas* c, const SkMatrix& original, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -167,7 +168,7 @@ struct ScaleOp final : IPCRenderBufferOp {
     SkScalar sx, sy;
 
     static ScaleOp* Create(RenderCommandBuffer* commandBuffer, SkScalar sx, SkScalar sy);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -176,7 +177,7 @@ struct TranslateOp final : IPCRenderBufferOp {
     SkScalar dx, dy;
 
     static TranslateOp* Create(RenderCommandBuffer* commandBuffer, SkScalar dx, SkScalar dy);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -188,7 +189,7 @@ struct ClipPathOp final : IPCRenderBufferOp {
 
     static ClipPathOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path, SkClipOp op,
                               bool aa);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -200,7 +201,7 @@ struct ClipRectOp final : IPCRenderBufferOp {
 
     static ClipRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& rect, SkClipOp op,
                               bool aa);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -212,7 +213,7 @@ struct ClipRRectOp final : IPCRenderBufferOp {
 
     static ClipRRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRRect& rrect,
                                SkClipOp op, bool aa);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -223,7 +224,7 @@ struct ClipRegionOp final : IPCRenderBufferOp {
 
     static ClipRegionOp* Create(RenderCommandBuffer* commandBuffer, const SkRegion& region,
                                 SkClipOp op);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -232,7 +233,7 @@ struct ClipShaderOp final : IPCRenderBufferOp {
 
     static ClipShaderOp* Create(RenderCommandBuffer* commandBuffer,
                                 const sk_sp<SkShader>& /*shader*/, SkClipOp op);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     SkClipOp op;
     std::string toString() const;
 };
@@ -241,7 +242,8 @@ struct ResetClipOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_RESETCLIP;
 
     static ResetClipOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip);
+    void draw(SkCanvas* c, const SkMatrix&, const SkRect& initialClip,
+              IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -249,8 +251,9 @@ struct DrawPaintOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWPAINT;
     ShmemPaint paint;
 
-    static DrawPaintOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+    static DrawPaintOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p,
+                               IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -258,8 +261,20 @@ struct DrawBehindOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWBEHIND;
     ShmemPaint paint;
 
-    static DrawBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+    static DrawBehindOp* Create(RenderCommandBuffer* commandBuffer, const SkPaint& p,
+                                IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
+    std::string toString() const;
+};
+
+struct DrawShadowRecOp final : IPCRenderBufferOp {
+    static const auto kType = TYPE_DRAWSHADOWREC;
+    RSpan<uint8_t> pathData;
+    SkDrawShadowRec rec;
+
+    static DrawShadowRecOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path,
+                                   const SkDrawShadowRec& rec);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -269,8 +284,8 @@ struct DrawPathOp final : IPCRenderBufferOp {
     RSpan<uint8_t> pathData;
 
     static DrawPathOp* Create(RenderCommandBuffer* commandBuffer, const SkPath& path,
-                              const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+                              const SkPaint& p, IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -279,9 +294,9 @@ struct DrawRectOp final : IPCRenderBufferOp {
     SkRect rect;
     ShmemPaint paint;
 
-    static DrawRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& r,
-                              const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+    static DrawRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& r, const SkPaint& p,
+                              IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -291,8 +306,8 @@ struct DrawRegionOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawRegionOp* Create(RenderCommandBuffer* commandBuffer, const SkRegion& r,
-                                const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+                                const SkPaint& p, IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -301,9 +316,9 @@ struct DrawOvalOp final : IPCRenderBufferOp {
     SkRect oval;
     ShmemPaint paint;
 
-    static DrawOvalOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& o,
-                              const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+    static DrawOvalOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& o, const SkPaint& p,
+                              IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -317,8 +332,8 @@ struct DrawArcOp final : IPCRenderBufferOp {
 
     static DrawArcOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& oval,
                              SkScalar startAngle, SkScalar sweepAngle, bool useCenter,
-                             const SkPaint& paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                             const SkPaint& paint, IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -328,8 +343,8 @@ struct DrawRRectOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawRRectOp* Create(RenderCommandBuffer* commandBuffer, const SkRRect& rr,
-                               const SkPaint& p);
-    void draw(SkCanvas* c, const SkMatrix&);
+                               const SkPaint& p, IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -338,7 +353,7 @@ struct DrawAnnotationOp final : IPCRenderBufferOp {
 
     static DrawAnnotationOp* Create(RenderCommandBuffer* commandBuffer, const SkRect& rect,
                                     const char* text, SkData* data);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -347,7 +362,7 @@ struct DrawDrawableOp final : IPCRenderBufferOp {
 
     static DrawDrawableOp* Create(RenderCommandBuffer* commandBuffer, SkDrawable* drawable,
                                   const SkMatrix* matrix);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -356,7 +371,7 @@ struct DrawPictureOp final : IPCRenderBufferOp {
 
     static DrawPictureOp* Create(RenderCommandBuffer* commandBuffer, const SkPicture* picture,
                                  const SkMatrix* matrix, const SkPaint* paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -370,8 +385,9 @@ struct DrawImageOp final : IPCRenderBufferOp {
     bool hasPaint;
 
     static DrawImageOp* Create(RenderCommandBuffer* commandBuffer, uint64_t bitmapId, SkScalar x,
-                               SkScalar y, const SkSamplingOptions& sampling, const SkPaint* paint);
-    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache);
+                               SkScalar y, const SkSamplingOptions& sampling, const SkPaint* paint,
+                               IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -390,7 +406,7 @@ struct DrawImageRectOp final : IPCRenderBufferOp {
                                    const SkRect& src, const SkRect& dst,
                                    const SkSamplingOptions& sampling, const SkPaint* paint,
                                    SkCanvas::SrcRectConstraint constraint);
-    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache& resourceCache);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -410,7 +426,7 @@ struct DrawTextBlobOp final : IPCRenderBufferOp {
     static DrawTextBlobOp* Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
                                   SkScalar x_in, SkScalar y_in, const SkPaint& p,
                                   IPCClientResourceCache* cache);
-    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* cache);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -424,8 +440,9 @@ struct DrawPatchOp final : IPCRenderBufferOp {
 
     static DrawPatchOp* Create(RenderCommandBuffer* commandBuffer, const SkPoint inPoints[12],
                                const SkColor inColors[4], const SkPoint inTexCoords[4],
-                               SkBlendMode inMode, const SkPaint& inPaint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                               SkBlendMode inMode, const SkPaint& inPaint,
+                               IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -436,8 +453,9 @@ struct DrawPointsOp final : IPCRenderBufferOp {
     ShmemPaint paint;
 
     static DrawPointsOp* Create(RenderCommandBuffer* commandBuffer, SkCanvas::PointMode mode,
-                                size_t count, const SkPoint* points, const SkPaint& paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                                size_t count, const SkPoint* points, const SkPaint& paint,
+                                IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -448,8 +466,9 @@ struct DrawVerticesOp final : IPCRenderBufferOp {
     RSpan<uint8_t> verticesData;
 
     static DrawVerticesOp* Create(RenderCommandBuffer* commandBuffer, const SkVertices* vertices,
-                                  SkBlendMode mode, const SkPaint& paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                                  SkBlendMode mode, const SkPaint& paint,
+                                  IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -464,8 +483,9 @@ struct DrawSkMeshOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_DRAWMESH;
 
     static DrawSkMeshOp* Create(RenderCommandBuffer* commandBuffer, const SkMesh& mesh,
-                                sk_sp<SkBlender> blender, const SkPaint& paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+                                sk_sp<SkBlender> blender, const SkPaint& paint,
+                                IPCClientResourceCache* clientCache = nullptr);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -476,7 +496,7 @@ struct DrawAtlasOp final : IPCRenderBufferOp {
                                const SkRSXform* xform, const SkRect* tex, const SkColor* colors,
                                int count, SkBlendMode mode, const SkSamplingOptions& sampling,
                                const SkRect* cull, const SkPaint* paint);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -485,7 +505,7 @@ struct DrawProxySurfaceControlOp final : IPCRenderBufferOp {
     int proxyId;
 
     static DrawProxySurfaceControlOp* Create(RenderCommandBuffer* commandBuffer, int id);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -494,7 +514,7 @@ struct BeginRenderTargetOp final : IPCRenderBufferOp {
     uint64_t bufferId;
 
     static BeginRenderTargetOp* Create(RenderCommandBuffer* commandBuffer, uint64_t bufferId);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
@@ -502,13 +522,13 @@ struct EndRenderTargetOp final : IPCRenderBufferOp {
     static const auto kType = TYPE_ENDRENDERTARGET;
 
     static EndRenderTargetOp* Create(RenderCommandBuffer* commandBuffer);
-    void draw(SkCanvas* c, const SkMatrix&);
+    void draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* serverCache);
     std::string toString() const;
 };
 
 // Structs are defined in RenderCommandBuffer.h in libgui.
 
-struct UploadBitmap final : IPCRenderBufferOp {
+struct UploadBitmap final : IPCRenderBufferUploadOp {
     static const auto kType = TYPE_UPLOADBITMAP;
     uint64_t imageId;
     int32_t width;
@@ -523,7 +543,7 @@ struct UploadBitmap final : IPCRenderBufferOp {
     std::string toString() const;
 };
 
-struct FreeBitmap final : IPCRenderBufferOp {
+struct FreeBitmap final : IPCRenderBufferUploadOp {
     static const auto kType = TYPE_FREEBITMAP;
     uint64_t imageId;
 
@@ -532,7 +552,7 @@ struct FreeBitmap final : IPCRenderBufferOp {
     std::string toString() const;
 };
 
-struct UploadTypeface final : IPCRenderBufferOp {
+struct UploadTypeface final : IPCRenderBufferUploadOp {
     static const auto kType = TYPE_UPLOADTYPEFACE;
     uint32_t fontId;
     RSpan<uint8_t> data;

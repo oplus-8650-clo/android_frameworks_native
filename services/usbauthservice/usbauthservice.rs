@@ -16,6 +16,7 @@
 
 use binder::ProcessState;
 use log::{debug, error};
+use rustutils::android::system_properties;
 use std::sync::{Arc, Mutex};
 use tokio_stream::{Stream, StreamExt};
 use ueventd::device::Device;
@@ -69,6 +70,9 @@ fn is_device_usb(device: &Device) -> bool {
     device.subsystem() == Some("usb".to_string())
 }
 
+// Read-only property designating whether the image is debuggable.
+const RO_DEBUGGABLE: &str = "ro.debuggable";
+
 /// Main function of the usb_auth crate.
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,7 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     debug!("UsbAuth service is starting...");
     let use_interactive_policy = usb_flags_lib_rust::enable_usb_host_authorization();
-    let device_manager = Arc::new(Mutex::new(UsbDeviceAuthManager::new(use_interactive_policy)?));
+    let debuggable = system_properties::read_bool(RO_DEBUGGABLE, false).unwrap_or(false);
+    let device_manager =
+        Arc::new(Mutex::new(UsbDeviceAuthManager::new(use_interactive_policy, debuggable)?));
 
     let (mut watcher, event_stream) = Watcher::new().await?;
 
@@ -217,6 +223,7 @@ mod tests {
             mock_etc.path(),
             mock_proc.path(),
             false,
+            false,
         )
         .unwrap();
         let manager = Arc::new(Mutex::new(manager));
@@ -247,6 +254,7 @@ mod tests {
             mock_sys.path(),
             mock_etc.path(),
             mock_proc.path(),
+            false,
             false,
         )
         .unwrap();
@@ -279,6 +287,7 @@ mod tests {
             mock_etc.path(),
             mock_proc.path(),
             false,
+            false,
         )
         .unwrap();
         let manager = Arc::new(Mutex::new(manager));
@@ -310,6 +319,7 @@ mod tests {
             mock_etc.path(),
             mock_proc.path(),
             false,
+            false,
         )
         .unwrap();
         let manager = Arc::new(Mutex::new(manager));
@@ -339,6 +349,7 @@ mod tests {
             mock_sys.path(),
             mock_etc.path(),
             mock_proc.path(),
+            false,
             false,
         )
         .unwrap();

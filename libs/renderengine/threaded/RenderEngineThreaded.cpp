@@ -27,6 +27,7 @@
 
 #include <android-base/stringprintf.h>
 #include <common/FlagManager.h>
+#include <common/ThreadStateCrashLogger.h>
 #include <common/trace.h>
 #include <private/gui/SyncFeatures.h>
 #include <processgroup/processgroup.h>
@@ -110,6 +111,8 @@ void RenderEngineThreaded::threadMain(CreateInstanceFactory factory) NO_THREAD_S
         }
         return std::nullopt;
     };
+
+    ThreadStateCrashLogger stateLogger([this] { mRenderEngine->logStateForCrash(); });
 
     // process any tasks until shutdown
     while (mRunning) {

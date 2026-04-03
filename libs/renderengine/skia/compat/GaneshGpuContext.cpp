@@ -102,6 +102,10 @@ bool GaneshGpuContext::isAbandonedOrDeviceLost() {
     return mGrContext->abandoned();
 }
 
+bool GaneshGpuContext::supportsProtectedContent() const {
+    return mGrContext->supportsProtectedContent();
+}
+
 void GaneshGpuContext::setResourceCacheLimit(size_t maxResourceBytes) {
     mGrContext->setResourceCacheLimit(maxResourceBytes);
 }
@@ -119,8 +123,14 @@ void GaneshGpuContext::resetContextIfApplicable() {
     mGrContext->resetContext(); // Only applicable to GL
 };
 
-void GaneshGpuContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
-    mGrContext->dumpMemoryStatistics(traceMemoryDump);
+void GaneshGpuContext::reportStatsForEachCache(
+        const std::vector<ResourcePair>& resourceMap,
+        std::function<void(SkiaMemoryReporter& reporter, const char* label,
+                           const size_t cacheLimit)>
+                reportStats) const {
+    SkiaMemoryReporter contextReporter(resourceMap, true);
+    mGrContext->dumpMemoryStatistics(&contextReporter);
+    reportStats(contextReporter, "context", mGrContext->getResourceCacheLimit());
 }
 
 } // namespace android::renderengine::skia

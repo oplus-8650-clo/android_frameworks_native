@@ -83,13 +83,6 @@ static std::string toString(const InputDeviceUsiVersion& v) {
     return base::StringPrintf("%d.%d", v.majorVersion, v.minorVersion);
 }
 
-template <typename T>
-inline static void swap(T& a, T& b) {
-    T temp = a;
-    a = b;
-    b = temp;
-}
-
 inline static int32_t signExtendNybble(int32_t value) {
     return value >= 8 ? value - 16 : value;
 }
@@ -2441,7 +2434,7 @@ void TouchInputMapper::assignPointerIds(const RawState& last, RawState& current)
                 break;
             }
 
-            swap(heap[parentIndex], heap[childIndex]);
+            std::swap(heap[parentIndex], heap[childIndex]);
             parentIndex = childIndex;
         }
     }
@@ -2487,7 +2480,7 @@ void TouchInputMapper::assignPointerIds(const RawState& last, RawState& current)
                         break;
                     }
 
-                    swap(heap[parentIndex], heap[childIndex]);
+                    std::swap(heap[parentIndex], heap[childIndex]);
                     parentIndex = childIndex;
                 }
 

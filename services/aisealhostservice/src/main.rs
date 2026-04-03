@@ -34,6 +34,7 @@ use aisealhostservice_aidl::aidl::android::aiseal::IAiSealHostService::{
 use android_os_permissions_aidl::aidl::android::os::IPermissionController::IPermissionController;
 use android_system_virtualizationcommon::aidl::android::system::virtualizationcommon::{
     ICEStoreKEK::{BnCEStoreKEK, ICEStoreKEK},
+    IGuestAgent::IGuestAgent,
 };
 use android_system_virtualizationservice::aidl::android::system::virtualizationservice::{
     CpuOptions::CpuOptions,
@@ -51,7 +52,7 @@ use binder::{
     ProcessState, Strong, ThreadState,
 };
 use log::{error, info, warn};
-use rustutils::android::{users::AID_ROOT, users::AID_SYSTEM};
+use rustutils::android::{system_properties, users::AID_ROOT, users::AID_SYSTEM};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -62,7 +63,7 @@ use std::time::Duration;
 use vmclient::{DeathReason, ErrorCode, VmInstance, VmWaitError};
 
 const LOG_TAG: &str = "AiSealHostService";
-const AISEAL_VM_START_TIMEOUT: Duration = Duration::from_secs(61);
+const AISEAL_VM_START_TIMEOUT: Duration = Duration::from_secs(244);
 
 fn handle_vm_death(
     reason: DeathReason,
@@ -86,6 +87,14 @@ fn handle_vm_death(
             Ok(())
         }
     }
+}
+
+fn is_shutting_down() -> Result<bool> {
+    let shutdown_sysprop_opt = system_properties::read("sys.shutdown.requested")?;
+    if let Some(shutdown_sysprop) = shutdown_sysprop_opt {
+        return Ok(!shutdown_sysprop.is_empty());
+    }
+    Ok(false)
 }
 
 fn try_main() -> Result<()> {
@@ -142,7 +151,7 @@ fn try_main() -> Result<()> {
         debugLevel: if aiseal_config.debuggable { DebugLevel::FULL } else { DebugLevel::NONE },
         protectedVm: aiseal_config.protected_vm,
         memoryMib: aiseal_config.memory_mib,
-        cpuOptions: CpuOptions { cpuTopology: CpuTopology::MatchHost(true) },
+        cpuOptions: CpuOptions { cpuTopology: CpuTopology::CpuCount(1) },
         customConfig: custom_config,
         ..Default::default()
     });
@@ -194,9 +203,24 @@ fn try_main() -> Result<()> {
     let host_service = AiSealHostService::new_binder(pm, instance.clone(), aiseal_config);
     add_service("aiseal_host", host_service.as_binder()).context("Registering host service")?;
 
-    let internal_service = AiSealInternalService::new_binder(instance);
+    let internal_service = AiSealInternalService::new_binder(instance.clone());
     add_service("aiseal_internal", internal_service.as_binder())
         .context("Registering internal service")?;
+
+    std::thread::spawn(move || {
+        let reason = instance.wait_for_death();
+        if is_shutting_down().unwrap_or(false) {
+            info!("VM died during shutdown, ignoring");
+            return;
+        }
+        error!("VM has unexpectedly died: {:?}", reason);
+        if let Err(e) =
+            handle_vm_death(reason, virtualization_service.as_ref(), &instance_id, &vm_dir)
+        {
+            error!("Failed to handle VM death: {:?}", e);
+        }
+        std::process::exit(1);
+    });
 
     info!("Registered services, joining threadpool");
     ProcessState::join_thread_pool();
@@ -359,7 +383,6 @@ impl IAiSealHostService for AiSealHostService {
 }
 
 /// Implementation of the `IAiSealInternalService` AIDL interface.
-#[allow(dead_code)]
 struct AiSealInternalService {
     instance: Arc<VmInstance>,
 }
@@ -373,22 +396,36 @@ impl AiSealInternalService {
             BinderFeatures::default(),
         )
     }
+
+    fn get_guest_agent(&self) -> binder::Result<Strong<dyn IGuestAgent>> {
+        let Some(guest_agent) = self.instance.vm.getGuestAgent()? else {
+            return Err(anyhow!("No guest agent"))
+                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
+        };
+        Ok(guest_agent)
+    }
 }
 
 impl IAiSealInternalService for AiSealInternalService {
     fn onUserUnlocking(&self, user_id: i32, kek_file: &str) -> binder::Result<()> {
         info!("onUserUnlocking {user_id}");
-        let Some(guest_agent) = self.instance.vm.getGuestAgent()? else {
-            return Err(anyhow!("No guest agent"))
-                .or_binder_exception(ExceptionCode::ILLEGAL_STATE);
-        };
         let kek = CEStoreKEK::new_binder(kek_file);
-        guest_agent.userUnlocked(user_id, &kek)
+        self.get_guest_agent()?.userUnlocked(user_id, &kek)
     }
 
     fn onUserStopped(&self, user_id: i32) -> binder::Result<()> {
         info!("onUserStopped {user_id}");
-        Ok(())
+        self.get_guest_agent()?.userLocked(user_id)
+    }
+
+    fn onUserRemoved(&self, user_id: i32) -> binder::Result<()> {
+        info!("onUserRemoved {user_id}");
+        self.get_guest_agent()?.userRemoved(user_id)
+    }
+
+    fn trimMemory(&self) -> binder::Result<()> {
+        info!("Internal request to trim memory of AiSeal VM");
+        self.get_guest_agent()?.trimAsync()
     }
 }
 

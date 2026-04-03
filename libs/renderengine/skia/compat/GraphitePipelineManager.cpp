@@ -868,7 +868,8 @@ void GraphitePipelineManager::PrecompilePipelines(
                        create_hw_image_precompile_shader(),
                        SkBlendMode::kSrcOver,
                        /* paintColorIsOpaque= */ true,
-                       /* matrixColorFilter= */ true),
+                       /* matrixColorFilter= */ true,
+                       /* dither= */ false),
           DrawTypeFlags::kAnalyticRRect,
           kRGBA_1_D_SRGB },
 
@@ -876,7 +877,8 @@ void GraphitePipelineManager::PrecompilePipelines(
                        create_hw_image_precompile_shader(),
                        SkBlendMode::kSrcOver,
                        /* paintColorIsOpaque= */ false,
-                       /* matrixColorFilter= */ true),
+                       /* matrixColorFilter= */ true,
+                       /* dither= */ false),
           DrawTypeFlags::kAnalyticRRect,
           kRGBA_1_D_SRGB },
 
@@ -1004,6 +1006,36 @@ void GraphitePipelineManager::PrecompilePipelines(
         { Builder().transparent().blend().srcOver(),
           DrawTypeFlags::kNonAAFillRect,
           kRGBA_1_D },
+
+        { LinearEffect(effectManager, k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+                       create_hw_image_precompile_shader(),
+                       SkBlendMode::kSrcOver,
+                       /* paintColorIsOpaque= */ true,
+                       /* matrixColorFilter= */ true,
+                       /* dither= */ false,
+                       SkColorSpace::MakeSRGBLinear()),
+          DrawTypeFlags::kAnalyticRRect,
+          kRGBA_1_D_SRGB },
+
+        { LinearEffect(effectManager, k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+                       create_hw_image_precompile_shader(),
+                       SkBlendMode::kSrcOver,
+                       /* paintColorIsOpaque= */ false,
+                       /* matrixColorFilter= */ true,
+                       /* dither= */ false,
+                       SkColorSpace::MakeSRGBLinear()),
+          DrawTypeFlags::kAnalyticRRect,
+          kRGBA_1_D_SRGB },
+
+        { LinearEffect(effectManager, k0x188a0000__DISPLAY_P3__false__0x90a0000__Shader,
+                       create_hw_image_precompile_shader(),
+                       SkBlendMode::kSrcOver,
+                       /* paintColorIsOpaque= */ true,
+                       /* matrixColorFilter= */ true,
+                       /* dither= */ true,
+                       SkColorSpace::MakeSRGBLinear()),
+          DrawTypeFlags::kAnalyticRRect,
+          kRGBA_1_D_SRGB },
 
 #if RE_ENABLE_EXTERNAL_FORMAT_PRECOMPILES
         // 238 Full range (kHIAAO4AAAAAAAAA) block ----------------

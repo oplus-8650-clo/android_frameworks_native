@@ -35,6 +35,9 @@ struct DisplayModeRequest {
 
     // Whether the request is expected to happen seamlessly (without visual artifact).
     bool seamless = false;
+
+    // The synchronization token for the request, if applicable.
+    sp<IBinder> displaySynchronizationToken;
 };
 
 inline bool operator==(const DisplayModeRequest& lhs, const DisplayModeRequest& rhs) {
