@@ -1440,33 +1440,6 @@ INSTANTIATE_TEST_SUITE_P(PerRenderEngineType, RenderEngineTest,
                                          std::make_shared<GaneshVkRenderEngineFactory>(),
                                          std::make_shared<GraphiteVkRenderEngineFactory>()));
 
-TEST_P(RenderEngineTest, drawLayers_extenededSrgbWithGammaOetfDoesNotCrush) {
-    if (!GetParam()->apiSupported()) {
-        GTEST_SKIP();
-    }
-    initializeRenderEngine();
-
-    renderengine::DisplaySettings settings;
-    settings.physicalDisplay = fullscreenRect();
-    settings.clip = fullscreenRect();
-    settings.outputDataspace = ui::Dataspace::V0_SRGB;
-    settings.dimmingStage = aidl::android::hardware::graphics::composer3::DimmingStage::GAMMA_OETF;
-
-    renderengine::LayerSettings layer;
-    layer.geometry.boundaries = fullscreenRect().toFloatRect();
-    layer.source.solidColor = half3(0.01f, 0.0f, 0.0f);
-    layer.sourceDataspace = ui::Dataspace::V0_SCRGB_LINEAR;
-    layer.alpha = 1.0f;
-
-    std::vector<renderengine::LayerSettings> layers;
-    layers.push_back(layer);
-
-    invokeDraw(settings, layers);
-
-    // An sRGB OETF instead would be ~25
-    expectBufferColor(fullscreenRect(), 31, 0, 0, 255, 1);
-}
-
 TEST_P(RenderEngineTest, drawLayers_noLayersToDraw) {
     if (!GetParam()->apiSupported()) {
         GTEST_SKIP();

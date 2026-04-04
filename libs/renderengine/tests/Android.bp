@@ -36,7 +36,6 @@ cc_test {
         "PipelineCallbackHandlerTest.cpp",
         "RenderEngineTest.cpp",
         "RenderEngineThreadedTest.cpp",
-        "SharedSkiaDiskCacheTest.cpp",
     ],
     include_dirs: [
         "external/skia/src/gpu",

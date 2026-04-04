@@ -245,7 +245,7 @@ sk_sp<SkShader> RuntimeEffectManager::createLinearEffectShader(
                         ->makeLinearGamma();
         sk_sp<SkColorSpace> outputSpace = nullptr;
         if ((linearEffect.fakeOutputDataspace & HAL_DATASPACE_TRANSFER_MASK)) {
-            outputSpace = renderengine::toSkColorSpace(linearEffect.outputDataspace, options);
+            outputSpace = renderengine::toSkColorSpace(linearEffect.fakeOutputDataspace, options);
         }
         shader = shader->makeWithWorkingColorSpace(inputSpace, outputSpace);
     }

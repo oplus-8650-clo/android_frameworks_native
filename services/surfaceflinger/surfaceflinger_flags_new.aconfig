@@ -289,13 +289,6 @@ flag {
 } # hwc_buffer_override_skip
 
 flag {
-  name: "layer_caching_desktop_rollout"
-  namespace: "core_graphics"
-  description: "R/W flag to enable layer caching for Desktop devices, IF the debug.sf.layer_caching_desktop_rollout_optin sysprop is set to true."
-  bug: "488006412"
-} # layer_caching_desktop_rollout
-
-flag {
   name: "local_tonemap_screenshots"
   namespace: "core_graphics"
   description: "Enables local tonemapping when capturing screenshots"
