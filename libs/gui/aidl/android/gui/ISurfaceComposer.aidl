@@ -60,11 +60,6 @@ import android.gui.WindowInfosListenerInfo;
 /** @hide */
 interface ISurfaceComposer {
 
-    enum VsyncSource {
-        eVsyncSourceApp = 0,
-        eVsyncSourceSurfaceFlinger = 1
-    }
-
     enum EventRegistration {
         modeChanged = 1 << 0,
         frameRateOverride = 1 << 1,
@@ -91,7 +86,7 @@ interface ISurfaceComposer {
      *     surface creation, see ISurfaceComposerClient::createSurface. Set to null if no layer
      *     association should be made.
      */
-    @nullable IDisplayEventConnection createDisplayEventConnection(VsyncSource vsyncSource,
+    @nullable IDisplayEventConnection createDisplayEventConnection(
             EventRegistration eventRegistration, @nullable IBinder layerHandle);
 
     /**
@@ -492,7 +487,7 @@ interface ISurfaceComposer {
      * Associates the given IBinder token with the AGSL shaderString. After registration the
      * IBinder token can be used to apply shader effects to layers.
      */
-    void registerShader(IBinder token, @utf8InCpp String debugName, @utf8InCpp String shaderString);
+    void registerShader(IBinder token, @utf8InCpp String uniqueShaderName, @utf8InCpp String shaderString);
 
     /**
      * Removes the association between the given IBinder token and the AGSL shaderString.
@@ -688,20 +683,4 @@ interface ISurfaceComposer {
      * Requires root
      */
      void resetForcedPacesetter();
-
-    /**
-     * Registers a list of graphic buffers with SurfaceFlinger.
-     * This is used to notify SurfaceFlinger about buffers that will be used
-     * in the future, so that it can prepare them for use by out-of-process
-     * rendering.
-     */
-    oneway void registerGraphicBuffers(in GraphicBuffersRegisterInfo info);
-
-    /**
-     * Unregisters a list of graphic buffers from SurfaceFlinger.
-     * This is used to notify SurfaceFlinger that the buffers are no longer
-     * needed, so that it can release any resources associated with them for
-     * out-of-process rendering.
-     */
-    oneway void unregisterGraphicBuffers(in GraphicBuffersUnregisterInfo info);
 }

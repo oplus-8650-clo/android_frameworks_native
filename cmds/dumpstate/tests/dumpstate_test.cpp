@@ -37,6 +37,17 @@
 #include <unistd.h>
 #include <ziparchive/zip_archive.h>
 
+#if defined(__BIONIC__)
+#include <sys/pidfd.h>
+#else
+// Not available in glibc.
+// See: https://man7.org/linux/man-pages/man2/pidfd_open.2.html#SYNOPSIS
+#include <sys/syscall.h>
+static int pidfd_open(pid_t pid, unsigned int flags) {
+    return syscall(SYS_pidfd_open, pid, flags);
+}
+#endif
+
 #include <filesystem>
 #include <thread>
 
@@ -167,6 +178,16 @@ class DumpOptionsTest : public Test {
     Dumpstate::DumpOptions options_;
     android::base::unique_fd fd;
 };
+
+// Ensure that we're running on a kernel which supports the syscall pidfd_open. At the
+// time of this writing, all supported kernels should have this syscall.
+// See: https://source.android.com/docs/core/architecture/kernel/android-common
+TEST(DumpStateTest, PidFdOpenSupported) {
+    android::base::unique_fd self(pidfd_open(getpid(), 0));
+    // This shouldn't happen on any systems that are likely to run this test.
+    EXPECT_NE(errno, ENOSYS) << "pidfd_open is not supported on this system";
+    EXPECT_GT(self.get(), 0);
+}
 
 TEST_F(DumpOptionsTest, InitializeNone) {
     // clang-format off
@@ -1400,22 +1421,25 @@ class DumpstateUtilTest : public DumpstateBaseTest {
         ReadFileToString(path_, &out);
     }
 
-    void CreateFd(const std::string& name) {
+    void CreateFd(const std::string& name, android::base::unique_fd* fd_out = nullptr) {
         path_ = kTestDataPath + name;
         MYLOGD("Creating fd for file %s\n", path_.c_str());
 
-        fd = TEMP_FAILURE_RETRY(open(path_.c_str(),
-                                     O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
-                                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH));
-        ASSERT_GE(fd, 0) << "could not create FD for path " << path_;
+        if (fd_out == nullptr) {
+            fd_out = &fd;
+        }
+        fd_out->reset(TEMP_FAILURE_RETRY(open(path_.c_str(),
+                                          O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
+                                          S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)));
+        ASSERT_GE(fd_out->get(), 0) << "could not create FD for path " << path_;
     }
 
     // Runs a command into the `fd` and capture `stderr`.
     int RunCommand(const std::string& title, const std::vector<std::string>& full_command,
                    const CommandOptions& options = CommandOptions::DEFAULT) {
         CaptureStderr();
-        int status = RunCommandToFd(fd, title, full_command, options);
-        close(fd);
+        int status = RunCommandToFd(fd.get(), title, full_command, options);
+        fd.reset();
 
         CaptureFdOut();
         err = GetCapturedStderr();
@@ -1425,15 +1449,15 @@ class DumpstateUtilTest : public DumpstateBaseTest {
     // Dumps a file and into the `fd` and `stderr`.
     int DumpFile(const std::string& title, const std::string& path) {
         CaptureStderr();
-        int status = DumpFileToFd(fd, title, path);
-        close(fd);
+        int status = DumpFileToFd(fd.get(), title, path);
+        fd.reset();
 
         CaptureFdOut();
         err = GetCapturedStderr();
         return status;
     }
 
-    int fd;
+    android::base::unique_fd fd;
 
     // 'fd` output and `stderr` from the last command ran.
     std::string out, err;
@@ -1571,7 +1595,7 @@ TEST_F(DumpstateUtilTest, RunCommandIsKilled) {
     CaptureStderr();
 
     std::thread t([=]() {
-        EXPECT_EQ(SIGTERM, RunCommandToFd(fd, "", {kSimpleCommand, "--pid", "--sleep", "20"},
+        EXPECT_EQ(SIGTERM, RunCommandToFd(fd.get(), "", {kSimpleCommand, "--pid", "--sleep", "20"},
                                           CommandOptions::WithTimeout(100).Always().Build()));
     });
 
@@ -1603,6 +1627,28 @@ TEST_F(DumpstateUtilTest, RunCommandIsKilled) {
                               " --pid --sleep 20' failed: killed by signal 15\n"));
     EXPECT_THAT(err, StrEq("*** command '" + kSimpleCommand +
                            " --pid --sleep 20' failed: killed by signal 15\n"));
+}
+
+TEST_F(DumpstateUtilTest, CorrectCommandIsTerminated) {
+    CreateFd("RunCommand1Terminates.txt");
+    android::base::unique_fd t2fd;
+    CreateFd("RunCommand2Terminates.txt", &t2fd);
+
+    std::thread t1([=]() {
+        EXPECT_EQ(0, RunCommandToFd(fd.get(), "", {kSimpleCommand, "--pid", "--sleep", "5"},
+                                          CommandOptions::WithTimeout(100).Always().Build()));
+    });
+
+    std::thread t2([=, &t2fd]() {
+        EXPECT_EQ(0, RunCommandToFd(t2fd.get(), "", {kSimpleCommand, "--sleep", "10"},
+                                    CommandOptions::WithTimeout(100).Always().Build()));
+    });
+
+    // T1 and T2 just need to exit peacefully without getting forcibly terminated.
+    // On some platforms, we observed that terminating t1 would get signaled to the process
+    // running in t2, leading to forced termination of the forked process in t2.
+    t1.join();
+    t2.join();
 }
 
 TEST_F(DumpstateUtilTest, RunCommandAsRootUserBuild) {

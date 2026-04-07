@@ -1213,9 +1213,9 @@ status_t SurfaceComposerClient::Transaction::apply(bool synchronous, bool oneWay
     }
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     QtiDolphinWrapper* qtiDolphinWrapper = QtiDolphinWrapper::qtiGetDolphinWrapper();
+// QTI_END: 2024-05-15: Performance: native: smart touch consuming
     if (qtiDolphinWrapper && QtiDolphinWrapper::sQuickTouch &&
             qtiDolphinWrapper->qtiDolphinFilterBuffer) {
-// QTI_END: 2024-05-15: Performance: native: smart touch consuming
         qtiDolphinWrapper->qtiDolphinFilterBuffer(mState.mIsAutoTimestamp, mState.mDesiredPresentTime, mState.mFlags);
 // QTI_BEGIN: 2024-05-15: Performance: native: smart touch consuming
     }
@@ -2614,6 +2614,7 @@ SurfaceComposerClient::Transaction::setRenderCommandBufferFrameId(const sp<Surfa
     }
     s->what |= layer_state_t::eRenderCommandBufferFrameIdChanged;
     s->renderCommandBufferFrameId = frameId;
+    s->renderCommandBufferFrameIdQueueTime = systemTime();
     return *this;
 }
 
@@ -3408,14 +3409,14 @@ status_t SurfaceComposerClient::removeActivePictureListener(
     return statusTFromBinderStatus(status);
 }
 
-sp<IBinder> SurfaceComposerClient::registerShader(const std::string& debugName,
+sp<IBinder> SurfaceComposerClient::registerShader(const std::string& uniqueShaderName,
                                                   const std::string& shaderString) {
     if (!com_android_graphics_libgui_flags_composition_shaders()) {
         return nullptr;
     }
     sp<IBinder> token = sp<BBinder>::make();
     binder::Status status =
-            ComposerServiceAIDL::getComposerService()->registerShader(token, debugName,
+            ComposerServiceAIDL::getComposerService()->registerShader(token, uniqueShaderName,
                                                                       shaderString);
     return status.isOk() ? token : nullptr;
 }

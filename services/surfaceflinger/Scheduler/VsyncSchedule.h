@@ -132,7 +132,7 @@ private:
     friend class android::VsyncScheduleTest;
     friend class android::fuzz::SchedulerFuzzer;
 
-    static TrackerPtr createTracker(ftl::NonNull<DisplayModePtr> modePtr);
+    static TrackerPtr createTracker(ftl::NonNull<DisplayModePtr> modePtr, FeatureFlags features);
     static DispatchPtr createDispatch(TrackerPtr);
     static ControllerPtr createController(PhysicalDisplayId, VsyncTracker&, FeatureFlags);
 

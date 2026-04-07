@@ -45,7 +45,7 @@ class BufferItemConsumerTest : public ::testing::Test {
         : public BufferItemConsumer::BufferFreedListener {
         explicit BufferFreedListener(BufferItemConsumerTest* test)
             : mTest(test) {}
-        void onBufferFreed(const wp<GraphicBuffer>& /* gBuffer */) override {
+        void onBufferFreed(const sp<GraphicBuffer>& /* gBuffer */) override {
             mTest->HandleBufferFreed();
         }
         BufferItemConsumerTest* mTest;
@@ -525,4 +525,39 @@ TEST_F(BufferItemConsumerTest, DiscardFreeBuffers_TriggersCallback) {
     EXPECT_EQ(10, freedCount);
 }
 
-}  // namespace android
+TEST_F(BufferItemConsumerTest, TriggerBufferFreed_UsageChange) {
+    auto [consumer, surface] = BufferItemConsumer::create(kUsage, 3);
+
+    struct MockFreedListener : public BufferItemConsumer::BufferFreedListener {
+        int mCount = 0;
+        void onBufferFreed(const sp<GraphicBuffer>& /* graphicBuffer */) override { mCount++; }
+    };
+    sp<MockFreedListener> listener = sp<MockFreedListener>::make();
+    consumer->setBufferFreedListener(listener);
+
+    ASSERT_EQ(OK, surface->connect(NATIVE_WINDOW_API_CPU, nullptr));
+
+    // 1. Cycle one buffer to put it in the free list
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+    ASSERT_EQ(OK, surface->queueBuffer(buffer, fence));
+
+    BufferItem item;
+    ASSERT_EQ(OK, consumer->acquireBuffer(&item, 0));
+    ASSERT_EQ(OK, consumer->releaseBuffer(item));
+
+    ASSERT_EQ(0, listener->mCount);
+
+    // 2. Trigger usage change on the producer side.
+    native_window_set_usage(surface.get(), kUsage | GRALLOC_USAGE_SW_WRITE_OFTEN);
+
+    // This dequeue should trigger reallocation because of usage change,
+    // which should notify the consumer via onBuffersReleased -> onBufferFreed.
+    ASSERT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+
+    // 3. Verify consumer was notified
+    EXPECT_EQ(1, listener->mCount);
+}
+
+} // namespace android

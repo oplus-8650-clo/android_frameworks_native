@@ -41,7 +41,9 @@ struct RPointer {
     T* operator->() { return get(); }
     const T* operator->() const { return get(); }
 
-    void set(const T* p) { offset = p ? ((uint8_t*)p) - ((uint8_t*)this) : 0; }
+    void set(const T* p) {
+        offset = p ? static_cast<int32_t>(((const uint8_t*)p) - ((const uint8_t*)this)) : 0;
+    }
     void operator=(const T* p) { set(p); }
 
     void operator=(const RPointer& other) { set(other.get()); }

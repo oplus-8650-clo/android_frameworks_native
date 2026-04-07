@@ -67,6 +67,7 @@ cc_test {
         "InputProcessorConverter_test.cpp",
         "InputProcessor_test.cpp",
         "InputReader_test.cpp",
+        "InputReaderTracer_test.cpp",
         "InputTraceSession.cpp",
         "InputTracingTest.cpp",
         "InstrumentedInputReader.cpp",

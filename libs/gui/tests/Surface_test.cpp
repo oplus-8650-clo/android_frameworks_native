@@ -729,6 +729,14 @@ public:
         return NO_ERROR;
     }
 
+    status_t registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo&) override {
+        return NO_ERROR;
+    }
+
+    status_t unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo&) override {
+        return NO_ERROR;
+    }
+
 protected:
     IBinder* onAsBinder() override { return nullptr; }
 
@@ -743,9 +751,8 @@ public:
     void setSupportsPresent(bool supportsPresent) { mSupportsPresent = supportsPresent; }
 
     binder::Status bootFinished() override { return binder::Status::ok(); }
-
     binder::Status createDisplayEventConnection(
-            VsyncSource /*vsyncSource*/, EventRegistration /*eventRegistration*/,
+            gui::ISurfaceComposer::EventRegistration /*eventRegistration*/,
             const sp<IBinder>& /*layerHandle*/,
             sp<gui::IDisplayEventConnection>* outConnection) override {
         *outConnection = nullptr;
@@ -1113,16 +1120,6 @@ public:
     binder::Status forcePacesetter(int64_t) { return binder::Status::ok(); }
 
     binder::Status resetForcedPacesetter() { return binder::Status::ok(); }
-
-    binder::Status registerGraphicBuffers(
-            const gui::GraphicBuffersRegisterInfo& /*info*/) override {
-        return binder::Status::ok();
-    }
-
-    binder::Status unregisterGraphicBuffers(
-            const gui::GraphicBuffersUnregisterInfo& /*info*/) override {
-        return binder::Status::ok();
-    }
 
     binder::Status registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
                                   const std::string& shaderString) override {

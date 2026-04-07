@@ -1064,29 +1064,32 @@ void Cache::primeShaderCache(SkiaRenderEngine* renderengine, PrimeCacheConfig co
     }
 }
 
-static void maybeSetDiskCacheFilename(uirenderer::skiapipeline::ShaderCache& cache,
-                                      const char* filename) {
+static bool isCacheDirAvailable() {
     if (FlagManager::getInstance().shader_disk_cache()) {
         auto before = systemTime();
         SFTRACE_NAME("Initializing disk cache");
         if (base::WaitForProperty(kCacheAvailableProp, "1", std::chrono::seconds(5))) {
             auto after = systemTime();
             ALOGD("Waited %.4fms for disk to be ready", (after - before) / 1000000.0f);
-            egl_set_cache_filename(kEglShaderCachePath);
-            cache.setFilename(filename);
+            return true;
         } else {
             ALOGW("Timeout waiting for shader disk cache location");
         }
     }
+
+    return false;
 }
 
 void Cache::initializeGaneshDiskCache() {
     static bool sGaneshInitialized = false;
 
-    auto& cache = uirenderer::skiapipeline::ShaderCache::get(
-            renderengine::RenderEngine::SkiaBackend::Ganesh);
     if (!sGaneshInitialized) {
-        maybeSetDiskCacheFilename(cache, kSkiaShaderCachePath);
+        if (isCacheDirAvailable()) {
+            egl_set_cache_filename(kEglShaderCachePath);
+            auto& cache = uirenderer::skiapipeline::ShaderCache::get(
+                    renderengine::RenderEngine::SkiaBackend::Ganesh);
+            cache.setFilename(kSkiaShaderCachePath);
+        }
         sGaneshInitialized = true;
     }
 }
@@ -1094,10 +1097,12 @@ void Cache::initializeGaneshDiskCache() {
 void Cache::initializeGraphiteDiskCache() {
     static bool sGraphiteInitialized = false;
 
-    auto& cache = uirenderer::skiapipeline::ShaderCache::get(
-            renderengine::RenderEngine::SkiaBackend::Graphite);
     if (!sGraphiteInitialized) {
-        maybeSetDiskCacheFilename(cache, kSkiaPersistentPipelinesPath);
+        if (isCacheDirAvailable()) {
+            auto& cache = uirenderer::skiapipeline::ShaderCache::get(
+                    renderengine::RenderEngine::SkiaBackend::Graphite);
+            cache.setFilename(kSkiaPersistentPipelinesPath);
+        }
         sGraphiteInitialized = true;
     }
 }

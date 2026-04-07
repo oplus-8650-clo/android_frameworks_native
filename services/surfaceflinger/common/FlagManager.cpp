@@ -128,7 +128,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate);
     DUMP_ACONFIG_FLAG(color_transform_translation);
     DUMP_ACONFIG_FLAG(configure_work_duration);
-    DUMP_ACONFIG_FLAG(deprecate_vsync_sf_v2);
     DUMP_ACONFIG_FLAG(disable_transparent_region_hint);
     DUMP_ACONFIG_FLAG(enable_color_correction_bugfix);
     DUMP_ACONFIG_FLAG(force_sdr_invalid_hdr_type);
@@ -138,7 +137,6 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_preview2_rollout);
     DUMP_ACONFIG_FLAG(graphite_renderengine_desktop_rollout);
-    DUMP_ACONFIG_FLAG(jank_classification_v2);
     DUMP_ACONFIG_FLAG(luts_api);
     DUMP_ACONFIG_FLAG(md_degrade_hdr);
     DUMP_ACONFIG_FLAG(mirror_uid_filtering);
@@ -151,6 +149,8 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(set_power_mode_async);
     DUMP_ACONFIG_FLAG(use_content_priority_for_jank_classification);
     DUMP_ACONFIG_FLAG(use_experimental_jank_classification);
+    DUMP_ACONFIG_FLAG(use_last_vsync_predict);
+    DUMP_ACONFIG_FLAG(vd_aware_scheduler);
 
     /// Trunk stable readonly flags ///
     /// IMPORTANT - please keep alphabetize to reduce merge conflicts
@@ -187,6 +187,7 @@ void FlagManager::dump(std::string& result) const {
     DUMP_ACONFIG_FLAG(stable_edid_ids);
     DUMP_ACONFIG_FLAG(synced_resolution_switch);
     DUMP_ACONFIG_FLAG(true_hdr_screenshots);
+    DUMP_ACONFIG_FLAG(virtual_display_content_filtering);
     DUMP_ACONFIG_FLAG(vulkan_renderengine);
     DUMP_ACONFIG_FLAG(wb_framebuffersurface2);
     DUMP_ACONFIG_FLAG(wb_virtualdisplay2);
@@ -303,6 +304,7 @@ FLAG_MANAGER_ACONFIG_FLAG(skip_invisible_windows_in_input, "");
 FLAG_MANAGER_ACONFIG_FLAG(stable_edid_ids, "debug.sf.stable_edid_ids")
 FLAG_MANAGER_ACONFIG_FLAG(synced_resolution_switch, "");
 FLAG_MANAGER_ACONFIG_FLAG(true_hdr_screenshots, "debug.sf.true_hdr_screenshots");
+FLAG_MANAGER_ACONFIG_FLAG(virtual_display_content_filtering, "");
 FLAG_MANAGER_ACONFIG_FLAG(vulkan_renderengine, "debug.renderengine.vulkan")
 FLAG_MANAGER_ACONFIG_FLAG(wb_framebuffersurface2, "");
 FLAG_MANAGER_ACONFIG_FLAG(wb_virtualdisplay2, "");
@@ -318,7 +320,6 @@ FLAG_MANAGER_ACONFIG_FLAG(bugfix_resize_virtual_display_surfaces, "");
 FLAG_MANAGER_ACONFIG_FLAG(bugfix_virtual_display_refresh_rate, "");
 FLAG_MANAGER_ACONFIG_FLAG(color_transform_translation, "");
 FLAG_MANAGER_ACONFIG_FLAG(configure_work_duration, "");
-FLAG_MANAGER_ACONFIG_FLAG(deprecate_vsync_sf_v2, "");
 FLAG_MANAGER_ACONFIG_FLAG(disable_transparent_region_hint,
                           "debug.sf.disable_transparent_region_hint");
 FLAG_MANAGER_ACONFIG_FLAG(enable_color_correction_bugfix, "");
@@ -329,7 +330,6 @@ FLAG_MANAGER_ACONFIG_FLAG(get_display_known_vsync_sample_enabled,
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_preview2_rollout, "");
 FLAG_MANAGER_ACONFIG_FLAG(graphite_renderengine_desktop_rollout, "");
-FLAG_MANAGER_ACONFIG_FLAG(jank_classification_v2, "debug.sf.jank_classification_v2")
 FLAG_MANAGER_ACONFIG_FLAG(md_degrade_hdr, "");
 FLAG_MANAGER_ACONFIG_FLAG(mirror_uid_filtering, "");
 FLAG_MANAGER_ACONFIG_FLAG(monitor_buffer_fences, "");
@@ -341,6 +341,8 @@ FLAG_MANAGER_ACONFIG_FLAG(refresh_rate_overlay_on_external_display, "")
 FLAG_MANAGER_ACONFIG_FLAG(set_power_mode_async, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_content_priority_for_jank_classification, "");
 FLAG_MANAGER_ACONFIG_FLAG(use_experimental_jank_classification, "");
+FLAG_MANAGER_ACONFIG_FLAG(use_last_vsync_predict, "debug.sf.use_last_vsync_predict");
+FLAG_MANAGER_ACONFIG_FLAG(vd_aware_scheduler, "");
 
 /// Trunk stable server (R/W) flags from outside SurfaceFlinger ///
 

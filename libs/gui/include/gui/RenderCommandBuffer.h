@@ -33,17 +33,14 @@ struct IPCRenderBufferOp {
     uint32_t type;
 };
 
-class RenderCommandBuffer {
-public:
-    RenderCommandBuffer() { memset(mBytes, 0, sizeof(mBytes)); }
-    ~RenderCommandBuffer() {}
+template <size_t Size>
+struct IpcArena {
+    IpcArena() { memset(mBytes, 0, sizeof(mBytes)); }
 
-    IPCRenderBufferOp* getOps() { return mHead.get(); }
+    uint8_t mBytes[Size];
+    size_t mUsed = 0;
 
-    // op must be allocated by this RenderCommandBuffer
-    void pushOp(IPCRenderBufferOp* op);
-
-    void reset();
+    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
 
     template <typename T>
     T* allocAligned(size_t count = 1) {
@@ -56,6 +53,38 @@ public:
         mUsed = aligned + allocationSize;
         return reinterpret_cast<T*>(ptr);
     }
+
+    void resetArena() { mUsed = 0; }
+};
+
+template <typename T, typename A>
+inline bool SetRSpan(RSpan<T>& span, A* allocator, const T* data, size_t count) {
+    span.data = allocator->template allocAligned<T>(count);
+    if (!span.data) {
+        return false;
+    }
+    span.size = count;
+    if (data) {
+        memcpy(span.data.get(), data, count * sizeof(T));
+    }
+    return true;
+}
+
+struct IpcRenderRegion;
+
+class RenderCommandBuffer : public IpcArena<RENDER_COMMAND_BUFFER_DEFAULT_SIZE> {
+public:
+    RenderCommandBuffer() {}
+    ~RenderCommandBuffer() {}
+
+    RPointer<IpcRenderRegion> mRegion;
+
+    IPCRenderBufferOp* getOps() { return mHead.get(); }
+
+    // op must be allocated by this RenderCommandBuffer
+    void pushOp(IPCRenderBufferOp* op);
+
+    void reset();
 
     bool dumpToFile(const char* filename) const;
     static RenderCommandBuffer* loadFromFile(const char* filename);
@@ -70,10 +99,6 @@ public:
         height = mHeight;
     }
 
-    uint8_t mBytes[RENDER_COMMAND_BUFFER_DEFAULT_SIZE];
-    size_t mUsed = 0;
-
-    static size_t roundUp(size_t n, size_t m) { return ((n + m - 1) / m) * m; }
     RPointer<IPCRenderBufferOp> mTail;
     RPointer<IPCRenderBufferOp> mHead;
     // These are somewhat awkward, and used to achieve compatibility with the buffer based geometry
@@ -83,23 +108,33 @@ public:
     int mHeight = 0;
 };
 
-template <typename T>
-inline bool SetRSpan(RSpan<T>& span, RenderCommandBuffer* commandBuffer, const T* data,
-                     size_t count) {
-    span.data = commandBuffer->allocAligned<T>(count);
-    if (!span.data) {
-        return false;
-    }
-    span.size = count;
-    if (data) {
-        memcpy(span.data.get(), data, count * sizeof(T));
-    }
-    return true;
-}
-
 struct IpcRenderRegion {
-    LocklessStaticQueue<RenderCommandBuffer, 8> mCommandBuffers;
+    LocklessStaticQueue<RenderCommandBuffer, 4> mCommandBuffers;
     std::atomic<uint64_t> mFrameNumber;
+
+    IpcArena<16 * 1024 * 1024> mArena;
+
+    template <typename T>
+    T* allocAligned(size_t count = 1) {
+        return mArena.allocAligned<T>(count);
+    }
+
+    RPointer<IPCRenderBufferOp> mUploadsHead;
+    RPointer<IPCRenderBufferOp> mUploadsTail;
+
+    void pushUploadCmd(IPCRenderBufferOp* cmd) {
+        assert(reinterpret_cast<const uint8_t*>(cmd) > mArena.mBytes &&
+               reinterpret_cast<const uint8_t*>(cmd) < mArena.mBytes + sizeof(mArena.mBytes));
+
+        if (mUploadsTail) {
+            mUploadsTail->next = cmd;
+        }
+        if (!mUploadsHead) {
+            mUploadsHead = cmd;
+        }
+        mUploadsTail = cmd;
+        cmd->next = nullptr;
+    }
 };
 
 } // namespace android

@@ -232,12 +232,12 @@ public:
     binder::Status copyAppDataPath(const std::optional<std::string>& uuid,
                                    const std::string& fromPath, const std::string& toPath,
                                    int32_t userId, int32_t appId, const std::string& seInfo,
-                                   int32_t flags,
+                                   int32_t flags, int32_t callerUid,
                                    const android::sp<IAppDataOperationCallback>& callback);
     binder::Status moveAppDataPath(const std::optional<std::string>& uuid,
                                    const std::string& fromPath, const std::string& toPath,
                                    int32_t userId, int32_t appId, const std::string& seInfo,
-                                   int32_t flags,
+                                   int32_t flags, int32_t callerUid,
                                    const android::sp<IAppDataOperationCallback>& callback);
 
 private:

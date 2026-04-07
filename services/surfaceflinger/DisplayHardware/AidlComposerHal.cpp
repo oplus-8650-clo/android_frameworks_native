@@ -1932,6 +1932,9 @@ Error AidlComposer::getReadbackBufferFence(Display display, int* outReleaseFence
 
 Error AidlComposer::getDisplayKnownVsyncSample(Display display,
                                                composer3::VsyncSample* outVsyncSample) {
+    if (mComposerInterfaceVersion < 5) {
+        return Error::UNSUPPORTED;
+    }
     const auto status = mAidlComposerClient->getDisplayKnownVsyncSample(translate<int64_t>(display),
                                                                         outVsyncSample);
     if (!status.isOk()) {

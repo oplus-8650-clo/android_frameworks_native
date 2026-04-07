@@ -399,20 +399,11 @@ TEST_F(InputChannelTest, DuplicateChannelAndAssertEqual) {
  * returning status WOULD_BLOCK. This can result in ANRs when not properly handled. Therefore it is
  * useful to understand the capacity of these sockets for various important messages, including
  * finished messages. The specific number of messages is determined by the socket buffer size and
- * size of the InputMessage, which this test determines by sending messages until sendMessage
- * return a non-OK status such as WOULD_BLOCK.
+ * effective size of InputMessages on the socket, which this test determines by sending
+ * messages until sendMessage return a non-OK status such as WOULD_BLOCK.
  *
- * Concretely, the send buffer and receive buffer of the socket (SO_SNDBUF and SO_RECVBUF) each have
- * a size of 65536 bytes (this is double what is defined as SOCKET_BUFFER_SIZE in InputTransport, as
- * the kernel accounts for SOCK_SEQPACKET metadata). In the case of a motion message, which occupies
- * the whole capacity of the InputMessage union, its effective size in the socket is the same as
- * InputMessage.size(), which is 2472 bytes. For sendMessage (send() under the hood), to return a
- * WOULD_BLOCK, the read buffer has to be full. This happens when both the receive buffer and send
- * buffer is full, meaning the effective capacity of the socket is 65536 bytes * 2 = 131072 bytes.
- * Therefore the expected number of messages to fill the socket is 131072 bytes / 2472 bytes = 53.
- *
- * Depending on the architecture and the type of message, the effective message size could differ,
- * requiring fewer or more messages to fill the socket.
+ * Depending on the hardware architecture, kernel, and the type of message, the effective message
+ * size could differ, requiring fewer or more messages to fill the socket's effective capacity.
  */
 TEST_F(InputChannelTest, FinishedMessageCapacityInSocket) {
     std::unique_ptr<InputChannel> serverChannel, clientChannel;
@@ -437,38 +428,43 @@ TEST_F(InputChannelTest, FinishedMessageCapacityInSocket) {
 /**
  * Similar to above, but for motion messages.
  *
- * The effective capacity depends on the kernel's memory allocation (sk_wmem_alloc),
- * which is heavily influenced by the slab allocator's power-of-two buckets and
- * hardware cache-line alignment.
+ * Effective capacity depends on `sk_wmem_alloc`. The kernel allocates memory using
+ * power-of-two slab buckets, padding structs to hardware cache lines (SMP_CACHE_BYTES).
  */
 TEST_F(InputChannelTest, MotionMessageCapacityInSocket) {
-    // Total footprint = slab_bucket(sk_buff) + slab_bucket(aligned payload + aligned tail).
+    // Total Footprint = slab_bucket(sk_buff) + slab_bucket(aligned_payload + tail).
     //
-    // 1. sk_buff bucket: The struct itself is 232 bytes, which the slab allocator
-    //    places into a 256-byte bucket. Overhead = 256 bytes.
-    // 2. Data bucket: Contains a 168-byte MotionMessage payload and a ~320-byte tail
-    //    struct (skb_shared_info). To prevent false sharing, the kernel aligns both
-    //    independently to the CPU's L1 cache line.
+    // 1. sk_buff bucket: ~232-248 bytes. Allocated from the 256-byte slab bucket.
+    // 2. Data bucket: 168-byte MotionMessage payload + `skb_shared_info` tail.
     //
-    // - 64-byte cache line (Modern ARM/x86):
-    //   ALIGN(168, 64) + ALIGN(320, 64) = 192 + 320 = 512 bytes.
-    //   Fits exactly into the 512-byte slab bucket.
-    //   Total Footprint: 256 (sk_buff) + 512 (data) = 768 bytes.
-    constexpr int kFootprint64ByteCacheLine = 768;
-    constexpr uint32_t kCapacity64ByteCacheLine = 87;
+    // Note: In most kernels, the payload is aligned to the L1 cache line,
+    // but the shinfo tail is added as a raw size. However, because the payload is
+    // aligned, the tail still begins on a fresh cache line boundary.
+    //
+    // Memory footprint branches based on alignment and kernel KABI padding:
+    //
+    // - 512-byte Data Bucket (Total Footprint: 768 bytes)
+    //   Condition: 64-byte alignment, standard 320-byte tail.
+    //   Calculation: ALIGN(168, 64) + 320 = 192 + 320 = 512 bytes.
+    //   Allocation: 256 (sk_buff) + 512 (data) = 768 bytes.
+    constexpr int kFootprint768Byte = 768;
+    constexpr uint32_t kCapacity768Byte = 87;
 
-    // - 128-byte cache line (Legacy ARM):
-    //   ALIGN(168, 128) + ALIGN(320, 128) = 256 + 384 = 640 bytes.
-    //   Overflows the 512-byte limit, forcing the use of a 1024-byte slab bucket.
-    //   Total Footprint: 256 (sk_buff) + 1024 (data) = 1280 bytes.
-    constexpr int kFootprint128ByteCacheLine = 1280;
-    constexpr uint32_t kCapacity128ByteCacheLine = 53;
+    // - 1024-byte Data Bucket (Total Footprint: 1280 bytes)
+    //   Condition: Padded >320-byte tail (e.g., 344-byte tail due to Android KABI).
+    //   Calculation: ALIGN(168, 64) + 344 = 192 + 344 = 536 bytes.
+    //   Overflow: Since 536 > 512, it overflows into the 1024-byte slab bucket
+    //   Allocation: 256 (sk_buff) + 1024 (data) = 1280 bytes.
+    constexpr int kFootprint1280Byte = 1280;
+    constexpr uint32_t kCapacity1280Byte = 53;
 
-    // Note: Smaller payloads like the 24-byte FinishedMessage maintain a 768-byte footprint
-    // across all architectures because ALIGN(24, 128) + ALIGN(320, 128) = 128 + 384 = 512 bytes.
+    // Note: 24-byte FinishedMessages maintain a 768-byte footprint globally.
+    // ALIGN(24, 64) + 344 = 64 + 344 = 408 bytes (fits the 512-byte bucket).
 
     std::unique_ptr<InputChannel> serverChannel, clientChannel;
-    ASSERT_EQ(OK, InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel));
+    status_t result =
+            InputChannel::openInputChannelPair("channel name", serverChannel, clientChannel);
+    ASSERT_EQ(OK, result) << "should have successfully opened a channel pair";
 
     int footprint = 0;
     uint32_t seq = 1;
@@ -500,15 +496,15 @@ TEST_F(InputChannelTest, MotionMessageCapacityInSocket) {
     ASSERT_EQ(WOULD_BLOCK, status)
             << "Expected sendMessage to return WOULD_BLOCK when the socket is full";
 
-    if (footprint == kFootprint64ByteCacheLine) {
-        ASSERT_EQ(seq, kCapacity64ByteCacheLine);
-    } else if (footprint == kFootprint128ByteCacheLine) {
-        ASSERT_EQ(seq, kCapacity128ByteCacheLine);
+    if (footprint == kFootprint768Byte) {
+        ASSERT_EQ(seq, kCapacity768Byte);
+    } else if (footprint == kFootprint1280Byte) {
+        ASSERT_EQ(seq, kCapacity1280Byte);
     } else {
         // If a future kernel changes the sk_buff layout or slab allocator rules,
         // we don't want to break the test. We just need to guarantee the socket
         // can still hold a safe minimum number of messages to prevent dropped inputs.
-        ASSERT_GE(seq, kCapacity128ByteCacheLine)
+        ASSERT_GE(seq, kCapacity1280Byte)
                 << "Unrecognized kernel footprint (" << footprint << " bytes). "
                 << "Socket capacity broke at " << seq << ", which is below the safe minimum";
     }

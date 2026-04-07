@@ -2814,7 +2814,6 @@ TEST_F(FrameTimelineTest, jankClassification_presentOnTimeDoesNotClassify_Experi
 }
 
 TEST_F(FrameTimelineTest, jankClassification_displayPowerChangeInProgress) {
-    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
     SET_FLAG_FOR_TEST(flags::use_experimental_jank_classification, true);
     // Layer specific increment
     EXPECT_CALL(*mTimeStats, incrementJankyFrames(_));
@@ -4382,10 +4381,9 @@ TEST_F(FrameTimelineTest, jankClassification_appVsyncResyncJitter) {
               JankType::AppResyncedJitter | JankType::SurfaceFlingerScheduling);
     EXPECT_EQ(surfaceFrame3->getFramePresentMetadata(), FramePresentMetadata::EarlyPresent);
 
-    const float w_s = std::log2((/*presentDelay*/ 10.f + /*expectedPresentDelta*/ 20.f) /
-                                /*expectedPresentDelta*/ 20.f);
-    const float w_f = std::sqrt(/*expectedPresentDelta*/ 20.f /
-                                static_cast<float>((120_Hz).getPeriodNsecs()));
+    const float w_s = std::log2((/*presentDelay*/ 10.f + /*interval*/ 10.f) /
+                                /*interval*/ 10.f);
+    const float w_f = std::sqrt(/*interval*/ 10.f / static_cast<float>((120_Hz).getPeriodNsecs()));
     EXPECT_FLOAT_EQ(*surfaceFrame3->getJankSeverityScore(), w_s * w_f);
 
     EXPECT_EQ(*surfaceFrame5->getJankType(), JankType::None);
@@ -4790,8 +4788,6 @@ TEST_F(FrameTimelineTest, surfaceFrameRenderRateUsingAppFrameRate) {
 }
 
 TEST_F(FrameTimelineTest, presviousSurfaceFrame) {
-    SET_FLAG_FOR_TEST(flags::jank_classification_v2, true);
-
     int64_t token1 = mTokenManager->generateTokenForPredictions({1, 1, 1});
     FrameTimelineInfo ftInfo1;
     ftInfo1.vsyncId = token1;

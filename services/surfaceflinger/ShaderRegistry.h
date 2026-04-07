@@ -32,7 +32,7 @@ public:
     // Override for IBinder::DeathRecipient
     void binderDied(const wp<IBinder>&) override EXCLUDES(mMutex);
 
-    bool registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+    bool registerShader(const sp<IBinder>& shaderToken, const std::string& uniqueShaderName,
                         const std::string& shaderString);
     void unregisterShader(const sp<IBinder>& shaderToken);
     sk_sp<SkRuntimeEffect> getShader(const sp<IBinder>& shaderToken);
@@ -46,7 +46,7 @@ private:
 
     struct RegisteredShader {
         sk_sp<SkRuntimeEffect> effect;
-        std::string debugName;
+        std::string uniqueShaderName;
     };
 
     std::unordered_map<wp<IBinder>, RegisteredShader, WpHash> mRegistry GUARDED_BY(mMutex);

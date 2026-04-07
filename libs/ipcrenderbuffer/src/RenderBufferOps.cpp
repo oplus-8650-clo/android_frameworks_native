@@ -18,7 +18,6 @@
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
 #include <SkColorFilter.h>
-#include <SkFontMgr.h>
 #include <SkSurface.h>
 
 #include "SkFontScanner_FreeType.h"
@@ -28,6 +27,9 @@
 
 #include <android/ipcrenderbuffer/RenderBufferOps.h>
 #include <android/ipcrenderbuffer/RenderBufferDebugUtils.h>
+
+#include <unordered_map>
+#include <unordered_set>
 
 #define DUMP_OPS 0
 // #define DUMP_OPS 1
@@ -189,7 +191,7 @@ void renderOpToCanvas(IPCServerResourceCache* cache, RenderCommandBuffer* buffer
                 break;
             }
             DrawTextBlobOp* co = (DrawTextBlobOp*)op;
-            co->draw(canvas, SkMatrix::I(), cache->fontManager);
+            co->draw(canvas, SkMatrix::I(), cache);
             break;
         }
         case TYPE_DRAWPATCH: {
@@ -315,6 +317,16 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
         ALOGE("Rendering command buffer");
     }
 
+    for (IPCRenderBufferOp* op = buffer->mRegion->mUploadsHead.get(); op; op = op->next) {
+        if (op->type == TYPE_UPLOADBITMAP) {
+            UploadBitmap* uo = (UploadBitmap*)op;
+            if (cache) uo->execute(*cache);
+        } else if (op->type == TYPE_UPLOADTYPEFACE) {
+            UploadTypeface* uo = (UploadTypeface*)op;
+            if (cache) uo->execute(*cache);
+        }
+    }
+
     SkMatrix rootMatrix = canvas->getTotalMatrix();
     SkRect rootClip = SkRect::Make(canvas->getDeviceClipBounds());
 
@@ -394,6 +406,17 @@ bool renderCommandBufferToCanvas(IPCServerResourceCache* cache, RenderCommandBuf
     if constexpr (DUMP_OPS) {
         ALOGE("Done rendering command buffer");
     }
+
+    for (IPCRenderBufferOp* op = buffer->mRegion->mUploadsHead.get(); op; op = op->next) {
+        if (op->type == TYPE_FREEBITMAP) {
+            FreeBitmap* fo = (FreeBitmap*)op;
+            if (cache) fo->execute(*cache);
+        }
+    }
+
+    buffer->mRegion->mUploadsHead = nullptr;
+    buffer->mRegion->mUploadsTail = nullptr;
+    buffer->mRegion->mArena.resetArena();
     return true;
 }
 
@@ -937,53 +960,52 @@ std::string DrawImageRectOp::toString() const {
     return "DrawImageRectOp";
 }
 
+struct SerializeTypefaceContext {
+    RenderCommandBuffer* commandBuffer;
+    IPCClientResourceCache* cache;
+};
+
 SkSerialReturnType serializeTypeFace(SkTypeface* tf, void* ctx) {
-    thread_local static std::vector<char> sTmpTypefaceStorage;
+    SerializeTypefaceContext* stc = reinterpret_cast<SerializeTypefaceContext*>(ctx);
+    RenderCommandBuffer* commandBuffer = stc->commandBuffer;
+    IPCClientResourceCache* cache = stc->cache;
 
-    SkString familyName;
-    tf->getFamilyName(&familyName);
+    uint32_t id = tf->uniqueID();
+    if (cache && cache->typefaces.count(id) == 0) {
+        cache->typefaces.insert(id);
+        auto data = tf->serialize(SkTypeface::SerializeBehavior::kDoIncludeData);
+        if (data) {
+            UploadTypeface::Create(commandBuffer->mRegion.get(), id, data.get());
+        }
+    }
 
-    // We have to do this because skia wants to do 2 copies
-    // Ideally we should have a LinearAllocator API if this is not one-off.
-    size_t nameSize = familyName.size() + 1;
-    sTmpTypefaceStorage.resize(sizeof(ShmemTypeface) + nameSize);
-
-    ShmemTypeface* info = reinterpret_cast<ShmemTypeface*>(&sTmpTypefaceStorage[0]);
-    // allocate after info
-    info->name.data = &sTmpTypefaceStorage[sizeof(*info)];
-    info->name.size = nameSize;
-
-    // write fields
-    std::copy(familyName.data(), familyName.data() + nameSize, info->name.data.get());
-    SkFontStyle style = tf->fontStyle();
-    info->weight = style.weight();
-    info->width = style.width();
-    info->slant = style.slant();
-
-    return SkData::MakeWithoutCopy(sTmpTypefaceStorage.data(), sTmpTypefaceStorage.size());
+    return SkData::MakeWithCopy(&id, sizeof(id));
 }
 
 sk_sp<SkTypeface> deserializeTypeFace(SkStream& stream, void* ctx) {
-    auto* fontManager = reinterpret_cast<SkFontMgr*>(ctx);
-    if (!fontManager) {
-        ALOGE("Trying to draw text with no font manager!");
+    auto* cache = reinterpret_cast<IPCServerResourceCache*>(ctx);
+    if (!cache) {
+        ALOGE("Trying to draw text with no resource cache!");
         return nullptr;
     }
 
-    const auto* info = reinterpret_cast<const ShmemTypeface*>(stream.getMemoryBase());
-    if (info == nullptr) {
-        ALOGE("TextBlob deserial stream not memory based");
+    uint32_t id;
+    if (stream.read(&id, sizeof(id)) != sizeof(id)) {
         return nullptr;
     }
 
-    SkFontStyle style(info->weight, info->width, info->slant);
-    sk_sp<SkTypeface> tf = fontManager->matchFamilyStyle(info->name.data.get(), style);
+    auto it = cache->typefaces.find(id);
+    if (it != cache->typefaces.end()) {
+        return it->second;
+    }
 
-    return tf;
-};
+    ALOGE("Typeface id %u expected to be cached but not found", id);
+    return nullptr;
+}
 
 DrawTextBlobOp* DrawTextBlobOp::Create(RenderCommandBuffer* commandBuffer, const SkTextBlob* blob,
-                                       SkScalar x_in, SkScalar y_in, const SkPaint& p) {
+                                       SkScalar x_in, SkScalar y_in, const SkPaint& p,
+                                       IPCClientResourceCache* cache) {
     SkSerialProcs procs;
 
     DrawTextBlobOp* op = commandBuffer->allocAligned<DrawTextBlobOp>();
@@ -994,27 +1016,28 @@ DrawTextBlobOp* DrawTextBlobOp::Create(RenderCommandBuffer* commandBuffer, const
     op->x = x_in;
     op->y = y_in;
 
+    SerializeTypefaceContext ctx = {commandBuffer, cache};
+    procs.fTypefaceCtx = &ctx;
     procs.fTypefaceProc = serializeTypeFace;
-    size_t serializedSizeBytes =
-            blob->serialize(procs, commandBuffer->mBytes + commandBuffer->mUsed,
-                            sizeof(commandBuffer->mBytes) - commandBuffer->mUsed);
 
-    OP_REQUIRE(serializedSizeBytes > 0);
+    auto data = blob->serialize(procs);
+    OP_REQUIRE(data);
 
-    // Since uint8_t is aligned to 1 byte this allocation will start at
-    // commandBuffer->mBytes + commandBuffer->mUsed
-    OP_REQUIRE(SetRSpan<uint8_t>(op->blobData, commandBuffer, nullptr, serializedSizeBytes));
+    OP_REQUIRE(SetRSpan<uint8_t>(op->blobData, commandBuffer, (const uint8_t*)data->data(),
+                                 data->size()));
 
     return op;
 }
 
-void DrawTextBlobOp::draw(SkCanvas* c, const SkMatrix&, sk_sp<SkFontMgr> fontMgr) {
+void DrawTextBlobOp::draw(SkCanvas* c, const SkMatrix&, IPCServerResourceCache* cache) {
     SkDeserialProcs procs;
-    procs.fTypefaceCtx = fontMgr.get();
+    procs.fTypefaceCtx = cache;
     procs.fTypefaceStreamProc = deserializeTypeFace;
     sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(blobData.data.get(), blobData.size, procs);
     if (blob) {
         c->drawTextBlob(blob, x, y, fromShmemPaint(paint));
+    } else {
+        ALOGE("Failed to deserialize text blob");
     }
 }
 std::string DrawTextBlobOp::toString() const {
@@ -1181,6 +1204,94 @@ void EndRenderTargetOp::draw(SkCanvas* c, const SkMatrix&) {}
 
 std::string EndRenderTargetOp::toString() const {
     return "EndRenderTargetOp";
+}
+
+UploadBitmap* UploadBitmap::Create(IpcRenderRegion* region, uint64_t imageId,
+                                   const SkBitmap& bitmap) {
+    UploadBitmap* op = region->allocAligned<UploadBitmap>();
+    OP_REQUIRE(op);
+    op->type = TYPE_UPLOADBITMAP;
+    op->imageId = imageId;
+    op->width = bitmap.width();
+    op->height = bitmap.height();
+    op->colorType = (int32_t)bitmap.colorType();
+    op->alphaType = (int32_t)bitmap.alphaType();
+    op->rowBytes = bitmap.rowBytes();
+
+    size_t pixelSize = bitmap.computeByteSize();
+    OP_REQUIRE(SetRSpan(op->pixels, region, (const uint8_t*)bitmap.getPixels(), pixelSize));
+
+    region->pushUploadCmd(op);
+    return op;
+}
+
+void UploadBitmap::execute(IPCServerResourceCache& resourceCache) {
+    SkImageInfo info =
+            SkImageInfo::Make(width, height, (SkColorType)colorType, (SkAlphaType)alphaType);
+    if (pixels.data.get()) {
+        SkBitmap bitmap;
+        if (bitmap.tryAllocPixels(info, rowBytes)) {
+            memcpy(bitmap.getPixels(), pixels.data.get(), pixels.size);
+            bitmap.setImmutable();
+            sk_sp<SkImage> image = SkImages::RasterFromBitmap(bitmap);
+            resourceCache.bitmaps[imageId] = {nullptr, image, nullptr};
+        } else {
+            ALOGE("Failed to allocate pixels for UploadBitmap");
+        }
+    }
+}
+
+std::string UploadBitmap::toString() const {
+    return std::string("UploadBitmap id=") + std::to_string(imageId) + std::string(" w=") +
+            std::to_string(width) + std::string(" h=") + std::to_string(height) +
+            std::string(" ct=") + std::to_string(colorType) + std::string(" at=") +
+            std::to_string(alphaType) + std::string(" rb=") + std::to_string(rowBytes) +
+            std::string(" sz=") + std::to_string(pixels.size);
+}
+
+FreeBitmap* FreeBitmap::Create(IpcRenderRegion* region, uint64_t imageId) {
+    FreeBitmap* op = region->allocAligned<FreeBitmap>();
+    OP_REQUIRE(op);
+    op->type = TYPE_FREEBITMAP;
+    op->imageId = imageId;
+    region->pushUploadCmd(op);
+    return op;
+}
+
+void FreeBitmap::execute(IPCServerResourceCache& resourceCache) {
+    resourceCache.bitmaps.erase(imageId);
+}
+
+std::string FreeBitmap::toString() const {
+    return std::string("FreeBitmap id=") + std::to_string(imageId);
+}
+
+UploadTypeface* UploadTypeface::Create(IpcRenderRegion* region, uint32_t fontId,
+                                       const SkData* data) {
+    UploadTypeface* op = region->allocAligned<UploadTypeface>();
+    OP_REQUIRE(op);
+    op->type = TYPE_UPLOADTYPEFACE;
+    op->fontId = fontId;
+    OP_REQUIRE(SetRSpan(op->data, region, (const uint8_t*)data->data(), data->size()));
+    region->pushUploadCmd(op);
+    return op;
+}
+
+void UploadTypeface::execute(IPCServerResourceCache& resourceCache) {
+    if (data.data.get() && data.size > 0) {
+        SkMemoryStream stream(data.data.get(), data.size);
+        sk_sp<SkTypeface> tf = SkTypeface::MakeDeserialize(&stream, nullptr);
+        if (tf) {
+            resourceCache.typefaces[fontId] = tf;
+        } else {
+            ALOGE("Failed to deserialize Typeface for font id %u", fontId);
+        }
+    }
+}
+
+std::string UploadTypeface::toString() const {
+    return std::string("UploadTypeface id=") + std::to_string(fontId) + std::string(" size=") +
+            std::to_string(data.size);
 }
 
 } // namespace android

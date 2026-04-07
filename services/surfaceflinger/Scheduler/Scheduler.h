@@ -90,11 +90,6 @@ class TokenManager;
 class VsyncConfiguration;
 class VsyncSchedule;
 
-enum class Cycle {
-    Render,       // Surface rendering.
-    LastComposite // Ahead of display compositing by one refresh period.
-};
-
 class Scheduler : public IEventThreadCallback, android::impl::MessageQueue {
     using Impl = android::impl::MessageQueue;
 
@@ -161,12 +156,12 @@ public:
         return std::move(future);
     }
 
-    void createEventThread(Cycle, TokenManager*, std::chrono::nanoseconds workDuration,
+    void createEventThread(TokenManager*, std::chrono::nanoseconds workDuration,
                            std::chrono::nanoseconds readyDuration);
 
     sp<IDisplayEventConnection> createDisplayEventConnection(
-            Cycle, EventRegistrationFlags eventRegistration = {},
-            const sp<IBinder>& layerHandle = nullptr) EXCLUDES(mChoreographerLock);
+            EventRegistrationFlags eventRegistration = {}, const sp<IBinder>& layerHandle = nullptr)
+            EXCLUDES(mChoreographerLock);
 
     enum class Hotplug { Connected, Disconnected };
     void dispatchHotplug(PhysicalDisplayId, Hotplug);
@@ -192,11 +187,10 @@ public:
     void enableSyntheticVsync(bool = true) REQUIRES(kMainThreadContext);
     void omitVsyncDispatching(bool) REQUIRES(kMainThreadContext);
 
-    void onHdcpLevelsChanged(Cycle, PhysicalDisplayId, int32_t, int32_t);
+    void onHdcpLevelsChanged(PhysicalDisplayId, int32_t, int32_t);
 
     // Modifies work duration in the event thread.
-    void setDuration(Cycle, std::chrono::nanoseconds workDuration,
-                     std::chrono::nanoseconds readyDuration);
+    void setDuration(std::chrono::nanoseconds workDuration, std::chrono::nanoseconds readyDuration);
 
     VsyncModulator& vsyncModulator() { return *mVsyncModulator; }
 
@@ -216,7 +210,7 @@ public:
         }
 
         if (const auto config = (*mVsyncModulator.*handler)(args...)) {
-            setVsyncConfig(*config, getPacesetterVsyncPeriod());
+            setVsyncConfig(*config);
         }
     }
 
@@ -329,7 +323,7 @@ public:
     bool isVsyncInPhase(TimePoint expectedVsyncTime, Fps frameRate) const;
 
     void dump(utils::Dumper&) const EXCLUDES(mVsyncConfigLock);
-    void dump(Cycle, std::string&) const;
+    void dump(std::string&) const;
     void dumpVsync(std::string&) const EXCLUDES(mDisplayLock);
 
     // Returns the preferred refresh rate and frame rate for the pacesetter display.
@@ -434,15 +428,7 @@ private:
 
     // Used to skip event dispatch before EventThread creation during boot.
     // TODO: b/241285191 - Reorder Scheduler initialization to avoid this.
-    bool hasEventThreads() const {
-        return CC_LIKELY(
-                mRenderEventThread &&
-                (FlagManager::getInstance().deprecate_vsync_sf_v2() || mLastCompositeEventThread));
-    }
-
-    EventThread& eventThreadFor(Cycle cycle) const {
-        return *(cycle == Cycle::Render ? mRenderEventThread : mLastCompositeEventThread);
-    }
+    bool hasEventThreads() const { return CC_LIKELY(mEventThread); }
 
     // Update feature state machine to given state when corresponding timer resets or expires.
     void kernelIdleTimerCallback(PhysicalDisplayId, TimerState) EXCLUDES(mDisplayLock);
@@ -457,7 +443,7 @@ private:
                                      DisplayModePtr modePtr = nullptr)
             REQUIRES(kMainThreadContext, mDisplayLock);
     void resyncAllToHardwareVsync(bool allowToEnable) EXCLUDES(mDisplayLock);
-    void setVsyncConfig(const VsyncConfig&, Period vsyncPeriod);
+    void setVsyncConfig(const VsyncConfig&);
 
     // TODO: b/241286431 - Remove this option, which assumes that the pacesetter does not change
     // when a (secondary) display is registered or unregistered. In the short term, this avoids
@@ -567,8 +553,7 @@ private:
     // Returns true if any powered on display is capable of switching modes.
     bool canAnySelectorSwitch() const EXCLUDES(mDisplayLock);
 
-    std::unique_ptr<EventThread> mRenderEventThread;
-    std::unique_ptr<EventThread> mLastCompositeEventThread;
+    std::unique_ptr<EventThread> mEventThread;
 
     std::atomic<nsecs_t> mLastResyncTime = 0;
     std::atomic<nsecs_t> mLastResyncTimeOnTx = 0;

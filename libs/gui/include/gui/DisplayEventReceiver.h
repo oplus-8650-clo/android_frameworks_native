@@ -142,9 +142,7 @@ public:
      * To receive ModeChanged and/or FrameRateOverrides events specify this in
      * the constructor. Other events start being delivered immediately.
      */
-    explicit DisplayEventReceiver(gui::ISurfaceComposer::VsyncSource vsyncSource =
-                                          gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp,
-                                  EventRegistrationFlags eventRegistration = {},
+    explicit DisplayEventReceiver(EventRegistrationFlags eventRegistration = {},
                                   const sp<IBinder>& layerHandle = nullptr);
 
     /*

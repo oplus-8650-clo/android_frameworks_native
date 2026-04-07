@@ -37,7 +37,7 @@ void RenderCommandBuffer::pushOp(IPCRenderBufferOp* op) {
 void RenderCommandBuffer::reset() {
     mTail = nullptr;
     mHead = nullptr;
-    mUsed = 0;
+    this->resetArena();
 }
 
 bool RenderCommandBuffer::dumpToFile(const char* filename) const {

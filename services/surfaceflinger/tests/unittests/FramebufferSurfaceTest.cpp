@@ -156,4 +156,74 @@ TEST_F(FramebufferSurfaceTest, NoBuffersRenderedLeavesHwcUntouched) {
     EXPECT_EQ(clientTargetBuffer, buffer);
 }
 
+TEST_F(FramebufferSurfaceTest, TestUsageChangeReusesHwcSlot) {
+    sp<SurfaceListener> listener = sp<StubSurfaceListener>::make();
+    mRenderSurface->connect(NATIVE_WINDOW_API_CPU, listener);
+
+    uint32_t slot1, slot2, slot3;
+    sp<GraphicBuffer> hwcBuffer1, hwcBuffer2, hwcBuffer3;
+
+    // We need to mock getPresentFence for onFrameCommitted
+    EXPECT_CALL(mMockHwc, getPresentFence(static_cast<HalDisplayId>(kDisplayId)))
+            .WillRepeatedly(Return(Fence::NO_FENCE));
+
+    // First frame
+    EXPECT_CALL(mMockHwc, setClientTarget(static_cast<HalDisplayId>(kDisplayId), _, _, _, _, _))
+            .WillOnce(DoAll(SaveArg<1>(&slot1), SaveArg<3>(&hwcBuffer1), Return(OK)));
+
+    mDisplaySurface->beginFrame(true);
+    mDisplaySurface->prepareFrame(compositionengine::DisplaySurface::CompositionType::Gpu);
+    sp<GraphicBuffer> buffer1;
+    sp<Fence> fence1;
+    ASSERT_EQ(OK, mRenderSurface->dequeueBuffer(&buffer1, &fence1));
+    ASSERT_EQ(OK, mRenderSurface->queueBuffer(buffer1, fence1));
+    mDisplaySurface->advanceFrame(1.0);
+    mDisplaySurface->onFrameCommitted();
+
+    // Second frame - this will allow the first frame's buffer to be released on commit.
+    EXPECT_CALL(mMockHwc, setClientTarget(static_cast<HalDisplayId>(kDisplayId), _, _, _, _, _))
+            .WillOnce(DoAll(SaveArg<1>(&slot2), SaveArg<3>(&hwcBuffer2), Return(OK)));
+
+    mDisplaySurface->beginFrame(true);
+    mDisplaySurface->prepareFrame(compositionengine::DisplaySurface::CompositionType::Gpu);
+    sp<GraphicBuffer> buffer2;
+    sp<Fence> fence2;
+    ASSERT_EQ(OK, mRenderSurface->dequeueBuffer(&buffer2, &fence2));
+    ASSERT_EQ(OK, mRenderSurface->queueBuffer(buffer2, fence2));
+    mDisplaySurface->advanceFrame(1.0);
+    mDisplaySurface->onFrameCommitted(); // This releases buffer1!
+
+    // Change usage
+    uint64_t newUsage = GRALLOC_USAGE_HW_FB | GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER |
+            GRALLOC_USAGE_SW_WRITE_OFTEN;
+    native_window_set_usage(mRenderSurface.get(), newUsage);
+
+    // Third frame - should trigger reallocation and reuse buffer1's HWC slot.
+    EXPECT_CALL(mMockHwc, setClientTarget(static_cast<HalDisplayId>(kDisplayId), _, _, _, _, _))
+            .WillOnce(DoAll(SaveArg<1>(&slot3), SaveArg<3>(&hwcBuffer3), Return(OK)));
+
+    mDisplaySurface->beginFrame(true);
+    mDisplaySurface->prepareFrame(compositionengine::DisplaySurface::CompositionType::Gpu);
+    sp<GraphicBuffer> buffer3;
+    sp<Fence> fence3;
+    ASSERT_EQ(OK, mRenderSurface->dequeueBuffer(&buffer3, &fence3));
+    ASSERT_EQ(OK, mRenderSurface->queueBuffer(buffer3, fence3));
+
+    mDisplaySurface->advanceFrame(1.0);
+
+    // Check that buffer3 is indeed different from buffer2 (reallocated)
+    // It might also be different from buffer1 if BufferQueue didn't reuse the slot.
+    ASSERT_NE(buffer2->getId(), buffer3->getId());
+
+    // The HWC slot for buffer3 should be the same as slot1 (recently freed).
+    EXPECT_EQ(slot1, slot3);
+    EXPECT_NE(slot2, slot3);
+
+    // And it should be set to a buffer (non-null hwcBuffer)
+    EXPECT_NE(nullptr, hwcBuffer3);
+    EXPECT_EQ(buffer3, hwcBuffer3);
+
+    mDisplaySurface->onFrameCommitted();
+}
+
 } // namespace android

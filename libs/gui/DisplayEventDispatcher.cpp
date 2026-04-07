@@ -29,9 +29,7 @@
 
 #include <com_android_graphics_surfaceflinger_flags.h>
 
-// QTI_BEGIN: 2026-03-06: Performance: native: smart touch consuming
 #include "QtiExtension/QtiDolphinWrapper.h"
-// QTI_END: 2026-03-06: Performance: native: smart touch consuming
 
 namespace android {
 using namespace com::android::graphics::surfaceflinger;
@@ -44,11 +42,10 @@ static const size_t EVENT_BUFFER_SIZE = 100;
 static constexpr nsecs_t WAITING_FOR_VSYNC_TIMEOUT = ms2ns(300);
 
 DisplayEventDispatcher::DisplayEventDispatcher(const sp<Looper>& looper,
-                                               gui::ISurfaceComposer::VsyncSource vsyncSource,
                                                EventRegistrationFlags eventRegistration,
                                                const sp<IBinder>& layerHandle)
       : mLooper(looper),
-        mReceiver(vsyncSource, eventRegistration, layerHandle),
+        mReceiver(eventRegistration, layerHandle),
         mWaitingForVsync(false),
         mLastVsyncCount(0),
         mLastScheduleVsyncTime(0) {
@@ -143,12 +140,10 @@ int DisplayEventDispatcher::handleEvent(int, int events, void*) {
         mWaitingForVsync = false;
         mLastVsyncCount = vsyncCount;
         dispatchVsync(vsyncTimestamp, vsyncDisplayId, vsyncCount, vsyncEventData);
-// QTI_BEGIN: 2026-03-06: Performance: native: smart touch consuming
         QtiDolphinWrapper* qtiDolphinWrapper = QtiDolphinWrapper::qtiGetDolphinWrapper();
         if (qtiDolphinWrapper && qtiDolphinWrapper->qtiDolphinSetVsyncTime) {
             qtiDolphinWrapper->qtiDolphinSetVsyncTime(vsyncTimestamp);
         }
-// QTI_END: 2026-03-06: Performance: native: smart touch consuming
     }
 
     if (mWaitingForVsync) {

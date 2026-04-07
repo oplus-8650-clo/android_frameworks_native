@@ -17,7 +17,6 @@
 #define LOG_TAG "Sensors"
 #define ATRACE_TAG ATRACE_TAG_SYSTEM_SERVER
 
-#include <android/sensor.h>
 #include <com_android_hardware_libsensor_flags.h>
 #include <cutils/trace.h>
 #include <hardware/sensors-base.h>
@@ -44,18 +43,13 @@ namespace android {
 SensorEventQueue::SensorEventQueue(const sp<ISensorEventConnection>& connection,
                                    SensorManager& sensorManager, String8 packageName)
       : mSensorEventConnection(connection),
-        mRecBuffer(nullptr),
         mSensorManager(sensorManager),
         mPackageName(packageName),
         mAvailable(0),
         mConsumed(0),
-        mNumAcksToSend(0) {
-    mRecBuffer = new ASensorEvent[MAX_RECEIVE_BUFFER_EVENT_COUNT];
-}
+        mNumAcksToSend(0) {}
 
-SensorEventQueue::~SensorEventQueue() {
-    delete [] mRecBuffer;
-}
+SensorEventQueue::~SensorEventQueue() {}
 
 void SensorEventQueue::onFirstRef()
 {
@@ -84,7 +78,7 @@ ssize_t SensorEventQueue::read(ASensorEvent* events, size_t numEvents) {
         mConsumed = 0;
     }
     size_t count = min(numEvents, mAvailable);
-    memcpy(events, mRecBuffer + mConsumed, count * sizeof(ASensorEvent));
+    memcpy(events, &mRecBuffer[mConsumed], count * sizeof(ASensorEvent));
 
     if (CC_UNLIKELY(ATRACE_ENABLED()) &&
         libsensor_flags::sensor_event_queue_report_sensor_usage_in_tracing()) {

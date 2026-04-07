@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <android-base/thread_annotations.h>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -32,11 +33,12 @@ public:
 
 private:
     std::thread mThread;
-    bool mDone = false;
-    std::deque<std::function<void()>> mRunnables;
+    bool mDone GUARDED_BY(mMutex) = false;
+    std::deque<std::function<void()>> mRunnables GUARDED_BY(mMutex);
     std::mutex mMutex;
     std::condition_variable mCv;
 
     void run();
     void execute(std::deque<std::function<void()>>& runnables);
+    bool waitingDone() REQUIRES(mMutex);
 };

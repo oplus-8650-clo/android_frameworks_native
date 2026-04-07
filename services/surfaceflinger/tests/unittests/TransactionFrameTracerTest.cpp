@@ -106,7 +106,7 @@ public:
         EXPECT_CALL(*mFlinger.getFrameTracer(),
                     traceTimestamp(layerId, bufferId, frameNumber, latchTime,
                                    FrameTracer::FrameEvent::LATCH, /*duration*/ 0));
-        layer->updateTexImage(latchTime, expectedPresentTime);
+        layer->latchBufferStatsAndHandles(latchTime, expectedPresentTime);
 
         auto glDoneFence = fenceFactory.createFenceTimeForTest(fence);
         auto presentFence = fenceFactory.createFenceTimeForTest(fence);

@@ -55,8 +55,9 @@ public:
     void setTimingTestingMode(bool testinMode);
     void allowReportActualToAcquireMutex();
     bool sessionExists();
-    ftl::Flags<Workload> getCommittedWorkload() const;
     ftl::Flags<Workload> getQueuedWorkload() const;
+    ftl::Flags<Workload> getCommittedWorkload() const;
+    ftl::Flags<Workload> getCompositedWorkload() const;
     int64_t toNanos(Duration d);
 
     struct GpuTestConfig {
@@ -318,12 +319,16 @@ Duration PowerAdvisorTest::getErrorMargin() {
     return mPowerAdvisor->sTargetSafetyMargin;
 }
 
+ftl::Flags<Workload> PowerAdvisorTest::getQueuedWorkload() const {
+    return ftl::Flags<Workload>{mPowerAdvisor->mQueuedWorkload.load()};
+}
+
 ftl::Flags<Workload> PowerAdvisorTest::getCommittedWorkload() const {
     return mPowerAdvisor->mCommittedWorkload;
 }
 
-ftl::Flags<Workload> PowerAdvisorTest::getQueuedWorkload() const {
-    return ftl::Flags<Workload>{mPowerAdvisor->mQueuedWorkload.load()};
+ftl::Flags<Workload> PowerAdvisorTest::getCompositedWorkload() const {
+    return mPowerAdvisor->mCompositedWorkload;
 }
 
 namespace {
@@ -872,15 +877,70 @@ TEST_F(PowerAdvisorTest, trackQueuedWorkloads) {
     ASSERT_EQ(getQueuedWorkload(), ftl::Flags<Workload>());
 }
 
-TEST_F(PowerAdvisorTest, trackCommittedWorkloads) {
-    // verify queued workloads are cleared after commit
+TEST_F(PowerAdvisorTest, compositedWorkloadResetsCommittedWorkload) {
+    mPowerAdvisor->onBootFinished();
+
     mPowerAdvisor->setCommittedWorkload(Workload::SCREENSHOT | Workload::VISIBLE_REGION);
     ASSERT_EQ(getCommittedWorkload(), Workload::SCREENSHOT | Workload::VISIBLE_REGION);
 
-    // on composite, verify we update the committed workload so we track workload increases for the
-    // next frame accurately
     mPowerAdvisor->setCompositedWorkload(Workload::VISIBLE_REGION | Workload::DISPLAY_CHANGES);
-    ASSERT_EQ(getCommittedWorkload(), Workload::VISIBLE_REGION | Workload::DISPLAY_CHANGES);
+
+    ASSERT_EQ(getCompositedWorkload(), Workload::VISIBLE_REGION | Workload::DISPLAY_CHANGES);
+    ASSERT_EQ(getCommittedWorkload(), ftl::Flags<Workload>());
+}
+
+TEST_F(PowerAdvisorTest, workloadHints_firstFrameWithEffectsSendsHint) {
+    mPowerAdvisor->onBootFinished();
+    startPowerHintSession();
+
+    EXPECT_CALL(*mMockPowerHintSession, sendHint(Eq(SessionHint::CPU_LOAD_UP)))
+            .Times(1)
+            .WillOnce(Return(testing::ByMove(HalResult<void>::ok())));
+
+    mPowerAdvisor->setCompositedWorkload(ftl::Flags<Workload>());
+    mPowerAdvisor->setCommittedWorkload(Workload::EFFECTS);
+}
+
+TEST_F(PowerAdvisorTest, workloadHints_consecutiveFramesWithEffectsNoHint) {
+    mPowerAdvisor->onBootFinished();
+    startPowerHintSession();
+
+    EXPECT_CALL(*mMockPowerHintSession, sendHint(_)).Times(0);
+
+    mPowerAdvisor->setCompositedWorkload(Workload::EFFECTS);
+    mPowerAdvisor->setCommittedWorkload(Workload::EFFECTS);
+}
+
+TEST_F(PowerAdvisorTest, workloadHints_effectsRemovedNoHint) {
+    mPowerAdvisor->onBootFinished();
+    startPowerHintSession();
+
+    EXPECT_CALL(*mMockPowerHintSession, sendHint(_)).Times(0);
+
+    mPowerAdvisor->setCompositedWorkload(Workload::EFFECTS);
+    mPowerAdvisor->setCommittedWorkload(Workload::VISIBLE_REGION);
+}
+
+TEST_F(PowerAdvisorTest, workloadHints_resetsCommittedStateEachFrame) {
+    mPowerAdvisor->onBootFinished();
+    startPowerHintSession();
+
+    EXPECT_CALL(*mMockPowerHintSession, sendHint(Eq(SessionHint::CPU_LOAD_UP)))
+            .Times(1)
+            .WillOnce(Return(testing::ByMove(HalResult<void>::ok())));
+
+    mPowerAdvisor->setCompositedWorkload(ftl::Flags<Workload>());
+
+    // Frame 1: Client requests an effect. Hint is sent.
+    mPowerAdvisor->setCommittedWorkload(Workload::EFFECTS);
+    mPowerAdvisor->setCompositedWorkload(Workload::EFFECTS);
+
+    // Frame 2: Effects end. No new effects requested. No hint should be sent.
+    mPowerAdvisor->setCommittedWorkload(ftl::Flags<Workload>());
+    mPowerAdvisor->setCompositedWorkload(ftl::Flags<Workload>());
+
+    // Frame 3: Normal frame without effects. No hint should be sent.
+    mPowerAdvisor->setCommittedWorkload(ftl::Flags<Workload>());
 }
 
 } // namespace

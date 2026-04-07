@@ -43,6 +43,7 @@
 #include "FramebufferSurface.h"
 #include "HWComposer.h"
 #include "HwcSlotTracker.h"
+#include "MutexUtils.h"
 
 // QTI_BEGIN: 2023-05-29: Display: sf: extensions: Clean up
 #include "../QtiExtension/QtiSurfaceFlingerExtensionFactory.h"
@@ -72,6 +73,20 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, PhysicalDisplayId displa
     mRendererConsumer->setMaxAcquiredBufferCount(SurfaceFlinger::maxFrameBufferAcquiredBuffers - 1);
 }
 
+void FramebufferSurface::onFirstRef() {
+    mRendererConsumer->setBufferFreedListener(
+            wp<BufferItemConsumer::BufferFreedListener>::fromExisting(this));
+}
+
+void FramebufferSurface::onBufferFreed(const sp<GraphicBuffer>& graphicBuffer) {
+    Mutex::Autolock lock(mMutex);
+    onBufferFreedLocked(graphicBuffer);
+}
+
+void FramebufferSurface::onBufferFreedLocked(const sp<GraphicBuffer>& graphicBuffer) {
+    mHwcSlotTracker.remove(graphicBuffer);
+}
+
 void FramebufferSurface::resizeBuffers(const ui::Size& newSize) {
     const auto limitedSize = limitSize(newSize);
     mRendererConsumer->setDefaultBufferSize(limitedSize.width, limitedSize.height);
@@ -88,7 +103,11 @@ status_t FramebufferSurface::prepareFrame(CompositionType /*compositionType*/) {
 status_t FramebufferSurface::advanceFrame(float hdrSdrRatio) {
     Mutex::Autolock lock(mMutex);
     BufferItem item;
-    status_t err = mRendererConsumer->acquireBuffer(&item, 0, /*waitForFence*/ false);
+    status_t err = mRendererConsumer->acquireBuffer(&item, 0, /*waitForFence*/ false,
+                                                    [&](const sp<GraphicBuffer>& buffer) {
+                                                        ASSERT_MUTEX(mMutex);
+                                                        onBufferFreedLocked(buffer);
+                                                    });
     if (err == BufferQueue::NO_BUFFER_AVAILABLE) {
 // QTI_BEGIN: 2023-06-20: Display: sf: Fix spec fence for SDM caching
         // mDataspace = Dataspace::UNKNOWN;
@@ -124,15 +143,22 @@ status_t FramebufferSurface::advanceFrame(float hdrSdrRatio) {
 }
 
 void FramebufferSurface::onFrameCommitted() {
+    Mutex::Autolock lock(mMutex);
     // We only release the frame once an entire new frame has replaced it. This is because the frame
     // will be alive in the display hardware for panel refreshes until another has replaced it.
     if (mPreviousFrameData) {
         sp<Fence> fence =
                 Fence::merge("FramebufferSurface-Acquire+Present", mPreviousFrameData->mFence,
                              mHwc.getPresentFence(mDisplayId));
-        status_t result = mRendererConsumer->releaseBuffer(mPreviousFrameData->mBuffer, fence);
-        ALOGE_IF(result != NO_ERROR, "onFrameCommitted: error releasing buffer:"
-                " %s (%d)", strerror(-result), result);
+        status_t result = mRendererConsumer->releaseBuffer(mPreviousFrameData->mBuffer, fence,
+                                                           [&](const sp<GraphicBuffer>& buffer) {
+                                                               ASSERT_MUTEX(mMutex);
+                                                               onBufferFreedLocked(buffer);
+                                                           });
+        ALOGE_IF(result != NO_ERROR,
+                 "onFrameCommitted: error releasing buffer:"
+                 " %s (%d)",
+                 strerror(-result), result);
 
         mPreviousFrameData.reset();
     }

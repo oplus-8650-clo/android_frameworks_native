@@ -20,6 +20,7 @@
 #include <android/gui/BorderSettings.h>
 #include <android/gui/BoxShadowSettings.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
+#include <ftl/enum.h>
 #include <gui/CornerRadii.h>
 #include <gui/DisplayLuts.h>
 #include <gui/RenderCommandBufferConsumer.h>
@@ -192,6 +193,7 @@ struct LayerSettings {
     enum class SampleTarget : uint32_t {
         Self,
         Behind,
+        ftl_last = Behind,
     };
     SampleTarget postProcessTarget;
 
@@ -330,6 +332,31 @@ static inline void PrintTo(const EdgeExtensionEffect& effect, ::std::ostream* os
     *os << effect;
 }
 
+// TODO: print the effect's name after it's exposed in Skia.
+static inline void PrintTo(const sk_sp<SkRuntimeEffect> effect, ::std::ostream* os,
+                           const uint8_t currentIndent = 0) {
+    const std::string newline = IndentedNewline(currentIndent + 1);
+    const std::string innerNewline = IndentedNewline(currentIndent + 2);
+    *os << "SkRuntimeEffect {";
+    if (!effect->children().empty()) {
+        *os << newline << ".children = [";
+        for (const auto& child : effect->children()) {
+            *os << innerNewline << child.name << " (type = " << static_cast<int>(child.type) << ")";
+        }
+        *os << newline << "]";
+    }
+    std::stringstream source(effect->source());
+    std::string lineSrc;
+    int lineNumber = 1;
+    *os << newline << ".source = (";
+    while (std::getline(source, lineSrc)) {
+        // Printing line numbers gives an indication if some log lines are missing.
+        *os << innerNewline << std::setw(4) << lineNumber++ << ": " << lineSrc;
+    }
+    *os << newline << ")";
+    *os << IndentedNewline(currentIndent) << "}";
+}
+
 static inline void PrintTo(const LayerSettings& settings, ::std::ostream* os,
                            const uint8_t currentIndent = 0) {
     const std::string newline = IndentedNewline(currentIndent + 1);
@@ -360,11 +387,13 @@ static inline void PrintTo(const LayerSettings& settings, ::std::ostream* os,
     *os << newline << ".backgroundBlurRadius = " << settings.backgroundBlurRadius;
     *os << newline << ".backgroundBlurScale = " << settings.backgroundBlurScale;
     if (settings.blurRegions.size()) {
-        *os << newline << ".blurRegions =";
+        *os << newline << ".blurRegions = [";
+        const std::string blurRegionNewline = IndentedNewline(currentIndent + 2);
         for (auto blurRegion : settings.blurRegions) {
-            *os << "\n";
-            PrintTo(blurRegion, os);
+            *os << blurRegionNewline;
+            PrintTo(blurRegion, os, currentIndent + 2);
         }
+        *os << newline << "]";
     }
     *os << newline << ".blurRegionTransform = ";
     PrintMatrix(settings.blurRegionTransform, os);
@@ -372,17 +401,30 @@ static inline void PrintTo(const LayerSettings& settings, ::std::ostream* os,
         *os << newline << ".stretchEffect = ";
         PrintTo(settings.stretchEffect, os, currentIndent + 1);
     }
-
     if (settings.edgeExtensionEffect.hasEffect()) {
         *os << newline << ".edgeExtensionEffect = " << settings.edgeExtensionEffect;
     }
     *os << newline << ".whitePointNits = " << settings.whitePointNits;
     if (settings.luts) {
         *os << newline << ".luts = ";
-        PrintTo(settings.luts, os);
+        PrintTo(settings.luts, os, currentIndent + 1);
     }
     if (settings.renderCommandBuffer) {
         *os << newline << ".renderCommandBuffer = " << settings.renderCommandBuffer.get();
+    }
+    if (settings.postProcessEffect) {
+        *os << newline << ".postProcessEffect = ";
+        PrintTo(settings.postProcessEffect, os, currentIndent + 1);
+    }
+    if (settings.postProcessUniforms) {
+        *os << newline << ".postProcessUniforms = " << "[ ";
+        for (const uint8_t uniform : *settings.postProcessUniforms) {
+            *os << uniform << " ";
+        }
+        *os << "]";
+    }
+    if (settings.postProcessEffect) {
+        *os << newline << ".postProcessTarget = " << ftl::enum_string(settings.postProcessTarget);
     }
 
     *os << IndentedNewline(currentIndent) << "}";

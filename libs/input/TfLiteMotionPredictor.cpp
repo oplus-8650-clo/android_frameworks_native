@@ -81,7 +81,12 @@ std::string getModelPath() {
     }
     return "/system/etc/motion_predictor_model.tflite";
 #else
-    return base::GetExecutableDirectory() + "/motion_predictor_model.tflite";
+    const char* ravenwood_runtime_dir = getenv("RAVENWOOD_RUNTIME_DIR");
+    if (ravenwood_runtime_dir) {
+        return std::string(ravenwood_runtime_dir) + "ravenwood-data/motion_predictor_model.tflite";
+    } else {
+        return base::GetExecutableDirectory() + "/motion_predictor_model.tflite";
+    }
 #endif
 }
 

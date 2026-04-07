@@ -2477,20 +2477,8 @@ status_t SurfaceFlinger::getDisplayDecorationSupport(
 // ----------------------------------------------------------------------------
 
 sp<IDisplayEventConnection> SurfaceFlinger::createDisplayEventConnection(
-        gui::ISurfaceComposer::VsyncSource vsyncSource, EventRegistrationFlags eventRegistration,
-        const sp<IBinder>& layerHandle) {
-    const auto cycle = [&] {
-        if (FlagManager::getInstance().deprecate_vsync_sf_v2()) {
-            ALOGW_IF(vsyncSource == gui::ISurfaceComposer::VsyncSource::eVsyncSourceSurfaceFlinger,
-                     "requested unsupported config eVsyncSourceSurfaceFlinger");
-            return scheduler::Cycle::Render;
-        }
-
-        return vsyncSource == gui::ISurfaceComposer::VsyncSource::eVsyncSourceSurfaceFlinger
-                ? scheduler::Cycle::LastComposite
-                : scheduler::Cycle::Render;
-    }();
-    return mScheduler->createDisplayEventConnection(cycle, eventRegistration, layerHandle);
+        EventRegistrationFlags eventRegistration, const sp<IBinder>& layerHandle) {
+    return mScheduler->createDisplayEventConnection(eventRegistration, layerHandle);
 }
 
 void SurfaceFlinger::scheduleCommit(FrameHint hint, Duration workDurationSlack) {
@@ -5424,12 +5412,8 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
 
     const auto configs = mScheduler->getCurrentVsyncConfigs();
 
-    mScheduler->createEventThread(scheduler::Cycle::Render, mFrameTimeline->getTokenManager(),
+    mScheduler->createEventThread(mFrameTimeline->getTokenManager(),
                                   /* workDuration */ configs.late.appWorkDuration,
-                                  /* readyDuration */ configs.late.sfWorkDuration);
-    mScheduler->createEventThread(scheduler::Cycle::LastComposite,
-                                  mFrameTimeline->getTokenManager(),
-                                  /* workDuration */ activeRefreshRate.getPeriod(),
                                   /* readyDuration */ configs.late.sfWorkDuration);
 
     // Dispatch after EventThread creation, since registerDisplay above skipped dispatch.
@@ -6013,6 +5997,16 @@ status_t SurfaceFlinger::setTransactionState(TransactionState&& transactionState
     return NO_ERROR;
 }
 
+status_t SurfaceFlinger::registerGraphicBuffers(const gui::GraphicBuffersRegisterInfo& info) {
+    mIpcCache->queueRegisterGraphicBuffers(info);
+    return NO_ERROR;
+}
+
+status_t SurfaceFlinger::unregisterGraphicBuffers(const gui::GraphicBuffersUnregisterInfo& info) {
+    mIpcCache->queueUnregisterGraphicBuffers(info);
+    return NO_ERROR;
+}
+
 bool SurfaceFlinger::applyTransactionState(
         const FrameTimelineInfo& frameTimelineInfo, std::vector<ResolvedComposerState>& states,
         std::vector<DisplayState>& displays, uint32_t flags,
@@ -6273,12 +6267,19 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
         }
     }
     if (what & layer_state_t::eRenderCommandBufferFrameIdChanged) {
+        std::optional<gui::CornerRadii> cornerRadii = std::nullopt;
+        if (snapshot) {
+            cornerRadii =
+                    std::make_optional<gui::CornerRadii>(snapshot->roundedCorner.reportedRadii);
+        }
+        layer->setCornerRadii(cornerRadii);
         // TODO(b/485971052): It seems like we also want to add the layer
         // to mLayersWithQueuedFrames in order to ensure onCompositionPresented
         // is invoked, but currently that is highly coupled to mBufferInfo
-        layer->setRenderCommandBufferFrameId(s.renderCommandBufferFrameId, postTime,
+        layer->setRenderCommandBufferFrameId(s.renderCommandBufferFrameId,
+                                             s.renderCommandBufferFrameIdQueueTime, postTime,
                                              desiredPresentTime, isAutoTimestamp,
-                                             frameTimelineInfo, gameMode);
+                                             frameTimelineInfo, gameMode, systemContentPriority);
     }
     if (what & layer_state_t::eBufferChanged) {
         std::optional<ui::Transform::RotationFlags> transformHint = std::nullopt;
@@ -6303,7 +6304,7 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
                                                              systemContentPriority);
     }
 
-    if (!(what & layer_state_t::eBufferChanged)) {
+    if (!(what & layer_state_t::eBufferChanged) && !(what & layer_state_t::eRenderCommandBufferFrameIdChanged)) {
         layer->setDesiredPresentTime(desiredPresentTime, isAutoTimestamp);
     }
 
@@ -6481,6 +6482,7 @@ status_t SurfaceFlinger::createLayer(LayerCreationArgs& args, gui::CreateSurface
         args.addToRoot = false;
     }
 
+    args.debugCookie = reinterpret_cast<uintptr_t>(outResult.handle.get());
     addClientLayer(args, layer);
 
     outResult.transformHint = mFrontInternalDisplayTransformHint;
@@ -7053,7 +7055,7 @@ void SurfaceFlinger::dumpScheduler(std::string& result) const {
 }
 
 void SurfaceFlinger::dumpEvents(std::string& result) const {
-    mScheduler->dump(scheduler::Cycle::Render, result);
+    mScheduler->dump(result);
 }
 
 void SurfaceFlinger::dumpVsync(std::string& result) const {
@@ -7612,6 +7614,8 @@ status_t SurfaceFlinger::CheckTransactCodeCredentials(uint32_t code) {
         case GET_DISPLAY_COLOR_MODES:
         case GET_DISPLAY_MODES:
         case GET_SCHEDULING_POLICY:
+        case REGISTER_GRAPHIC_BUFFERS:
+        case UNREGISTER_GRAPHIC_BUFFERS:
         // Calling setTransactionState is safe, because you need to have been
         // granted a reference to Client* and Handle* to do anything with it.
         case SET_TRANSACTION_STATE: {
@@ -7826,13 +7830,12 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             }
             case 1018: { // Set the render deadline as a duration until VSYNC.
                 n = data.readInt32();
-                mScheduler->setDuration(scheduler::Cycle::Render, std::chrono::nanoseconds(n), 0ns);
+                mScheduler->setDuration(std::chrono::nanoseconds(n), 0ns);
                 return NO_ERROR;
             }
             case 1019: { // Set the deadline of the last composite as a duration until VSYNC.
                 n = data.readInt32();
-                mScheduler->setDuration(scheduler::Cycle::LastComposite,
-                                        std::chrono::nanoseconds(n), 0ns);
+                mScheduler->setDuration(std::chrono::nanoseconds(n), 0ns);
                 return NO_ERROR;
             }
             case 1020: { // Unused
@@ -9800,8 +9803,7 @@ void SurfaceFlinger::updateHdcpLevels(hal::HWDisplayId hwcDisplayId, int32_t con
             setTransactionFlags(eDisplayTransactionNeeded);
         }
         FTL_FAKE_GUARD(kMainThreadContext, mDisplayModeController.setSecure(displayId, secure));
-        mScheduler->onHdcpLevelsChanged(scheduler::Cycle::Render, displayId, connectedLevel,
-                                        maxLevel);
+        mScheduler->onHdcpLevelsChanged(displayId, connectedLevel, maxLevel);
     }));
 }
 
@@ -9821,9 +9823,10 @@ void SurfaceFlinger::removeActivePictureListener(const sp<gui::IActivePictureLis
     mActivePictureListenersToRemove.push_back(listener);
 }
 
-bool SurfaceFlinger::registerShader(const sp<IBinder>& shaderToken, const std::string& debugName,
+bool SurfaceFlinger::registerShader(const sp<IBinder>& shaderToken,
+                                    const std::string& uniqueShaderName,
                                     const std::string& shaderString) {
-    return mShaderRegistry->registerShader(shaderToken, debugName, shaderString);
+    return mShaderRegistry->registerShader(shaderToken, uniqueShaderName, shaderString);
 }
 
 void SurfaceFlinger::unregisterShader(const sp<IBinder>& shaderToken) {
@@ -10001,6 +10004,7 @@ std::vector<std::pair<Layer*, LayerFE*>> SurfaceFlinger::copyMergedSnapshots(
                 }
 
                 auto it = mLegacyLayers.find(snapshot.sequence);
+
                 LLOG_ALWAYS_FATAL_WITH_TRACE_IF(it == mLegacyLayers.end(),
                                                 "Couldnt find layer object for %s",
                                                 snapshot.getDebugString().c_str());
@@ -10235,10 +10239,10 @@ binder::Status SurfaceComposerAIDL::bootFinished() {
 }
 
 binder::Status SurfaceComposerAIDL::createDisplayEventConnection(
-        VsyncSource vsyncSource, EventRegistration eventRegistration,
-        const sp<IBinder>& layerHandle, sp<IDisplayEventConnection>* outConnection) {
+        EventRegistration eventRegistration, const sp<IBinder>& layerHandle,
+        sp<IDisplayEventConnection>* outConnection) {
     sp<IDisplayEventConnection> conn =
-            mFlinger->createDisplayEventConnection(vsyncSource, eventRegistration, layerHandle);
+            mFlinger->createDisplayEventConnection(eventRegistration, layerHandle);
     if (conn == nullptr) {
         *outConnection = nullptr;
         return binderStatusFromStatusT(BAD_VALUE);
@@ -10902,13 +10906,13 @@ binder::Status SurfaceComposerAIDL::removeHdrLayerInfoListener(
 }
 
 binder::Status SurfaceComposerAIDL::registerShader(const sp<IBinder>& shaderToken,
-                                                   const std::string& debugName,
+                                                   const std::string& uniqueShaderName,
                                                    const std::string& shaderString) {
     status_t status = checkReadFrameBufferPermission();
     if (status != OK) {
         return binderStatusFromStatusT(status);
     }
-    if (!mFlinger->registerShader(shaderToken, debugName, shaderString)) {
+    if (!mFlinger->registerShader(shaderToken, uniqueShaderName, shaderString)) {
         return binder::Status::fromExceptionCode(binder::Status::EX_SERVICE_SPECIFIC);
     }
     return binder::Status::ok();
@@ -11206,18 +11210,6 @@ binder::Status SurfaceComposerAIDL::resetForcedPacesetter() {
     }
 
     mFlinger->sfdo_resetForcedPacesetter();
-    return binder::Status::ok();
-}
-
-binder::Status SurfaceComposerAIDL::registerGraphicBuffers(
-        const gui::GraphicBuffersRegisterInfo& info) {
-    mFlinger->mIpcCache->queueRegisterGraphicBuffers(info);
-    return binder::Status::ok();
-}
-
-binder::Status SurfaceComposerAIDL::unregisterGraphicBuffers(
-        const gui::GraphicBuffersUnregisterInfo& info) {
-    mFlinger->mIpcCache->queueUnregisterGraphicBuffers(info);
     return binder::Status::ok();
 }
 

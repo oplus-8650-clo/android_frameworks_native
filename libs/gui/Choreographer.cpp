@@ -105,8 +105,7 @@ sp<Choreographer> Choreographer::getForThread() {
 }
 
 Choreographer::Choreographer(const sp<Looper>& looper, const sp<IBinder>& layerHandle)
-      : DisplayEventDispatcher(looper, gui::ISurfaceComposer::VsyncSource::eVsyncSourceApp, {},
-                               layerHandle),
+      : DisplayEventDispatcher(looper, {}, layerHandle),
         mLooper(looper),
         mThreadId(std::this_thread::get_id()) {
     std::lock_guard<std::mutex> _l(gChoreographers.lock);

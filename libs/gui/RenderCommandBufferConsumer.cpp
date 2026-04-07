@@ -45,10 +45,12 @@ void RenderCommandBufferConsumer::consumerAcquire(uint64_t frameNumber) {
     while (!mRenderRegion->mCommandBuffers.empty()) {
         uint64_t lo = mRenderRegion->mCommandBuffers.getLo();
         uint64_t hi = mRenderRegion->mCommandBuffers.getHi();
+
         // Skip until we get to the requested frameNumber OR the latest available frame.
         if (lo + 1 >= frameNumber || lo + 1 == hi) {
             return;
         }
+
         mRenderRegion->mCommandBuffers.popFront();
     }
 }

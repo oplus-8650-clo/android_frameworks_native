@@ -394,7 +394,7 @@ bool delayMatchVsyncCadence(nsecs_t presentDelay, Fps refreshRate, nsecs_t prese
 // Formula explained in go/refined-jank-metric
 std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
                                                          nsecs_t expectedPresentDelta,
-                                                         nsecs_t actualPresentDelta) {
+                                                         nsecs_t actualPresentDelta, Fps interval) {
     if (expectedPresentDelta <= 0) return {0.0f, JankSeverityType::Unknown};
 
     const int32_t jankBitmask = JankType::DisplayHAL | JankType::SurfaceFlingerCpuDeadlineMissed |
@@ -415,10 +415,10 @@ std::pair<float, JankSeverityType> calculateJankSeverity(int32_t jankType,
     }
 
     const auto absDelay = std::abs(expectedPresentDelta - actualPresentDelta);
-    const float ratio = static_cast<float>(absDelay + expectedPresentDelta) /
-            static_cast<float>(expectedPresentDelta);
+    const float ratio = static_cast<float>(absDelay + interval.getPeriodNsecs()) /
+            static_cast<float>(interval.getPeriodNsecs());
     const float w_s = std::log2(ratio);
-    const float w_f = std::sqrt(static_cast<float>(expectedPresentDelta) /
+    const float w_f = std::sqrt(static_cast<float>(interval.getPeriodNsecs()) /
                                 static_cast<float>((120_Hz).getPeriodNsecs()));
     const float score = w_s * w_f;
 
@@ -595,8 +595,7 @@ std::optional<float> SurfaceFrame::getJankSeverityScore() const {
         // Frame hasn't been presented yet.
         return std::nullopt;
     }
-    return calculateJankSeverity(mJankType.value(), mExpectedPresentDelta, mActualPresentDelta)
-            .first;
+    return mJankScore;
 }
 
 nsecs_t SurfaceFrame::getBaseTime() const {
@@ -843,10 +842,8 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         // Cannot do any classification for invalid present time.
         mJankType.legacy() = JankType::Unknown;
         mJankType.experimental() = mJankType.legacy();
-        if (FlagManager::getInstance().jank_classification_v2()) {
-            if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
-                mJankType.experimental() = JankType::DisplayNotOn;
-            }
+        if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
+            mJankType.experimental() = JankType::DisplayNotOn;
         }
         mJankSeverityTypeLegacy = JankSeverityType::Unknown;
         if (outDeadlineDelta) {
@@ -865,10 +862,8 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
         mJankType.legacy() = mPresentState != PresentState::Presented ? JankType::Dropped
                                                                       : JankType::AppDeadlineMissed;
         mJankType.experimental() = mJankType.legacy();
-        if (FlagManager::getInstance().jank_classification_v2()) {
-            if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
-                mJankType.experimental() = JankType::DisplayNotOn;
-            }
+        if (displayFrameJankTypeExperimental & JankType::DisplayNotOn) {
+            mJankType.experimental() = JankType::DisplayNotOn;
         }
         mJankSeverityTypeLegacy = JankSeverityType::Unknown;
         if (outDeadlineDelta) {
@@ -887,19 +882,6 @@ void SurfaceFrame::classifyJankLocked(int32_t displayFrameJankTypeLegacy,
 
     classifyJankLegacyLocked(displayFrameJankTypeLegacy, refreshRate, displayFrameRenderRate,
                              outDeadlineDelta, outPresentDelay);
-    if (!FlagManager::getInstance().jank_classification_v2()) {
-        if (mPresentState != PresentState::Presented) {
-            mJankType.legacy() = JankType::Dropped;
-            // Since frame was not presented, lets drop any present value
-            mActuals.presentTime = 0;
-            mJankSeverityTypeLegacy = JankSeverityType::Unknown;
-        }
-
-        mJankType.experimental() = mJankType.legacy();
-        mFramePresentMetadata.experimental() = mFramePresentMetadata.legacy();
-        mFrameReadyMetadata.experimental() = mFrameReadyMetadata.legacy();
-        return;
-    }
 
     const auto previousFrameData = previousFrameDataLocked();
 
@@ -1088,6 +1070,11 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankTypeLe
 
     classifyJankLocked(displayFrameJankTypeLegacy, displayFrameJankTypeExperimental, refreshRate,
                        displayFrameRenderRate, &deadlineDelta, &presentDelay);
+    const auto [score, severity] =
+            calculateJankSeverity(mJankType.value(), mExpectedPresentDelta, mActualPresentDelta,
+                                  mRenderRate ? *mRenderRate : mDisplayFrameRenderRate);
+    mJankSeverity = severity;
+    mJankScore = score;
 
     if (mPredictionState != PredictionState::None) {
         // Only update janky frames if the app used vsync predictions
@@ -1102,6 +1089,7 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankTypeLe
         jd.frameIntervalNs =
                 (mRenderRate ? *mRenderRate : mDisplayFrameRenderRate).getPeriodNsecs();
         jd.presentDelayNs = presentDelay;
+        jd.jankScore = mJankScore;
 
         if (mPredictionState == PredictionState::Valid) {
             jd.scheduledAppFrameTimeNs = mPredictions.endTime - mPredictions.startTime;
@@ -1240,22 +1228,16 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
 
         if (mPresentState == PresentState::Dropped) {
             actualSurfaceFrameStartEvent->set_present_type(FrameTimelineEvent::PRESENT_DROPPED);
-            if (FlagManager::getInstance().jank_classification_v2()) {
-                actualSurfaceFrameStartEvent->set_present_type_experimental(
-                        FrameTimelineEvent::PRESENT_DROPPED);
-            }
+            actualSurfaceFrameStartEvent->set_present_type_experimental(
+                    FrameTimelineEvent::PRESENT_DROPPED);
         } else if (mPresentState == PresentState::Unknown) {
             actualSurfaceFrameStartEvent->set_present_type(FrameTimelineEvent::PRESENT_UNSPECIFIED);
-            if (FlagManager::getInstance().jank_classification_v2()) {
-                actualSurfaceFrameStartEvent->set_present_type_experimental(
-                        FrameTimelineEvent::PRESENT_UNSPECIFIED);
-            }
+            actualSurfaceFrameStartEvent->set_present_type_experimental(
+                    FrameTimelineEvent::PRESENT_UNSPECIFIED);
         } else {
             actualSurfaceFrameStartEvent->set_present_type(toProto(mFramePresentMetadata.value()));
-            if (FlagManager::getInstance().jank_classification_v2()) {
-                actualSurfaceFrameStartEvent->set_present_type_experimental(
-                        toProto(mFramePresentMetadata.altValue()));
-            }
+            actualSurfaceFrameStartEvent->set_present_type_experimental(
+                    toProto(mFramePresentMetadata.altValue()));
         }
         actualSurfaceFrameStartEvent->set_on_time_finish(mFrameReadyMetadata.value() ==
                                                          FrameReadyMetadata::OnTimeFinish);
@@ -1263,21 +1245,13 @@ void SurfaceFrame::traceActuals(int64_t displayFrameToken, nsecs_t monoBootOffse
         actualSurfaceFrameStartEvent->set_jank_type(jankTypeBitmaskToProto(mJankType.value()));
         actualSurfaceFrameStartEvent->set_prediction_type(toProto(mPredictionState));
         actualSurfaceFrameStartEvent->set_is_buffer(mIsBuffer);
-        if (FlagManager::getInstance().jank_classification_v2()) {
-            actualSurfaceFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
-            actualSurfaceFrameStartEvent->set_jank_type_experimental(
-                    jankTypeBitmaskToProto(mJankType.altValue()));
-            actualSurfaceFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
-            actualSurfaceFrameStartEvent->set_vsync_resynced_jitter_millis(mVsyncResyncedJitter /
-                                                                           1e6f);
-            const auto [score, type] =
-                    calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
-                                          mActualPresentDelta);
-            actualSurfaceFrameStartEvent->set_jank_severity_score(score);
-            actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(type));
-        } else {
-            actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
-        }
+        actualSurfaceFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
+        actualSurfaceFrameStartEvent->set_jank_type_experimental(
+                jankTypeBitmaskToProto(mJankType.altValue()));
+        actualSurfaceFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
+        actualSurfaceFrameStartEvent->set_vsync_resynced_jitter_millis(mVsyncResyncedJitter / 1e6f);
+        actualSurfaceFrameStartEvent->set_jank_severity_score(mJankScore);
+        actualSurfaceFrameStartEvent->set_jank_severity_type(toProto(mJankSeverity));
     });
 
     if (traced) {
@@ -1432,14 +1406,12 @@ void FrameTimeline::addSurfaceFrame(std::shared_ptr<SurfaceFrame> surfaceFrame) 
     SFTRACE_CALL();
     std::scoped_lock lock(mMutex);
 
-    if (FlagManager::getInstance().jank_classification_v2()) {
-        if (const auto it = mPreviousSurfaceFrames.find(surfaceFrame->getLayerId());
-            it != mPreviousSurfaceFrames.end()) {
-            surfaceFrame->setPreviousSurfaceFrame(it->second);
-        }
-
-        mPreviousSurfaceFrames[surfaceFrame->getLayerId()] = surfaceFrame;
+    if (const auto it = mPreviousSurfaceFrames.find(surfaceFrame->getLayerId());
+        it != mPreviousSurfaceFrames.end()) {
+        surfaceFrame->setPreviousSurfaceFrame(it->second);
     }
+
+    mPreviousSurfaceFrames[surfaceFrame->getLayerId()] = surfaceFrame;
 
     mCurrentDisplayFrame->addSurfaceFrame(surfaceFrame);
 }
@@ -1613,9 +1585,7 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
         }
 
         mJankType.experimental() =
-                !FlagManager::getInstance().jank_classification_v2() || mDisplayState.poweredOn
-                ? mJankType.legacy()
-                : JankType::DisplayNotOn;
+                mDisplayState.poweredOn ? mJankType.legacy() : JankType::DisplayNotOn;
         return;
     }
 
@@ -1650,12 +1620,6 @@ void FrameTimeline::DisplayFrame::classifyJank(nsecs_t& deadlineDelta,
     }
 
     classifyJankLegacy(presentDelay, previousActualPresentTime);
-
-    if (!FlagManager::getInstance().jank_classification_v2()) {
-        mJankType.experimental() = mJankType.legacy();
-        mFramePresentMetadata.experimental() = mFramePresentMetadata.legacy();
-        return;
-    }
 
     mPresentDelay = presentDelay;
     mActualPresentDelta = mSurfaceFlingerActuals.presentTime - previousActualPresentTime;
@@ -1776,6 +1740,10 @@ void FrameTimeline::DisplayFrame::onPresent(nsecs_t signalTime,
     nsecs_t displayPresentJitter = 0;
     classifyJank(deadlineDelta, displayPresentJitter, previousPredictedPresentTime,
                  previousActualPresentTime);
+    const auto [score, severity] = calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
+                                                         mActualPresentDelta, mRenderRate);
+    mJankSeverity = severity;
+    mJankScore = score;
 
     for (auto& surfaceFrame : mSurfaceFrames) {
         surfaceFrame->onPresent(signalTime, mJankType.legacy(), mJankType.experimental(),
@@ -1859,8 +1827,9 @@ void FrameTimeline::DisplayFrame::addSkippedFrame(pid_t surfaceFlingerPid, nsecs
             static_cast<float>(surfaceFrame->getPredictions().presentTime) >=
                     (static_cast<float>(previousPredictionPresentTime) +
                      kThresh * static_cast<float>(mRenderRate.getPeriodNsecs())) &&
-            // sf skipped frame is not considered if app is self janked
-            surfaceFrame->getJankType() != JankType::None && !surfaceFrame->isSelfJanky()) {
+            // sf skipped frame is not considered if app is self janked or display is not on
+            surfaceFrame->getJankType() != JankType::None && !surfaceFrame->isSelfJanky() &&
+            mDisplayState.poweredOn) {
             skippedFrameStartTime = surfaceFrame->getPredictions().endTime;
             skippedFramePresentTime = surfaceFrame->getPredictions().presentTime;
             break;
@@ -1904,12 +1873,10 @@ void FrameTimeline::DisplayFrame::addSkippedFrame(pid_t surfaceFlingerPid, nsecs
             actualDisplayFrameStartEvent->set_present_type(FrameTimelineEvent::PRESENT_DROPPED);
             actualDisplayFrameStartEvent->set_jank_type(jankTypeBitmaskToProto(JankType::Dropped));
             actualDisplayFrameStartEvent->set_jank_severity_type(toProto(JankSeverityType::None));
-            if (FlagManager::getInstance().jank_classification_v2()) {
-                actualDisplayFrameStartEvent->set_jank_type_experimental(
-                        jankTypeBitmaskToProto(JankType::Dropped));
-                actualDisplayFrameStartEvent->set_present_type_experimental(
-                        FrameTimelineEvent::PRESENT_DROPPED);
-            }
+            actualDisplayFrameStartEvent->set_jank_type_experimental(
+                    jankTypeBitmaskToProto(JankType::Dropped));
+            actualDisplayFrameStartEvent->set_present_type_experimental(
+                    FrameTimelineEvent::PRESENT_DROPPED);
         });
 
         if (traced) {
@@ -1970,22 +1937,14 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
         actualDisplayFrameStartEvent->set_gpu_composition(mGpuFence != FenceTime::NO_FENCE);
         actualDisplayFrameStartEvent->set_jank_type(jankTypeBitmaskToProto(mJankType.value()));
         actualDisplayFrameStartEvent->set_prediction_type(toProto(mPredictionState));
-        if (FlagManager::getInstance().jank_classification_v2()) {
-            actualDisplayFrameStartEvent->set_present_type_experimental(
-                    toProto(mFramePresentMetadata.altValue()));
-            actualDisplayFrameStartEvent->set_jank_type_experimental(
-                    jankTypeBitmaskToProto(mJankType.altValue()));
-            actualDisplayFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
-            actualDisplayFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
-
-            const auto [score, type] =
-                    calculateJankSeverity(mJankType.value(), mExpectedPresentDelta,
-                                          mActualPresentDelta);
-            actualDisplayFrameStartEvent->set_jank_severity_score(score);
-            actualDisplayFrameStartEvent->set_jank_severity_type(toProto(type));
-        } else {
-            actualDisplayFrameStartEvent->set_jank_severity_type(toProto(mJankSeverityTypeLegacy));
-        }
+        actualDisplayFrameStartEvent->set_present_type_experimental(
+                toProto(mFramePresentMetadata.altValue()));
+        actualDisplayFrameStartEvent->set_jank_type_experimental(
+                jankTypeBitmaskToProto(mJankType.altValue()));
+        actualDisplayFrameStartEvent->set_present_delay_millis(mPresentDelay / 1e6f);
+        actualDisplayFrameStartEvent->set_jank_debug_metadata(mJankDebugMetadata);
+        actualDisplayFrameStartEvent->set_jank_severity_score(mJankScore);
+        actualDisplayFrameStartEvent->set_jank_severity_type(toProto(mJankSeverity));
     });
 
     if (traced) {
@@ -1994,11 +1953,9 @@ void FrameTimeline::DisplayFrame::traceActuals(pid_t surfaceFlingerPid, nsecs_t 
             auto packet = ctx.NewTracePacket();
             packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
             auto presentTime = mSurfaceFlingerActuals.presentTime;
-            if (FlagManager::getInstance().jank_classification_v2()) {
-                if (presentTime <= mSurfaceFlingerActuals.startTime) {
-                    // this can happen when the display is off and we use a stale fence
-                    presentTime = mSurfaceFlingerActuals.startTime + ms2ns(4);
-                }
+            if (presentTime <= mSurfaceFlingerActuals.startTime) {
+                // this can happen when the display is off and we use a stale fence
+                presentTime = mSurfaceFlingerActuals.startTime + ms2ns(4);
             }
             if (monoBootOffset > 0 &&
                 FlagManager::getInstance().frametimeline_boottime_in_lambda()) {
