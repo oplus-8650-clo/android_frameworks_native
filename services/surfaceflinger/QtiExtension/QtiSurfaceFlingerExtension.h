@@ -103,6 +103,7 @@ public:
                                                    Concurrency concurrency) override;
     virtual ndk::ScopedAStatus notifyTUIEventDone(int32_t in_error, DisplayType in_disp_type,
                                                   TUIEventType in_eventType) override;
+    virtual ndk::ScopedAStatus notifyContentFps(const std::string& name, int fps) override;
 
 private:
     android::surfaceflingerextension::QtiSurfaceFlingerExtensionIntf* mQtiSFExtnIntf;
