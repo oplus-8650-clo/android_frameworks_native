@@ -614,6 +614,144 @@ TEST_F(ServiceTest, GetAppSizeWrongSizes) {
                                            &externalStorageSize));
 }
 
+TEST_F(ServiceTest, GetAppSize_NonPositiveAppId) {
+    LOG(INFO) << "GetAppSize_NonPositiveAppId";
+    int32_t appId = -1;
+    int32_t pccId = kTestPccAppId;
+    std::vector<int64_t> sizesWithoutQuota, sizesWithQuota;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {0};
+    std::vector<std::string> codePaths = {"/data/app/com.foo"};
+
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    // 2. Write PCC data (2MB each to PCC CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, appId, 0,
+                                              ceDataInodes, codePaths, &sizesWithoutQuota));
+    // Check that all app-related sizes are 0
+    for (size_t i = 0; i < sizesWithoutQuota.size(); i++) {
+        ASSERT_EQ(0, sizesWithoutQuota[i]);
+    }
+
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, appId, 0,
+                                              ceDataInodes, codePaths, &sizesWithQuota));
+    // Check that all app-related sizes are 0
+    for (size_t i = 0; i < sizesWithQuota.size(); i++) {
+        ASSERT_EQ(0, sizesWithQuota[i]);
+    }
+
+    // Cleanup
+    service->destroyAppData(testUuid, "com.foo", kTestUserId, FLAG_STORAGE_CE | FLAG_STORAGE_DE, 0,
+                            0);
+}
+
+TEST_F(ServiceTest, GetAppSize_NonPositiveAppIdWithPcc) {
+    LOG(INFO) << "GetAppSize_NonPositiveAppIdWithPcc";
+    int32_t appId = -1;
+    int32_t pccId = kTestPccAppId;
+    std::vector<int64_t> sizesWithoutQuota, sizesWithQuota;
+    std::vector<std::string> packageNames = {"com.foo"};
+    std::vector<int64_t> ceDataInodes = {0};
+    std::vector<std::string> codePaths = {"/data/app/com.foo"};
+
+    android::os::CreateAppDataResult result;
+    android::os::CreateAppDataArgs args;
+    args.packageName = "com.foo";
+    args.uuid = testUuid;
+    args.userId = kTestUserId;
+    args.appId = kTestAppId;
+    args.pccId = kTestPccAppId;
+    args.seInfo = "default";
+    args.flags = FLAG_STORAGE_CE | FLAG_STORAGE_DE;
+
+    ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
+
+    const std::string cePath = get_full_path("user/0/com.foo");
+    const std::string dePath = get_full_path("user_de/0/com.foo");
+    const std::string pccCePath = get_full_path("user/0/com.foo-pcc");
+    const std::string pccDePath = get_full_path("user_de/0/com.foo-pcc");
+
+    // 1. Write initial app data (1MB each to CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", cePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=1M count=1", dePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=1M count=1", cePath.c_str())
+                   .c_str());
+
+    // 2. Write PCC data (2MB each to PCC CE, DE, and cache)
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccCePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/file.txt bs=2M count=1", pccDePath.c_str()).c_str());
+    system(StringPrintf("dd if=/dev/zero of=%s/cache/file.txt bs=2M count=1", pccCePath.c_str())
+                   .c_str());
+
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId, 0, appId, pccId,
+                                              ceDataInodes, codePaths, &sizesWithoutQuota));
+
+    // dataSize (sizes[1]) should be around 6MB (PCC data), NOT 9MB (app + PCC) or 3MB (app only).
+    const int64_t kDataWrittenToPcc = 6 * 1024 * 1024;
+    const int64_t kCacheDataWrittenToPcc = 2 * 1024 * 1024;
+    const int64_t kBuffer = 0.5 * 1024 * 1024;
+    EXPECT_GE(sizesWithoutQuota[1], kDataWrittenToPcc);
+    EXPECT_LT(sizesWithoutQuota[1], kDataWrittenToPcc + kBuffer);
+    EXPECT_GE(sizesWithoutQuota[2], kCacheDataWrittenToPcc);
+    EXPECT_LT(sizesWithoutQuota[2], kCacheDataWrittenToPcc + kBuffer);
+
+    // Other app-related sizes should be 0 (codeSize, cacheSize, etc.)
+    for (size_t i = 0; i < sizesWithoutQuota.size(); i++) {
+        if (i == 1 || i == 2) {
+            continue;
+        }
+        EXPECT_EQ(0, sizesWithoutQuota[i]);
+    }
+
+    ASSERT_BINDER_SUCCESS(service->getAppSize(testUuid, packageNames, kTestUserId,
+                                              InstalldNativeService::FLAG_USE_QUOTA, appId, pccId,
+                                              ceDataInodes, codePaths, &sizesWithQuota));
+
+    EXPECT_GE(sizesWithQuota[1], kDataWrittenToPcc);
+    EXPECT_LT(sizesWithQuota[1], kDataWrittenToPcc + kBuffer);
+    EXPECT_GE(sizesWithQuota[2], kCacheDataWrittenToPcc);
+    EXPECT_LT(sizesWithQuota[2], kCacheDataWrittenToPcc + kBuffer);
+
+    // Other app-related sizes should be 0
+    for (size_t i = 0; i < sizesWithQuota.size(); i++) {
+        if (i == 1 || i == 2) {
+            continue;
+        }
+        EXPECT_EQ(0, sizesWithQuota[i]);
+    }
+
+    // Cleanup
+    service->destroyAppData(testUuid, "com.foo", kTestUserId, FLAG_STORAGE_CE | FLAG_STORAGE_DE, 0,
+                            0);
+}
+
 // TODO: b/479055375 - Write tests for PCC storage stats attribution where device supports Project
 //  IDs
 // PCC Storage Attribution Tests
