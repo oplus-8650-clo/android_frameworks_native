@@ -36,7 +36,7 @@ namespace android::renderengine::skia {
 
 GraphiteBackendTexture::GraphiteBackendTexture(std::shared_ptr<skgpu::graphite::Recorder> recorder,
                                                AHardwareBuffer* buffer, bool isOutputBuffer)
-      : SkiaBackendTexture(buffer, isOutputBuffer), mRecorder(std::move(recorder)) {
+      : SkiaBackendTexture(isOutputBuffer), mRecorder(std::move(recorder)) {
     SFTRACE_CALL();
     AHardwareBuffer_Desc desc;
     AHardwareBuffer_describe(buffer, &desc);
@@ -72,12 +72,14 @@ sk_sp<SkImage> GraphiteBackendTexture::makeImage(SkAlphaType alphaType, ui::Data
                                                  TextureReleaseProc releaseImageProc,
                                                  ReleaseContext releaseContext,
                                                  ftl::Flags<ColorSpaceOptions> options) {
-    const SkColorType colorType = colorTypeForImage(alphaType);
-    sk_sp<SkImage> image = SkImages::WrapTexture(mRecorder.get(), mBackendTexture, colorType,
-                                                 alphaType, toSkColorSpace(dataspace, options),
+    // NOTE: Graphite infers the SkColorType of the image from the backend texture's format.
+    // It assumes the texture's alpha channel matches `alphaType`, and particularly, if `alphaType`
+    // is kUnknown_SkAlphaType, it will force alpha to opaque automatically when sampling it.
+    sk_sp<SkImage> image = SkImages::WrapTexture(mRecorder.get(), mBackendTexture, alphaType,
+                                                 toSkColorSpace(dataspace, options),
                                                  releaseImageProc, releaseContext);
     if (!image) {
-        logFatalTexture("Unable to generate SkImage.", dataspace, colorType);
+        logFatalTexture("Unable to generate SkImage.", dataspace, alphaType);
     }
     return image;
 }
@@ -86,14 +88,13 @@ sk_sp<SkSurface> GraphiteBackendTexture::makeSurface(ui::Dataspace dataspace,
                                                      TextureReleaseProc releaseSurfaceProc,
                                                      ReleaseContext releaseContext,
                                                      ftl::Flags<ColorSpaceOptions> options) {
-    const SkColorType colorType = internalColorType();
     SkSurfaceProps props;
     sk_sp<SkSurface> surface =
-            SkSurfaces::WrapBackendTexture(mRecorder.get(), mBackendTexture, colorType,
+            SkSurfaces::WrapBackendTexture(mRecorder.get(), mBackendTexture,
                                            toSkColorSpace(dataspace, options), &props,
                                            releaseSurfaceProc, releaseContext);
     if (!surface) {
-        logFatalTexture("Unable to generate SkSurface.", dataspace, colorType);
+        logFatalTexture("Unable to generate SkSurface.", dataspace, kPremul_SkAlphaType);
     }
     return surface;
 }
@@ -102,20 +103,21 @@ std::string GraphiteBackendTexture::backendDebugInfo() const {
     if (!mBackendTexture.isValid()) {
         return "GraphiteBackendTexture(INVALID)";
     }
-    return std::format("GraphiteBackendTexture(BackendTexture(dimensions={}x{}, {}))",
+    return std::format("GraphiteBackendTexture(dimensions={}x{}, {})",
                        mBackendTexture.dimensions().width(), mBackendTexture.dimensions().height(),
                        mBackendTexture.info().toString().c_str());
 }
 
 void GraphiteBackendTexture::logFatalTexture(const char* msg, ui::Dataspace dataspace,
-                                             SkColorType colorType) {
+                                             SkAlphaType alphaType) {
     const skgpu::graphite::TextureInfo& textureInfo = mBackendTexture.info();
-    LOG_ALWAYS_FATAL("%s isOutputBuffer:%d, dataspace:%d, colorType:%d"
+    LOG_ALWAYS_FATAL("%s isOutputBuffer:%d, dataspace:%d, alphaType:%d"
                      "\n\tBackendTexture: isValid:%d, dimensions:%dx%d"
                      "\n\t\tTextureInfo: %s",
-                     msg, isOutputBuffer(), static_cast<int32_t>(dataspace), colorType,
-                     mBackendTexture.isValid(), mBackendTexture.dimensions().width(),
-                     mBackendTexture.dimensions().height(), textureInfo.toString().c_str());
+                     msg, isOutputBuffer(), static_cast<int32_t>(dataspace),
+                     static_cast<int32_t>(alphaType), mBackendTexture.isValid(),
+                     mBackendTexture.dimensions().width(), mBackendTexture.dimensions().height(),
+                     textureInfo.toString().c_str());
 }
 
 } // namespace android::renderengine::skia
