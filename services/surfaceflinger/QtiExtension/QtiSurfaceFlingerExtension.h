@@ -252,6 +252,9 @@ public:
     std::optional<PhysicalDisplayId> qtiGetInternalDisplayId();
     void qtiSetDesiredModeByThermalLevel(float newLevelFps);
     bool qtiIsFpsDeferNeeded(float newFpsRequest) override;
+    void qtiDisallowThermalFpsChange() override {
+        mQtiAllowThermalFpsChange = false;
+    }
     DisplayModePtr qtiGetModeFromFps(float fps);
     void qtiHandleNewLevelFps(float currFps, float newLevelFps, float* fpsToSet);
     void qtiNotifyResolutionSwitch(int displayId, int32_t width, int32_t height,
