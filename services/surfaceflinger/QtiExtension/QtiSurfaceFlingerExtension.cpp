@@ -1564,12 +1564,12 @@ void QtiSurfaceFlingerExtension::qtiUpdateSmomoState() {
     mQtiSmomoOptimalRefreshActive = smomo_optimal_refresh;
 }
 
-void QtiSurfaceFlingerExtension::qtiSetDisplayAnimating() {
+void QtiSurfaceFlingerExtension::qtiSetDisplayAnimating() NO_THREAD_SAFETY_ANALYSIS {
     bool hasScreenshot = false;
     uint32_t hwcDisplayId;
 
     for (const auto& [token, displayDevice] :
-         FTL_FAKE_GUARD(mQtiFlinger->mStateLock, mQtiFlinger->mDisplays)) {
+        FTL_FAKE_GUARD(mQtiFlinger->mStateLock, mQtiFlinger->mDisplays)) {
         if (qtiGetHwcDisplayId(displayDevice, &hwcDisplayId) &&
             qtiIsInternalDisplay(displayDevice)) {
             continue;

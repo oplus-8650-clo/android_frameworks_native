@@ -449,9 +449,7 @@ TEST_F(UnwantedInteractionBlockerTest, SwitchIsPassedToNextListener) {
                           /*switchValues=*/4, /*switchMask=*/5);
 
     mBlocker->notifySwitch(args);
-    NotifySwitchArgs outArgs;
-    ASSERT_NO_FATAL_FAILURE(mTestListener.assertNotifySwitchWasCalled(&outArgs));
-    ASSERT_EQ(args, outArgs);
+    ASSERT_NO_FATAL_FAILURE(mTestListener.assertNotifySwitchWasCalled(testing::Eq(args)));
 }
 
 /**
@@ -462,9 +460,7 @@ TEST_F(UnwantedInteractionBlockerTest, DeviceResetIsPassedToNextListener) {
     NotifyDeviceResetArgs args(/*sequenceNum=*/1, /*eventTime=*/2, DEVICE_ID);
 
     mBlocker->notifyDeviceReset(args);
-    NotifyDeviceResetArgs outArgs;
-    ASSERT_NO_FATAL_FAILURE(mTestListener.assertNotifyDeviceResetWasCalled(&outArgs));
-    ASSERT_EQ(args, outArgs);
+    ASSERT_NO_FATAL_FAILURE(mTestListener.assertNotifyDeviceResetWasCalled(testing::Eq(args)));
 }
 
 /**

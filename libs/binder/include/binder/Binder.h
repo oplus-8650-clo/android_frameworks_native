@@ -215,6 +215,7 @@ private:
     [[nodiscard]] status_t stopRecordingTransactions();
     [[nodiscard]] std::optional<std::string> tryGetFunctionName(size_t transactionCode);
     status_t getTraceName(uint32_t code, char* buffer, size_t bufferSize);
+    [[nodiscard]] bool startTrace(uint32_t code);
 
     static std::atomic<bool> sGlobalInheritRt;
 

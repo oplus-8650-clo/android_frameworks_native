@@ -684,8 +684,6 @@ private:
     status_t getStalledTransactionInfo(
             int pid, std::optional<TransactionHandler::StalledTransactionInfo>& result);
 
-    void updateHdcpLevels(hal::HWDisplayId hwcDisplayId, int32_t connectedLevel, int32_t maxLevel);
-
     void addActivePictureListener(const sp<gui::IActivePictureListener>& listener);
 
     void removeActivePictureListener(const sp<gui::IActivePictureListener>& listener);
@@ -812,12 +810,14 @@ private:
             PhysicalDisplayId, DisplayModeId defaultModeId) const REQUIRES(mStateLock);
 
     status_t setDesiredDisplayModeSpecsInternal(
-            const sp<DisplayDevice>&, const scheduler::RefreshRateSelector::PolicyVariant&)
-            EXCLUDES(mStateLock, mModeTransitionMutex) REQUIRES(kMainThreadContext);
+            const sp<DisplayDevice>&, const scheduler::RefreshRateSelector::PolicyVariant&,
+            sp<IBinder> displaySyncToken = nullptr) EXCLUDES(mStateLock, mModeTransitionMutex)
+            REQUIRES(kMainThreadContext);
 
     // TODO(b/241285191): Look up RefreshRateSelector on Scheduler to remove redundant parameter.
     status_t applyRefreshRateSelectorPolicy(PhysicalDisplayId,
-                                            const scheduler::RefreshRateSelector&)
+                                            const scheduler::RefreshRateSelector&,
+                                            sp<IBinder> displaySyncToken = nullptr)
             REQUIRES(mStateLock, mModeTransitionMutex, kMainThreadContext);
 
     void updateWorkDuration(const sp<DisplayDevice>&, const gui::DisplayModeSpecs&);
@@ -921,7 +921,8 @@ private:
     status_t checkLayerLeaks();
 
     status_t mirrorLayer(const LayerCreationArgs& args, const sp<IBinder>& mirrorFromHandle,
-                         const sp<IBinder>& stopAtHandle, gui::CreateSurfaceResult& outResult);
+                         const sp<IBinder>& stopAtHandle, const sp<IBinder>& cropByHandle,
+                         gui::CreateSurfaceResult& outResult);
 
     // Finds the layer stack associated with the provided `displayId`, and returns the surface
     // control via `gui::CreateSurfaceResult`. Otherwise, PERMISSION_DENIED if the client lacks the

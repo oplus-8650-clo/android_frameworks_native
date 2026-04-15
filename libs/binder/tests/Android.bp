@@ -99,6 +99,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
+        "android.os.binder.flags-aconfig-cc",
         "libfakeservicemanager",
         "libgmock",
     ],
@@ -134,6 +135,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
+        "android.os.binder.flags-aconfig-cc",
         "libgmock",
     ],
     header_libs: [
@@ -148,6 +150,30 @@ cc_test {
         false: [],
         default: [],
     }),
+}
+
+cc_test {
+    name: "binderIPCThreadStateUnitTest",
+    host_supported: true,
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+    srcs: [
+        "binderIPCThreadStateUnitTest.cpp",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libcutils",
+        "libutils",
+        "liblog",
+    ],
+    static_libs: [
+        "libgmock",
+        "libfakeservicemanager",
+    ],
+    test_suites: ["general-tests"],
 }
 
 // unit test only, which can run on host and doesn't use /dev/binder
@@ -168,6 +194,7 @@ cc_test {
         "binderPersistableBundleTest.cpp",
         "binderStatsSpscQueueTest.cpp",
         "BinderCallsAggregationUnitTest.cpp",
+        "HistogramUnitTest.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -244,6 +271,7 @@ cc_test {
         "android.os.binder.flags-aconfig-cc",
         "libgmock",
         "libselinux",
+        "libfakeservicemanager",
     ],
     test_suites: [
         "general-tests",
@@ -978,6 +1006,9 @@ cc_test {
         "libutils",
         "libutilscallstack",
         "libbase",
+    ],
+    static_libs: [
+        "android.os.binder.flags-aconfig-cc",
     ],
     header_libs: [
         "jni_headers",

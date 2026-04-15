@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-#undef LOG_TAG
-#define LOG_TAG "PipelineCallbackHandlerTest"
-
 #include <gtest/gtest.h>
 
 #include "../skia/compat/PipelineCallbackHandler.h"
@@ -28,14 +25,23 @@ namespace {
 // This derived class splits open the PipelineCallbackHandler for testing
 class PipelineCallbackHandlerTest : public skia::PipelineCallbackHandler {
 public:
+    // constants
+    using skia::PipelineCallbackHandler::kMaxBlobSizeInBytes;
     using skia::PipelineCallbackHandler::kMaxNumSerializedPipelineKeys;
     using skia::PipelineCallbackHandler::kMaxSerializedKeySizeInBytes;
     using skia::PipelineCallbackHandler::kNumEpochsBetweenNewPipelineSaves;
     using skia::PipelineCallbackHandler::kNumEpochsBetweenUsesSaves;
+    using skia::PipelineCallbackHandler::kTooOldInEpochs;
 
-    using skia::PipelineCallbackHandler::CreateBlob;
+    // types
     using skia::PipelineCallbackHandler::PipelineData;
+    using skia::PipelineCallbackHandler::PipelineKey;
+    using skia::PipelineCallbackHandler::PipelineMap;
     using skia::PipelineCallbackHandler::SerializedKeyInfo;
+
+    // methods
+    using skia::PipelineCallbackHandler::CreateBlob;
+    using skia::PipelineCallbackHandler::Gather;
     using skia::PipelineCallbackHandler::UnpackBlob;
 
     PipelineCallbackHandlerTest()
@@ -362,33 +368,33 @@ TEST(PipelineCallbackHandlerTest, checkLastSaveEpochNewPipelines) {
             PipelineCallbackHandlerTest::kNumEpochsBetweenNewPipelineSaves;
 
     const Action kActions[] = {
-            Action::AddPipeline("1", 1, /* hasData= */ false, 0),
-            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                                     /* totDataSize */ 0, /* lastSaveEpoch */ 0,
+            Action::AddPipeline("1", 1, /* hasData= */ true, 0),
+            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                                     /* totDataSize */ 4, /* lastSaveEpoch */ 0,
                                      /* pipelineAdded */ true}),
             Action::AdvanceEpoch(kEpochsPerPipelineSave + 1),
             Action::TryToSaveCache(true),
-            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                                     /* totDataSize */ 4,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ false}),
 
-            Action::AddPipeline("2", 2, /* hasData= */ false, 0),
-            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 0, /* #withOut */ 2,
-                                     /* totDataSize */ 0,
+            Action::AddPipeline("2", 2, /* hasData= */ true, 0),
+            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 2, /* #withOut */ 0,
+                                     /* totDataSize */ 8,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ true}),
             Action::TryToSaveCache(
                     false), // there is a new pipeline but the time limit hasn't been reached
 
             Action::AdvanceEpoch(kEpochsPerPipelineSave + 1),
-            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 0, /* #withOut */ 2,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 2, /* #withOut */ 0,
+                                     /* totDataSize */ 8,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ true}),
             Action::TryToSaveCache(true),
-            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 0, /* #withOut */ 2,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 2, /* #withData */ 2, /* #withOut */ 0,
+                                     /* totDataSize */ 8,
                                      /* lastSaveEpoch */ 2 * kEpochsPerPipelineSave + 2,
                                      /* pipelineAdded */ false}),
 
@@ -410,34 +416,34 @@ TEST(PipelineCallbackHandlerTest, checkLastSaveEpochUses) {
     const Action kActions[] = {
             //----- Preamble - add a Pipeline and "save" the cache
             Action::AdvanceEpoch(kEpochsPerPipelineSave + 1),
-            Action::AddPipeline("1", 1, /* hasData= */ false, 0),
+            Action::AddPipeline("1", 1, /* hasData= */ true, 0),
             Action::CheckCacheStats(
-                    {/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                     /* totDataSize */ 0, /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
+                    {/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                     /* totDataSize */ 4, /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                      /* pipelineAdded */ false}), // f since AddPipeline triggered a save
             Action::TryToSaveCache(false),        // save should've occurred upon the AddPipeline
-            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                                     /* totDataSize */ 4,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ false}),
 
             //----- Actual test
             Action::UsePipeline("1", 1),
-            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                                     /* totDataSize */ 4,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ false}),
             Action::TryToSaveCache(false), // haven't reached uses time limit
 
             Action::AdvanceEpoch(kEpochsPerUsesSave + 1),
-            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                                     /* totDataSize */ 0,
+            Action::CheckCacheStats({/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                                     /* totDataSize */ 4,
                                      /* lastSaveEpoch */ kEpochsPerPipelineSave + 1,
                                      /* pipelineAdded */ false}),
             Action::TryToSaveCache(true), // we have reached the uses time limit
             Action::CheckCacheStats(
-                    {/* tot# */ 1, /* #withData */ 0, /* #withOut */ 1,
-                     /* totDataSize */ 0,
+                    {/* tot# */ 1, /* #withData */ 1, /* #withOut */ 0,
+                     /* totDataSize */ 4,
                      /* lastSaveEpoch */ kEpochsPerUsesSave + kEpochsPerPipelineSave + 2,
                      /* pipelineAdded */ false}),
     };
@@ -482,7 +488,7 @@ void run_serialize_keys_test(
     // Usually the test creates the blob from 'orig'. When testing blob truncation however
     // a munged blob is passed in.
     if (!blob) {
-        blob = PipelineCallbackHandlerTest::CreateBlob(orig, expectedEpoch);
+        blob = PipelineCallbackHandlerTest::CreateBlob(orig, expectedEpoch, /* rebaseEpoch= */ 0);
         EXPECT_TRUE(blob != nullptr);
     }
 
@@ -504,7 +510,7 @@ void run_serialize_keys_test(
 } // anonymous namespace
 
 // Basic test to ensure data round trips through serialization
-TEST(PipelineCallbackHandlerTest, blobCreation1) {
+TEST(PipelineCallbackHandlerTest, blobCreationRoundTrip) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
@@ -516,7 +522,7 @@ TEST(PipelineCallbackHandlerTest, blobCreation1) {
 
 // Test out handling of a missing serializedKey. Even though such Pipelines should be
 // filtered out during the gathering stage the blob serialization can deal with them.
-TEST(PipelineCallbackHandlerTest, blobCreation2) {
+TEST(PipelineCallbackHandlerTest, blobCreationMissingKey) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
@@ -531,7 +537,7 @@ TEST(PipelineCallbackHandlerTest, blobCreation2) {
 
 // Test out handling of too large of a serialized key. In this case we suspect some sort
 // of corruption of the file since the gathering phase should eliminate such keys.
-TEST(PipelineCallbackHandlerTest, blobCreation3) {
+TEST(PipelineCallbackHandlerTest, blobCreationKeyTooLarge) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
@@ -548,7 +554,7 @@ TEST(PipelineCallbackHandlerTest, blobCreation3) {
 
 // Test out handling of too many keys. In this case we suspect some sort
 // of corruption of the file since the gathering phase should limit the number of keys.
-TEST(PipelineCallbackHandlerTest, blobCreation4) {
+TEST(PipelineCallbackHandlerTest, blobCreationTooManyKeys) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
@@ -559,7 +565,7 @@ TEST(PipelineCallbackHandlerTest, blobCreation4) {
 }
 
 // Test out creating a blob with no keys. This should never happen but shouldn't crash.
-TEST(PipelineCallbackHandlerTest, blobCreation5) {
+TEST(PipelineCallbackHandlerTest, blobCreationNoKeys) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
@@ -570,14 +576,15 @@ TEST(PipelineCallbackHandlerTest, blobCreation5) {
 
 // Test out truncated blobs. These should all be detected and fail unpacking since
 // we suspect corruption of the file.
-TEST(PipelineCallbackHandlerTest, blobCreation6) {
+TEST(PipelineCallbackHandlerTest, blobCreationTruncatedBlobs) {
     std::vector<const PipelineCallbackHandlerTest::PipelineData*> orig;
     constexpr uint32_t kEpochOfSave = 77;
 
     create_keys(&orig, 1);
     ASSERT_EQ(orig.size(), 1ul);
 
-    sk_sp<SkData> blob = PipelineCallbackHandlerTest::CreateBlob(orig, kEpochOfSave);
+    sk_sp<SkData> blob =
+            PipelineCallbackHandlerTest::CreateBlob(orig, kEpochOfSave, /* rebaseEpoch= */ 0);
     EXPECT_TRUE(blob != nullptr);
 
     size_t numSlices = blob->size() / sizeof(uint32_t);
@@ -586,6 +593,201 @@ TEST(PipelineCallbackHandlerTest, blobCreation6) {
         sk_sp<SkData> tmp = blob->shareSubset(0, i * sizeof(uint32_t));
         run_serialize_keys_test(std::move(tmp), orig, /* expectedToSucceed= */ false, kEpochOfSave);
     }
+}
+
+namespace {
+
+void add(PipelineCallbackHandlerTest::PipelineMap* map, uint32_t uniqueKeyHash,
+         size_t dataSizeInBytes, uint32_t epoch) {
+    std::string label = std::to_string(uniqueKeyHash);
+
+    sk_sp<SkData> serializedKey =
+            dataSizeInBytes ? SkData::MakeZeroInitialized(dataSizeInBytes) : nullptr;
+
+    constexpr std::chrono::milliseconds kDefaultCreationTime = std::chrono::milliseconds(0);
+
+    auto newData =
+            std::make_unique<PipelineCallbackHandlerTest::PipelineData>(label, kDefaultCreationTime,
+                                                                        std::move(serializedKey),
+                                                                        epoch,
+                                                                        /* fromPrecompile= */ false,
+                                                                        /* fromWarmup= */ false);
+
+    map->emplace(std::make_pair(PipelineCallbackHandlerTest::PipelineKey(&newData->mLabel,
+                                                                         uniqueKeyHash),
+                                std::move(newData)));
+}
+
+void check_result(const std::vector<const PipelineCallbackHandlerTest::PipelineData*>& actual,
+                  SkSpan<const uint32_t> expectedLastUsageEpochs) {
+    ASSERT_EQ(expectedLastUsageEpochs.size(), actual.size());
+    if (expectedLastUsageEpochs.size() != actual.size()) {
+        return;
+    }
+
+    for (size_t i = 0; i < expectedLastUsageEpochs.size(); i++) {
+        ASSERT_EQ(expectedLastUsageEpochs[i], actual[i]->mLastUsageEpoch);
+    }
+}
+
+// Check that all the serialization invariants are met
+void check_limits(const std::vector<const PipelineCallbackHandlerTest::PipelineData*>& keys,
+                  uint32_t currentEpoch) {
+    ASSERT_TRUE(keys.size() <= PipelineCallbackHandlerTest::kMaxNumSerializedPipelineKeys);
+
+    for (auto key : keys) {
+        ASSERT_NE(key->mSerializedKey, nullptr);
+        if (key->mSerializedKey) {
+            ASSERT_TRUE(key->mSerializedKey->size() <=
+                        PipelineCallbackHandlerTest::kMaxSerializedKeySizeInBytes);
+
+            uint32_t epochDelta = currentEpoch - key->mLastUsageEpoch;
+            ASSERT_TRUE(epochDelta <= PipelineCallbackHandlerTest::kTooOldInEpochs);
+        }
+    }
+
+    sk_sp<SkData> blob = PipelineCallbackHandlerTest::CreateBlob(keys, /* epochOfSave= */ 0,
+                                                                 /* rebaseEpoch= */ 0);
+    ASSERT_NE(blob, nullptr);
+
+    if (blob) {
+        ASSERT_TRUE(blob->size() <= PipelineCallbackHandlerTest::kMaxBlobSizeInBytes);
+    }
+}
+
+} // anonymous namespace
+
+// Check basic MRU ordering behavior of the gather step
+TEST(PipelineCallbackHandlerTest, gatherMRUOrder) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    add(&map, /* uniqueKeyHash= */ 1, /* dataSizeInBytes= */ 4, /* epoch= */ 1);
+    add(&map, /* uniqueKeyHash= */ 2, /* dataSizeInBytes= */ 4, /* epoch= */ 2);
+    add(&map, /* uniqueKeyHash= */ 3, /* dataSizeInBytes= */ 4, /* epoch= */ 3);
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, 3, &rebaseEpoch);
+
+    ASSERT_EQ(rebaseEpoch, 1u);
+    check_limits(keys, /* currentEpoch= */ 3);
+    check_result(keys, {3, 2, 1});
+}
+
+// Pipelines w/o a serialized key should never be serialized
+TEST(PipelineCallbackHandlerTest, gatherMissingData) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    add(&map, /* uniqueKeyHash= */ 1, /* dataSizeInBytes= */ 4, /* epoch= */ 1);
+    add(&map, /* uniqueKeyHash= */ 2, /* dataSizeInBytes= */ 0, /* epoch= */ 2);
+    add(&map, /* uniqueKeyHash= */ 3, /* dataSizeInBytes= */ 4, /* epoch= */ 3);
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, 3, &rebaseEpoch);
+
+    ASSERT_EQ(rebaseEpoch, 1u);
+    check_limits(keys, /* currentEpoch= */ 3);
+    check_result(keys, {3, 1});
+}
+
+// Serialized keys that are too big individually should be eliminated
+TEST(PipelineCallbackHandlerTest, gatherKeyTooBig) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    constexpr uint32_t kTooBig = PipelineCallbackHandlerTest::kMaxSerializedKeySizeInBytes + 1;
+    add(&map, /* uniqueKeyHash= */ 1, /* dataSizeInBytes= */ 4, /* epoch= */ 1);
+    add(&map, /* uniqueKeyHash= */ 2, /* dataSizeInBytes= */ kTooBig, /* epoch= */ 2);
+    add(&map, /* uniqueKeyHash= */ 3, /* dataSizeInBytes= */ 4, /* epoch= */ 3);
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, 3, &rebaseEpoch);
+
+    ASSERT_EQ(rebaseEpoch, 1u);
+    check_limits(keys, /* currentEpoch= */ 3);
+    check_result(keys, {3, 1});
+}
+
+// Test out the hard limit on the number of keys
+TEST(PipelineCallbackHandlerTest, gatherTooManyKeys) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    constexpr uint32_t kMaxEpoch = PipelineCallbackHandlerTest::kMaxNumSerializedPipelineKeys + 10;
+    for (uint32_t i = 1; i <= kMaxEpoch; ++i) {
+        add(&map, /* uniqueKeyHash= */ i, /* dataSizeInBytes= */ 4, /* epoch= */ i);
+    }
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, kMaxEpoch, &rebaseEpoch);
+
+    // Although the older Pipelines get removed that doesn't happen until after the
+    // initial pass.
+    ASSERT_EQ(rebaseEpoch, 1u);
+    check_limits(keys, kMaxEpoch);
+
+    ASSERT_EQ(PipelineCallbackHandlerTest::kMaxNumSerializedPipelineKeys, keys.size());
+    uint32_t expectedEpoch = kMaxEpoch;
+    for (auto key : keys) {
+        ASSERT_EQ(expectedEpoch--, key->mLastUsageEpoch);
+    }
+}
+
+// Test out the serialized cache's max size limit
+TEST(PipelineCallbackHandlerTest, gatherTooBig) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    // Add the max number of allowed pipelines each of which has the max allowed sized serialized
+    // key
+    constexpr uint32_t kMaxEpoch = PipelineCallbackHandlerTest::kMaxNumSerializedPipelineKeys;
+    for (uint32_t i = 1; i <= kMaxEpoch; ++i) {
+        add(&map, /* uniqueKeyHash= */ i, PipelineCallbackHandlerTest::kMaxSerializedKeySizeInBytes,
+            /* epoch= */ i);
+    }
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, kMaxEpoch, &rebaseEpoch);
+
+    ASSERT_TRUE(PipelineCallbackHandlerTest::kMaxNumSerializedPipelineKeys > keys.size());
+    // Although the excess Pipelines get removed that doesn't happen until after the
+    // initial pass.
+    ASSERT_EQ(rebaseEpoch, 1u);
+    check_limits(keys, kMaxEpoch);
+}
+
+// Test out the age limit and Blob rebasing
+TEST(PipelineCallbackHandlerTest, gatherTooOld) {
+    PipelineCallbackHandlerTest::PipelineMap map;
+
+    constexpr uint32_t kAncientEpoch = PipelineCallbackHandlerTest::kTooOldInEpochs + 10;
+    add(&map, /* uniqueKeyHash= */ 1, /* dataSizeInBytes= */ 4, /* epoch= */ kAncientEpoch - 1);
+    add(&map, /* uniqueKeyHash= */ 2, /* dataSizeInBytes= */ 4, /* epoch= */ 2);
+    add(&map, /* uniqueKeyHash= */ 3, /* dataSizeInBytes= */ 4, /* epoch= */ kAncientEpoch - 3);
+
+    uint32_t rebaseEpoch = 0;
+    std::vector<const PipelineCallbackHandlerTest::PipelineData*> keys =
+            PipelineCallbackHandlerTest::Gather(map, kAncientEpoch, &rebaseEpoch);
+
+    ASSERT_EQ(rebaseEpoch, kAncientEpoch - 3);
+    check_limits(keys, /* currentEpoch= */ kAncientEpoch);
+    check_result(keys, {kAncientEpoch - 1, kAncientEpoch - 3});
+
+    // Verify that rebasing occurs correctly during serialization
+    sk_sp<SkData> blob = PipelineCallbackHandlerTest::CreateBlob(keys, kAncientEpoch, rebaseEpoch);
+    ASSERT_NE(blob, nullptr);
+
+    std::vector<PipelineCallbackHandlerTest::SerializedKeyInfo> readBack;
+    uint32_t readBackEpochOfSave = 0;
+    bool result =
+            PipelineCallbackHandlerTest::UnpackBlob(blob.get(), &readBack, &readBackEpochOfSave);
+    ASSERT_EQ(result, true);
+
+    ASSERT_EQ(readBackEpochOfSave, 3u);
+    ASSERT_EQ(readBack.size(), 2u);
+    ASSERT_EQ(readBack[0].mLastUsageEpoch, 2u);
+    ASSERT_EQ(readBack[1].mLastUsageEpoch, 0u);
 }
 
 } // namespace android::renderengine

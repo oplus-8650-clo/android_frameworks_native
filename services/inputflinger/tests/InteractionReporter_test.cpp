@@ -148,6 +148,56 @@ TEST_F(InteractionReporterTest, SetInteractionProviderService_RegistersProvider)
     mInteractionReporter.setInteractionProviderService(std::move(mockManager));
 }
 
+TEST_F(InteractionReporterTest, NotifyMotion_TriggersCallback) {
+    bool callbackCalled = false;
+    mInteractionReporter.getInteractionProvider()->requestWakeupCallback(
+            [&callbackCalled]() { callbackCalled = true; });
+
+    mInteractionReporter.notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN).build());
+
+    EXPECT_TRUE(callbackCalled);
+}
+
+TEST_F(InteractionReporterTest, NotifyKey_TriggersCallback) {
+    bool callbackCalled = false;
+    mInteractionReporter.getInteractionProvider()->requestWakeupCallback(
+            [&callbackCalled]() { callbackCalled = true; });
+
+    mInteractionReporter.notifyKey(
+            KeyArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD).build());
+
+    EXPECT_TRUE(callbackCalled);
+}
+
+TEST_F(InteractionReporterTest, NotifyMotion_TriggersCallbackExactlyOnce) {
+    int callbackCallCount = 0;
+    mInteractionReporter.getInteractionProvider()->requestWakeupCallback(
+            [&callbackCallCount]() { callbackCallCount++; });
+
+    mInteractionReporter.notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN).build());
+
+    mInteractionReporter.notifyMotion(
+            MotionArgsBuilder(AMOTION_EVENT_ACTION_MOVE, AINPUT_SOURCE_TOUCHSCREEN).build());
+
+    EXPECT_EQ(1, callbackCallCount);
+}
+
+TEST_F(InteractionReporterTest, NotifyKey_TriggersCallbackExactlyOnce) {
+    int callbackCallCount = 0;
+    mInteractionReporter.getInteractionProvider()->requestWakeupCallback(
+            [&callbackCallCount]() { callbackCallCount++; });
+
+    mInteractionReporter.notifyKey(
+            KeyArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD).build());
+
+    mInteractionReporter.notifyKey(
+            KeyArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD).build());
+
+    EXPECT_EQ(1, callbackCallCount);
+}
+
 TEST_F(InteractionReporterTest, NotifySwitch_ForwardsNotification) {
     NotifySwitchArgs args;
 

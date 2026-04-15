@@ -43,52 +43,18 @@ public:
     struct HierarchyState {
         uint32_t layerId;
         const LayerHierarchy* hierarchy;
+        nsecs_t lastUpdateTime;
 
         bool operator==(const HierarchyState&) const = default;
     };
 
-    // Accumulates LayerHierarchies to construct an MergeableHierarchy.
-    class Accumulator {
-    public:
-        Accumulator() : mTime(systemTime(SYSTEM_TIME_MONOTONIC)) {}
-        // Add a new LayerHierarchy to the equivalency. True if adding it was successful
-        bool add(const LayerHierarchy* hierarchy);
+    MergeableHierarchy(HierarchyState state) : mRoot(state) {}
 
-        // True if building an MergeableHierarchy is possible
-        bool canBuild() { return !mHierarchies.empty(); }
-
-        // Builds an MergeableHierarchy, and ascribes an owner for it.
-        MergeableHierarchy build() { return MergeableHierarchy(std::move(mHierarchies)); }
-
-    private:
-        nsecs_t mTime;
-        std::vector<HierarchyState> mHierarchies;
-    };
-
-    MergeableHierarchy(std::vector<HierarchyState>&& hierarchies)
-          : mHierarchies(std::move(hierarchies)) {}
-
-    uint32_t getId() const { return getFirstLayer(); }
-
-    uint32_t getFirstLayer() const { return mHierarchies.front().layerId; }
-    uint32_t getLastLayer() const { return mHierarchies.back().layerId; }
-
-    bool isValid() const { return !mHierarchies.empty(); }
-
-    bool hasLayer(uint32_t id) const {
-        return std::any_of(mHierarchies.cbegin(), mHierarchies.cend(),
-                           [=](const auto& hierarchy) { return hierarchy.layerId == id; });
-    }
+    uint32_t getId() const { return mRoot.layerId; }
 
     void constructSnapshot(LayerSnapshotBuilder& builder, const LayerSnapshotBuilder::Args& args,
-                           compositionengine::CompositionEngine& compositionEngine);
-    void constructSnapshotForHierarchy(LayerSnapshotBuilder& builder,
-                                       const LayerSnapshotBuilder::Args& args,
-                                       const LayerHierarchy* hierarchy, const LayerSnapshot& parent,
-                                       std::vector<std::unique_ptr<LayerSnapshot>>& outSnapshots);
-
-    void materializeSnapshot(std::vector<std::unique_ptr<LayerSnapshot>> snapshots,
-                             compositionengine::CompositionEngine& compositionEngine);
+                           compositionengine::CompositionEngine& compositionEngine,
+                           std::unordered_map<uint32_t, sp<Layer>>& legacyLayers);
 
     std::unique_ptr<LayerSnapshot> getSnapshotCopy() const {
         if (!mSnapshot) {
@@ -100,12 +66,10 @@ public:
 
     void dump(std::ostream& out) const;
 
-    bool operator==(const MergeableHierarchy& other) const {
-        return mHierarchies == other.mHierarchies;
-    }
+    bool operator==(const MergeableHierarchy& other) const { return mRoot == other.mRoot; }
 
 private:
-    std::vector<HierarchyState> mHierarchies;
+    HierarchyState mRoot;
     std::unique_ptr<LayerSnapshot> mSnapshot = nullptr;
 };
 

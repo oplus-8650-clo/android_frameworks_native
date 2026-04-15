@@ -20,12 +20,14 @@
 
 #include <android-base/logging.h>
 #include <ftl/enum.h>
+#include <format>
 #include <input/EvdevAbsCode.h>
 #include <input/EvdevKeyCode.h>
 #include <input/KeyCode.h>
 #include <input/MotionEventAxis.h>
 
 #include <map>
+#include <sstream>
 
 #include "EventHub.h"
 #include "android/keycodes.h"
@@ -116,6 +118,19 @@ void JoystickInputMapper::dump(std::string& dump) {
                              axis.rawAxisInfo.flat, axis.rawAxisInfo.fuzz,
                              axis.rawAxisInfo.resolution);
     }
+
+    dump += INDENT3 "Key to Axis Remappings:\n";
+    std::ostringstream ss;
+    if (mEvdevKeyToEvdevAbs.empty()) {
+        ss << INDENT4 "<empty>\n";
+    } else {
+        for (const auto& [evdevKey, axisData] : mEvdevKeyToEvdevAbs) {
+            const auto& [evdevAbs, isHighAxis] = axisData;
+            ss << INDENT4 << evdevKey << " -> " << evdevAbs
+               << (isHighAxis ? " (high)" : "") << "\n";
+        }
+    }
+    dump += ss.str();
 }
 
 std::list<NotifyArgs> JoystickInputMapper::reconfigure(nsecs_t when,

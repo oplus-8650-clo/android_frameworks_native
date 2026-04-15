@@ -1876,6 +1876,32 @@ TEST_F(LayerSnapshotTest, childInheritsParentDisableClientDrawnRadiusOpt) {
     EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.sfDrawnRadii, gui::CornerRadii(RADIUS));
 }
 
+TEST_F(LayerSnapshotTest, childInheritsParentDisableClientDrawnRadiusOptEvenIfParentNotRounded) {
+    // ROOT
+    // ├── 1 (Task - No rounded corners)
+    // │   ├── 11 (Activity - Has rounded corners)
+    static constexpr float RADIUS = 123.f;
+    static const gui::CornerRadii ACTUAL_RADIUS = gui::CornerRadii(RADIUS);
+    static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);
+
+    setRoundedCorners(11, RADIUS);
+    setCrop(11, Rect{1000, 1000});
+
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+    // Initially optimization is enabled for child
+    EXPECT_FALSE(getSnapshot({.id = 11})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, ACTUAL_RADIUS);
+
+    // Disable the optimization on the parent (Task) which has NO rounded corners
+    setFlags(1, layer_state_t::eRoundedCornerOptDisabled, layer_state_t::eRoundedCornerOptDisabled);
+    UPDATE_AND_VERIFY(mSnapshotBuilder, STARTING_ZORDER);
+
+    // Child should inherit the disabled flag even though parent is not rounded
+    EXPECT_TRUE(getSnapshot({.id = 11})->roundedCorner.disableClientDrawnRadii);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.reportedRadii, ZERO_RADIUS);
+    EXPECT_EQ(getSnapshot({.id = 11})->roundedCorner.sfDrawnRadii, ACTUAL_RADIUS);
+}
+
 TEST_F(LayerSnapshotTest, disableClientDrawnRadiusOpt) {
     static constexpr float RADIUS = 123.f;
     static const gui::CornerRadii ZERO_RADIUS = gui::CornerRadii(0.f);

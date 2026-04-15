@@ -47,7 +47,7 @@ class DisplayModeController {
 public:
     using ActiveModeListener = ftl::Function<void(PhysicalDisplayId, Fps vsyncRate, Fps renderFps)>;
 
-    DisplayModeController();
+    DisplayModeController() = default;
 
     void setHwComposer(HWComposer* composerPtr) { mComposerPtr = composerPtr; }
     void setActiveModeListener(const ActiveModeListener& listener) {
@@ -85,6 +85,10 @@ public:
     using DisplayModeRequestOpt = ftl::Optional<DisplayModeRequest>;
 
     DisplayModeRequestOpt getDesiredMode(PhysicalDisplayId) const EXCLUDES(mDisplayLock);
+
+    // Returns an array with all the displays that have a pending desired mode request that matches
+    // a given synchronization token.
+    std::vector<PhysicalDisplayId> getDisplayIdForRequest(sp<IBinder>) const EXCLUDES(mDisplayLock);
 
     // Consumes the display's desired mode if one exists. If it does not match the active resolution
     // (i.e. the DisplayModeRequest is a resolution switch), then it must match `expectedResolution`
@@ -153,8 +157,6 @@ public:
     void setSecure(PhysicalDisplayId displayId, bool secure) REQUIRES(kMainThreadContext)
             EXCLUDES(mDisplayLock);
 
-    bool supportsHdcp() const;
-
     void startHdcpNegotiation(PhysicalDisplayId displayId) REQUIRES(kMainThreadContext);
 
 private:
@@ -216,8 +218,6 @@ private:
 
     mutable std::mutex mDisplayLock;
     ui::PhysicalDisplayMap<PhysicalDisplayId, DisplayPtr> mDisplays GUARDED_BY(mDisplayLock);
-
-    bool mSupportsHdcp = false;
 };
 
 } // namespace android::display

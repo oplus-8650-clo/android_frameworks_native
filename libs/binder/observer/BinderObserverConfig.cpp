@@ -38,6 +38,10 @@ const char* getprogname() {
 }
 #endif
 
+bool BinderObserverConfig::Environment::fileExists(const std::string& path) {
+    return access(path.c_str(), F_OK) == 0;
+}
+
 std::string BinderObserverConfig::Environment::readFileLine(const std::string& path) {
     std::string content;
     std::ifstream file(path);
@@ -55,14 +59,22 @@ std::string BinderObserverConfig::Environment::getProcessName() {
     return getprogname();
 }
 
-BinderObserverConfig::ShardingConfig BinderObserverConfig::Environment::getSystemServerSharding() {
+BinderObserverConfig::ShardingConfig BinderObserverConfig::Environment::getSystemServerSharding(
+        bool debugMonitorAll) {
+    if (debugMonitorAll) {
+        return ShardingConfig{.processMod = 1,
+                              .spamMod = 1,
+                              .callMod = 1,
+                              .cpuSamplingMod = kBinderObserverV2Enabled ? 10 : 0};
+    }
+
     return kUseDroidfoodConfig
             ? ShardingConfig{.processMod = 1,
-                             .spamMod = 5,
+                             .spamMod = 10,
                              .callMod = 10,
                              .cpuSamplingMod = kBinderObserverV2Enabled ? 10 : 0}
             : ShardingConfig{.processMod = 10,
-                             .spamMod = 50,
+                             .spamMod = 100,
                              .callMod = 100,
                              .cpuSamplingMod = kBinderObserverV2Enabled ? 100 : 0};
 }
@@ -71,11 +83,11 @@ BinderObserverConfig::ShardingConfig
 BinderObserverConfig::Environment::getOtherProcessesSharding() {
     return kUseDroidfoodConfig
             ? ShardingConfig{.processMod = 5,
-                             .spamMod = 1,
+                             .spamMod = 2,
                              .callMod = 2,
                              .cpuSamplingMod = kBinderObserverV2Enabled ? 10 : 0}
             : ShardingConfig{.processMod = 50,
-                             .spamMod = 10,
+                             .spamMod = 20,
                              .callMod = 20,
                              .cpuSamplingMod = kBinderObserverV2Enabled ? 100 : 0};
 }
@@ -110,9 +122,14 @@ std::unique_ptr<BinderObserverConfig> BinderObserverConfig::createConfig(
     uid_t uid = environment->getUid();
     std::string processName = environment->getProcessName();
 
-    ShardingConfig sharding = (uid == AID_SYSTEM && processName == "system_server")
-            ? environment->getSystemServerSharding()
-            : environment->getOtherProcessesSharding();
+    ShardingConfig sharding;
+    if (uid == AID_SYSTEM && processName == "system_server") {
+        // Limit full monitoring to the system server process to prevent excessive overhead.
+        bool debugMonitorAll = environment->fileExists(kFullBinderSpamDetectionConfigPath);
+        sharding = environment->getSystemServerSharding(debugMonitorAll);
+    } else {
+        sharding = environment->getOtherProcessesSharding();
+    }
 
     if (sharding.processMod == 0) {
         // Sharding of 0 means disabled. No need to read further configuration.

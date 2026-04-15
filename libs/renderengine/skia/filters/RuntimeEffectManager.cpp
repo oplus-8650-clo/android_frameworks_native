@@ -212,7 +212,8 @@ sk_sp<SkShader> RuntimeEffectManager::createLinearEffectShader(
         sk_sp<SkShader> shader, const shaders::LinearEffect& linearEffect,
         sk_sp<SkRuntimeEffect> runtimeEffect, const mat4& colorTransform, float maxDisplayLuminance,
         float currentDisplayLuminanceNits, float maxLuminance, AHardwareBuffer* buffer,
-        aidl::android::hardware::graphics::composer3::RenderIntent renderIntent) {
+        aidl::android::hardware::graphics::composer3::RenderIntent renderIntent,
+        ftl::Flags<ColorSpaceOptions> options) {
     SFTRACE_CALL();
     SkRuntimeShaderBuilder effectBuilder(runtimeEffect);
 
@@ -236,14 +237,15 @@ sk_sp<SkShader> RuntimeEffectManager::createLinearEffectShader(
         // shader will be drawn into).
         //
         // The only exception is when there is a custom OETF, in which case the working color space
-        // should be the final output data space, since the linear effect will manage converting to
+        // be the final output data space, since the linear effect will manage converting to
         // the output gamut and apply the custom OETF. Using the final output space disables Skia's
         // color management post OETF.
         sk_sp<SkColorSpace> inputSpace =
-                renderengine::toSkColorSpace(linearEffect.inputDataspace)->makeLinearGamma();
+                renderengine::toSkColorSpace(linearEffect.inputDataspace, options)
+                        ->makeLinearGamma();
         sk_sp<SkColorSpace> outputSpace = nullptr;
         if ((linearEffect.fakeOutputDataspace & HAL_DATASPACE_TRANSFER_MASK)) {
-            outputSpace = renderengine::toSkColorSpace(linearEffect.fakeOutputDataspace);
+            outputSpace = renderengine::toSkColorSpace(linearEffect.fakeOutputDataspace, options);
         }
         shader = shader->makeWithWorkingColorSpace(inputSpace, outputSpace);
     }

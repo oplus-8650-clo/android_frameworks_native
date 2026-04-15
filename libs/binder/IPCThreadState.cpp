@@ -23,6 +23,18 @@
 #include <binder/ProcessState.h>
 #include <binder/TextOutput.h>
 
+#if defined(__ANDROID__) && !defined(__TRUSTY__)
+#define PCC_LOGGING
+#endif
+#if defined(PCC_LOGGING)
+#include <android/app/privatecompute/IPccSandboxManagerNative.h>
+#include <binder/IServiceManager.h>
+#include <binder/PersistableBundle.h>
+#include <private/android_filesystem_config.h>
+#include <utils/String8.h>
+#include <chrono>
+#endif // PCC_LOGGING
+
 #include <utils/CallStack.h>
 #include <utils/SystemClock.h>
 
@@ -1634,17 +1646,16 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
 
     case BR_FROZEN_BINDER:
         {
-            const struct binder_frozen_state_info* data =
-                    reinterpret_cast<const struct binder_frozen_state_info*>(
-                            mIn.readInplace(sizeof(struct binder_frozen_state_info)));
-            if (data == nullptr) {
+            struct binder_frozen_state_info info;
+            if (mIn.read(&info, sizeof(struct binder_frozen_state_info)) != NO_ERROR) {
                 result = UNKNOWN_ERROR;
                 break;
             }
-            BpBinder* proxy = (BpBinder*)data->cookie;
-            proxy->getPrivateAccessor().onFrozenStateChanged(data->is_frozen);
+            BpBinder* proxy = (BpBinder*)info.cookie;
+            proxy->getPrivateAccessor().onFrozenStateChanged(info.is_frozen);
+
             mOut.writeInt32(BC_FREEZE_NOTIFICATION_DONE);
-            mOut.writePointer(data->cookie);
+            mOut.writePointer(info.cookie);
         }
         break;
 
@@ -1682,6 +1693,58 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
     return result;
 }
 
+// Flag gated: isOutgoingTransactionsAuditable is only set if
+// android.app.privatecompute.flags.Flags.enablePccFrameworkSupport is true.
+bool IPCThreadState::logPccTransaction(BBinder* binder, uint32_t code, uid_t callingUid) {
+#if !defined(PCC_LOGGING)
+    (void)binder;
+    (void)code;
+    (void)callingUid;
+    return false;
+#else
+    // Only log if this process is PCC/PCS.
+    if (!ProcessState::self()->isOutgoingTransactionsAuditable()) {
+        return false;
+    }
+    // Do not log PCC -> PCC transactions.
+    if (callingUid >= AID_PCC_COMPONENT_PROCESS_START
+        && callingUid <= AID_PCC_COMPONENT_PROCESS_END) {
+        return false;
+    }
+
+    sp<android::app::privatecompute::IPccSandboxManagerNative> service =
+            interface_cast<app::privatecompute::IPccSandboxManagerNative>(
+                    defaultServiceManager()->checkService(String16("pcc_sandbox_native")));
+
+    if (service == nullptr) {
+        // Rate-limit the logging, as this could be spammy.
+        [[clang::no_destroy]] static std::atomic<std::chrono::steady_clock::time_point>
+                lastLogTime(std::chrono::steady_clock::time_point::min());
+        auto now = std::chrono::steady_clock::now();
+        auto last = lastLogTime.load(std::memory_order_relaxed);
+        // The first and second conditions are to prevent undefined behaviors; the first when last
+        // is a large negative number, the second in case the clock is not monotonic.
+        // The third is the rate-limit we want to enforce.
+        if ((last == std::chrono::steady_clock::time_point::min() || last > now || now - last > 1s)
+            && lastLogTime.compare_exchange_strong(last, now, std::memory_order_relaxed)) {
+            ALOGW("Failed to get IPccSandboxManager service.");
+        }
+        return false;
+    }
+
+    android::os::PersistableBundle bundle;
+    bundle.putString(String16("interface_name"), String16(binder->getInterfaceDescriptor()));
+    bundle.putString(String16("method_name"), String16(binder->getFunctionName(code).c_str()));
+    ::android::binder::Status status = service->writeToAuditLog(bundle);
+    if (!status.isOk()) {
+        ALOGW("Failed to write to audit log: %s", status.toString8().c_str());
+        return false;
+    }
+    return true;
+#endif // PCC_LOGGING
+}
+
+
 status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const Parcel& data,
                                           Parcel* reply, uint32_t flags) {
     LOG_ALWAYS_FATAL_IF(binder == nullptr, "Calling transact on null Binder.");
@@ -1690,6 +1753,13 @@ status_t IPCThreadState::doTransactBinder(BBinder* binder, uint32_t code, const 
             mProcess->mBinderObserver->onBeginTransaction(binder, code, getCallingUid());
 #endif
     status_t error = binder->transact(code, data, reply, flags);
+#if defined(PCC_LOGGING)
+    // PCC Next: Audit Mode. For PCC components and gateway apps, send binder transaction data to
+    // the audit log.
+    if (error == NO_ERROR) {
+        logPccTransaction(binder, code, getCallingUid());
+    }
+#endif // PCC_LOGGING
 #ifdef BINDER_WITH_OBSERVERS
     mProcess->mBinderObserver->onEndTransaction(mBinderStatsQueue, callInfo);
 #endif

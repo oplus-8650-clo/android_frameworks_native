@@ -300,6 +300,10 @@ pub trait IBinderInternal: IBinder {
     #[cfg(not(any(android_vndk, android_ndk)))]
     fn set_requesting_sid(&mut self, enable: bool);
 
+    ///  Allow the binder to inherit realtime scheduling policies from its caller.
+    ///  This must be called before the object is sent to another process. Not thread safe.
+    fn set_inherit_rt(&mut self, enable: bool);
+
     /// Dump this object to the given file handle
     #[cfg(feature = "std")]
     fn dump<F: AsRawFd>(&mut self, fp: &F, args: &[&str]) -> Result<()>;
@@ -857,6 +861,7 @@ unsafe impl<T, V: AsNative<T>> AsNative<T> for Option<V> {
 /// # use binder::BinderFeatures;
 /// BinderFeatures {
 ///   set_requesting_sid: true,
+///   set_inherit_rt: true,
 ///   ..BinderFeatures::default(),
 /// }
 /// ```
@@ -866,6 +871,9 @@ pub struct BinderFeatures {
     /// for `ThreadState::with_calling_sid` to work.
     #[cfg(not(any(android_vndk, android_ndk)))]
     pub set_requesting_sid: bool,
+    ///  Allow the binder to inherit realtime scheduling policies from its caller.
+    ///  This must be called before the object is sent to another process. Not thread safe.
+    pub set_inherit_rt: bool,
     // Ensure that clients include a ..BinderFeatures::default() to preserve backwards compatibility
     // when new fields are added. #[non_exhaustive] doesn't work because it prevents struct
     // expressions entirely.
@@ -1146,6 +1154,7 @@ macro_rules! declare_binder_interface {
 
                 #[cfg(not(any(android_vndk, android_ndk)))]
                 $crate::binder_impl::IBinderInternal::set_requesting_sid(&mut binder, features.set_requesting_sid);
+                $crate::binder_impl::IBinderInternal::set_inherit_rt(&mut binder, features.set_inherit_rt);
                 $crate::Strong::new(alloc::boxed::Box::new(binder))
             }
 

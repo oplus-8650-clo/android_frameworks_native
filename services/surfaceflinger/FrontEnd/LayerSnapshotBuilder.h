@@ -139,7 +139,8 @@ private:
             const LayerHierarchy::TraversalPath& traversalPath, const LayerSnapshot& parentSnapshot,
             int depth);
     void updateSnapshot(LayerSnapshot&, const Args&, const RequestedLayerState&,
-                        const LayerSnapshot& parentSnapshot, const LayerHierarchy::TraversalPath&);
+                        const LayerSnapshot& parentSnapshot, const LayerHierarchy::TraversalPath&,
+                        bool forMergedSnapshot = false);
     static void updateRelativeState(LayerSnapshot& snapshot, const LayerSnapshot& parentSnapshot,
                                     bool parentIsRelative, const Args& args);
     static void resetRelativeState(LayerSnapshot& snapshot);
@@ -166,7 +167,7 @@ private:
                               const ShadowSettings& globalShadowSettings);
     void updateInput(LayerSnapshot& snapshot, const RequestedLayerState& requested,
                      const LayerSnapshot& parentSnapshot, const LayerHierarchy::TraversalPath& path,
-                     const Args& args);
+                     const Args& args, bool forMergedSnapshot = false);
     // Return true if there are unreachable snapshots
     bool sortSnapshotsByZ(const Args& args);
     LayerSnapshot* createSnapshot(const LayerHierarchy::TraversalPath& id,
@@ -177,6 +178,7 @@ private:
                                           const RequestedLayerState& requestedCHildState,
                                           const Args& args, bool* outChildHasValidFrameRate);
     void updateTouchableRegionCrop(const Args& args);
+    bool updateMirrorLayerCrops(const Args& args);
 
     void applyStopLayers(const LayerHierarchy&, const LayerHierarchy::TraversalPath&);
     void applyStopLayersInternal(const LayerHierarchy&, const LayerHierarchy::TraversalPath&,
@@ -195,6 +197,8 @@ private:
     std::vector<std::unique_ptr<LayerSnapshot>> mMergedSnapshots;
     bool mResortSnapshots = false;
     int mNumInterestingSnapshots = 0;
+    bool mHasMirrorRequests = false;
+    bool mSnapshotsHaveMirrorCrop = false;
 };
 
 } // namespace android::surfaceflinger::frontend

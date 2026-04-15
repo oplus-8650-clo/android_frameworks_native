@@ -108,6 +108,16 @@ TEST_F(CompositionEngineTest, canSetTimeStats) {
     EXPECT_EQ(mTimeStats.get(), mEngine.getTimeStats());
 }
 
+TEST_F(CompositionEngineTest, powerHintSessionEnabled) {
+    EXPECT_TRUE(mEngine.isPowerHintSessionEnabled());
+
+    mEngine.setPowerHintSessionEnabled(false);
+    EXPECT_FALSE(mEngine.isPowerHintSessionEnabled());
+
+    mEngine.setPowerHintSessionEnabled(true);
+    EXPECT_TRUE(mEngine.isPowerHintSessionEnabled());
+}
+
 /*
  * CompositionEngine::present
  */

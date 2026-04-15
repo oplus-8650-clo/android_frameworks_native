@@ -35,7 +35,11 @@ static constexpr std::chrono::nanoseconds EVENT_SHOULD_NOT_OCCUR_TIMEOUT = 10ms;
 void FakeInputDispatcherPolicy::assertFilterInputEventWasCalled(const NotifyKeyArgs& args) {
     assertFilterInputEventWasCalledInternal([&args](const InputEvent& event) {
         ASSERT_EQ(event.getType(), InputEventType::KEY);
-        EXPECT_EQ(event.getDisplayId(), args.displayId);
+        if (args.displayId != ui::LogicalDisplayId::INVALID) {
+            EXPECT_EQ(event.getDisplayId(), args.displayId);
+        } else {
+            EXPECT_EQ(event.getDisplayId(), ui::LogicalDisplayId::DEFAULT);
+        }
 
         const auto& keyEvent = static_cast<const KeyEvent&>(event);
         EXPECT_EQ(keyEvent.getEventTime(), args.eventTime);
@@ -482,12 +486,29 @@ bool FakeInputDispatcherPolicy::filterInputEvent(const InputEvent& inputEvent,
 }
 
 void FakeInputDispatcherPolicy::interceptKeyBeforeQueueing(const KeyEvent& inputEvent, uint32_t&) {
+    {
+        std::scoped_lock lock(mLock);
+        mInterceptKeyBeforeQueueingEvent.push(inputEvent);
+        mNotifyInterceptKeyBeforeQueueing.notify_all();
+    }
     if (inputEvent.getAction() == AKEY_EVENT_ACTION_UP) {
         // Clear intercept state when we handled the event.
         if (std::holds_alternative<nsecs_t>(mInterceptKeyBeforeDispatchingResult)) {
             mInterceptKeyBeforeDispatchingResult = nsecs_t(0);
         }
     }
+}
+
+void FakeInputDispatcherPolicy::assertInterceptKeyBeforeQueueingWasCalled(
+        const ::testing::Matcher<KeyEvent>& matcher) {
+    std::unique_lock lock(mLock);
+    base::ScopedLockAssertion assumeLocked(mLock);
+    std::optional<KeyEvent> event =
+            getItemFromStorageLockedInterruptible(EVENT_SHOULD_OCCUR_TIMEOUT,
+                                                  mInterceptKeyBeforeQueueingEvent, lock,
+                                                  mNotifyInterceptKeyBeforeQueueing);
+    ASSERT_TRUE(event.has_value()) << "Expected interceptKeyBeforeQueueing to have been called.";
+    ASSERT_THAT(*event, matcher);
 }
 
 void FakeInputDispatcherPolicy::interceptMotionBeforeQueueing(ui::LogicalDisplayId, uint32_t,

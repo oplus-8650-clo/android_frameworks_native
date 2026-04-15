@@ -48,6 +48,15 @@
 #include <utils/SystemClock.h>
 #include "binder/IServiceManagerUnitTestHelper.h"
 
+#if defined(__ANDROID__) && !defined(__TRUSTY__)
+#define PCC_LOGGING
+#endif
+#if defined(PCC_LOGGING)
+#include <android/app/privatecompute/IPccSandboxManagerNative.h>
+#include <android/app/privatecompute/BnPccSandboxManagerNative.h>
+#include <private/android_filesystem_config.h>
+#endif // PCC_LOGGING
+
 #include <android_os_binder_flags.h>
 
 #include <linux/android/binderfs.h>
@@ -1999,6 +2008,57 @@ TEST_F(BinderLibTest, ThreadPoolStarted) {
     ASSERT_TRUE(server != nullptr);
     EXPECT_THAT(server->transact(BINDER_LIB_TEST_IS_THREADPOOL_STARTED, data, &reply), NO_ERROR);
     EXPECT_TRUE(reply.readBool());
+}
+
+TEST_F(BinderLibTest, TestIsOutgoingTransactionsAuditable) {
+    sp<ProcessState> ps = ProcessState::self();
+    EXPECT_FALSE(ps->isOutgoingTransactionsAuditable());
+    ps->setIsOutgoingTransactionsAuditable(true);
+    EXPECT_TRUE(ps->isOutgoingTransactionsAuditable());
+    ps->setIsOutgoingTransactionsAuditable(false);
+    EXPECT_FALSE(ps->isOutgoingTransactionsAuditable());
+}
+
+#if defined(PCC_LOGGING)
+class FakePccSandboxManager : public android::app::privatecompute::BnPccSandboxManagerNative {
+public:
+    ::android::binder::Status writeToAuditLog(const ::android::os::PersistableBundle& /*data*/)
+        override {
+        return ::android::binder::Status::ok();
+    }
+};
+#endif
+
+TEST_F(BinderLibTest, PccAuditTestLogPccTransaction) {
+    sp<ProcessState> ps = ProcessState::self();
+    uid_t nonPccUid = AID_APP_START;
+    uid_t pccUid = AID_PCC_COMPONENT_PROCESS_START;
+
+#if !defined(PCC_LOGGING)
+    // Case 0: PCC disabled: must return false
+    EXPECT_FALSE(IPCThreadState::logPccTransaction(nullptr, 0, nonPccUid));
+    EXPECT_FALSE(IPCThreadState::logPccTransaction(nullptr, 0, pccUid));
+#else
+    auto sm = defaultServiceManager();
+
+    // Case 1: Not auditable -> returns false
+    ps->setIsOutgoingTransactionsAuditable(false);
+    EXPECT_FALSE(IPCThreadState::logPccTransaction(nullptr, 0, nonPccUid));
+
+    // Case 2: CallingUid is PCC -> returns false
+    ps->setIsOutgoingTransactionsAuditable(true);
+    EXPECT_FALSE(IPCThreadState::logPccTransaction(nullptr, 0, pccUid));
+
+    // Case 3: CallingUid not PCC, no service -> returns false
+    // We can't remove the service here, this is tested in
+    // binderIPCThreadStateUnitTest's PccAuditTestLogPccTransactionNoService
+
+    // Case 4: CallingUid not PCC, service available -> returns true
+    sp<BBinder> binder = sp<BBinder>::make();
+    sp<FakePccSandboxManager> fakeService = sp<FakePccSandboxManager>::make();
+    EXPECT_EQ(OK, sm->addService(String16("pcc_sandbox_native"), fakeService));
+    EXPECT_TRUE(IPCThreadState::logPccTransaction(binder.get(), 0, nonPccUid));
+#endif
 }
 
 TEST_F(BinderLibTest, HangingServices) {

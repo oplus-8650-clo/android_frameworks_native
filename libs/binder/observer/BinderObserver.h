@@ -60,7 +60,10 @@ public:
     explicit BinderObserver(std::unique_ptr<BinderObserverConfig> config);
 
     void deregisterThread(std::shared_ptr<BinderStatsSpscQueue>& queue);
+    // Disabled inlining to correctly understand the performance impact of BinderObserver.
+    __attribute__((noinline))
     CallInfo onBeginTransaction(BBinder* binder, uint32_t code, uid_t callingUid);
+    __attribute__((noinline))
     void onEndTransaction(std::shared_ptr<BinderStatsSpscQueue>& queue, const CallInfo& callInfo);
 
 private:

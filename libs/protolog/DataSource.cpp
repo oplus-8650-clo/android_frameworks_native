@@ -46,6 +46,19 @@
 #include <unordered_map>
 #include <vector>
 
+namespace {
+constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325;
+constexpr uint64_t FNV_PRIME = 0x100000001b3;
+
+uint64_t fnv1a_64(std::string_view str, uint64_t hash = FNV_OFFSET_BASIS) {
+    for (char c : str) {
+        hash ^= static_cast<uint8_t>(c);
+        hash *= FNV_PRIME;
+    }
+    return hash;
+}
+} // namespace
+
 namespace android {
 namespace protolog {
 namespace datasource {
@@ -146,13 +159,22 @@ void InitDataSource(uint32_t backends) {
     });
 }
 
+InternResult IncrementalState::internGroup(std::string_view group) {
+    uint64_t hash = fnv1a_64(group); // Use the same FNV-1a helper
+    auto [id, is_new] = group_intern_table.getOrEmplace(group, hash);
+    return {id, is_new};
+}
+
 InternResult IncrementalState::internMessage(ProtoLogLevel level, std::string_view group,
                                              std::string_view format) {
+    uint64_t hash = fnv1a_64(group);
+    hash = fnv1a_64(format, hash);
+    hash ^= static_cast<uint8_t>(level);
+    hash *= FNV_PRIME;
+
     auto key = std::make_tuple(level, group, format);
-    auto [id, is_new] = message_intern_table.getOrEmplace(key, next_message_id);
-    if (is_new) {
-        next_message_id++;
-    }
+    auto [id, is_new] = message_intern_table.getOrEmplace(key, hash);
+
     return {id, is_new};
 }
 

@@ -267,7 +267,7 @@ int RpcServerTrusty::handleMessageInternal(void* ctx) {
     auto& session = channelContext->session;
     auto& connection = channelContext->connection;
     status_t status =
-            session->state()->drainCommands(connection, session, RpcState::CommandType::ANY);
+            session->state()->drainCommands(*connection, *session, RpcState::CommandType::ANY);
     if (status != OK) {
         LOG_RPC_DETAIL("Binder connection thread closing w/ status %s",
                        statusToString(status).c_str());

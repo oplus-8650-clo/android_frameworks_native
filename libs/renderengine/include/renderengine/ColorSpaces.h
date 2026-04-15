@@ -16,11 +16,18 @@
 
 #pragma once
 
+#include <ftl/flags.h>
+#include <ui/GraphicTypes.h>
+
 #include "SkColorSpace.h"
-#include "ui/GraphicTypes.h"
 
 namespace android {
 namespace renderengine {
+
+enum class ColorSpaceOptions : uint32_t {
+    None = 0,
+    USE_HLG_OOTF = 1 << 0,
+};
 
 // Converts an android dataspace to a supported SkColorSpace
 // Supported dataspaces are
@@ -30,7 +37,8 @@ namespace renderengine {
 // 4. BT2020 HLG
 // Unknown primaries are mapped to BT709, and unknown transfer functions
 // are mapped to sRGB.
-sk_sp<SkColorSpace> toSkColorSpace(ui::Dataspace dataspace);
+sk_sp<SkColorSpace> toSkColorSpace(ui::Dataspace dataspace,
+                                   ftl::Flags<ColorSpaceOptions> options = ColorSpaceOptions::None);
 
 } // namespace renderengine
 } // namespace android

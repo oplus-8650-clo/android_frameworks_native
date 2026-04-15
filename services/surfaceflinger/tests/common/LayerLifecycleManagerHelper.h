@@ -60,6 +60,7 @@ public:
         args.name = "testlayer";
         args.addToRoot = true;
         args.layerIdToMirror = layerIdToMirror;
+        args.croppedByLayerId = id;
         return args;
     }
 

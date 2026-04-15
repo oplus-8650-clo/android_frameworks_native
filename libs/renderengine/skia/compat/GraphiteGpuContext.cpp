@@ -148,6 +148,10 @@ bool GraphiteGpuContext::isAbandonedOrDeviceLost() {
     return mContext->isDeviceLost();
 }
 
+bool GraphiteGpuContext::supportsProtectedContent() const {
+    return mContext->supportsProtectedContent();
+}
+
 void GraphiteGpuContext::setResourceCacheLimit(size_t maxResourceBytes) {
     // Graphite has a separate budget for its Context and its Recorder. For now the majority of
     // memory that Graphite will allocate will be on the Recorder and minimal amount on the Context.
@@ -185,9 +189,18 @@ void GraphiteGpuContext::purgeResourcesNotUsedIn(std::chrono::milliseconds durat
     mRecorder->performDeferredCleanup(duration);
 }
 
-void GraphiteGpuContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
-    mContext->dumpMemoryStatistics(traceMemoryDump);
-    mRecorder->dumpMemoryStatistics(traceMemoryDump);
+void GraphiteGpuContext::reportStatsForEachCache(
+        const std::vector<ResourcePair>& resourceMap,
+        std::function<void(SkiaMemoryReporter& reporter, const char* label,
+                           const size_t cacheLimit)>
+                reportStats) const {
+    SkiaMemoryReporter contextReporter(resourceMap, true);
+    mContext->dumpMemoryStatistics(&contextReporter);
+    reportStats(contextReporter, "context", mContext->maxBudgetedBytes());
+
+    SkiaMemoryReporter recorderReporter(resourceMap, true);
+    mRecorder->dumpMemoryStatistics(&recorderReporter);
+    reportStats(recorderReporter, "recorder", mRecorder->maxBudgetedBytes());
 }
 
 } // namespace android::renderengine::skia

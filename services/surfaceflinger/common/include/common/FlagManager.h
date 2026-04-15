@@ -60,8 +60,10 @@ public:
     bool bugfix_layer_caching_color_inversion_flickering() const;
     bool bugfix_resize_virtual_display_surfaces() const;
     bool bugfix_virtual_display_refresh_rate() const;
+    bool color_transform_box_shadows_and_border() const;
     bool color_transform_translation() const;
     bool configure_work_duration() const;
+    bool debug_gpu_present_times() const;
     bool disable_transparent_region_hint() const;
     bool enable_color_correction_bugfix() const;
     bool fence_handling() const;
@@ -72,8 +74,10 @@ public:
     bool graphite_renderengine_preview_rollout() const;
     bool graphite_renderengine_preview2_rollout() const;
     bool graphite_renderengine_desktop_rollout() const;
+    bool hwc_buffer_override_skip() const;
     bool md_degrade_hdr() const;
     bool mirror_uid_filtering() const;
+    bool mirror_with_crop() const;
     bool monitor_buffer_fences() const;
     bool mrr_full_frame_rate_list() const;
     bool offload_gpu_composition() const;
@@ -97,8 +101,6 @@ public:
     bool enable_user_preferred_hdr_mode() const;
     bool frame_rate_category_mrr() const;
     bool graphite_renderengine() const;
-    bool hdcp_level_hal() const;
-    bool hdcp_negotiation() const;
     bool idle_screen_refresh_rate_timeout() const;
     bool local_tonemap_screenshots() const;
     bool luts_api() const;
