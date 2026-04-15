@@ -47,6 +47,7 @@ using aidl::vendor::qti::hardware::display::config::CameraSmoothOp;
 using aidl::vendor::qti::hardware::display::config::Concurrency;
 using aidl::vendor::qti::hardware::display::config::DisplayType;
 using aidl::vendor::qti::hardware::display::config::TUIEventType;
+using aidl::vendor::qti::hardware::display::config::VirtualDispType;
 
 using composer::LayerExtnIntf;
 using smomo::SmomoIntf;

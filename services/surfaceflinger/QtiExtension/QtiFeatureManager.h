@@ -62,6 +62,7 @@ private:
     bool mQtiEnableSmomoOptimalRefreshRate = false;
     bool mQtiAllowIdleFallback = false;
     bool mQtiReduceSlotsForWideVideo = true;
+    bool mQtiVirtualDispTypePQ = false;
 };
 
 } // namespace surfaceflingerextension
