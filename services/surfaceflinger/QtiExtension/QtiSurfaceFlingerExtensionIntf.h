@@ -40,6 +40,7 @@ enum QtiFeature {
     kSmomoOptimalRefreshRate,
     kIdleFallback,
     kReduceSlotsForWideVideo,
+    kVirtualDispTypePQ,
 };
 
 class QtiSurfaceFlingerExtensionIntf {
