@@ -63,6 +63,15 @@ TEST_P(BinderStabilityIntegrationTest, ExpectedStabilityForItsPartition) {
             ADD_FAILURE() << "Unrecognized partition for service: " << partition;
             return;
     }
+    // android.os.IAccessor is a binder from libbinder on the system partition.
+    // Processes from other partitions can register them with servicemanager
+    // but can't use them directly because they don't have access to libbinder
+    // directly. They will always have SYSTEM stability.
+    const auto desc = binder->getInterfaceDescriptor();
+    if (desc == String16("android.os.IAccessor")) {
+        ASSERT_TRUE(Stability::check(Stability::getRepr(binder.get()), Stability::Level::SYSTEM));
+        return;
+    }
 
     ASSERT_TRUE(Stability::check(Stability::getRepr(binder.get()), level))
             << "Binder hosted on partition " << partition
