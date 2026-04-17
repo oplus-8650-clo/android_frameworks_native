@@ -55,7 +55,7 @@ public:
 private:
     DISALLOW_COPY_AND_ASSIGN(GraphiteBackendTexture);
 
-    void logFatalTexture(const char* msg, ui::Dataspace dataspace, SkColorType colorType);
+    void logFatalTexture(const char* msg, ui::Dataspace dataspace, SkAlphaType alphaType);
 
     const std::shared_ptr<skgpu::graphite::Recorder> mRecorder;
     skgpu::graphite::BackendTexture mBackendTexture;

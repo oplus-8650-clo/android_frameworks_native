@@ -52,6 +52,7 @@ use binder::{
     ProcessState, Strong, ThreadState,
 };
 use log::{error, info, warn};
+use rustutils::android::system_properties::PropertyWatcher;
 use rustutils::android::{system_properties, users::AID_ROOT, users::AID_SYSTEM};
 use std::collections::HashMap;
 use std::fs;
@@ -97,12 +98,28 @@ fn is_shutting_down() -> Result<bool> {
     Ok(false)
 }
 
+fn wait_for_boot_completed() -> Result<()> {
+    let mut watcher = PropertyWatcher::new("sys.boot_completed")?;
+    info!("Waiting for boot completed...");
+    watcher.wait_for_value("1", None).context("Failed to wait for sys.boot_completed")?;
+    info!("Boot completed, proceeding with startup");
+    Ok(())
+}
+
 fn try_main() -> Result<()> {
     android_logger::init_once(
         android_logger::Config::default().with_tag(LOG_TAG).with_max_level(log::LevelFilter::Info),
     );
 
     info!("Starting AiSealHostService");
+
+    let is_enabled = system_properties::read_bool("service.aiseal.enable", false)?;
+    if !is_enabled {
+        error!("service.aiseal.enable is not set to 1, aiseal disabled. exiting");
+        std::process::exit(1);
+    }
+
+    wait_for_boot_completed()?;
 
     ProcessState::start_thread_pool();
 

@@ -1417,26 +1417,18 @@ void SkiaRenderEngine::drawLayersInternal(
             // isOpaque means we need to ignore the alpha in the image,
             // replacing it with the alpha specified by the LayerSettings. See
             // https://developer.android.com/reference/android/view/SurfaceControl.Builder#setOpaque(boolean)
-            // The proper way to do this is to use an SkColorType that ignores
-            // alpha, like kRGB_888x_SkColorType, and that is used if the
-            // incoming image is kRGBA_8888_SkColorType. However, the incoming
-            // image may be kRGBA_F16_SkColorType, for which there is no RGBX
-            // SkColorType, or kRGBA_1010102_SkColorType, for which we have
-            // kRGB_101010x_SkColorType, but it is not yet supported as a source
-            // on the GPU. (Adding both is tracked in skbug.com/12048.) In the
-            // meantime, we'll use a workaround that works unless we need to do
-            // any color conversion. The workaround requires that we pretend the
-            // image is already premultiplied, so that we do not premultiply it
-            // before applying SkBlendMode::kPlus.
-            const bool useIsOpaqueWorkaround = item.isOpaque &&
-                    (imageTextureRef->colorType() == kRGBA_1010102_SkColorType ||
-                     imageTextureRef->colorType() == kRGBA_F16_SkColorType);
-            const auto alphaType = useIsOpaqueWorkaround ? kPremul_SkAlphaType
-                    : item.isOpaque                      ? kOpaque_SkAlphaType
-                    : item.usePremultipliedAlpha         ? kPremul_SkAlphaType
-                                                         : kUnpremul_SkAlphaType;
+            // Signal this with kUnknown_SkAlphaType, since kOpaque_SkAlphaType is a promise that
+            // the image's contents are already opaque.
+            const auto alphaType = item.isOpaque              ? kUnknown_SkAlphaType :
+                                   item.usePremultipliedAlpha ? kPremul_SkAlphaType
+                                                              : kUnpremul_SkAlphaType;
             sk_sp<SkImage> image =
                     imageTextureRef->makeImage(layerDataspace, alphaType, colorSpaceOptions);
+            // If the image could not be created in such a way to respect item.isOpaque, then we
+            // need to use a workaround where we treat the image as premultiplied and apply
+            // SkBlendMode::kPlus with opaque black.
+            const bool useIsOpaqueWorkaround =
+                    item.isOpaque && image->alphaType() != kOpaque_SkAlphaType;
 
             auto texMatrix = getSkM44(item.textureTransform).asM33();
             // textureTansform was intended to be passed directly into a shader, so when
@@ -1528,10 +1520,9 @@ void SkiaRenderEngine::drawLayersInternal(
             }
             paint.setAlphaf(layer.alpha);
 
-            if (imageTextureRef->colorType() == kAlpha_8_SkColorType) {
+            if (image->colorType() == kAlpha_8_SkColorType) {
                 LOG_THREAD_STATE_AND_CRASH_IF(layer.disableBlending,
                                               "Cannot disableBlending with A8");
-
                 // SysUI creates the alpha layer as a coverage layer, which is
                 // appropriate for the DPU. Use a color matrix to convert it to
                 // a mask.

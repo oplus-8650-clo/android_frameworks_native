@@ -50,13 +50,17 @@ public:
 private:
     DISALLOW_COPY_AND_ASSIGN(GaneshBackendTexture);
 
-    void logFatalTexture(const char* msg, ui::Dataspace dataspace, SkColorType colorType);
+    SkColorType internalColorType() const { return mColorType; }
+
+    void logFatalTexture(const char* msg, ui::Dataspace dataspace, SkColorType colorType,
+                         SkAlphaType alphaType);
 
     const sk_sp<GrDirectContext> mGrContext;
     GrBackendTexture mBackendTexture;
     GrAHardwareBufferUtils::DeleteImageProc mDeleteProc;
     GrAHardwareBufferUtils::UpdateImageProc mUpdateProc;
     GrAHardwareBufferUtils::TexImageCtx mImageCtx;
+    SkColorType mColorType = kUnknown_SkColorType;
 };
 
 } // namespace android::renderengine::skia

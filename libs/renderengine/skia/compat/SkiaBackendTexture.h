@@ -34,13 +34,7 @@ namespace android::renderengine::skia {
  */
 class SkiaBackendTexture {
 public:
-    SkiaBackendTexture(AHardwareBuffer* buffer, bool isOutputBuffer)
-          : mIsOutputBuffer(isOutputBuffer) {
-        AHardwareBuffer_Desc desc;
-        AHardwareBuffer_describe(buffer, &desc);
-
-        mColorType = AHardwareBufferUtils::GetSkColorTypeFromBufferFormat(desc.format);
-    }
+    SkiaBackendTexture(bool isOutputBuffer)  : mIsOutputBuffer(isOutputBuffer) {}
     virtual ~SkiaBackendTexture() = default;
 
     // These two definitions mirror Skia's own types used for texture release callbacks, which are
@@ -65,31 +59,15 @@ public:
 
     bool isOutputBuffer() const { return mIsOutputBuffer; }
 
-    SkColorType internalColorType() const { return mColorType; }
-
     std::string toString() const {
-        return std::format("isOutputBuffer={}, internalColorType={}, {}", mIsOutputBuffer,
-                           static_cast<int>(internalColorType()), backendDebugInfo().c_str());
+        return std::format("isOutputBuffer={}, {}", mIsOutputBuffer, backendDebugInfo().c_str());
     }
 
 protected:
     virtual std::string backendDebugInfo() const = 0;
 
-    // Strip alpha channel from rawColorType if alphaType is opaque (note: only works for RGBA_8888)
-    SkColorType colorTypeForImage(SkAlphaType alphaType) const {
-        if (alphaType == kOpaque_SkAlphaType) {
-            // TODO: b/40043126 - Support RGBX SkColorType for F16 and support it and 101010x as a
-            // source
-            if (internalColorType() == kRGBA_8888_SkColorType) {
-                return kRGB_888x_SkColorType;
-            }
-        }
-        return internalColorType();
-    }
-
 private:
     const bool mIsOutputBuffer;
-    SkColorType mColorType = kUnknown_SkColorType;
 };
 
 } // namespace android::renderengine::skia
