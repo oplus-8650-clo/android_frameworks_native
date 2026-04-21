@@ -187,9 +187,12 @@ void QtiNullExtension::qtiTryDrawMethod(sp<DisplayDevice> display) {}
  * Methods for Dolphin Interface
  */
 void QtiNullExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {}
-void QtiNullExtension::qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                      uint32_t flags, nsecs_t desiredPresentTime) {}
-void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height) {}
+void QtiNullExtension::qtiDolphinTrackBufferIncrement(const char *name, int32_t layerId,
+                                                      bool isAutoTimestamp, uint32_t flags,
+                                                      nsecs_t desiredPresentTime) {}
+void QtiNullExtension::qtiDolphinTrackBufferDecrement(const char *name, int32_t layerId, int count,
+                                                      const Rect& bounds, bool focused,
+                                                      bool isVisible) {}
 void QtiNullExtension::qtiDolphinUnblockPendingBuffer() {}
 void QtiNullExtension::qtiDolphinTrackVsyncSignal() {}
 bool QtiNullExtension::qtiDolphinIsTargetFpsActive() {
