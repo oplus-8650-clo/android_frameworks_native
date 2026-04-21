@@ -164,9 +164,10 @@ public:
      * Methods for Dolphin APIs
      */
     virtual void qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod);
-    virtual void qtiDolphinTrackBufferIncrement(const char *name, bool isAutoTimestamp,
-                                                uint32_t flags, nsecs_t desiredPresentTime);
-    virtual void qtiDolphinTrackBufferDecrement(const char *name, int count, int width, int height);
+    virtual void qtiDolphinTrackBufferIncrement(const char *name, int32_t layerId,
+                                 bool isAutoTimestamp, uint32_t flags, nsecs_t desiredPresentTime);
+    virtual void qtiDolphinTrackBufferDecrement(const char *name, int32_t layerId,
+                                 int count, const Rect& bounds, bool focused, bool isVisible);
     virtual void qtiDolphinTrackVsyncSignal();
     virtual void qtiDolphinUnblockPendingBuffer();
     virtual bool qtiDolphinIsTargetFpsActive() = 0;

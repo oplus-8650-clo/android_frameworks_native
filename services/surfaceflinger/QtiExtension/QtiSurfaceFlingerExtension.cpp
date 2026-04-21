@@ -1803,17 +1803,19 @@ void QtiSurfaceFlingerExtension::qtiDolphinSetVsyncPeriod(nsecs_t vsyncPeriod) {
     }
 }
 
-void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferIncrement(const char *name,
+void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferIncrement(const char *name, int32_t layerId,
             bool isAutoTimestamp, uint32_t flags, nsecs_t desiredPresentTime) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, isAutoTimestamp, flags,
+        mQtiDolphinWrapper->qtiDolphinTrackBufferIncrement(name, layerId, isAutoTimestamp, flags,
                                                            desiredPresentTime);
     }
 }
 
-void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int count, int width, int height) {
+void QtiSurfaceFlingerExtension::qtiDolphinTrackBufferDecrement(const char* name, int32_t layerId,
+            int count, const Rect& bounds, bool focused, bool isVisible) {
     if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement) {
-        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, count, width, height);
+        mQtiDolphinWrapper->qtiDolphinTrackBufferDecrement(name, layerId, count, bounds, focused,
+                                                           isVisible);
     }
 }
 
