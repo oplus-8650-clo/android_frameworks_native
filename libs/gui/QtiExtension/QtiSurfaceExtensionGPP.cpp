@@ -43,7 +43,8 @@ QtiSurfaceExtensionGPP::QtiSurfaceExtensionGPP(
       mConnectedProducerListener(),
       mClientSetBufferCount(0),
       mLastQueuedBufferSlot(-1),
-      mAutoPrerotation(false) {
+      mAutoPrerotation(false),
+      mPresentMode(0) {
     // FIRST_APPLICATION_UID / AID_APP_START is first uid for 3rd party application.
     // The system application will not enter this logic.
     mUID = getuid();
@@ -170,10 +171,13 @@ bool QtiSurfaceExtensionGPP::DynamicEnableInternal(sp<IGraphicBufferProducer>* g
                 DisableGPPinternal(gbp);
             }
             if (needReconnect && mIsEnable == enable && nullptr != *gbp && nullptr != mConnectedProducerListener) {
-               IGraphicBufferProducer::QueueBufferOutput output;
-               (*gbp)->connect(mConnectedProducerListener, mAPI, mReportBufferRemoval, &output);
-               (*gbp)->setAutoPrerotation(mAutoPrerotation);
-               TransferBuffersToNewQueue(gbp);
+                IGraphicBufferProducer::QueueBufferOutput output;
+                (*gbp)->connect(mConnectedProducerListener, mAPI, mReportBufferRemoval, &output);
+                (*gbp)->setAutoPrerotation(mAutoPrerotation);
+                if (mPresentMode != 0) {
+                    (*gbp)->setPresentMode(mPresentMode);
+                }
+                TransferBuffersToNewQueue(gbp);
             }
             if (mIsEnable == enable) {
                 ALOGV("GPP dynamic On/Off succeeded, mIsEnable = %d", mIsEnable);
@@ -352,6 +356,11 @@ void QtiSurfaceExtensionGPP::setFrameRate(float frameRate, int8_t compatibility,
     mFrameRate = frameRate;
     mCompatibility = compatibility;
     mChangeFrameRateStrategy = changeFrameRateStrategy;
+}
+
+void QtiSurfaceExtensionGPP::setPresentMode(int32_t mode) {
+    ALOGI("%s: present mode %" PRId32, __func__, mode);
+    mPresentMode = mode;
 }
 
 } //namespace android::libguiextension
