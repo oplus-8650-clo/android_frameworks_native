@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wconversion"
@@ -221,27 +219,16 @@ sp<GraphicBuffer> allocateClearSlotBuffer() {
 
 } // anonymous namespace
 
-// QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
 void HidlComposer::CommandWriter::qtiSetDisplayElapseTime(uint64_t time) {
     constexpr uint16_t kSetDisplayElapseTimeLength = 2;
-// QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
-// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #ifdef QTI_DISPLAY_EXTENSION
-// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
-// QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
     beginCommand(static_cast<V2_1::IComposerClient::Command>(
                          IQtiComposerClient::Command::SET_DISPLAY_ELAPSE_TIME),
                  kSetDisplayElapseTimeLength);
     write64(time);
     endCommand();
-// QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
-// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 #endif
-// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
-// QTI_BEGIN: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
 }
-// QTI_END: 2023-01-30: Display: sf: Add support for setDisplayElapseTime
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
 void HidlComposer::CommandWriter::qtiSetLayerType(uint32_t type) {
     constexpr uint16_t kSetLayerTypeLength = 1;
@@ -278,7 +265,6 @@ void HidlComposer::CommandWriter::qtiSetLayerFlag(uint32_t type) {
     endCommand();
 #endif
 }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
 HidlComposer::HidlComposer(const std::string& serviceName)
       : mClearSlotBuffer(allocateClearSlotBuffer()), mWriter(kWriterInitialSize) {
@@ -288,7 +274,6 @@ HidlComposer::HidlComposer(const std::string& serviceName)
         LOG_ALWAYS_FATAL("failed to get hwcomposer service");
     }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #ifdef QTI_DISPLAY_EXTENSION
     if (sp<IQtiComposer> composer_3_1 = IQtiComposer::castFrom(mComposer)) {
         composer_3_1->createClient_3_1([&](const auto& tmpError, const auto& tmpClient) {
@@ -303,7 +288,6 @@ HidlComposer::HidlComposer(const std::string& serviceName)
     } else
 #endif
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (sp<IComposer> composer_2_4 = IComposer::castFrom(mComposer)) {
         composer_2_4->createClient_2_4([&](const auto& tmpError, const auto& tmpClient) {
             if (tmpError == V2_4::Error::NONE) {
@@ -799,13 +783,11 @@ Error HidlComposer::presentOrValidateDisplay(Display display, nsecs_t /*expected
 
     mReader.takePresentOrValidateStage(display, state);
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (*state == 2) { // Validate and present succeeded.
         mReader.takePresentFence(display, outPresentFence);
         mReader.hasChanges(display, outNumTypes, outNumRequests);
     }
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     if (*state == 1) { // Present succeeded
         mReader.takePresentFence(display, outPresentFence);
     }

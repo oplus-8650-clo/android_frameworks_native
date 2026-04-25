@@ -29,11 +29,9 @@ class Fence;
 class IGraphicBufferProducer;
 class String8;
 
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
 namespace surfaceflingerextension {
 class QtiDisplaySurfaceExtensionIntf;
 } // namespace surfaceflingerextension
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
 namespace compositionengine {
 
 /**
@@ -87,15 +85,9 @@ public:
     // Returns true if the render surface supports client composition prediction.
     virtual bool supportsCompositionStrategyPrediction() const;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #ifdef QTI_DISPLAY_EXTENSION
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
     virtual surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() = 0;
-// QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #endif
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 };
 
 } // namespace compositionengine

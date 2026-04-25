@@ -30,17 +30,13 @@ namespace android {
 
 class GraphicBuffer;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace surfaceflingerextension {
 class QtiDisplaySurfaceExtensionIntf;
 }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 
 namespace compositionengineextension {
 class QtiRenderSurfaceExtension;
 }
-// QTI_END: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 
 namespace compositionengine {
 
@@ -108,12 +104,9 @@ public:
 
     // Returns true if the render surface supports client composition prediction.
     virtual bool supportsCompositionStrategyPrediction() const = 0;
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     // TODO - check if we really need this here
 #ifdef QTI_DISPLAY_EXTENSION
     virtual android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf*
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
-// QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
     qtiGetDisplaySurfaceExtension() {
         return nullptr;
     }
@@ -122,10 +115,7 @@ public:
     qtiGetRenderSurfaceExtension() {
         return nullptr;
     }
-// QTI_END: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #endif
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 };
 
 } // namespace compositionengine

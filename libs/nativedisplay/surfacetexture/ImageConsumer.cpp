@@ -26,23 +26,19 @@
 #include <surfacetexture/ImageConsumer.h>
 #include <surfacetexture/SurfaceTexture.h>
 
-// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 #include "../QtiExtension/QtiImageConsumerExtension.h"
 
 
-// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 // Macro for including the SurfaceTexture name in log messages
 #define IMG_LOGE(x, ...) ALOGE("[%s] " x, st.mName.c_str(), ##__VA_ARGS__)
 #define IMG_LOGV(x, ...) ALOGV("[%s] " x, st.mName.c_str(), ##__VA_ARGS__)
 
 namespace android {
 
-// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 ImageConsumer::ImageConsumer() {
     mQtiImageConsumerExtn = std::make_shared<android::libnativedisplay::QtiImageConsumerExtension>(this);
 }
 
-// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 sp<GraphicBuffer> ImageConsumer::dequeueBuffer(int* outSlotid, android_dataspace* outDataspace,
                                                HdrMetadata* outHdrMetadata, bool* outQueueEmpty,
                                                SurfaceTexture& st,
