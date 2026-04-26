@@ -197,10 +197,8 @@ struct LayerSettings {
     };
     SampleTarget postProcessTarget;
 
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
     bool lutSourceIsHwc = false;
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 };
 
 // Keep in sync with custom comparison function in

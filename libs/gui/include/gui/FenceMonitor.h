@@ -22,12 +22,10 @@
 
 #include <ui/Fence.h>
 
-// QTI_BEGIN: 2025-05-12: Performance: Add a new feature for GPU big jank detection by monitoring GPU completion in FenceMonitor
 namespace android::libguiextension {
 class QtiFenceMonitorExtension;
 }
 
-// QTI_END: 2025-05-12: Performance: Add a new feature for GPU big jank detection by monitoring GPU completion in FenceMonitor
 namespace android::gui {
 
 class FenceMonitor {
@@ -53,9 +51,7 @@ private:
     std::deque<Payload> mQueue;
     std::condition_variable mCondition;
     std::mutex mMutex;
-// QTI_BEGIN: 2025-05-12: Performance: Add a new feature for GPU big jank detection by monitoring GPU completion in FenceMonitor
     android::libguiextension::QtiFenceMonitorExtension* mQtiFenceMonitorExtn = nullptr;
-// QTI_END: 2025-05-12: Performance: Add a new feature for GPU big jank detection by monitoring GPU completion in FenceMonitor
 };
 
 } // namespace android::gui

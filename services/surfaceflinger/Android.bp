@@ -102,9 +102,7 @@ cc_defaults {
         "-Wextra",
         "-Wformat",
         "-Wthread-safety",
-// QTI_BEGIN: 2023-04-25: Display: sf: extensions: Fix for thread safety
         "-Wthread-safety-analysis",
-// QTI_END: 2023-04-25: Display: sf: extensions: Fix for thread safety
         "-Wunreachable-code",
         "-Wunused",
     ],
@@ -366,12 +364,10 @@ filegroup {
 
 cc_binary {
     name: "surfaceflinger",
-// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     defaults: [
         "libsurfaceflinger_binary",
         "libqtisurfaceflingerextension_defaults",
     ],
-// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     init_rc: ["surfaceflinger.rc"],
     srcs: [
         ":surfaceflinger_binary_sources",
@@ -382,13 +378,11 @@ cc_binary {
     shared_libs: [
         "libSurfaceFlingerProp",
     ],
-// QTI_BEGIN: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
     static_libs: [
         "libqticompositionengineextension",
         "libqtisurfaceflingerextension",
 
     ],
-// QTI_END: 2023-02-26: Display: AidlComposerHal: Add support for QtiComposer3Client
 
     logtags: ["surfaceflinger.logtags"],
 }

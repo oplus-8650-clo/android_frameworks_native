@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 #pragma once
 
 #include <mutex>
@@ -35,7 +33,6 @@
 #include <scheduler/Fps.h>
 #include <scheduler/VsyncConfig.h>
 
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 #include "../QtiExtension/QtiPhaseOffsetsExtension.h"
 #include "../QtiExtension/QtiWorkDurationsExtension.h"
 
@@ -47,7 +44,6 @@ class QtiPhaseOffsetsExtension;
 class QtiWorkDurationsExtension;
 } // namespace android::surfaceflingerextension
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
 namespace android::scheduler {
 
 /*
@@ -104,11 +100,9 @@ public:
     void dump(std::string& result) const override;
 
 protected:
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     friend class android::surfaceflingerextension::QtiPhaseOffsetsExtension;
     friend class android::surfaceflingerextension::QtiWorkDurationsExtension;
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     virtual VsyncConfigSet constructOffsets(nsecs_t vsyncDuration) const = 0;
 
     VsyncConfigSet getConfigsForRefreshRateLocked(Fps fps) const REQUIRES(mLock);
@@ -139,10 +133,8 @@ protected:
                  nsecs_t hwcMinWorkDuration);
 
 private:
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     friend class android::surfaceflingerextension::QtiPhaseOffsetsExtension;
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     VsyncConfigSet constructOffsets(nsecs_t vsyncDuration) const override;
 
     VsyncConfigSet getDefaultOffsets(nsecs_t vsyncPeriod) const;
@@ -184,10 +176,8 @@ protected:
                  nsecs_t hwcMinWorkDuration);
 
 private:
-// QTI_BEGIN: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     friend class android::surfaceflingerextension::QtiWorkDurationsExtension;
 
-// QTI_END: 2023-01-17: Display: sf: Introduce QTI Extensions in AOSP
     VsyncConfigSet constructOffsets(nsecs_t vsyncDuration) const override;
 
     const nsecs_t mSfDuration;

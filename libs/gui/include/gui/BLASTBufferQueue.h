@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 /* Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 #ifndef ANDROID_GUI_BLAST_BUFFER_QUEUE_H
 #define ANDROID_GUI_BLAST_BUFFER_QUEUE_H
 
@@ -51,11 +49,9 @@ namespace android {
 constexpr size_t kSubmittedBuffersMapSizeHint = 8;
 constexpr size_t kDequeueTimestampsMapSizeHint = 32;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace libguiextension {
 class QtiBLASTBufferQueueExtension;
 };
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 class BLASTBufferQueue;
 class BufferItemConsumer;
 class BufferReleaseReader;
@@ -109,23 +105,13 @@ public:
     sp<Surface> getSurface(bool includeSurfaceControlHandle);
     bool isSameSurfaceControl(const sp<SurfaceControl>& surfaceControl) const;
 
-// QTI_BEGIN: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
     void qtiSetUndequeuedBufferCount(int count) {
-// QTI_END: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
-// QTI_BEGIN: 2023-04-24: Performance: gui: Fix for thread safety
         mQtiNumUndequeued = count;
-// QTI_END: 2023-04-24: Performance: gui: Fix for thread safety
-// QTI_BEGIN: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
     }
 
     int qtiGetUndequeuedBufferCount() const {
-// QTI_END: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
-// QTI_BEGIN: 2023-04-24: Performance: gui: Fix for thread safety
         return mQtiNumUndequeued;
-// QTI_END: 2023-04-24: Performance: gui: Fix for thread safety
-// QTI_BEGIN: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
     }
-// QTI_END: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
     void onFrameReplaced(const BufferItem& item) override;
     void onFrameAvailable(const BufferItem& item) override;
     void onFrameDequeued(const uint64_t) override;
@@ -196,10 +182,8 @@ private:
     friend class TestBLASTBufferQueue;
     friend class BBQBufferQueueCore;
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     friend class libguiextension::QtiBLASTBufferQueueExtension;
     libguiextension::QtiBLASTBufferQueueExtension* mQtiBBQExtn = nullptr;
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     // can't be copied
     BLASTBufferQueue& operator = (const BLASTBufferQueue& rhs);
     BLASTBufferQueue(const BLASTBufferQueue& rhs);
@@ -239,9 +223,7 @@ private:
     // BufferQueue internally allows 1 more than
     // the max to be acquired
     int32_t mMaxAcquiredBuffers GUARDED_BY(mMutex) = 1;
-// QTI_BEGIN: 2023-04-24: Performance: gui: Fix for thread safety
     int mQtiNumUndequeued = 0;
-// QTI_END: 2023-04-24: Performance: gui: Fix for thread safety
     int32_t mNumFrameAvailable GUARDED_BY(mMutex) = 0;
     int32_t mNumAcquired GUARDED_BY(mMutex) = 0;
 

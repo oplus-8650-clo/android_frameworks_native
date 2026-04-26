@@ -645,16 +645,10 @@ sk_sp<SkShader> SkiaRenderEngine::createRuntimeEffectShader(
     if (graphicBuffer) {
         if (parameters.layer.luts) {
             shader = mLutShader.lutShader(shader, parameters.layer.luts,
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           parameters.layer.sourceDataspace
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
-// QTI_BEGIN: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
                                           , toSkColorSpace(parameters.outputDataSpace)
-// QTI_END: 2026-01-12: Display: renderengine: Avoid linear gamma for hwc lut
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                                           , parameters.layer.lutSourceIsHwc
                                          );
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
         } else if (parameters.agtm) {
             SFTRACE_NAME("AGTM");
             skhdr::Metadata metadata = skhdr::Metadata::MakeEmpty();
@@ -1448,36 +1442,26 @@ void SkiaRenderEngine::drawLayersInternal(
 
             sk_sp<SkShader> shader;
 
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             bool useRawShader = layer.source.buffer.buffer && layer.luts && layer.lutSourceIsHwc;
 
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             if (layer.source.buffer.useTextureFiltering) {
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               if (useRawShader) {
                 shader = image->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp,
                                               SkSamplingOptions({SkFilterMode::kLinear,
                                                                  SkMipmapMode::kNone}),
                                               &matrix);
               } else {
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                 shader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
                                            SkSamplingOptions(
                                                    {SkFilterMode::kLinear, SkMipmapMode::kNone}),
                                            &matrix);
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               }
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             } else {
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               if (useRawShader) {
                 shader = image->makeRawShader(SkSamplingOptions(), matrix);
               } else {
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
                 shader = image->makeShader(SkSamplingOptions(), matrix);
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
               }
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
             }
 
             if (useIsOpaqueWorkaround) {

@@ -421,12 +421,10 @@ public:
 
     hal::HWLayerId getId() const override { return mId; }
 
-// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     hal::HWDisplayId qtiGetDisplayId() const {
         if (mDisplay) return mDisplay->getId();
         return 0;
     }
-// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     hal::Error setCursorPosition(int32_t x, int32_t y) override;
     hal::Error setBuffer(uint32_t slot, const android::sp<android::GraphicBuffer>& buffer,

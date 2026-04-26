@@ -201,9 +201,7 @@ std::optional<compositionengine::LayerFE::LayerSettings> LayerFE::prepareClientC
     // Record the name of the layer for debugging further down the stack.
     layerSettings.name = mSnapshot->name;
     layerSettings.luts = mSnapshot->luts ? mSnapshot->luts : targetSettings.luts;
-// QTI_BEGIN: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
     layerSettings.lutSourceIsHwc = mSnapshot->luts == nullptr;
-// QTI_END: 2025-12-24: Display: [Lut] Bypass eotf when using hwc lut
 
     layerSettings.renderCommandBuffer = mSnapshot->renderCommandBuffer;
     layerSettings.renderResourceCache = mSnapshot->renderResourceCache;
@@ -506,11 +504,9 @@ sp<Fence> LayerFE::getAndClearLastClientTargetAcquireFence() {
     return lastCompositionAcquireFence;
 }
 
-// QTI_BEGIN: 2024-07-26: Display: sf: use layer id instead of unique sequence
 int32_t LayerFE::getLayerId() const {
     return static_cast<int32_t>(mSnapshot->sequence);
 }
-// QTI_END: 2024-07-26: Display: sf: use layer id instead of unique sequence
 
 // QTI_BEGIN
 vec2 LayerFE::getCornerRadius() const {
