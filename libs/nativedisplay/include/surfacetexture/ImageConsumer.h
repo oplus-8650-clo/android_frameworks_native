@@ -31,10 +31,12 @@
 
 namespace android {
 
+// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
 namespace libnativedisplay {
 class QtiImageConsumerExtension;
 } // namespace libnativedisplay
 
+// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
 class SurfaceTexture;
 class DequeueBufferCallbacks;
 
@@ -44,7 +46,9 @@ class DequeueBufferCallbacks;
  */
 class ImageConsumer {
 public:
+// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
     ImageConsumer();
+// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
     typedef status_t (*SurfaceTexture_createReleaseFence)(bool useFenceSync, EGLSyncKHR* eglFence,
                                                           EGLDisplay* display, int* releaseFence,
                                                           void* fencePassThroughHandle);
@@ -98,8 +102,10 @@ private:
 
     int mNextSlot = 0;
     std::vector<int> mRecycledSlots;
+// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
 
     std::shared_ptr<android::libnativedisplay::QtiImageConsumerExtension> mQtiImageConsumerExtn = nullptr;
+// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
 };
 
 } /* namespace android */

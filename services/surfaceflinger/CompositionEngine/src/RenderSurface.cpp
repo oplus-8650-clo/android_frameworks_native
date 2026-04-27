@@ -34,8 +34,10 @@
 #include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
 
+// QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 #include "QtiExtension/QtiRenderSurfaceExtension.h"
 
+// QTI_END: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wconversion"
@@ -68,9 +70,13 @@ RenderSurface::RenderSurface(const CompositionEngine& compositionEngine, Display
         mDisplaySurface(args.displaySurface),
         mSize(args.displayWidth, args.displayHeight),
         mMaxTextureCacheSize(args.maxTextureCacheSize) {
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     mQtiDSExtnIntf = args.mQtiDSExtnIntf;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
+// QTI_BEGIN: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
     mQtiRSExtnIntf =
             std::make_shared<android::compositionengineextension::QtiRenderSurfaceExtension>(this);
+// QTI_END: 2023-05-30: Display: sf: Consider render surface format for cache reset in unified draw
 
     LOG_ALWAYS_FATAL_IF(!mNativeWindow);
 }
