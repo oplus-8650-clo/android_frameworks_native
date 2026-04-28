@@ -85,7 +85,9 @@ DisplayDevice::DisplayDevice(DisplayDeviceCreationArgs& args)
                     .setDisplaySurface(std::move(args.displaySurface))
                     .setMaxTextureCacheSize(
                             static_cast<size_t>(SurfaceFlinger::maxFrameBufferAcquiredBuffers))
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                     .qtiSetDisplaySurfaceExtension(args.mQtiDSExtnIntf)
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                     .build());
 
     if (!mFlinger->mDisableClientCompositionCache &&

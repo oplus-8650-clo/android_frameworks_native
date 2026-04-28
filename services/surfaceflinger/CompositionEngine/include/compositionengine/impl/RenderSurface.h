@@ -75,10 +75,12 @@ public:
     std::shared_ptr<renderengine::ExternalTexture>& mutableTextureForTest();
     base::unique_fd& mutableBufferReadyForTest();
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf*
     qtiGetDisplaySurfaceExtension() {
         return mQtiDSExtnIntf;
     }
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     std::shared_ptr<android::compositionengineextension::QtiRenderSurfaceExtension>
     qtiGetRenderSurfaceExtension() {
@@ -101,7 +103,9 @@ private:
     bool mProtected{false};
 
     friend class android::compositionengineextension::QtiRenderSurfaceExtension;
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     std::shared_ptr<android::compositionengineextension::QtiRenderSurfaceExtension> mQtiRSExtnIntf =
             nullptr;
 };

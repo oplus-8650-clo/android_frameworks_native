@@ -38,11 +38,13 @@ class Rect;
 class String8;
 class HWComposer;
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 namespace surfaceflingerextension {
 class QtiDisplaySurfaceExtensionIntf;
 class QtiFramebufferSurfaceExtension;
 } // namespace surfaceflingerextension
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 // ---------------------------------------------------------------------------
 
 class FramebufferSurface final : public compositionengine::DisplaySurface,
@@ -62,7 +64,9 @@ public:
     virtual const sp<Fence>& getClientTargetAcquireFence() const override;
 
     surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* qtiGetDisplaySurfaceExtn() {
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         return mQtiDSExtnIntf;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     }
 
 
@@ -118,9 +122,11 @@ private:
 
     // Slot tracker to map buffers to HWC slot IDs
     HwcSlotTracker mHwcSlotTracker GUARDED_BY(mMutex);
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     friend class android::surfaceflingerextension::QtiFramebufferSurfaceExtension;
     android::surfaceflingerextension::QtiDisplaySurfaceExtensionIntf* mQtiDSExtnIntf = nullptr;
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 };
 
 // ---------------------------------------------------------------------------
