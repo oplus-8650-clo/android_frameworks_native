@@ -686,9 +686,16 @@ void QtiSurfaceFlingerExtension::qtiUpdateVsyncConfiguration() {
 
         if (useWorkDurations && mQtiWorkDurationsExtn) {
 #ifdef DYNAMIC_APP_DURATIONS
+            bool usePowerOffsets = mQtiFeatureManager->qtiIsExtensionFeatureEnabled(
+                    QtiFeature::kEnablePowerSaveModeForVideo);
             // Update the Work Durations for the given refresh rates in mOffsets map
             g_comp_ext_intf_.phaseOffsetExtnIntf->GetWorkDurationConfigs(
                     &mQtiWorkDurationConfigsMap);
+            if (usePowerOffsets) {
+                g_comp_ext_intf_.phaseOffsetExtnIntf->GetWorkDurationConfigsForPowerMode(
+                        &mQtiWorkDurationConfigsMapPowerMode);
+            }
+
             mQtiWorkDurationsExtn->qtiUpdateWorkDurations(&mQtiWorkDurationConfigsMap);
 #endif
         } else if (mQtiPhaseOffsetsExtn) {
@@ -2268,6 +2275,41 @@ void QtiSurfaceFlingerExtension::qtiFbScalingOnPowerChange(sp<DisplayDevice> dis
     // releases the FrameBuffer that was acquired as part of queueBuffer()
     compositionDisplay->getRenderSurface()->onPresentDisplayCompleted();
     mQtiDisplaySizeChanged = false;
+}
+
+void QtiSurfaceFlingerExtension::qtiUpdateOffsetsForPowerMode(bool powerMode) {
+#ifdef PHASE_OFFSET_EXTN
+    bool useWorkDurations =
+            mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kWorkDurations);
+
+    ALOGI("qtiUpdateOffsetsForPowerMode: %s",
+          powerMode ? "Applying power save offsets" : "Restoring default offsets");
+
+    if (!mQtiInitVsyncConfigurationExtn) {
+        qtiSetVsyncConfiguration(mQtiFlinger->mScheduler->getVsyncConfiguration_ptr());
+    }
+
+    if (useWorkDurations && mQtiWorkDurationsExtn) {
+#ifdef DYNAMIC_APP_DURATIONS
+        if (powerMode) {
+            mQtiWorkDurationsExtn->qtiUpdateWorkDurations(&mQtiWorkDurationConfigsMapPowerMode);
+        } else {
+            mQtiWorkDurationsExtn->qtiUpdateWorkDurations(&mQtiWorkDurationConfigsMap);
+        }
+#endif
+        ConditionalLock lock(mQtiFlinger->mStateLock,
+                             std::this_thread::get_id() != mQtiFlinger->mMainThreadId);
+        const auto displayDevice = mQtiFlinger->getFrontInternalDisplayLocked();
+        if (!displayDevice) {
+            ALOGE("qtiUpdateOffsetsForPowerMode: no front internal display");
+            return;
+        }
+
+        Fps fps = displayDevice->refreshRateSelector().getActiveMode().fps;
+
+        mQtiFlinger->mScheduler->updatePhaseConfiguration(displayDevice->getPhysicalId(), fps);
+    }
+#endif
 }
 
 /*

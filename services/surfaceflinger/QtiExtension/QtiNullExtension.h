@@ -62,6 +62,7 @@ public:
     void qtiSetEarlyWakeUpConfig(const sp<DisplayDevice>& display, hal::PowerMode mode,
                                  bool isInternal) override;
     void qtiUpdateVsyncConfiguration() override;
+    void qtiUpdateOffsetsForPowerMode(bool powerMode) override;
 
     /*
      * Methods that call FrameScheduler APIs.

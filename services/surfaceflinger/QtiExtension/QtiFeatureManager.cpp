@@ -100,6 +100,10 @@ void QtiFeatureManager::qtiInit() {
     propName = qtiGetPropName(QtiFeature::kVirtualDispTypePQ);
     mQtiVirtualDispTypePQ = base::GetBoolProperty(propName, false);
     ALOGI_IF(mQtiVirtualDispTypePQ, "Enable Virtual DIsplayType: %d", mQtiVirtualDispTypePQ);
+
+    propName = qtiGetPropName(QtiFeature::kEnablePowerSaveModeForVideo);
+    mQtiEnablePowerSaveModeForVideo = base::GetBoolProperty(propName, false);
+    ALOGI_IF(mQtiEnablePowerSaveModeForVideo, "Enable Power Save Mode for low fps Video");
 }
 
 void QtiFeatureManager::qtiSetIDisplayConfig(std::shared_ptr<IDisplayConfig> aidl) {
@@ -164,6 +168,8 @@ bool QtiFeatureManager::qtiIsExtensionFeatureEnabled(QtiFeature feature) {
             return mQtiReduceSlotsForWideVideo;
         case QtiFeature::kVirtualDispTypePQ:
             return mQtiVirtualDispTypePQ;
+        case QtiFeature::kEnablePowerSaveModeForVideo:
+            return mQtiEnablePowerSaveModeForVideo;
         default:
             ALOGW("Queried unknown SF extension feature %d", feature);
             return false;
@@ -210,6 +216,8 @@ string QtiFeatureManager::qtiGetPropName(QtiFeature feature) {
             return "vendor.display.reduce_slots_for_wide_video";
         case QtiFeature::kVirtualDispTypePQ:
             return "vendor.display.virtual_display_type_pq";
+        case QtiFeature::kEnablePowerSaveModeForVideo:
+            return "vendor.display.enable_power_save_mode_for_video";
         default:
             ALOGW("Queried unknown SF extension feature %d", feature);
             return "";

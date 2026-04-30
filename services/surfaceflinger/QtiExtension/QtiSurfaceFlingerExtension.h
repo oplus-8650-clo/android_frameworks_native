@@ -166,6 +166,7 @@ public:
     void qtiSetEarlyWakeUpConfig(const sp<DisplayDevice>& display, hal::PowerMode mode,
                                  bool isInternal) override;
     void qtiUpdateVsyncConfiguration() override;
+    void qtiUpdateOffsetsForPowerMode(bool powerMode) override;
 
     /*
      * Methods that call FrameScheduler APIs.
@@ -320,6 +321,7 @@ private:
     std::mutex mQtiDisplayCountMutex;
     std::unordered_map<float, int64_t> mQtiAdvancedSfOffsets;
     std::unordered_map<float, std::pair<int64_t, int64_t>> mQtiWorkDurationConfigsMap;
+    std::unordered_map<float, std::pair<int64_t, int64_t>> mQtiWorkDurationConfigsMapPowerMode;
 
     LayerExtWrapper mQtiLayerExt;
 
