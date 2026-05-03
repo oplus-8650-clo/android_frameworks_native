@@ -107,8 +107,6 @@ public:
             return mTexture->getOrCreateSurface(dataspace, options);
         }
 
-        SkColorType colorType() const { return mTexture->mBackendTexture->internalColorType(); }
-
         std::string toString() const { return mTexture->toString(); }
 
         DISALLOW_COPY_AND_ASSIGN(LocalRef);

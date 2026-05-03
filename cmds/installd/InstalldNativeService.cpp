@@ -2709,8 +2709,12 @@ static void collectPccQuotaStats(const std::string& uuid, int32_t userId, int32_
     }
 }
 
-static void collectQuotaStats(const std::string& uuid, int32_t userId, int32_t appId, int32_t pccId,
-                              struct stats* stats, struct stats* extStats) {
+static void collectQuotaStatsForApp(const std::string& uuid, int32_t userId, int32_t appId,
+                                    struct stats* stats, struct stats* extStats) {
+    // early exit if appId <= 0 so that we don't return app storage stats to caller
+    if (appId <= 0) {
+        return;
+    }
     int64_t space, doubleSpaceToBeDeleted = 0;
     uid_t uid = multiuser_get_uid(userId, appId);
     static const bool supportsProjectId = internal_storage_has_project_id();
@@ -2768,7 +2772,11 @@ static void collectQuotaStats(const std::string& uuid, int32_t userId, int32_t a
             }
         }
     }
+}
 
+static void collectQuotaStats(const std::string& uuid, int32_t userId, int32_t appId, int32_t pccId,
+                              struct stats* stats, struct stats* extStats) {
+    collectQuotaStatsForApp(uuid, userId, appId, stats, extStats);
     collectPccQuotaStats(uuid, userId, pccId, stats);
 }
 
@@ -2958,7 +2966,7 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
     // runtest -x frameworks/base/services/tests/servicestests/src/com/android/server/pm/InstallerTest.java -m testGetAppSize
 
 #if MEASURE_DEBUG
-    LOG(INFO) << "Measuring user " << userId << " app " << appId;
+    LOG(INFO) << "Measuring user " << userId << " app " << appId << " pcc " << pccId;
 #endif
 
     // Here's a summary of the common storage locations across the platform,
@@ -2996,33 +3004,41 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
     // Calculating the app size of the external storage owning app in a manual way, since
     // calculating it through quota apis also includes external media storage in the app storage
     // numbers
-    if (flags & FLAG_USE_QUOTA && appId >= AID_APP_START && !ownsExternalStorage(appId)) {
-        atrace_pm_begin("code");
-        for (const auto& codePath : codePaths) {
-            calculate_tree_size(codePath, &stats.codeSize, -1,
-                    multiuser_get_shared_gid(0, appId));
+    if (flags & FLAG_USE_QUOTA && (appId <= 0 || appId >= AID_APP_START) &&
+        (appId <= 0 || !ownsExternalStorage(appId))) {
+        if (appId > 0) {
+            atrace_pm_begin("code");
+            for (const auto& codePath : codePaths) {
+                calculate_tree_size(codePath, &stats.codeSize, -1,
+                                    multiuser_get_shared_gid(0, appId));
+            }
+            atrace_pm_end();
         }
-        atrace_pm_end();
 
         atrace_pm_begin("quota");
         collectQuotaStats(uuidString, userId, appId, pccId, &stats, &extStats);
         atrace_pm_end();
     } else {
-        atrace_pm_begin("code");
-        for (const auto& codePath : codePaths) {
-            calculate_tree_size(codePath, &stats.codeSize);
+        if (appId > 0) {
+            atrace_pm_begin("code");
+            for (const auto& codePath : codePaths) {
+                calculate_tree_size(codePath, &stats.codeSize);
+            }
+            atrace_pm_end();
         }
-        atrace_pm_end();
 
         for (size_t i = 0; i < packageNames.size(); i++) {
             const char* pkgname = packageNames[i].c_str();
 
-            atrace_pm_begin("data");
-            auto cePath = create_data_user_ce_package_path(uuid_, userId, pkgname, ceDataInodes[i]);
-            collectManualStats(cePath, &stats);
-            auto dePath = create_data_user_de_package_path(uuid_, userId, pkgname);
-            collectManualStats(dePath, &stats);
-            atrace_pm_end();
+            if (appId > 0) {
+                atrace_pm_begin("data");
+                auto cePath =
+                        create_data_user_ce_package_path(uuid_, userId, pkgname, ceDataInodes[i]);
+                collectManualStats(cePath, &stats);
+                auto dePath = create_data_user_de_package_path(uuid_, userId, pkgname);
+                collectManualStats(dePath, &stats);
+                atrace_pm_end();
+            }
 
             if (pccId > 0) {
                 atrace_pm_begin("pcc");
@@ -3049,7 +3065,7 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
                 atrace_pm_end();
             }
 
-            if (!uuid) {
+            if (appId > 0 && !uuid) {
                 atrace_pm_begin("profiles");
                 calculate_tree_size(
                         create_primary_current_profile_package_dir_path(userId, pkgname),
@@ -3060,15 +3076,17 @@ binder::Status InstalldNativeService::getAppSize(const std::optional<std::string
                 atrace_pm_end();
             }
 
-            atrace_pm_begin("external");
-            auto extPath = create_data_media_package_path(uuid_, userId, "data", pkgname);
-            collectManualStats(extPath, &extStats);
-            auto mediaPath = create_data_media_package_path(uuid_, userId, "media", pkgname);
-            calculate_tree_size(mediaPath, &extStats.dataSize);
-            atrace_pm_end();
+            if (appId > 0) {
+                atrace_pm_begin("external");
+                auto extPath = create_data_media_package_path(uuid_, userId, "data", pkgname);
+                collectManualStats(extPath, &extStats);
+                auto mediaPath = create_data_media_package_path(uuid_, userId, "media", pkgname);
+                calculate_tree_size(mediaPath, &extStats.dataSize);
+                atrace_pm_end();
+            }
         }
 
-        if (!uuid) {
+        if (appId > 0 && !uuid) {
             atrace_pm_begin("dalvik");
             int32_t sharedGid = multiuser_get_shared_gid(0, appId);
             if (sharedGid != -1) {
