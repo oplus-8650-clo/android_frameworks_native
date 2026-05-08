@@ -37,6 +37,9 @@ public:
 
     sk_sp<SkSurface> createRenderTarget(SkImageInfo imageInfo) override;
 
+    constexpr RenderEngine::SkiaBackend getBackend_onlyUseForCriticalWorkarounds() const override {
+        return RenderEngine::SkiaBackend::Graphite;
+    }
     size_t getMaxRenderTargetSize() const override;
     size_t getMaxTextureSize() const override;
     bool isAbandonedOrDeviceLost() override;

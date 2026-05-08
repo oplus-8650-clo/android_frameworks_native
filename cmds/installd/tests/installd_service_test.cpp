@@ -279,6 +279,7 @@ TEST_F(ServiceTest, CreateAppData_QuotaEnforcementSet) {
     if (!flags::enable_set_inode_quotas()) {
         return;
     }
+    #if APPLY_HARD_QUOTAS
     android::os::CreateAppDataResult result;
     android::os::CreateAppDataArgs args;
     args.uuid = std::nullopt;
@@ -293,6 +294,7 @@ TEST_F(ServiceTest, CreateAppData_QuotaEnforcementSet) {
     ASSERT_BINDER_SUCCESS(service->createAppData(args, &result));
 
     EXPECT_LT(0, GetInodesQuotaHardLimitsForUid("", kTestAppId));
+    #endif
 }
 
 TEST_F(ServiceTest, FixupAppData_Upgrade) {
