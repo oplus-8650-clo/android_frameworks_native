@@ -930,12 +930,14 @@ binder::Status InstalldNativeService::createAppDataLocked(
             chown_app_profile_dir(packageName, appId, userId);
         }
 
-        if (flags::enable_set_inode_quotas()) {
+        #if APPLY_HARD_QUOTAS
+        if (flags::enable_set_inode_quotas() && appId >= FIRST_APPLICATION_UID) {
             ScopedTrace tracer_quota("prepare_app_inode_quota");
             if (!PrepareAppInodeQuota(uuid ? uuid->c_str() : "", uid)) {
                 PLOG(ERROR) << "Failed to set hard quota " + path;
             }
         }
+        #endif
 
         {
             ScopedTrace tracer_profile("prepare_app_profile_dir");

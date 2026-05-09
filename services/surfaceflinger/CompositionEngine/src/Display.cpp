@@ -667,12 +667,16 @@ void Display::qtiBeginDraw() {
 
 // QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
         if (SFTRACE_ENABLED()) {
+// QTI_BEGIN: 2023-03-22: Display: surfaceflinger: Fixes for spec fence
             std::string temp =
                     "Specfence_QtiBeginDraw_currentIndex_" + std::to_string(current.index);
+// QTI_END: 2023-03-22: Display: surfaceflinger: Fixes for spec fence
             SFTRACE_NAME(temp.c_str());
+// QTI_BEGIN: 2023-03-22: Display: surfaceflinger: Fixes for spec fence
         }
 
         if (current.index < 0) {
+// QTI_END: 2023-03-22: Display: surfaceflinger: Fixes for spec fence
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
             return;
         }

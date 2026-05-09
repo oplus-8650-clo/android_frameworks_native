@@ -213,8 +213,10 @@ std::shared_ptr<renderengine::ExternalTexture> RenderSurface::dequeueBuffer(
 void RenderSurface::queueBuffer(base::unique_fd readyFence, float hdrSdrRatio) {
     auto& state = mDisplay.getState();
 
+// QTI_BEGIN: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
     bool qtiFlipClientTarget = mQtiRSExtnIntf->qtiFlipClientTarget();
 
+// QTI_END: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
     if (state.usesClientComposition || state.flipClientTarget||
         qtiFlipClientTarget) {
         // hasFlipClientTargetRequest could return true even if we haven't
@@ -235,10 +237,12 @@ void RenderSurface::queueBuffer(base::unique_fd readyFence, float hdrSdrRatio) {
         if (mTexture == nullptr) {
             ALOGE("No buffer is ready for display [%s]", mDisplay.getName().c_str());
         } else {
+// QTI_BEGIN: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
             status_t result =
                     mNativeWindow->queueBuffer(mNativeWindow.get(),
                                                mTexture->getBuffer()->getNativeBuffer(),
                                                qtiFlipClientTarget ? -1
+// QTI_END: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
                                                                    : dup(readyFence));
             if (result != NO_ERROR) {
                 ALOGE("Error when queueing buffer for display [%s]: %d", mDisplay.getName().c_str(),
@@ -250,8 +254,10 @@ void RenderSurface::queueBuffer(base::unique_fd readyFence, float hdrSdrRatio) {
                 } else {
                     mNativeWindow->cancelBuffer(mNativeWindow.get(),
                                                 mTexture->getBuffer()->getNativeBuffer(),
+// QTI_BEGIN: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
                                                 qtiFlipClientTarget
                                                         ? -1
+// QTI_END: 2024-04-09: Display: sf: extensions: Fix flickers seen with FB Scaling enabled
                                                         : dup(readyFence));
                 }
             }

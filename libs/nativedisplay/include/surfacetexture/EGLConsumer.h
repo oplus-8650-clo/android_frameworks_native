@@ -27,13 +27,13 @@
 
 namespace android {
 
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 namespace libnativedisplay {
 class QtiEglImageExtension;
 } // namespace libnativedisplay
 
 
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 class SurfaceTexture;
 
 /*
@@ -202,10 +202,10 @@ protected:
         // mCropRect is the crop rectangle passed to EGL when mEglImage
         // was created.
         Rect mCropRect;
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 
         std::shared_ptr<android::libnativedisplay::QtiEglImageExtension> mQtiEglImageExtn = nullptr;
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
     };
 
     /**
@@ -292,10 +292,10 @@ protected:
      */
     static sp<GraphicBuffer> sReleasedTexImageBuffer;
     sp<EglImage> mReleasedTexImage;
-// QTI_BEGIN: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_BEGIN: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 
     friend class android::libnativedisplay::QtiEglImageExtension;
-// QTI_END: 2024-02-27: Display: nativedisplay: fix video call flicker issue
+// QTI_END: 2024-02-27: Graphics: nativedisplay: fix video call flicker issue
 };
 
 } // namespace android
