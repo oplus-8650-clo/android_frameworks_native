@@ -128,6 +128,7 @@ public:
 // QTI_END: 2023-02-15: Display: perf: recover the pre-rendering feature in the U
     void onFrameReplaced(const BufferItem& item) override;
     void onFrameAvailable(const BufferItem& item) override;
+    void onDisconnect() override;
     void onFrameDequeued(const uint64_t) override;
     void onFrameCancelled(const uint64_t) override;
 

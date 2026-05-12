@@ -1998,4 +1998,61 @@ TEST_F(BLASTFrameEventHistoryTest, FrameEventHistory_CompositorTimings) {
     adapter.waitForCallbacks();
 }
 
+TEST_F(BLASTBufferQueueTest, FifoLatestReadySyncDeadlock) {
+    BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+    sp<IGraphicBufferProducer> igbProducer;
+    setUpProducer(adapter, igbProducer, 10);
+
+    igbProducer->setPresentMode(ANATIVEWINDOW_PRESENT_FIFO_LATEST_READY);
+
+    ALOGD("Setting blocker sync transaction");
+    Transaction sync1;
+    adapter.setSyncTransaction(sync1);
+
+    ALOGD("Queuing Buffer 1 (The Blocker)");
+    // BBQ acquires this into sync1. Since sync1 is never applied, BBQ remains
+    // in a state where waitForTransactionCallback == true.
+    queueBuffer(igbProducer, 255, 0, 0, 0);
+
+    ALOGD("Queuing Buffer 2 (The Dropped Frame)");
+    // Because waitForTransactionCallback == true, BBQ does not acquire this immediately.
+    // It sits in the physical BufferQueue.
+    queueBuffer(igbProducer, 0, 255, 0, 0);
+
+    ALOGD("Queuing Buffer 3 (The Drop Trigger)");
+    // BBQ sees multiple frames waiting and calls acquireAndReleaseBuffer().
+    // BufferQueue silently drops Buffer 2 due to FIFO_LATEST_READY.
+    queueBuffer(igbProducer, 0, 0, 255, 0);
+
+    ALOGD("Waiting 500ms for internal drops to settle");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    ALOGD("Setting final sync transaction");
+    Transaction sync2;
+    adapter.setSyncTransaction(sync2);
+
+    ALOGD("Spawning async thread to queue the final buffer");
+    std::atomic<bool> thread_finished = false;
+    std::thread trap_thread([&]() {
+        ALOGD("Async thread calling queueBuffer");
+        // BBQ tries to flush the shadow queue. It should acquire Buffer 4 and return normally
+        // without getting stuck in a wait loop.
+        queueBuffer(igbProducer, 255, 255, 255, 0);
+        ALOGD("Async thread queueBuffer returned");
+        thread_finished = true;
+    });
+
+    ALOGD("Main thread waiting for up to 500ms");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    if (!thread_finished) {
+        ALOGE("FAILURE: The queueBuffer call hung! Deadlock detected.");
+        trap_thread.detach();
+        FAIL() << "Test failed: queueBuffer hung due to sync transaction deadlock.";
+    } else {
+        ALOGD("SUCCESS: The queueBuffer call returned normally.");
+        trap_thread.join();
+    }
+}
+
 } // namespace android
