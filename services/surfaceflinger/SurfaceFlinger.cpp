@@ -3043,6 +3043,9 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
                 focused, isVisible);
     }
 
+    // Must flush after the latch loop so per-layer discards run first.
+    mQtiSFExtnIntf->qtiDolphinFlushLatchUnsignaledGpuFences();
+
     updateLayerHistory(latchTime);
     mLayerSnapshotBuilder.forEachSnapshot([&](const frontend::LayerSnapshot& snapshot) {
         // update output's dirty region if a snapshot is visible and its
@@ -5778,6 +5781,8 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyBufferC
 
                 if (!fenceSignaled) {
                     // check fence status
+                    const bool isGpuProduced = s.bufferData->buffer &&
+                            (s.bufferData->buffer->getUsage() & GRALLOC_USAGE_HW_RENDER);
                     const bool allowLatchUnsignaled =
                             shouldLatchUnsignaled(s, transaction.states.size(),
                                                   flushState.firstTransaction) &&
@@ -5785,8 +5790,16 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyBufferC
                     if (allowLatchUnsignaled) {
                         SFTRACE_FORMAT("fence unsignaled try allowLatchUnsignaled %s",
                                        layer->name.c_str());
+                        if (isGpuProduced) {
+                            mQtiSFExtnIntf->qtiDolphinTrackLatchUnsignaledGpuFence(
+                                    s.bufferData->acquireFence->get(), layer->id);
+                        }
                         ready = TransactionReadiness::NotReadyUnsignaled;
                     } else {
+                        if (isGpuProduced) {
+                            mQtiSFExtnIntf->qtiDolphinNotifyGpuFenceUnsignaled(
+                                    s.bufferData->acquireFence->get(), layer->id);
+                        }
                         ready = TransactionReadiness::NotReady;
                         auto& listener = s.bufferData->releaseBufferListener;
                         if (listener &&

@@ -140,6 +140,9 @@ public:
                                         const Rect& bounds, bool focused, bool isVisible);
     void qtiDolphinTrackVsyncSignal();
     bool qtiDolphinIsTargetFpsActive() override;
+    void qtiDolphinNotifyGpuFenceUnsignaled(int fenceFd = -1, int32_t layerId = -1) override;
+    void qtiDolphinTrackLatchUnsignaledGpuFence(int fenceFd = -1, int32_t layerId = -1) override;
+    void qtiDolphinFlushLatchUnsignaledGpuFences() override;
 
     bool qtiIsFpsDeferNeeded(float newFpsRequest) override;
     void qtiNotifyResolutionSwitch(int displayId, int32_t width, int32_t height,
