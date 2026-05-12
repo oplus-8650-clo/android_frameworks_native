@@ -632,6 +632,8 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
             mBufferItemConsumer->acquireBuffer(&bufferItem, 0 /* expectedPresent */, false);
     if (status == BufferQueue::NO_BUFFER_AVAILABLE) {
         BQA_LOGV("Failed to acquire a buffer, err=NO_BUFFER_AVAILABLE");
+        mNumFrameAvailable = 0;
+        mCallbackCV.notify_all();
         return status;
     } else if (status != OK) {
         BQA_LOGE("Failed to acquire a buffer, err=%s", statusToString(status).c_str());
@@ -639,7 +641,16 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
     }
 
     auto buffer = bufferItem.mGraphicBuffer;
-    mNumFrameAvailable--;
+
+    int32_t totalProcessed = 1 + static_cast<int32_t>(bufferItem.mCountOfDroppedBuffers);
+    if (mNumFrameAvailable >= totalProcessed) {
+        mNumFrameAvailable -= totalProcessed;
+    } else {
+        BQA_LOGE("mNumFrameAvailable (%u) is smaller than processed frames (%u)",
+                 mNumFrameAvailable, totalProcessed);
+        mNumFrameAvailable = 0;
+    }
+
     BBQ_TRACE("frame=%" PRIu64, bufferItem.mFrameNumber);
 
     if (buffer == nullptr) {
@@ -800,12 +811,36 @@ void BLASTBufferQueue::acquireAndReleaseBuffer() {
     status_t status =
             mBufferItemConsumer->acquireBuffer(&bufferItem, 0 /* expectedPresent */, false);
     if (status != OK) {
-        BQA_LOGE("Failed to acquire a buffer in acquireAndReleaseBuffer, err=%s",
-                 statusToString(status).c_str());
+        if (status == BufferQueue::NO_BUFFER_AVAILABLE) {
+            mNumFrameAvailable = 0;
+            mCallbackCV.notify_all();
+        } else {
+            BQA_LOGE("Failed to acquire a buffer in acquireAndReleaseBuffer, err=%s",
+                     statusToString(status).c_str());
+        }
         return;
     }
-    mNumFrameAvailable--;
+
+    int32_t totalProcessed = 1 + static_cast<int32_t>(bufferItem.mCountOfDroppedBuffers);
+    if (mNumFrameAvailable >= totalProcessed) {
+        mNumFrameAvailable -= totalProcessed;
+    } else {
+        BQA_LOGE("mNumFrameAvailable (%u) is smaller than processed frames (%u)",
+                 mNumFrameAvailable, totalProcessed);
+        mNumFrameAvailable = 0;
+    }
+
     mBufferItemConsumer->releaseBuffer(bufferItem, bufferItem.mFence);
+}
+
+void BLASTBufferQueue::onDisconnect() {
+    UNIQUE_LOCK_WITH_ASSERTION(mMutex);
+    BQA_LOGV("onDisconnect: clearing state");
+    mNumFrameAvailable = 0;
+    mNumAcquired = 0;
+    mPendingRelease.clear();
+    mSubmitted.clear();
+    mCallbackCV.notify_all();
 }
 
 void BLASTBufferQueue::onFrameAvailable(const BufferItem& item) {
