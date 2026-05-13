@@ -3397,6 +3397,9 @@ status_t Surface::setAdditionalOptions(const std::vector<gui::AdditionalOptions>
 #endif
 
 status_t Surface::setPresentMode(int32_t mode) {
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setPresentMode(mode);
+    }
     return mGraphicBufferProducer->setPresentMode(mode);
 }
 
