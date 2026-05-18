@@ -27,6 +27,7 @@
 
 #include "../debug/SkiaMemoryReporter.h"
 #include "SkiaBackendTexture.h"
+#include "renderengine/RenderEngine.h"
 
 #include <log/log.h>
 
@@ -107,6 +108,8 @@ public:
 
     virtual void purgeResourcesNotUsedIn(std::chrono::milliseconds) = 0;
 
+    virtual constexpr RenderEngine::SkiaBackend getBackend_onlyUseForCriticalWorkarounds()
+            const = 0;
     virtual size_t getMaxRenderTargetSize() const = 0;
     virtual size_t getMaxTextureSize() const = 0;
     virtual bool isAbandonedOrDeviceLost() = 0;

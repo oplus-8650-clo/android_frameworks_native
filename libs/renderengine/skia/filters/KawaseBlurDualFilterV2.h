@@ -54,21 +54,12 @@ public:
                                           const uint32_t radius, const sk_sp<SkImage> blurInput,
                                           const SkRect& blurRect) const override;
 
+    bool areBuffersPreallocated(const SkiaGpuContext* context, ui::Size displaySize) const override;
+    // Note: the buffer preallocation code path is never enabled for the unprotected context on
+    // GaneshGL due to performance reasons (nuance around texture copying logic for wrapped AHBs).
+    // It can be enabled for the protected context on GaneshGL for memory savings, as protected
+    // memory is extremely limited.
     void preallocateBuffers(SkiaGpuContext* context, ui::Size size) override;
-    bool areBuffersPreallocated(const SkiaGpuContext* context,
-                                ui::Size displaySize) const override {
-        const auto& preallocatedTextures =
-                context->supportsProtectedContent() ? mProtectedTextures : mUnprotectedTextures;
-        if (preallocatedTextures[0] == nullptr) {
-            return false;
-        }
-
-        const ui::Size preallocatedDisplaySize = context->supportsProtectedContent()
-                ? mProtectedDisplaySize
-                : mUnprotectedDisplaySize;
-        return displaySize.width <= preallocatedDisplaySize.width &&
-                displaySize.height <= preallocatedDisplaySize.height;
-    }
 
 private:
     static constexpr uint64_t kUnprotectedUsageFlags =

@@ -1155,11 +1155,8 @@ VkResult EnumerateDeviceExtensionProperties(
             {VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME,
              VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_SPEC_VERSION});
     }
-    bool hdrBoardConfig = android::sysprop::has_HDR_display(false);
-    if (hdrBoardConfig) {
-        loader_extensions.push_back({VK_EXT_HDR_METADATA_EXTENSION_NAME,
-                                     VK_EXT_HDR_METADATA_SPEC_VERSION});
-    }
+    loader_extensions.push_back(
+        {VK_EXT_HDR_METADATA_EXTENSION_NAME, VK_EXT_HDR_METADATA_SPEC_VERSION});
 
     VkPhysicalDevicePresentationPropertiesANDROID presentation_properties;
     QueryPresentationProperties(physicalDevice, &presentation_properties);

@@ -42,6 +42,7 @@
 #include <log/log.h>
 
 #include "RuntimeEffectManager.h"
+#include "renderengine/RenderEngine.h"
 
 namespace android {
 namespace renderengine {
@@ -231,10 +232,13 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generateTemporaryImage(SkiaGpuContext* co
         return input->imageInfo().makeWH(newW, newH);
     };
 
+    const bool isProtected = context->supportsProtectedContent();
     bool usesPreallocatedTextures =
-            FlagManager::getInstance().window_blur_kawase2_preallocate_buffers();
-    auto& preallocatedTexturesRef =
-            context->supportsProtectedContent() ? mProtectedTextures : mUnprotectedTextures;
+            FlagManager::getInstance().window_blur_kawase2_preallocate_buffers() &&
+            (isProtected ||
+             context->getBackend_onlyUseForCriticalWorkarounds() ==
+                     RenderEngine::SkiaBackend::Graphite);
+    auto& preallocatedTexturesRef = isProtected ? mProtectedTextures : mUnprotectedTextures;
 
     // Render into surfaces downscaled by 1x, 2x, 4x and 8x from the initial downscale.
     sk_sp<SkSurface> surfaces[kMaxSurfaces];
@@ -297,11 +301,38 @@ sk_sp<SkImage> KawaseBlurDualFilterV2::generateTemporaryImage(SkiaGpuContext* co
     return surfaces[0]->makeTemporaryImage();
 }
 
+bool KawaseBlurDualFilterV2::areBuffersPreallocated(const SkiaGpuContext* context,
+                                                    ui::Size displaySize) const {
+    const bool isProtected = context->supportsProtectedContent();
+
+    // Lie about buffers be preallocated if on the unprotected context in GaneshGL, so that callers
+    // don't need to be aware of this nuance of not being supported.
+    if (!isProtected &&
+        context->getBackend_onlyUseForCriticalWorkarounds() == RenderEngine::SkiaBackend::Ganesh) {
+        return true;
+    }
+
+    const auto& preallocatedTextures = isProtected ? mProtectedTextures : mUnprotectedTextures;
+    if (preallocatedTextures[0] == nullptr) {
+        return false;
+    }
+
+    const ui::Size preallocatedDisplaySize =
+            isProtected ? mProtectedDisplaySize : mUnprotectedDisplaySize;
+    return displaySize.width <= preallocatedDisplaySize.width &&
+            displaySize.height <= preallocatedDisplaySize.height;
+}
+
 void KawaseBlurDualFilterV2::preallocateBuffers(SkiaGpuContext* context, ui::Size size) {
     SFTRACE_CALL();
     std::lock_guard<std::mutex> lock(mRenderingMutex);
 
     const bool isProtected = context->supportsProtectedContent();
+    if (!isProtected &&
+        context->getBackend_onlyUseForCriticalWorkarounds() == RenderEngine::SkiaBackend::Ganesh) {
+        return;
+    }
+
     auto& texturesRef = isProtected ? mProtectedTextures : mUnprotectedTextures;
     ui::Size& displaySizeRef = isProtected ? mProtectedDisplaySize : mUnprotectedDisplaySize;
     const uint64_t usageFlags = isProtected ? kProtectedUsageFlags : kUnprotectedUsageFlags;

@@ -95,9 +95,11 @@ public:
     virtual void setConfiguration(const compositionengine::DisplayCreationArgs&);
     std::unique_ptr<compositionengine::OutputLayer> createOutputLayer(const sp<LayerFE>&) const;
 
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     void qtiBeginDraw();
     void qtiEndDraw();
 
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 private:
     friend class ::android::compositionengine::DisplayTestAccessor;
 
@@ -117,9 +119,11 @@ private:
     DisplayIdVariant mIdVariant;
     bool mIsDisconnected = false;
     adpf::PowerAdvisor* mPowerAdvisor = nullptr;
+// QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
 
     bool mQtiIsColorModeChanged = false;
     ColorProfile mQtiColorProfile = {ui::ColorMode::NATIVE, ui::Dataspace::UNKNOWN,
+// QTI_END: 2023-03-06: Display: SF: Squash commit of SF Extensions.
                                      ui::RenderIntent::COLORIMETRIC};
 
     int32_t mMaxLayerPictureProfiles = 0;
