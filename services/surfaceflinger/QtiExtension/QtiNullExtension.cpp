@@ -198,6 +198,9 @@ void QtiNullExtension::qtiDolphinTrackVsyncSignal() {}
 bool QtiNullExtension::qtiDolphinIsTargetFpsActive() {
     return false;
 }
+void QtiNullExtension::qtiDolphinNotifyGpuFenceUnsignaled(int fenceFd, int32_t layerId) {}
+void QtiNullExtension::qtiDolphinTrackLatchUnsignaledGpuFence(int fenceFd, int32_t layerId) {}
+void QtiNullExtension::qtiDolphinFlushLatchUnsignaledGpuFences() {}
 
 bool QtiNullExtension::qtiIsFpsDeferNeeded(float newFpsRequest) {
     return false;
