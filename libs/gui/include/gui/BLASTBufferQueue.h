@@ -220,7 +220,7 @@ private:
             REQUIRES(mMutex);
 
     void flushShadowQueue() REQUIRES(mMutex);
-    void acquireAndReleaseBuffer() REQUIRES(mMutex);
+    status_t acquireAndReleaseBuffer() REQUIRES(mMutex);
     void releaseBuffer(const ReleaseCallbackId& callbackId, const sp<Fence>& releaseFence)
             REQUIRES(mMutex);
 

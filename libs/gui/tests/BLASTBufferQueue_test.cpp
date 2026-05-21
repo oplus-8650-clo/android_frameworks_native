@@ -201,6 +201,16 @@ public:
         mBlastBufferQueueAdapter->setCornerRadiiCallback(callback);
     }
 
+    size_t getNumSubmitted() {
+        std::scoped_lock lock{mBlastBufferQueueAdapter->mMutex};
+        return mBlastBufferQueueAdapter->mSubmitted.size();
+    }
+
+    int32_t getNumAcquired() {
+        std::scoped_lock lock{mBlastBufferQueueAdapter->mMutex};
+        return mBlastBufferQueueAdapter->mNumAcquired;
+    }
+
 private:
     sp<TestBLASTBufferQueue> mBlastBufferQueueAdapter;
 };
@@ -448,6 +458,110 @@ TEST_F(BLASTBufferQueueTest, DISABLED_onFrameAvailable_ApplyDesiredPresentTime) 
 
     adapter.waitForCallbacks();
     ASSERT_GE(systemTime(), desiredPresentTime);
+}
+
+TEST_F(BLASTBufferQueueTest, ProducerDisconnect_ClearsStateAndCanReconnect) {
+    BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+    sp<IGraphicBufferProducer> igbProducer;
+    setUpProducer(adapter, igbProducer);
+
+    // Prevent immediate acquisition so the buffers stay in mQueue
+    adapter.syncNextTransaction([](Transaction*) {});
+
+    // Queue MULTIPLE buffers before disconnecting.
+    // This leaves multiple stale buffers in mQueue.
+    queueBuffer(igbProducer, 255, 0, 0, 0);
+    queueBuffer(igbProducer, 0, 255, 0, 0);
+    queueBuffer(igbProducer, 0, 0, 255, 0);
+
+    // Disconnect producer. This clears mNumFrameAvailable in BBQ but leaves 3 stale buffers in
+    // mQueue.
+    ASSERT_EQ(OK, igbProducer->disconnect(NATIVE_WINDOW_API_CPU));
+
+    // Reconnect producer
+    setUpProducer(adapter, igbProducer);
+
+    // Set a strict buffer limit to force starvation if buffers are orphaned in the queue.
+    igbProducer->setMaxDequeuedBufferCount(2);
+
+    // Call syncNextTransaction to trigger the wait condition in onFrameAvailable
+    adapter.syncNextTransaction([](Transaction*) {});
+
+    // Set a short dequeue timeout to detect deadlock
+    igbProducer->setDequeueTimeout(1000000); // 1ms
+
+    // Repeatedly queue buffers. Because mNumFrameAvailable gets out of sync,
+    // BBQ will always be 1 frame behind, eventually starving the BufferQueue.
+    status_t err = OK;
+    for (int i = 0; i < 100; i++) {
+        int slot;
+        sp<Fence> fence;
+        err = igbProducer->dequeueBuffer(&slot, &fence, mDisplayWidth, mDisplayHeight,
+                                         PIXEL_FORMAT_RGBA_8888, GRALLOC_USAGE_SW_WRITE_OFTEN,
+                                         nullptr, nullptr);
+        if (err != OK && err != IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION) {
+            ALOGE("Test hit error at loop index %d: %d", i, err);
+            break;
+        }
+
+        sp<GraphicBuffer> buf;
+        igbProducer->requestBuffer(slot, &buf);
+
+        IGraphicBufferProducer::QueueBufferOutput qbOutput;
+        IGraphicBufferProducer::QueueBufferInput input(systemTime(), true /* isAutoTimestamp */,
+                                                       HAL_DATASPACE_UNKNOWN,
+                                                       Rect(mDisplayWidth, mDisplayHeight),
+                                                       NATIVE_WINDOW_SCALING_MODE_FREEZE, 0,
+                                                       Fence::NO_FENCE);
+        igbProducer->queueBuffer(slot, input, &qbOutput);
+    }
+
+    // We expect both dequeues to succeed.
+    ASSERT_EQ(OK, err) << "err was " << err;
+}
+
+TEST_F(BLASTBufferQueueTest, ProducerDisconnect_DoesNotLeakAcquiredBuffers) {
+    BLASTBufferQueueHelper adapter(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+    sp<IGraphicBufferProducer> igbProducer;
+    setUpProducer(adapter, igbProducer);
+    igbProducer->setMaxDequeuedBufferCount(2);
+
+    Transaction syncTransaction;
+    adapter.setSyncTransaction(syncTransaction);
+
+    // Queue Buffer A. It will be acquired by BBQ and put into syncTransaction.
+    queueBuffer(igbProducer, 255, 0, 0, 0);
+
+    // Assert BBQ successfully acquired and submitted the buffer.
+    ASSERT_EQ(1u, adapter.getNumSubmitted());
+    ASSERT_EQ(1, adapter.getNumAcquired());
+
+    // Disconnect producer. This should NOT clear mSubmitted or mNumAcquired,
+    // because SurfaceFlinger (the syncTransaction) still holds Buffer A.
+    ASSERT_EQ(OK, igbProducer->disconnect(NATIVE_WINDOW_API_CPU));
+
+    // Assert state is preserved across disconnect.
+    ASSERT_EQ(1u, adapter.getNumSubmitted());
+    ASSERT_EQ(1, adapter.getNumAcquired());
+
+    // Reconnect producer
+    setUpProducer(adapter, igbProducer);
+    igbProducer->setMaxDequeuedBufferCount(2);
+
+    // Apply the transaction to send Buffer A to SurfaceFlinger
+    syncTransaction.apply();
+
+    // Now queue Buffer B to replace Buffer A, triggering the release callback for Buffer A
+    adapter.clearSyncTransaction();
+    queueBuffer(igbProducer, 0, 255, 0, 0);
+
+    // Wait for the release callback to arrive from SurfaceFlinger
+    adapter.waitForCallbacks();
+
+    // Assert that Buffer A was successfully released and removed from mSubmitted.
+    // Buffer B is now the only one acquired.
+    ASSERT_EQ(1u, adapter.getNumSubmitted());
+    ASSERT_EQ(1, adapter.getNumAcquired());
 }
 
 TEST_F(BLASTBufferQueueTest, onFrameAvailable_Apply) {
