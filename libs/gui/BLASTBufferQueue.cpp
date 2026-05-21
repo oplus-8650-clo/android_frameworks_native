@@ -632,8 +632,6 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
             mBufferItemConsumer->acquireBuffer(&bufferItem, 0 /* expectedPresent */, false);
     if (status == BufferQueue::NO_BUFFER_AVAILABLE) {
         BQA_LOGV("Failed to acquire a buffer, err=NO_BUFFER_AVAILABLE");
-        mNumFrameAvailable = 0;
-        mCallbackCV.notify_all();
         return status;
     } else if (status != OK) {
         BQA_LOGE("Failed to acquire a buffer, err=%s", statusToString(status).c_str());
@@ -805,20 +803,17 @@ Rect BLASTBufferQueue::computeCrop(const BufferItem& item) {
     return item.mCrop;
 }
 
-void BLASTBufferQueue::acquireAndReleaseBuffer() {
+status_t BLASTBufferQueue::acquireAndReleaseBuffer() {
     BBQ_TRACE();
     BufferItem bufferItem;
     status_t status =
             mBufferItemConsumer->acquireBuffer(&bufferItem, 0 /* expectedPresent */, false);
     if (status != OK) {
-        if (status == BufferQueue::NO_BUFFER_AVAILABLE) {
-            mNumFrameAvailable = 0;
-            mCallbackCV.notify_all();
-        } else {
+        if (status != BufferQueue::NO_BUFFER_AVAILABLE) {
             BQA_LOGE("Failed to acquire a buffer in acquireAndReleaseBuffer, err=%s",
                      statusToString(status).c_str());
         }
-        return;
+        return status;
     }
 
     int32_t totalProcessed = 1 + static_cast<int32_t>(bufferItem.mCountOfDroppedBuffers);
@@ -831,15 +826,23 @@ void BLASTBufferQueue::acquireAndReleaseBuffer() {
     }
 
     mBufferItemConsumer->releaseBuffer(bufferItem, bufferItem.mFence);
+    return OK;
 }
 
 void BLASTBufferQueue::onDisconnect() {
     UNIQUE_LOCK_WITH_ASSERTION(mMutex);
     BQA_LOGV("onDisconnect: clearing state");
-    mNumFrameAvailable = 0;
-    mNumAcquired = 0;
-    mPendingRelease.clear();
-    mSubmitted.clear();
+
+    // Flush the shadow queue to safely drain any stale buffers left in the
+    // BufferQueueCore queue by the disconnected producer.
+    while (mNumFrameAvailable > 0) {
+        if (acquireAndReleaseBuffer() != OK) {
+            BQA_LOGV("Stopped flushing shadow queue (consumer likely full). %u remaining.",
+                     mNumFrameAvailable);
+            break;
+        }
+    }
+
     mCallbackCV.notify_all();
 }
 
@@ -878,7 +881,7 @@ void BLASTBufferQueue::onFrameAvailable(const BufferItem& item) {
                 // a release callback invoked.
                 while (mNumFrameAvailable > 0) {
                     // flush out the shadow queue
-                    acquireAndReleaseBuffer();
+                    if (acquireAndReleaseBuffer() != OK) break;
                 }
             } else {
                 // Make sure the frame available count is 0 before proceeding with a sync to ensure
