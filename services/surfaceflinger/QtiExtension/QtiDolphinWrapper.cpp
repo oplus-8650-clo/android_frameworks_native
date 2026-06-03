@@ -32,6 +32,12 @@ QtiDolphinWrapper::QtiDolphinWrapper(int width, int height) {
                 "dolphinUnblockPendingBuffer");
         qtiDolphinIsTargetFpsActive = (bool (*) ())dlsym(mQtiDolphinHandle,
                 "dolphinIsTargetFpsActive");
+        qtiDolphinNotifyGpuFenceUnsignaled = (void (*) (int, int32_t))dlsym(mQtiDolphinHandle,
+                "dolphinNotifyGpuFenceUnsignaled");
+        qtiDolphinTrackLatchUnsignaledGpuFence = (void (*)(int, int32_t))dlsym(mQtiDolphinHandle,
+                "dolphinTrackLatchUnsignaledGpuFence");
+        qtiDolphinFlushLatchUnsignaledGpuFences = (void (*)())dlsym(mQtiDolphinHandle,
+                "dolphinFlushLatchUnsignaledGpuFences");
         bool functionsFound = qtiDolphinInit && qtiDolphinSetVsyncPeriod &&
                               qtiDolphinTrackBufferIncrement && qtiDolphinTrackBufferDecrement &&
                               qtiDolphinTrackVsyncSignal && qtiDolphinUnblockPendingBuffer &&
@@ -48,6 +54,9 @@ QtiDolphinWrapper::QtiDolphinWrapper(int width, int height) {
             qtiDolphinTrackVsyncSignal = nullptr;
             qtiDolphinUnblockPendingBuffer = nullptr;
             qtiDolphinIsTargetFpsActive = nullptr;
+            qtiDolphinNotifyGpuFenceUnsignaled = nullptr;
+            qtiDolphinTrackLatchUnsignaledGpuFence = nullptr;
+            qtiDolphinFlushLatchUnsignaledGpuFences = nullptr;
         }
     }
 }

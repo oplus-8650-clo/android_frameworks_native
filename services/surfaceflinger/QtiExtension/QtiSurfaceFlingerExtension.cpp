@@ -1838,6 +1838,24 @@ bool QtiSurfaceFlingerExtension::qtiDolphinIsTargetFpsActive() {
     return false;
 }
 
+void QtiSurfaceFlingerExtension::qtiDolphinNotifyGpuFenceUnsignaled(int fenceFd, int32_t layerId) {
+    if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinNotifyGpuFenceUnsignaled) {
+        mQtiDolphinWrapper->qtiDolphinNotifyGpuFenceUnsignaled(fenceFd, layerId);
+    }
+}
+
+void QtiSurfaceFlingerExtension::qtiDolphinTrackLatchUnsignaledGpuFence(int fenceFd, int32_t layerId) {
+    if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinTrackLatchUnsignaledGpuFence) {
+        mQtiDolphinWrapper->qtiDolphinTrackLatchUnsignaledGpuFence(fenceFd, layerId);
+    }
+}
+
+void QtiSurfaceFlingerExtension::qtiDolphinFlushLatchUnsignaledGpuFences() {
+    if (mQtiDolphinWrapper && mQtiDolphinWrapper->qtiDolphinFlushLatchUnsignaledGpuFences) {
+        mQtiDolphinWrapper->qtiDolphinFlushLatchUnsignaledGpuFences();
+    }
+}
+
 /*
  * Methods internal to QtiSurfaceFlingerExtension
  */

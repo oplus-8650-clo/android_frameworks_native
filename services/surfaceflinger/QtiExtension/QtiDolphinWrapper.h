@@ -25,6 +25,9 @@ public:
     void (*qtiDolphinTrackVsyncSignal)() = nullptr;
     void (*qtiDolphinUnblockPendingBuffer)() = nullptr;
     bool (*qtiDolphinIsTargetFpsActive)() = nullptr;
+    void (*qtiDolphinNotifyGpuFenceUnsignaled)(int fenceFd, int32_t layerId) = nullptr;
+    void (*qtiDolphinTrackLatchUnsignaledGpuFence)(int fenceFd, int32_t layerId) = nullptr;
+    void (*qtiDolphinFlushLatchUnsignaledGpuFences)() = nullptr;
 
 private:
     void *mQtiDolphinHandle = nullptr;

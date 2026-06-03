@@ -238,6 +238,9 @@ public:
     void qtiDolphinTrackVsyncSignal();
     void qtiDolphinUnblockPendingBuffer();
     bool qtiDolphinIsTargetFpsActive();
+    void qtiDolphinNotifyGpuFenceUnsignaled(int fenceFd = -1, int32_t layerId = -1);
+    void qtiDolphinTrackLatchUnsignaledGpuFence(int fenceFd = -1, int32_t layerId = -1);
+    void qtiDolphinFlushLatchUnsignaledGpuFences();
 
     /*
      * Methods for speculative fence
