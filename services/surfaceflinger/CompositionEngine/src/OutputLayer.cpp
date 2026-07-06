@@ -177,7 +177,7 @@ std::shared_ptr<gui::DisplayLuts> createLutsFromAgtm(
                 for (int32_t y = 0; y < size; y++) {
                     float g = (static_cast<float>(y) / (size - 1)) * scaleFactor;
                     for (int32_t z = 0; z < size; z++) {
-                        float b = (static_cast<float>(x) / (size - 1)) * scaleFactor;
+                        float b = (static_cast<float>(z) / (size - 1)) * scaleFactor;
                         linearPixels[pixelIndex * 4] = r;
                         linearPixels[pixelIndex * 4 + 1] = g;
                         linearPixels[pixelIndex * 4 + 2] = b;
