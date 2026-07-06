@@ -143,13 +143,8 @@ std::shared_ptr<gui::DisplayLuts> createLutsFromAgtm(
     if (outputState.sdrWhitePointNits > 0) {
         targetHdrSdrRatio = outputState.displayBrightnessNits / outputState.sdrWhitePointNits;
     }
-    float scaleFactor = 1.0f;
-    int32_t transfer = dataspace & HAL_DATASPACE_TRANSFER_MASK;
-    if (transfer == HAL_DATASPACE_TRANSFER_ST2084) {
-        scaleFactor = 10000.0f / 203.0f;
-    } else if (transfer == HAL_DATASPACE_TRANSFER_HLG) {
-        scaleFactor = 1000.0f / 203.0f;
-    }
+    const float scaleFactor = 1.0f / getSdrRelativeScaleFactor(dataspace);
+    const int32_t transfer = dataspace & HAL_DATASPACE_TRANSFER_MASK;
 
     auto metadata = skhdr::Metadata::MakeEmpty();
     metadata.setAdaptiveGlobalToneMap(agtm);
