@@ -585,8 +585,12 @@ void OutputLayer::updateCompositionState(
     // prefer querying this from gralloc instead to catch 2094-10 metadata
     const bool hasHdrMetadata = layerFEState->hdrMetadata.validTypes != 0;
 
+    ftl::Flags<HdrMetadataOptions> hdrOptions;
+    if (hasHdrMetadata) hdrOptions |= HdrMetadataOptions::HasHdrMetadata;
+    if (layerFEState->agtm.has_value()) hdrOptions |= HdrMetadataOptions::HasSmpte2094_50;
+
     auto hdrRenderType = getHdrRenderType(outputState.dataspace, pixelFormat,
-                                          layerFEState->desiredHdrSdrRatio, hasHdrMetadata);
+                                          layerFEState->desiredHdrSdrRatio, hdrOptions);
 
     // Determine the output dependent dataspace for this layer. If it is
     // colorspace agnostic, it just uses the dataspace chosen for the output to
@@ -610,7 +614,7 @@ void OutputLayer::updateCompositionState(
 
     // re-get HdrRenderType after the dataspace gets changed.
     hdrRenderType = getHdrRenderType(state.dataspace, pixelFormat, layerFEState->desiredHdrSdrRatio,
-                                     hasHdrMetadata);
+                                     hdrOptions);
 
     // For hdr content, treat the white point as the display brightness - HDR content should not be
     // boosted or dimmed.
@@ -624,8 +628,13 @@ void OutputLayer::updateCompositionState(
                 getOutput().getState().sdrWhitePointNits;
         float idealizedMaxHeadroom = deviceHeadroom;
 
-        idealizedMaxHeadroom =
-                std::min(idealizedMaxHeadroom, getIdealizedMaxHeadroom(state.dataspace));
+        float agtmMaxHeadroom = -1.f;
+        if (layerFEState->agtm) {
+            agtmMaxHeadroom = renderengine::getMaxHeadroom(layerFEState->agtm);
+        }
+
+        idealizedMaxHeadroom = std::min(idealizedMaxHeadroom,
+                                        getIdealizedMaxHeadroom(state.dataspace, agtmMaxHeadroom));
 
         state.dimmingRatio = std::min(idealizedMaxHeadroom / deviceHeadroom, 1.0f);
         state.whitePointNits = getOutput().getState().displayBrightnessNits * state.dimmingRatio;

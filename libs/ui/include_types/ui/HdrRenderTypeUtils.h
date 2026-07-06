@@ -16,9 +16,18 @@
 
 #pragma once
 
+#include <ftl/flags.h>
 #include <ui/GraphicTypes.h>
 
+#include <optional>
+
 namespace android {
+
+enum class HdrMetadataOptions : uint32_t {
+    None = 0,
+    HasHdrMetadata = 1 << 0,
+    HasSmpte2094_50 = 1 << 1,
+};
 
 enum class HdrRenderType {
     SDR,         // just render to SDR
@@ -34,9 +43,13 @@ enum class HdrRenderType {
  * @param hdrSdrRatio default is 1.f, render engine side doesn't take care of it.
  * @return HdrRenderType
  */
-inline HdrRenderType getHdrRenderType(ui::Dataspace dataspace,
-                                      std::optional<ui::PixelFormat> pixelFormat,
-                                      float hdrSdrRatio = 1.f, bool hasHdrMetadata = false) {
+inline HdrRenderType getHdrRenderType(
+        ui::Dataspace dataspace, std::optional<ui::PixelFormat> pixelFormat,
+        float hdrSdrRatio = 1.f,
+        ftl::Flags<HdrMetadataOptions> options = HdrMetadataOptions::None) {
+    if (options.test(HdrMetadataOptions::HasSmpte2094_50)) {
+        return HdrRenderType::GENERIC_HDR;
+    }
     const auto transfer = dataspace & HAL_DATASPACE_TRANSFER_MASK;
     const auto range = dataspace & HAL_DATASPACE_RANGE_MASK;
 
@@ -50,7 +63,7 @@ inline HdrRenderType getHdrRenderType(ui::Dataspace dataspace,
 
     if ((dataspace == BT2020_LINEAR_EXT || dataspace == ui::Dataspace::V0_SCRGB) &&
         pixelFormat.has_value() && pixelFormat.value() == ui::PixelFormat::RGBA_FP16 &&
-        hasHdrMetadata) {
+        options.test(HdrMetadataOptions::HasHdrMetadata)) {
         return HdrRenderType::GENERIC_HDR;
     }
 
@@ -69,7 +82,10 @@ inline HdrRenderType getHdrRenderType(ui::Dataspace dataspace,
  * TODO: take into account hdr metadata, but square it with the fact that some
  * HLG content has CTA.861-3 metadata
  */
-inline float getIdealizedMaxHeadroom(ui::Dataspace dataspace) {
+inline float getIdealizedMaxHeadroom(ui::Dataspace dataspace, float agtmMaxHeadroom = -1.f) {
+    if (agtmMaxHeadroom >= 1.f) {
+        return agtmMaxHeadroom;
+    }
     const auto transfer = dataspace & HAL_DATASPACE_TRANSFER_MASK;
 
     switch (transfer) {
