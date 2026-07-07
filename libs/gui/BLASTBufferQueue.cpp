@@ -657,6 +657,15 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
         return BAD_VALUE;
     }
 
+    if (buffer->getId() == mLastAcquiredBufferId &&
+        bufferItem.mFrameNumber == mLastAcquiredFrameNumber) {
+        BQA_LOGV("acquireNextBufferLocked skipping already acquired bufferId:%" PRIu64
+                 " frameNumber:%" PRIu64,
+                 buffer->getId(), bufferItem.mFrameNumber);
+        mBufferItemConsumer->releaseBuffer(bufferItem, Fence::NO_FENCE);
+        return acquireNextBufferLocked(transaction);
+    }
+
     if (rejectBuffer(bufferItem)) {
         BQA_LOGE("rejecting buffer:active_size=%dx%d, requested_size=%dx%d "
                  "buffer{size=%dx%d transform=%d}",
@@ -667,8 +676,9 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
     }
 
     mNumAcquired++;
+    mLastAcquiredBufferId = buffer->getId();
     mLastAcquiredFrameNumber = bufferItem.mFrameNumber;
-    ReleaseCallbackId releaseCallbackId(buffer->getId(), mLastAcquiredFrameNumber);
+    ReleaseCallbackId releaseCallbackId(mLastAcquiredBufferId, mLastAcquiredFrameNumber);
     mSubmitted.emplace_or_replace(releaseCallbackId, bufferItem);
 
     bool needsDisconnect = false;
