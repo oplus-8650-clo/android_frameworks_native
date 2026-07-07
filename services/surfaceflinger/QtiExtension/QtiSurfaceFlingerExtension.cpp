@@ -1049,6 +1049,16 @@ std::optional<android::VirtualDisplayIdVariant> QtiSurfaceFlingerExtension::qtiA
     auto& generator = mQtiFlinger->mVirtualDisplayIdGenerators.hal;
     if (canAllocateHwcForVDS && generator) {
         if (const auto id = generator->generateId()) {
+            VirtualDispType disp_type = VirtualDispType::DEFAULT;
+            bool usePQForVds = mQtiFeatureManager->qtiIsExtensionFeatureEnabled(QtiFeature::kVirtualDispTypePQ);
+            if (usePQForVds) {
+                disp_type = VirtualDispType::WITH_PQ;
+            }
+            if (mQtiDisplayConfigAidl) {
+                auto status = mQtiDisplayConfigAidl->setVirtualDispType(disp_type);
+                ALOGV("IDisplayConfig AIDL:: setVirtualDispType usePQ = %d ret = %d", usePQForVds,
+                      status.getStatus());
+            }
             if (mQtiFlinger->getHwComposer().allocateVirtualDisplay(*id, resolution, &format)) {
                 builder.setId(*id);
                 return *id;
@@ -2346,6 +2356,9 @@ ndk::ScopedAStatus DisplayConfigAidlCallbackHandler::notifyFpsMitigation(int32_t
 ndk::ScopedAStatus DisplayConfigAidlCallbackHandler::notifyTUIEventDone(int32_t in_error,
                                                                         DisplayType in_disp_type,
                                                                         TUIEventType in_eventType) {
+    return ndk::ScopedAStatus::ok();
+}
+ndk::ScopedAStatus DisplayConfigAidlCallbackHandler::notifyContentFps(const std::string& name, int fps) {
     return ndk::ScopedAStatus::ok();
 }
 
