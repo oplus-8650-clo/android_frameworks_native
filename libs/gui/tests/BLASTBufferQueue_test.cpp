@@ -106,6 +106,11 @@ public:
         }
     }
 
+    int32_t getNumAcquired() {
+        std::scoped_lock lock(mMutex);
+        return mNumAcquired;
+    }
+
 private:
     friend class sp<TestBLASTBufferQueue>;
     TestBLASTBufferQueue(const std::string& name) : BLASTBufferQueue(name) {}
@@ -2167,6 +2172,45 @@ TEST_F(BLASTBufferQueueTest, FifoLatestReadySyncDeadlock) {
         ALOGD("SUCCESS: The queueBuffer call returned normally.");
         trap_thread.join();
     }
+}
+
+TEST_F(BLASTBufferQueueTest, SharedBufferMode_AvoidDuplicateBufferAcquisition) {
+    sp<TestBLASTBufferQueue> bbq =
+            TestBLASTBufferQueue::create(mSurfaceControl, mDisplayWidth, mDisplayHeight);
+    sp<IGraphicBufferProducer> igbProducer = bbq->getIGraphicBufferProducer();
+    setUpProducer(igbProducer, 2);
+
+    // Enable shared buffer mode and auto refresh so that BufferQueue returns the same buffer and
+    // frame ids when the queue is empty.
+    ASSERT_EQ(OK, igbProducer->setSharedBufferMode(true));
+    ASSERT_EQ(OK, igbProducer->setAutoRefresh(true));
+
+    int slot;
+    sp<Fence> fence;
+    sp<GraphicBuffer> buf;
+    auto ret = igbProducer->dequeueBuffer(&slot, &fence, mDisplayWidth, mDisplayHeight,
+                                          PIXEL_FORMAT_RGBA_8888, GRALLOC_USAGE_SW_WRITE_OFTEN,
+                                          nullptr, nullptr);
+    ASSERT_EQ(IGraphicBufferProducer::BUFFER_NEEDS_REALLOCATION, ret);
+    ASSERT_EQ(OK, igbProducer->requestBuffer(slot, &buf));
+
+    IGraphicBufferProducer::QueueBufferOutput qbOutput;
+    IGraphicBufferProducer::QueueBufferInput input(systemTime(), true /* autotimestamp */,
+                                                   HAL_DATASPACE_UNKNOWN,
+                                                   Rect(mDisplayWidth, mDisplayHeight),
+                                                   NATIVE_WINDOW_SCALING_MODE_FREEZE, 0,
+                                                   Fence::NO_FENCE);
+    igbProducer->queueBuffer(slot, input, &qbOutput);
+
+    // BBQ should have one acquired buffer after the initial shared buffer is queued.
+    ASSERT_EQ(1, bbq->getNumAcquired());
+
+    // Trigger BBQ's acquireNextBufferLocked.
+    BufferItem item;
+    bbq->onFrameAvailable(item);
+
+    // Verify that we didn't acquire another buffer due to matching buffer and frame ids.
+    ASSERT_EQ(1, bbq->getNumAcquired());
 }
 
 } // namespace android
