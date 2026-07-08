@@ -3373,7 +3373,11 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
 
     persistDisplayBrightness(mustComposite);
 
+// QTI_BEGIN: 2026-04-20: Display: sfext: Change thermal fps caching logic
     mQtiSFExtnIntf->qtiSendCompositorTid();
+
+    mQtiSFExtnIntf->qtiDisallowThermalFpsChange();
+// QTI_END: 2026-04-20: Display: sfext: Change thermal fps caching logic
 
     return mustComposite && CC_LIKELY(mBootStage != BootStage::BOOTLOADER);
 }
