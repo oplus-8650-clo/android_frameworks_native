@@ -156,7 +156,7 @@ const SkString kEffectSource_LutEffect(R"(
                   // TODO(user): add correct weights by calculating tetrahedron volume ratios
                   if(tx >= ty && ty >= tz) {
                     linear = (1.0 - tx) * c000 + (tx - ty) * c100 + (ty - tz) * c110 + tz * c111;
-                  } else if(tx >= linear.b && linear.b >= ty) {
+                  } else if(tx >= tz && tz >= ty) {
                     linear = (1.0 - tx) * c000 + (tx - tz) * c100 + (tz - ty) * c101 + ty * c111;
                   } else if(tz >= tx && tx >= ty) {
                     linear = (1.0 - tz) * c000 + (tz - tx) * c001 + (tx - ty) * c101 + ty * c111;
