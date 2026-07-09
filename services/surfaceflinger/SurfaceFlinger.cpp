@@ -1838,7 +1838,14 @@ void SurfaceFlinger::initiateDisplayModeChanges() {
             // setActiveConfig doesn't properly support seamless requirement.
             constraints.seamlessRequired = false;
         } else {
-            constraints.seamlessRequired = initialDesiredMode.seamless;
+            // QTI_BEGIN
+            // Restrict seamless mode switch for modes in the same config group
+            const auto activeMode = mDisplayModeController.getActiveMode(initialDisplayId);
+            const bool sameGroup =
+                    activeMode.modePtr->getGroup() == initialDesiredMode.mode.modePtr->getGroup();
+            // QTI_END
+            constraints.seamlessRequired =
+                    initialDesiredMode.seamless /* QTI_BEGIN */ && sameGroup; /* QTI_END */
         }
 
         hal::VsyncPeriodChangeTimeline outTimeline;
