@@ -2007,7 +2007,6 @@ void QtiSurfaceFlingerExtension::qtiSetDesiredModeByThermalLevel(float newLevelF
 
         mQtiAllowThermalFpsChange = true;
         ret = mQtiFlinger->setDesiredDisplayModeSpecsInternal(display, policy);
-        mQtiAllowThermalFpsChange = false;
         return ret;
     });
 }
