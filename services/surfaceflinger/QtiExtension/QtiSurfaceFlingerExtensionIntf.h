@@ -40,6 +40,8 @@ enum QtiFeature {
     kSmomoOptimalRefreshRate,
     kIdleFallback,
     kReduceSlotsForWideVideo,
+    kVirtualDispTypePQ,
+    kEnablePowerSaveModeForVideo,
 };
 
 class QtiSurfaceFlingerExtensionIntf {
@@ -97,6 +99,7 @@ public:
     virtual void qtiSetEarlyWakeUpConfig(const sp<DisplayDevice>& display, hal::PowerMode mode,
                                          bool isInternal) = 0;
     virtual void qtiUpdateVsyncConfiguration() = 0;
+    virtual void qtiUpdateOffsetsForPowerMode(bool powerMode) = 0;
 
     /*
      * Methods that call FrameScheduler APIs.

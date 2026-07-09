@@ -1720,6 +1720,13 @@ private:
     // Whether a display should be turned on when initialized
     bool mSkipPowerOnForQuiescent;
 
+// QTI_BEGIN
+    bool mIsPowerFeatureEnabled = false;
+    int mVideoGeometryStableFrameCount = 0;
+    void evaluateVideoLayerPowerSaving(int latchedLayerCount, int activeDisplayFps,
+                                       bool isSteadyStateVideo);
+// QTI_END
+
     // used for omitting vsync callbacks to apps when the display is not updatable
     int mRefreshableDisplays GUARDED_BY(kMainThreadContext) = 0;
     void incRefreshableDisplays() REQUIRES(kMainThreadContext);
