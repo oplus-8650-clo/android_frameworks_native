@@ -1696,16 +1696,7 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
                 } else if (layerState.generatedLuts) {
                     luts = layerState.generatedLuts;
                 } else {
-                    bool hasSmpte2094_50 = false;
-
-                    if (FlagManager::getInstance().force_agtm_without_luts() &&
-                        layerFEState->buffer) {
-                        std::optional<std::vector<uint8_t>> smpte2094_50;
-                        status_t err = layerFEState->buffer->getSmpte2094_50(&smpte2094_50);
-                        hasSmpte2094_50 = err == OK && smpte2094_50;
-                    }
-
-                    if (!hasSmpte2094_50 && layer->getState().hwc) {
+                    if (!layerFEState->agtm.has_value() && layer->getState().hwc) {
                         luts = layer->getState().hwc->luts;
                     }
                 }

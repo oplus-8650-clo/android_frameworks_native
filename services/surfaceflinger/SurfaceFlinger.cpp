@@ -3908,8 +3908,12 @@ bool SurfaceFlinger::isHdrLayer(const frontend::LayerSnapshot& snapshot) const {
             ? std::make_optional(static_cast<ui::PixelFormat>(snapshot.buffer->getPixelFormat()))
             : std::nullopt;
 
-    if (getHdrRenderType(snapshot.dataspace, pixelFormat, snapshot.desiredHdrSdrRatio) !=
-        HdrRenderType::SDR) {
+    ftl::Flags<HdrMetadataOptions> hdrOptions;
+    if (snapshot.hdrMetadata.validTypes != 0) hdrOptions |= HdrMetadataOptions::HasHdrMetadata;
+    if (snapshot.agtm.has_value()) hdrOptions |= HdrMetadataOptions::HasSmpte2094_50;
+
+    if (getHdrRenderType(snapshot.dataspace, pixelFormat, snapshot.desiredHdrSdrRatio,
+                         hdrOptions) != HdrRenderType::SDR) {
         return true;
     }
     // If the layer is not allowed to be dimmed, treat it as HDR. WindowManager may disable
@@ -4096,6 +4100,15 @@ void SurfaceFlinger::onCompositionPresented(PhysicalDisplayId pacesetterId,
 
         std::swap(activePictureListenersToAdd, mActivePictureListenersToAdd);
         std::swap(activePictureListenersToRemove, mActivePictureListenersToRemove);
+    }
+
+    if (!mHdrLayerInfoChanged) {
+        mLayerSnapshotBuilder.forEachVisibleSnapshot(
+                [&](std::unique_ptr<frontend::LayerSnapshot>& snapshot) {
+                    if (snapshot->agtm.has_value()) {
+                        mHdrLayerInfoChanged = true;
+                    }
+                });
     }
 
     if (haveNewHdrInfoListeners || mHdrLayerInfoChanged) {
