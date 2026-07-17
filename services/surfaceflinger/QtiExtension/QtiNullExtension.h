@@ -146,6 +146,7 @@ public:
     void qtiDolphinFlushLatchUnsignaledGpuFences() override;
 
     bool qtiIsFpsDeferNeeded(float newFpsRequest) override;
+    void qtiDisallowThermalFpsChange() override {}
     void qtiNotifyResolutionSwitch(int displayId, int32_t width, int32_t height,
                                    int32_t vsyncPeriod) override;
     void qtiSetFrameBufferSizeForScaling(sp<DisplayDevice> displayDevice,
