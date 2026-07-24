@@ -337,6 +337,8 @@ private:
 
     std::queue<std::pair<uint64_t, FrameTimelineInfo>> mPendingFrameTimelines GUARDED_BY(mMutex);
 
+    // Tracks the last acquired buffer id
+    uint64_t mLastAcquiredBufferId GUARDED_BY(mMutex) = 0;
     // Tracks the last acquired frame number
     uint64_t mLastAcquiredFrameNumber GUARDED_BY(mMutex) = 0;
 
