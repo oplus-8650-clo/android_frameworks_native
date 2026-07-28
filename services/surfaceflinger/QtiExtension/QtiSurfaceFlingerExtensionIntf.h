@@ -41,6 +41,7 @@ enum QtiFeature {
     kIdleFallback,
     kReduceSlotsForWideVideo,
     kVirtualDispTypePQ,
+    kRenderSysuiAsSrgb,
 };
 
 class QtiSurfaceFlingerExtensionIntf {
