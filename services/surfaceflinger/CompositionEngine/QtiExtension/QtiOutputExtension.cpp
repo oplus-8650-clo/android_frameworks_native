@@ -180,4 +180,13 @@ bool QtiOutputExtension::qtiRenderSysuiAsSrgb(void) {
     return false;
 }
 
+bool QtiOutputExtension::qtiAllowSecCamConcurrency(void) {
+    auto sfext = QtiExtensionContext::instance().getQtiSurfaceFlingerExtn();
+    if (sfext) {
+        return sfext->qtiIsExtensionFeatureEnabled(
+                surfaceflingerextension::kAllowSecCamConcurrency);
+    }
+    return false;
+}
+
 } // namespace android::compositionengineextension

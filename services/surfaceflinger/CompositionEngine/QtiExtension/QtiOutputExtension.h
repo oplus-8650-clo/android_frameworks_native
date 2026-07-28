@@ -29,6 +29,7 @@ public:
                                      const std::vector<float>& radiusList,
                                      const std::vector<uint32_t>& indexList);
     static bool qtiRenderSysuiAsSrgb(void);
+    static bool qtiAllowSecCamConcurrency(void);
 };
 
 } // namespace android::compositionengineextension

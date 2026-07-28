@@ -3865,10 +3865,16 @@ void SurfaceFlinger::setForcedClientCompositionLayerStacks(
     bool forceAllDisplaysToClientComposition = false;
     if (mDebugDisableHWC) {
         forceAllDisplaysToClientComposition = true;
+        // QTI_BEGIN
+        refreshArgs.mQtiEnforceGpuComp = true;
+        // QTI_END
     }
 
     if (mDebugFlashDelay != 0) {
         forceAllDisplaysToClientComposition = true;
+        // QTI_BEGIN
+        refreshArgs.mQtiEnforceGpuComp = true;
+        // QTI_END
         refreshArgs.devOptFlashDirtyRegionsDelay = std::chrono::milliseconds(mDebugFlashDelay);
     }
 

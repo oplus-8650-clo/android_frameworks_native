@@ -64,6 +64,7 @@ private:
     bool mQtiReduceSlotsForWideVideo = true;
     bool mQtiVirtualDispTypePQ = false;
     bool mQtiRenderSysuiAsSrgb = false;
+    bool mQtiAllowSecCamConcurrency = false;
 };
 
 } // namespace surfaceflingerextension

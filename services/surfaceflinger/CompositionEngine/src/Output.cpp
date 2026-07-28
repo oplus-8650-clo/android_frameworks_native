@@ -903,14 +903,22 @@ void Output::updateCompositionState(const compositionengine::CompositionRefreshA
 
     mLayerRequestingBackgroundBlur = findLayerRequestingBackgroundComposition();
     bool forceClientComposition = mLayerRequestingBackgroundBlur != nullptr;
-
     auto* properties = getOverlaySupport();
 
     for (auto* layer : getOutputLayersOrderedByZ()) {
         const ui::LayerStack outputLayerStack =
                 layer->getOutput().getState().layerFilter.layerStack;
-        const bool layerForceClientComposition =
+        bool layerForceClientComposition =
                 refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack);
+        // QTI_BEGIN
+        if (layerForceClientComposition && QtiOutputExtension::qtiAllowSecCamConcurrency() &&
+            !refreshArgs.mQtiEnforceGpuComp) {
+            const auto* layerFEState = layer->getLayerFE().getCompositionState();
+            if (layerFEState && layerFEState->qtiIsSecureCamera) {
+                layerForceClientComposition = false;
+            }
+        }
+        // QTI_END
 
         layer->updateCompositionState(refreshArgs.updatingGeometryThisFrame,
                                       layerForceClientComposition || forceClientComposition,
