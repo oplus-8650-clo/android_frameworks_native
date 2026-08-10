@@ -852,8 +852,6 @@ private:
     void initScheduler(const sp<const DisplayDevice>&)
             REQUIRES(kMainThreadContext, mStateLock, mModeTransitionMutex);
 
-    void resetPhaseConfiguration(Fps) REQUIRES(mStateLock, kMainThreadContext);
-
     /*
      * Transactions
      */
