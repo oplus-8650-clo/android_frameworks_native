@@ -23,6 +23,7 @@
 #include <math/half.h>
 #include <sys/mman.h>
 #include <ui/ColorSpace.h>
+#include <ui/HdrRenderTypeUtils.h>
 
 #include <renderengine/ColorSpaces.h>
 #include "RuntimeEffectManager.h"
@@ -142,7 +143,7 @@ const SkString kEffectSource_LutEffect(R"(
                   // TODO(user): add correct weights by calculating tetrahedron volume ratios
                   if(tx >= ty && ty >= tz) {
                     linear = (1.0 - tx) * c000 + (tx - ty) * c100 + (ty - tz) * c110 + tz * c111;
-                  } else if(tx >= linear.b && linear.b >= ty) {
+                  } else if(tx >= tz && tz >= ty) {
                     linear = (1.0 - tx) * c000 + (tx - tz) * c100 + (tz - ty) * c101 + ty * c111;
                   } else if(tz >= tx && tx >= ty) {
                     linear = (1.0 - tz) * c000 + (tz - tx) * c001 + (tx - ty) * c101 + ty * c111;
@@ -199,27 +200,6 @@ static ColorSpace toColorSpace(ui::Dataspace dataspace) {
         default:
             return ColorSpace::sRGB();
     }
-}
-
-static float computeHlgScale() {
-    static constexpr auto input = 0.7498773651;
-    static constexpr auto a = 0.17883277;
-    static constexpr auto b = 1 - 4 * a;
-    const static auto c = 0.5 - a * std::log(4 * a);
-    // Returns about 265 nits -- After the typical HLG OOTF this would map to 203 nits under ideal
-    // conditions.
-    return (exp((input - c) / a) + b) / 12;
-}
-
-static float computePqScale() {
-    static constexpr auto input = 0.58068888104;
-    static constexpr auto m1 = 0.1593017578125;
-    static constexpr auto m2 = 78.84375;
-    static constexpr auto c1 = 0.8359375;
-    static constexpr auto c2 = 18.8515625;
-    static constexpr auto c3 = 18.6875;
-    // This should essetially return 203 nits
-    return pow((pow(input, 1 / m2) - c1) / (c2 - c3 * pow(input, 1 / m2)), 1 / m1);
 }
 
 LutShader::LutShader(RuntimeEffectManager& effectManager) {
@@ -294,17 +274,7 @@ sk_sp<SkShader> LutShader::generateLutShader(sk_sp<SkShader> input,
                                             ? SkSamplingOptions(SkFilterMode::kLinear)
                                             : SkSamplingOptions());
 
-    float normalizeScalar = 1.0;
-    switch (srcDataspace & HAL_DATASPACE_TRANSFER_MASK) {
-        case HAL_DATASPACE_TRANSFER_HLG:
-            normalizeScalar = computeHlgScale();
-            break;
-        case HAL_DATASPACE_TRANSFER_ST2084:
-            normalizeScalar = computePqScale();
-            break;
-        default:
-            normalizeScalar = 1.0;
-    }
+    float normalizeScalar = getSdrRelativeScaleFactor(srcDataspace);
     const int uSize = static_cast<int>(size); // the size per dimension
     const int uKey = static_cast<int>(samplingKey);
     const int uDimension = static_cast<int>(dimension);

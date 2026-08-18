@@ -42,6 +42,8 @@ enum QtiFeature {
     kReduceSlotsForWideVideo,
     kVirtualDispTypePQ,
     kEnablePowerSaveModeForVideo,
+    kRenderSysuiAsSrgb,
+    kAllowSecCamConcurrency,
 };
 
 class QtiSurfaceFlingerExtensionIntf {
